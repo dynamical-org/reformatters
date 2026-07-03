@@ -2,22 +2,22 @@
 
 # import pandas as pd
 
-# from reformatters.example.region_job import (
-#     ExampleRegionJob,
-#     ExampleSourceFileCoord,
+# from reformatters.example_materialized.region_job import (
+#     ExampleTemporalRegionJob,
+#     ExampleTemporalSourceFileCoord,
 # )
-# from reformatters.example.template_config import ExampleTemplateConfig
+# from reformatters.example_materialized.template_config import ExampleTemporalTemplateConfig
 
 # def test_source_file_coord_get_url() -> None:
-#     coord = ExampleSourceFileCoord(time=pd.Timestamp("2000-01-01"))
+#     coord = ExampleTemporalSourceFileCoord(time=pd.Timestamp("2000-01-01"))
 #     assert coord.get_url() == "https://example.com/data/2000-01-01.grib2"
 
 
 # def test_region_job_generete_source_file_coords() -> None:
-#     template_config = ExampleTemplateConfig()
+#     template_config = ExampleTemporalTemplateConfig()
 #     template_ds = template_config.get_template(pd.Timestamp("2000-01-23"))
 
-#     region_job = ExampleRegionJob(
+#     region_job = ExampleTemporalRegionJob(
 #         tmp_store=Mock(),
 #         template_ds=template_ds,
 #         data_vars=[Mock(), Mock()],

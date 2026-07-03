@@ -8,15 +8,15 @@
 # from pathlib import Path
 # from unittest.mock import Mock
 #
-# from reformatters.example.region_job import ExampleRegionJob, ExampleSourceFileCoord
-# from reformatters.example.template_config import ExampleTemplateConfig
+# from reformatters.example_materialized.region_job import ExampleTemporalRegionJob, ExampleTemporalSourceFileCoord
+# from reformatters.example_materialized.template_config import ExampleTemporalTemplateConfig
 #
 #
 # @pytest.fixture(scope="session")
 # def example_first_message_path() -> Path:
-#     cfg = ExampleTemplateConfig()
-#     coord = ExampleSourceFileCoord(...)  # fill in per dataset
-#     region_job = ExampleRegionJob.model_construct(
+#     cfg = ExampleTemporalTemplateConfig()
+#     coord = ExampleTemporalSourceFileCoord(...)  # fill in per dataset
+#     region_job = ExampleTemporalRegionJob.model_construct(
 #         tmp_store=Mock(),
 #         template_ds=cfg.get_template(cfg.append_dim_start),
 #         data_vars=cfg.data_vars,
@@ -29,7 +29,7 @@
 #
 # @pytest.mark.slow
 # def test_spatial_ref_matches_grib(example_first_message_path: Path) -> None:
-#     cfg = ExampleTemplateConfig()
+#     cfg = ExampleTemporalTemplateConfig()
 #     ds = cfg.get_template(cfg.append_dim_start)
 #     ds_raster = xr.open_dataset(example_first_message_path, engine="rasterio")
 #
@@ -43,7 +43,7 @@
 # def test_lat_lon_pixel_centers_from_source_grib(
 #     example_first_message_path: Path,
 # ) -> None:
-#     cfg = ExampleTemplateConfig()
+#     cfg = ExampleTemporalTemplateConfig()
 #     coords = cfg.dimension_coordinates()
 #
 #     with rasterio.open(example_first_message_path) as reader:
