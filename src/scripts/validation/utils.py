@@ -356,12 +356,21 @@ def get_two_random_points(
 def select_variables_for_plotting(
     ds: xr.Dataset, requested_vars: list[str] | None
 ) -> list[str]:
-    """Select and validate variables for plotting."""
+    """Select and validate variables for plotting.
+
+    Raises on any unknown requested variable: silently dropping one makes a partial
+    validation run look complete. Group vars are addressed by store path
+    (`pressure_level/temperature`).
+    """
     available_vars = [str(k) for k in ds.data_vars]
     if requested_vars:
-        selected_vars = [var for var in requested_vars if var in available_vars]
-        if not selected_vars:
-            raise ValueError("No valid variables specified")
+        missing = [var for var in requested_vars if var not in available_vars]
+        if missing:
+            raise ValueError(
+                f"Variables not in dataset: {missing}. Group vars are addressed by "
+                f"store path (e.g. pressure_level/temperature); available: {available_vars}"
+            )
+        selected_vars = list(requested_vars)
     else:
         selected_vars = available_vars
     selected_vars.sort()

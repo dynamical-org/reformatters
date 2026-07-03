@@ -202,7 +202,7 @@ BATCH OBSERVATIONS
 
 Verdicts + precise pointers, not narration: the lead acts on `next-verification` lines and never re-reads the images behind an OK.
 
-**Sizing.** Four dpi-80 images per variable is ~1.5-2k tokens, plus the stats section and reasoning: ~3-5k tokens per variable, so 15 variables ≈ 50-75k tokens per subagent — comfortable, with room to re-read a plot. 177 variables → ~12 parallel batch subagents, then a handful of verification subagents. Keep batches under ~20 variables; a subagent that also does follow-up re-renders needs the headroom.
+**Sizing (measured on noaa-hrrr-forecast-48-hour-spatial).** A batch reviewer spends ~6k tokens per variable all-in (plots + stats section + checklist + reasoning), ~2.5 minutes per 6-variable batch. So budget 10-15 variables per batch subagent (~60-90k tokens); 177 variables → 12-18 parallel batches, then a handful of verification subagents (a targeted source-parity check — idx fetch, byte-range GRIB download, gribberish decode — ran in under a minute and ~18k tokens). Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
 
 ## 4. Data quality checklist
 

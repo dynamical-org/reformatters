@@ -3,7 +3,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import typer
 import xarray as xr
 import zarr
 from matplotlib.axes import Axes
@@ -58,9 +57,19 @@ def align_to_valid_time_forecast(
         if init_time is None
         else pd.Timestamp(init_time)
     )
-    selected_lead_time = (
-        rng.choice(ds.lead_time, 1)[0] if lead_time is None else lead_time
-    )
+    if lead_time is None:
+        # Prefer leads whose valid time the reference covers; a lead past the
+        # reference's last analysis compares against a snapshot hours older.
+        candidate_leads = ds.lead_time.values
+        ref_max = pd.Timestamp(reference_ds.time.max().item())
+        covered = [
+            lead
+            for lead in candidate_leads
+            if selected_init_time + pd.Timedelta(lead) <= ref_max
+        ]
+        selected_lead_time = rng.choice(covered or candidate_leads, 1)[0]
+    else:
+        selected_lead_time = lead_time
 
     ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
     valid_time = pd.Timestamp(ds.valid_time.item())
@@ -412,17 +421,7 @@ def compare_spatial(
     log.info(f"Loading reference dataset: {reference_url}")
     reference_ds = load_zarr_dataset(reference_url)
 
-    validation_vars = [str(k) for k in validation_ds.data_vars]
-    if variables:
-        selected_vars = [v for v in variables if v in validation_vars]
-        missing = set(variables) - set(validation_vars)
-        if missing:
-            log.warning(f"Variables not in validation dataset: {missing}")
-        if not selected_vars:
-            typer.echo("Error: No valid variables specified", err=True)
-            raise typer.Exit(1)
-    else:
-        selected_vars = select_variables_for_plotting(validation_ds, None)
+    selected_vars = select_variables_for_plotting(validation_ds, variables)
 
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
         validation_ds

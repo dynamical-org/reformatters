@@ -117,7 +117,8 @@ def test_run_value_timeseries_writes_plots_and_stats(tmp_path: Path) -> None:
     stats = ctx.stats["temperature_2m"]
     assert stats.value_ts_plot == "value_timeseries_temperature_2m.png"
     assert stats.value_mean_p1 is not None
-    assert stats.value_std_p1 == 0.0
+    # A single value per timestep has no meaningful spread: n/a, not 0.
+    assert stats.value_std_p1 is None
 
 
 def test_run_value_timeseries_forecast_draws_std(tmp_path: Path) -> None:
@@ -154,5 +155,5 @@ def test_run_value_timeseries_virtual_pins_to_single_value(tmp_path: Path) -> No
 
     stats = ctx.stats["pressure_level/temperature"]
     assert stats.level_dim == "pressure_level"
-    # Virtual pins one (lead, member, level), so each timestep is a single value: std 0.
-    assert stats.value_std_p1 == 0.0
+    # Virtual pins one (lead, member, level): a single value per timestep, so std is n/a.
+    assert stats.value_std_p1 is None

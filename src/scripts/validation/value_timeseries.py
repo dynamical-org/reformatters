@@ -177,8 +177,11 @@ def run_value_timeseries(ctx: RunContext) -> None:
         _store_value_stats(stats, mean_p2, std_p2, 2)
 
         # std is only meaningful when there are non-time dims (lead_time / ensemble) to
-        # reduce over — for analysis datasets there's a single value per timestep.
+        # reduce over — a single value per timestep (analysis datasets, or the virtual
+        # pinned-lead sample) would report a misleading 0; report n/a instead.
         has_std = any(d not in ("time", "init_time") for d in da_p1.dims)
+        if not has_std:
+            stats.value_std_p1 = stats.value_std_p2 = None
 
         # Per-variable figure.
         fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3.375), squeeze=False)
