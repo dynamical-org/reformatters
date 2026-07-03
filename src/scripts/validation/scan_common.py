@@ -13,10 +13,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import typer
+from icechunk.store import IcechunkStore
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from scripts.validation.utils import open_icechunk_readonly
 
 dataset_id_argument = typer.Argument(..., help="Registered dataset id to scan")
 
@@ -47,6 +49,15 @@ def resolve_virtual_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
             "virtual (reference) stores."
         )
     return dataset
+
+
+def primary_icechunk_store(dataset: DynamicalDataset[Any, Any]) -> IcechunkStore:
+    """The dataset's primary store, opened read-only and anonymously by URL.
+
+    store_factory.primary_store() loads write credentials from Kubernetes secrets; these
+    scans only read, so they open the public URL directly and run without cluster access.
+    """
+    return open_icechunk_readonly(dataset.store_factory.primary_url())
 
 
 def build_virtual_jobs(

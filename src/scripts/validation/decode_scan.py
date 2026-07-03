@@ -23,6 +23,7 @@ from scripts.validation.scan_common import (
     dataset_id_argument,
     end_option,
     evenly_spaced_subset,
+    primary_icechunk_store,
     resolve_virtual_dataset,
     start_option,
 )
@@ -50,7 +51,7 @@ def scan(
 ) -> None:
     """Decode a bounded sample of present references across the archive and check health."""
     dataset = resolve_virtual_dataset(dataset_id)
-    store = dataset.store_factory.primary_store()
+    store = primary_icechunk_store(dataset)
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=None)
@@ -73,7 +74,7 @@ def scan(
     )
     results = []
     for i, job in enumerate(sampled):
-        result = checker(cast(VirtualRegionJob[Any, Any], job), store, ds)  # ty: ignore[invalid-argument-type]
+        result = checker(cast(VirtualRegionJob[Any, Any], job), store, ds)
         log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
         results.append(result)
 

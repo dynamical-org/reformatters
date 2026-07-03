@@ -243,20 +243,31 @@ def _anonymous_virtual_credentials(
     )
 
 
+def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
+    """Open an s3 icechunk store read-only and anonymously (virtual chunk access included).
+
+    Unlike StoreFactory.primary_store this needs no credentials or Kubernetes secret
+    access, so offline validation runs anywhere the bucket is publicly readable.
+    """
+    assert url.startswith("s3://"), url
+    assert url.endswith(".icechunk"), url
+    path = url.removeprefix("s3://")
+    assert "/" in path
+    bucket, prefix = path.split("/", 1)
+    storage = icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    )
+    repo = icechunk.Repository.open(
+        storage,
+        authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
+    )
+    return repo.readonly_session("main").store
+
+
 def load_zarr_dataset(url: str) -> xr.Dataset:
     url = url.removesuffix("/")
     if url.startswith("s3://") and url.endswith(".icechunk"):
-        path = url.removeprefix("s3://")
-        assert "/" in path
-        bucket, prefix = path.split("/", 1)
-        storage = icechunk.s3_storage(
-            bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
-        )
-        repo = icechunk.Repository.open(
-            storage,
-            authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
-        )
-        store: StoreLike = repo.readonly_session("main").store
+        store: StoreLike = open_icechunk_readonly(url)
         consolidated = False
     elif url.startswith("s3://"):
         store = ObjectStore(

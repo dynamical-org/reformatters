@@ -26,6 +26,7 @@ from scripts.validation.scan_common import (
     build_virtual_jobs,
     dataset_id_argument,
     end_option,
+    primary_icechunk_store,
     resolve_virtual_dataset,
     start_option,
 )
@@ -125,8 +126,7 @@ def scan(
     """Probe the whole archive for missing source-file refs and report availability."""
     dataset = resolve_virtual_dataset(dataset_id)
     append_dim = dataset.template_config.append_dim
-    store = dataset.store_factory.primary_store()
-    assert isinstance(store, IcechunkStore)
+    store = primary_icechunk_store(dataset)
 
     log.info(f"Building region jobs for {dataset_id} [{start} .. {end}]")
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=None)

@@ -109,7 +109,7 @@ The entry point for every run. It contains, in order:
 
 ## 3. Step-by-step inspection
 
-Work in this order.
+Work in this order. AI assistants reviewing a dataset with more than ~25 variables must use the batched process in [3f](#3f-batched-review-for-many-variable-datasets-ai-assistants) — a complete-variables dataset's plots do not fit in one agent context — with 3a-3e as the per-batch and aggregation steps.
 
 ### 3a. Read `validation_summary.md` entirely
 
@@ -172,6 +172,37 @@ When your review is complete, insert a `## Summary` section into `validation_sum
 **Verification gate on `### Review notes`.** Any entry that attributes a gap, sentinel, or anomaly to an **upstream cause** (source outage, upstream archive gap, model physics, source-GRIB precision) must be backed by direct evidence: a fetched source file (per the unavailable-timestamp tactic in [3d](#3d-dig-into-each-follow-up-item)) or an inspection of the reference dataset at the same timestamps. If you cannot produce that evidence, the item stays in `### For further review`, not `### Review notes` — "looks like an outage" without verification is exactly the failure mode this gate prevents.
 
 **Phrasing gate on `### For further review`.** Bullets in this section must describe an **open question with the evidence already gathered**, not a proposed verification that has not been performed. If a bullet contains "worth re-running", "should re-confirm", "warrants checking", "would be nice to verify", or any other phrasing that names a verification you could run, you have not finished §3d — go run it, then either resolve the item or rewrite the bullet around what the verification revealed.
+
+### 3f. Batched review for many-variable datasets (AI assistants)
+
+A complete-variables dataset (e.g. `noaa-hrrr-forecast-48-hour-spatial`: 177 variables, so ~700 per-variable PNGs) cannot be reviewed in a single agent context: at roughly 300-500 tokens per plot image plus each variable's stats block and reasoning, a full pass is on the order of a million tokens before any follow-up work. At ~25 variables a single context works; well above that, split the review across subagents. The lead (orchestrating) agent must not open plot images itself — every image read happens inside a batch or verification subagent whose context is discarded after it returns.
+
+**Lead agent process:**
+
+1. Produce or locate the run directory (`run-all`), and for virtual datasets run `manifest_scan.py` and `decode_scan.py`. Read their small summary outputs (`manifest_scan_summary.md`, `decode_scan_summary.md`) directly — availability findings come from these, not from plot review.
+2. From `validation_summary.md` read **only** the header: the Datasets block, Run parameters, and the Unavailable timestamps section (everything above `## Per-variable details`). Never read the per-variable details wholesale — at 177 variables that section alone is tens of thousands of tokens.
+3. List the variables (`ls <run-dir>/spatial_*.png` maps slugs back to names) and partition them into **theme-coherent batches of 10-20**: keep families together (all radiation, all reflectivity/precipitation, all cloud, each vertical group's variables together) so within-batch cross-variable checks — radiation peaking while cloud cover is high, temperature vs dew point consistency — remain possible. Note which batch got which family so cross-batch questions have an owner.
+4. Spawn one subagent per batch, in parallel, with the prompt contract below.
+5. Aggregate the structured verdicts. Look specifically for cross-batch patterns the subagents cannot see: the same timestamp flagged in several batches (run-level ingest issue), one member of a physically-linked pair flagged while the other batch reported its partner clean, level-adjacent anomalies in a vertical group split across batches.
+6. Dispatch each SUSPECT/FAIL finding to a **verification subagent** per [3d](#3d-dig-into-each-follow-up-item): give it the exact single-step re-render command (scratch `--output-dir`), or the upstream GRIB/idx URLs to fetch, and the specific question to answer. It returns confirmed/refuted plus evidence. The 3d rule is unchanged: if you can name a verification, run it — via a subagent.
+7. Write the `## Summary` per [3e](#3e-update-validation_summarymd) from the structured findings, citing the plot filenames and evidence the subagents returned.
+
+**Batch subagent prompt contract.** Each batch subagent gets: the run directory path; its explicit variable list; the reproduction parameters from the run header it needs (spatial snapshot time, timeseries period, sampled level); any dataset-specific expectations (e.g. hour-0-NaN accumulated variables, projected y/x grid, known source quirks); and instructions to, per variable, read all four PNGs (`nulls_`/`value_timeseries_`/`spatial_`/`temporal_<slug>.png`, slug = variable name with `/` → `__`), read that variable's heading section in `validation_summary.md`, and apply the full [section 4](#4-data-quality-checklist) checklist. It must return compactly (≤ ~40 lines), e.g.:
+
+```
+VERDICTS
+temperature_2m: OK
+composite_reflectivity: SUSPECT — histogram mass at -10 dBZ sentinel-like spike
+FINDINGS (SUSPECT/FAIL only)
+- var: composite_reflectivity; plot: spatial_composite_reflectivity.png; what: ...;
+  where: init=..., lead=...; suspected-cause: ...; next-verification: <exact command>
+BATCH OBSERVATIONS
+- radiation family diurnal phase consistent across all 4 vars in this batch
+```
+
+Verdicts + precise pointers, not narration: the lead acts on `next-verification` lines and never re-reads the images behind an OK.
+
+**Sizing.** Four dpi-80 images per variable is ~1.5-2k tokens, plus the stats section and reasoning: ~3-5k tokens per variable, so 15 variables ≈ 50-75k tokens per subagent — comfortable, with room to re-read a plot. 177 variables → ~12 parallel batch subagents, then a handful of verification subagents. Keep batches under ~20 variables; a subagent that also does follow-up re-renders needs the headroom.
 
 ## 4. Data quality checklist
 
