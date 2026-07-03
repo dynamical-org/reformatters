@@ -38,7 +38,7 @@ def scan(
     start: datetime | None = start_option,
     end: datetime | None = end_option,
     max_samples: int = typer.Option(
-        20, "--max-samples", help="Max region jobs (~ positions x var groups) to sample"
+        20, "--max-samples", help="Max append-dim regions to decode-check"
     ),
     sampled_leads: int = typer.Option(
         5, help="Lead times to decode per sampled position"
@@ -54,9 +54,15 @@ def scan(
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=None)
-    sampled = evenly_spaced_subset(jobs, max_samples)
+    # Sample evenly over append-dim regions, keeping every var-group job at each sampled
+    # region — sampling the raw job list would stride over (region x var group) and could
+    # systematically skip whole variable groups when a dataset sets max_vars_per_job.
+    regions = sorted({job.region.start for job in jobs})
+    sampled_regions = set(evenly_spaced_subset(regions, max_samples))
+    sampled = [job for job in jobs if job.region.start in sampled_regions]
     log.info(
-        f"Decode-checking {len(sampled)} of {len(jobs)} region jobs "
+        f"Decode-checking {len(sampled)} of {len(jobs)} region jobs across "
+        f"{len(sampled_regions)} of {len(regions)} regions "
         f"(sampled_leads={sampled_leads}, sampled_levels={sampled_levels})"
     )
 
@@ -76,9 +82,10 @@ def scan(
     summary = [
         f"# Decode health (sampled) — {dataset_id}",
         "",
-        f"- Region jobs sampled: {len(sampled)} of {len(jobs)}",
-        f"- Sampling: latest position per job, {sampled_leads} leads, "
-        f"{sampled_levels} levels per group var",
+        f"- Regions sampled: {len(sampled_regions)} of {len(regions)} "
+        f"({len(sampled)} region jobs)",
+        f"- Sampling: latest present position per region, {sampled_leads} leads, "
+        f"{sampled_levels} levels per group var, all members",
         f"- Failures: {len(failures)}",
         "",
         "Coverage is a sample, not exhaustive: an unsampled reference that decodes to "

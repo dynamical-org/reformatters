@@ -567,7 +567,7 @@ def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=slice(0, 2)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 2))
     ds = validation.open_flattened_dataset(store, consolidated=False)

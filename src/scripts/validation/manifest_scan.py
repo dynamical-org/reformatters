@@ -8,8 +8,10 @@ null scan in report_nulls is skipped on virtual stores because presence is a man
 question, not a value question. See docs/validation.md.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +21,7 @@ import zarr
 from icechunk.store import IcechunkStore
 
 from reformatters.common.logging import get_logger
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     dataset_id_argument,
@@ -33,23 +36,37 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 32})
 
 
+def _probe_job(
+    job: VirtualRegionJob[Any, Any], store: IcechunkStore, append_dim: str
+) -> list[tuple[tuple[pd.Timestamp, str], bool]]:
+    """((position, url), is_present) for every source file one region job covers."""
+    candidates = list(job.source_file_coords())
+    missing_ids = {id(c) for c in job.filter_already_present(candidates, store)}
+    return [
+        ((coord.out_loc()[append_dim], coord.get_url()), id(coord) not in missing_ids)
+        for coord in candidates
+    ]
+
+
 def _availability_by_position(
-    jobs: list, store: IcechunkStore, append_dim: str
+    jobs: list, store: IcechunkStore, append_dim: str, max_workers: int = 16
 ) -> dict[pd.Timestamp, tuple[int, int]]:
     """Map each append-dim position to (present_files, expected_files).
 
     Reuses VirtualRegionJob.source_file_coords + filter_already_present (which own chunk-key
     resolution) and dedups source files by (position, url) so a file shared across variable
-    groups is counted once.
+    groups is counted once. Jobs are probed concurrently (a whole archive is thousands of
+    jobs); results merge in this thread.
     """
     present_by_file: dict[tuple[pd.Timestamp, str], bool] = {}
-    for job in jobs:
-        candidates = list(job.source_file_coords())
-        missing_ids = {id(c) for c in job.filter_already_present(candidates, store)}
-        for coord in candidates:
-            key = (coord.out_loc()[append_dim], coord.get_url())
-            is_present = id(coord) not in missing_ids
-            present_by_file[key] = present_by_file.get(key, False) or is_present
+    progress_every = max(1, len(jobs) // 20)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_probe_job, job, store, append_dim) for job in jobs]
+        for i, future in enumerate(as_completed(futures), start=1):
+            for key, is_present in future.result():
+                present_by_file[key] = present_by_file.get(key, False) or is_present
+            if i % progress_every == 0 or i == len(jobs):
+                log.info(f"  probed {i}/{len(jobs)} region jobs")
 
     counts: dict[pd.Timestamp, list[int]] = {}
     for (position, _url), is_present in present_by_file.items():

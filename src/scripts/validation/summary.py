@@ -315,7 +315,12 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
 
     lines.append("## Unavailable timestamps")
     lines.append("")
-    if not unavailable_rows:
+    if ctx.is_virtual:
+        lines.append(
+            "Not value-scanned (virtual store). Whole-archive availability is checked "
+            "by `manifest_scan.py`; include its output when publishing this report."
+        )
+    elif not unavailable_rows:
         lines.append("None detected at the two sampled points.")
     else:
         lines.append(
