@@ -2,9 +2,11 @@ import asyncio
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple
+from itertools import groupby
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
 
 import icechunk
+import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
@@ -53,6 +55,10 @@ class VirtualRegionJob(
     # Locked to None: an int would split one file's vars across independently
     # committing jobs, breaking the per-file commit atomicity readers rely on.
     max_vars_per_job: ClassVar[Final[int | None]] = None
+
+    # Contiguous blocks keep each worker's commits within 1-2 manifest windows per array
+    # (scattered regions rewrite most windows every flush), see docs/parallel_processing.md.
+    worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "contiguous"
 
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
@@ -124,10 +130,15 @@ class VirtualRegionJob(
         would trigger a download + decode.
         """
         group = zarr.open_group(store, mode="r")
+        rep_vars = [self.representative_var(coord) for coord in candidates]
+        indices = self._resolve_chunk_keys(
+            [
+                (coord.out_loc(), var)
+                for coord, var in zip(candidates, rep_vars, strict=True)
+            ]
+        )
         keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []
-        for coord in candidates:
-            var = self.representative_var(coord)
-            index = self.chunk_key(coord.out_loc(), var)
+        for coord, var, index in zip(candidates, rep_vars, indices, strict=True):
             if index is None:
                 keyed.append((coord, None))
                 continue
@@ -161,8 +172,10 @@ class VirtualRegionJob(
             while pending:
                 tick_start = time.monotonic()
                 available = self.discover_available(pending)
+                discover_s = time.monotonic() - tick_start
                 if available:
                     coords, sizes = zip(*available, strict=True)
+                    build_start = time.monotonic()
                     refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
                     # Drop files that yielded no refs (skipped as unreadable).
                     batch = [
@@ -170,13 +183,15 @@ class VirtualRegionJob(
                         for coord, refs in zip(coords, refs_per_file, strict=True)
                         if refs
                     ]
+                    build_s = time.monotonic() - build_start
                     ready = {id(coord) for coord in coords}
                     pending = [coord for coord in pending if id(coord) not in ready]
                     skipped = len(coords) - len(batch)
                     log.info(
                         f"Ingesting {len(batch)} files"
                         f"{f' ({skipped} skipped)' if skipped else ''}, "
-                        f"{len(pending)} still pending"
+                        f"{len(pending)} still pending "
+                        f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
                     )
                     if batch:
                         yield batch
@@ -210,18 +225,44 @@ class VirtualRegionJob(
         worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         store_factory: storage.StoreFactory,
         branch_name: str,
-        worker_index: int,  # noqa: ARG003 - virtual jobs commit per batch with their own messages
+        worker_index: int,  # noqa: ARG003 - per-batch commit messages don't carry it
     ) -> dict[str, list[SourceFileResult]]:
-        """Drive each job's per-batch virtual write loop on ``branch_name``.
+        """Drive the whole worker's virtual write loop on ``branch_name``.
 
-        Always returns an empty dict of results: virtual refs live in the icechunk
-        manifest, so there is nothing to thread back to finalize.
+        Gathers the not-already-present source files across all the worker's jobs
+        against a single readonly view, then runs one write loop over their union:
+        a backfill worker's generator yields a single batch (one commit for the
+        whole worker), an update job's generator polls and commits per tick.
+        Always returns an empty dict: virtual refs live in the icechunk manifest,
+        so there is nothing to thread back to finalize.
         """
         assert worker_jobs, "process_worker_jobs requires at least one job"
+        assert all(isinstance(job, VirtualRegionJob) for job in worker_jobs)
+        jobs = cast(
+            "Sequence[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", worker_jobs
+        )
+        del worker_jobs
+
         primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
-        for job in worker_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            job.process_virtual(primary_repo, replica_repos, branch_name)
+        readonly_store = primary_repo.readonly_session(branch_name).store
+        remaining = [
+            coord
+            for job in jobs
+            for coord in job.filter_already_present(
+                job.source_file_coords(), readonly_store
+            )
+        ]
+        # An all-already-present worker writes nothing; an empty icechunk commit
+        # would raise, so skip the write loop entirely.
+        if remaining:
+            # A worker's jobs share template_ds/processing_mode/tick_interval, so any
+            # one drives the write loop over the union of their coords. Poison the
+            # driver's region: the loop spans every job's region, so reading a single
+            # job's region would be a bug (see _NoRegion).
+            driver = jobs[0].model_copy(update={"region": _NO_REGION})
+            driver.process_virtual(
+                primary_repo, list(replica_repos), branch_name, remaining
+            )
         return {}
 
     def process_virtual(
@@ -229,18 +270,20 @@ class VirtualRegionJob(
         primary_repo: icechunk.Repository,
         replica_repos: Sequence[icechunk.Repository],
         branch: str,
+        remaining: Sequence[SOURCE_FILE_COORD],
     ) -> None:
-        """Run the virtual write loop, committing each yielded batch atomically.
+        """Run the virtual write loop over `remaining`, committing each yielded batch atomically.
 
-        The same loop serves backfill (temp branch) and the single-writer
-        operational update ("main"); see "The write loop" in docs/virtual_datasets.md.
+        `remaining` is the pre-filtered union of the worker's not-already-present
+        source files (gathered by process_worker_jobs). The same loop serves
+        backfill (temp branch, one batch -> one commit) and the single-writer
+        operational update ("main", per-tick commits); see "The write loop" in
+        docs/virtual_datasets.md.
         """
         # A fresh writable session is opened per batch because an icechunk
         # session becomes read-only after commit. sync_dims_to grows the store
         # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
-        candidates = self.source_file_coords()
-        remaining = self.filter_already_present(candidates, readonly_store)
         # The smallest group, so the sync_dims_to shortcut below can never skip a group
         # that lags root (e.g. after a partially-applied prior grow).
         current_size = min(
@@ -262,13 +305,20 @@ class VirtualRegionJob(
                 self.sync_dims_to(stores, needed_size)
                 current_size = needed_size
 
+            emit_start = time.monotonic()
             self._emit_refs(stores, refs)
+            emit_s = time.monotonic() - emit_start
 
             now = pd.Timestamp.now(tz="UTC")
+            commit_start = time.monotonic()
             storage.commit_if_icechunk(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+            )
+            log.info(
+                f"Committed {len(refs)} refs "
+                f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s)"
             )
 
     def _assert_probe_chunk_covered(
@@ -292,9 +342,11 @@ class VirtualRegionJob(
     def _emit_refs(
         self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
     ) -> None:
+        indices = self._resolve_chunk_keys(
+            [(ref.out_loc, ref.data_var) for ref in refs]
+        )
         specs_by_var: dict[str, list[VirtualChunkSpec]] = {}
-        for ref in refs:
-            index = self.chunk_key(ref.out_loc, ref.data_var)
+        for ref, index in zip(refs, indices, strict=True):
             assert index is not None, (
                 f"ref {ref.data_var.name} {dict(ref.out_loc)} did not resolve to a "
                 "chunk index after expansion"
@@ -324,42 +376,75 @@ class VirtualRegionJob(
         """Map a source message's coordinate labels to its zarr chunk index.
 
         Returns None if a label is not in the template's coords (the filter treats
-        that as "remaining").
+        that as "remaining"). A batch of one through _resolve_chunk_keys, which
+        holds the actual chunk-index math -- see there.
         """
-        # Geometry comes from the checked-in template, not in-code DataVar.encoding
-        # which could drift. Index by var.path so a vertical-group var resolves to its
-        # group node (its DataArray carries the vertical coord, absent from the root).
-        template_var = self.template_ds[var.path]
-        dims = tuple(str(d) for d in template_var.dims)
-        chunks = template_var.encoding["chunks"]
-        assert len(chunks) == len(dims)
-        labels = {str(dim): label for dim, label in out_loc.items()}
+        return self._resolve_chunk_keys([(out_loc, var)])[0]
 
-        index: list[int] = []
-        for dim, chunk_size in zip(dims, chunks, strict=True):
-            if dim in labels:
-                position = int(
-                    template_var.get_index(dim).get_indexer(pd.Index([labels[dim]]))[0]
-                )
-                if position < 0:
-                    return None  # label not in coords -> not yet a position in this dataset
-            else:
-                # A dim absent from out_loc must be single-chunk, else all refs
-                # collapse to chunk 0 along it.
-                assert chunk_size >= template_var.sizes[dim], (
-                    f"dim {dim} is absent from out_loc but spans multiple chunks "
-                    f"(size {template_var.sizes[dim]}, chunk {chunk_size}); out_loc "
-                    "must locate every multi-chunk dim."
-                )
-                position = 0
-            chunk_index, remainder = divmod(position, chunk_size)
-            assert remainder == 0, (
-                f"{dim}={labels.get(dim)} maps to position {position}, which is not "
-                f"on a chunk boundary (chunk size {chunk_size}); a virtual chunk must "
-                "be exactly one GRIB message."
+    def _resolve_chunk_keys(
+        self, items: Sequence[tuple[Mapping[Dim, CoordinateValue], DataVar[Any]]]
+    ) -> list[tuple[int, ...] | None]:
+        """Map each (out_loc, var) pair to its zarr chunk index, or None if a label
+        isn't in the template's coords yet (the filter treats that as "remaining").
+
+        Groups items by var.path and, per group, resolves every labeled dim's
+        position with one vectorized pandas.Index.get_indexer call over the whole
+        group, rather than one call per item. chunk_key is a batch-of-one wrapper
+        around this.
+        """
+        order = sorted(range(len(items)), key=lambda i: items[i][1].path)
+        results: list[tuple[int, ...] | None] = [None] * len(items)
+
+        for var_path, idx_group in groupby(order, key=lambda i: items[i][1].path):
+            idxs = list(idx_group)
+            template_var = self.template_ds[var_path]
+            dims = tuple(str(d) for d in template_var.dims)
+            chunks = tuple(template_var.encoding["chunks"])
+            assert len(chunks) == len(dims)
+
+            group_labels = [
+                {str(dim): label for dim, label in items[i][0].items()} for i in idxs
+            ]
+            labeled_dims = set(group_labels[0])
+            assert all(set(labels) == labeled_dims for labels in group_labels), (
+                f"every ref for {var_path} must label the same set of dims"
             )
-            index.append(chunk_index)
-        return tuple(index)
+
+            n = len(idxs)
+            chunk_indices = np.zeros((n, len(dims)), dtype=np.int64)
+            present = np.ones(n, dtype=bool)
+            for dim_i, (dim, chunk_size) in enumerate(zip(dims, chunks, strict=True)):
+                if dim in labeled_dims:
+                    labels = pd.Index([lbl[dim] for lbl in group_labels])
+                    positions = template_var.get_index(dim).get_indexer(labels)
+                    present &= positions >= 0
+                    chunk_idx, remainder = np.divmod(
+                        np.where(positions >= 0, positions, 0), chunk_size
+                    )
+                    assert np.all(remainder[positions >= 0] == 0), (
+                        f"a ref's {dim} label does not fall on a chunk boundary "
+                        f"(chunk size {chunk_size}); a virtual chunk must be exactly "
+                        "one GRIB message."
+                    )
+                else:
+                    # A dim absent from out_loc must be single-chunk, else all refs
+                    # collapse to chunk 0 along it.
+                    size = int(template_var.sizes[dim])
+                    assert chunk_size >= size, (
+                        f"dim {dim} is absent from out_loc but spans multiple chunks "
+                        f"(size {size}, chunk {chunk_size}); out_loc must locate every "
+                        "multi-chunk dim."
+                    )
+                    chunk_idx = np.zeros(n, dtype=np.int64)
+                chunk_indices[:, dim_i] = chunk_idx
+
+            for local_i, item_i in enumerate(idxs):
+                results[item_i] = (
+                    tuple(int(v) for v in chunk_indices[local_i])
+                    if present[local_i]
+                    else None  # label not in coords -> not yet a position in this dataset
+                )
+        return results
 
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
@@ -429,6 +514,26 @@ class VirtualRegionJob(
             for name, coord in node.to_dataset().coords.items()
         }
         return xr.Dataset(coords=coords).isel({self.append_dim: processing_region})
+
+
+class _NoRegion:
+    """Poison `region` for the batched write-loop driver (see process_worker_jobs).
+
+    process_worker_jobs runs one write loop over the union of all its jobs'
+    coords, so the driver's own region is meaningless. process_virtual and every
+    method it calls must act on the coords passed to them, never self.region;
+    reading it would silently narrow the batch to a single job. Any access raises
+    instead, so a future edit that reintroduces region-dependence fails loudly.
+    """
+
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401
+        raise AssertionError(
+            "the batched virtual write loop read self.region; process_virtual and "
+            "the methods it calls must use the coords passed to them, not self.region"
+        )
+
+
+_NO_REGION: Final = _NoRegion()
 
 
 def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:

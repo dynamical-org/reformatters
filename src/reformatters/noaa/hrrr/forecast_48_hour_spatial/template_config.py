@@ -103,7 +103,7 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="noaa-hrrr-forecast-48-hour-spatial",
-            dataset_version="0.1.0",
+            dataset_version="0.5.0",
             name="NOAA HRRR forecast, 48 hour, spatial",
             description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -355,6 +355,8 @@ def _data_var(
     comment: str | None,
     hour_0: bool | None,
     filters: Sequence[CodecConfig] | None = None,
+    flag_values: tuple[int, ...] | None = None,
+    flag_meanings: str | None = None,
 ) -> NoaaHrrrDataVar:
     step_type, window_reset_frequency = _WINDOW_ATTRS[window]
     # Default to the K->C filter for temperature/dew point; a var may override with an
@@ -375,6 +377,8 @@ def _data_var(
             standard_name=standard_name,
             step_type=step_type,  # ty: ignore[invalid-argument-type]
             comment=comment,
+            flag_values=flag_values,
+            flag_meanings=flag_meanings,
         ),
         internal_attrs=NoaaHrrrInternalAttrs(
             grib_element=element,
@@ -406,6 +410,8 @@ def _root_var(
     comment: str | None = None,
     hour_0: bool | None = None,
     filters: Sequence[CodecConfig] | None = None,
+    flag_values: tuple[int, ...] | None = None,
+    flag_meanings: str | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -421,6 +427,8 @@ def _root_var(
         comment=comment,
         hour_0=hour_0,
         filters=filters,
+        flag_values=flag_values,
+        flag_meanings=flag_meanings,
     )
 
 
@@ -1053,6 +1061,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             comment="0=no; 1=yes",
             hour_0=False,
+            flag_values=(0, 1),
+            flag_meanings="no yes",
         ),
         _root_var(
             "categorical_ice_pellets_surface",
@@ -1063,6 +1073,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             comment="0=no; 1=yes",
             hour_0=False,
+            flag_values=(0, 1),
+            flag_meanings="no yes",
         ),
         _root_var(
             "categorical_freezing_rain_surface",
@@ -1073,6 +1085,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             comment="0=no; 1=yes",
             hour_0=False,
+            flag_values=(0, 1),
+            flag_meanings="no yes",
         ),
         _root_var(
             "categorical_rain_surface",
@@ -1083,6 +1097,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="1",
             comment="0=no; 1=yes",
             hour_0=False,
+            flag_values=(0, 1),
+            flag_meanings="no yes",
         ),
         _root_var(
             "surface_roughness_surface",

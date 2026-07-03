@@ -37,6 +37,7 @@ from reformatters.common.config_models import (
     Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -337,6 +338,18 @@ def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
     return sum(1 for _ in repo.ancestry(branch=branch))
 
 
+def _process_virtual(
+    job: VirtualTestRegionJob,
+    primary_repo: icechunk.Repository,
+    replica_repos: Sequence[icechunk.Repository] = (),
+    branch: str = "main",
+) -> None:
+    """Gather remaining coords (as process_worker_jobs does), then drive the write loop."""
+    readonly = primary_repo.readonly_session(branch).store
+    remaining = job.filter_already_present(job.source_file_coords(), readonly)
+    job.process_virtual(primary_repo, list(replica_repos), branch, remaining)
+
+
 def _assert_store_values(store: object, n_inits: int) -> None:
     result = xr.open_zarr(store, decode_timedelta=True)
     assert result.sizes["init_time"] == n_inits
@@ -431,6 +444,287 @@ def test_chunk_key_uses_template_geometry_not_datavar_encoding() -> None:
     assert job.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
 
 
+def _create_ensemble_template_ds(
+    n_inits: int, *, ensemble_members: tuple[int, ...] = (0, 1, 2)
+) -> xr.DataTree:
+    """Like _create_template_ds, but with a plain-int labeled dim (ensemble_member)
+    in place of lead_time, to exercise non-Timestamp/Timedelta label lookups."""
+    init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
+    encoding: dict[str, Any] = {
+        "dtype": "float64",
+        "chunks": (1, 1, N_LAT, N_LON),
+        "fill_value": np.nan,
+        "compressors": None,
+        "filters": None,
+    }
+    ds = xr.Dataset(
+        {
+            "temperature_2m": xr.Variable(
+                ("init_time", "ensemble_member", "latitude", "longitude"),
+                dask.array.full(
+                    (n_inits, len(ensemble_members), N_LAT, N_LON),
+                    np.nan,
+                    dtype="float64",
+                    chunks=-1,
+                ),
+                encoding=encoding,
+            )
+        },
+        coords={
+            "init_time": ("init_time", init_times),
+            "ensemble_member": ("ensemble_member", np.array(ensemble_members)),
+            "latitude": ("latitude", np.arange(N_LAT, dtype="float64")),
+            "longitude": ("longitude", np.arange(N_LON, dtype="float64")),
+        },
+        attrs={"dataset_id": DATASET_ID, "dataset_version": "v1.0"},
+    )
+    ds["init_time"].encoding.update(
+        {
+            "dtype": "int64",
+            "fill_value": -1,
+            "units": "seconds since 1970-01-01 00:00:00",
+            "calendar": "proleptic_gregorian",
+        }
+    )
+    ds["ensemble_member"].encoding["fill_value"] = -1
+    ds["latitude"].encoding["fill_value"] = np.nan
+    ds["longitude"].encoding["fill_value"] = np.nan
+    return xr.DataTree.from_dict({"/": ds})
+
+
+def test_chunk_key_int_labeled_dim_resolves_and_handles_absent_label() -> None:
+    # Non-Timestamp/Timedelta labeled dim: dict-based lookups must hash/compare
+    # int coordinate labels consistently, not just datetime-like ones.
+    template_ds = _create_ensemble_template_ds(4, ensemble_members=(0, 1, 2))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    var = job.data_vars[0]
+
+    present: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + APPEND_DIM_FREQ,
+        "ensemble_member": 2,
+    }
+    assert job.chunk_key(present, var) == (1, 2, 0, 0)
+
+    absent: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "ensemble_member": 99,  # not in the template's ensemble_member coord
+    }
+    assert job.chunk_key(absent, var) is None
+
+    # Repeat the present lookup to prove any cache built on first use is stable.
+    assert job.chunk_key(present, var) == (1, 2, 0, 0)
+
+
+def test_chunk_key_repeated_calls_same_var_different_out_loc() -> None:
+    # A cache keyed on var.path alone (ignoring out_loc) would return stale
+    # results; each distinct out_loc must resolve independently and correctly.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+
+    for init_idx in range(4):
+        for lead_idx, lead in enumerate(LEAD_TIMES):
+            out_loc: Mapping[Dim, CoordinateValue] = {
+                "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+                "lead_time": lead,
+            }
+            assert job.chunk_key(out_loc, var) == (init_idx, lead_idx, 0, 0)
+
+    # And querying an already-seen out_loc again still gives the same answer.
+    out_loc = {
+        "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[1],
+    }
+    assert job.chunk_key(out_loc, var) == (2, 1, 0, 0)
+    assert job.chunk_key(out_loc, var) == (2, 1, 0, 0)
+
+
+def test_chunk_key_two_datavars_same_path_different_encoding_in_sequence() -> None:
+    # Any per-var.path geometry cache must key strictly off the template, not
+    # off whichever DataVar object happened to populate it first.
+    job = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    correct_var = job.data_vars[0]
+    misconfigured_var = VirtualTestDataVar(
+        name="temperature_2m",
+        encoding=Encoding(
+            dtype="float64",
+            fill_value=np.nan,
+            chunks=(1, 2, N_LAT, N_LON),  # disagrees with the template's (1, 1, ...)
+            shards=None,
+            compressors=None,
+            filters=None,
+        ),
+    )
+    out_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "lead_time": LEAD_TIMES[1],
+    }
+    # correct_var first (populates any cache), then misconfigured_var: both must
+    # resolve against the template's chunk size of 1, not either var's own encoding.
+    assert job.chunk_key(out_loc, correct_var) == (0, 1, 0, 0)
+    assert job.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
+    # And again in the opposite order, to rule out order-dependent cache seeding.
+    job2 = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    assert job2.chunk_key(out_loc, misconfigured_var) == (0, 1, 0, 0)
+    assert job2.chunk_key(out_loc, correct_var) == (0, 1, 0, 0)
+
+
+def test_chunk_key_separate_job_instances_do_not_share_cache() -> None:
+    # Two jobs over different templates (different init_time chunk sizes) must
+    # not cross-contaminate any var.path-keyed cache.
+    job_chunk1 = _make_region_job(
+        _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    job_chunk2 = _make_region_job(
+        _create_template_ds(4, chunks=(2, 1, N_LAT, N_LON)), region=slice(0, 4)
+    )
+    var = job_chunk1.data_vars[0]
+    out_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START,
+        "lead_time": LEAD_TIMES[0],
+    }
+    # Warm job_chunk1's cache first.
+    assert job_chunk1.chunk_key(out_loc, var) == (0, 0, 0, 0)
+    # job_chunk2's init_time chunk size is 2: init index 2 lands at the start of
+    # chunk index 1, distinct from job_chunk1's chunk index 2 for the same position.
+    out_loc_init2: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[0],
+    }
+    assert job_chunk2.chunk_key(out_loc_init2, job_chunk2.data_vars[0]) == (1, 0, 0, 0)
+    # Re-querying job_chunk1 for the same position must still use its own
+    # (1, 1, ...) chunking, unaffected by job_chunk2's lookups in between.
+    assert job_chunk1.chunk_key(out_loc_init2, var) == (2, 0, 0, 0)
+
+
+def test_resolve_chunk_keys_matches_chunk_key_and_batches_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _resolve_chunk_keys (used by _emit_refs and filter_already_present) must
+    # return exactly what calling chunk_key once per item would, while touching the
+    # template only once per var per call regardless of how many items (or labeled
+    # dims) share that var -- not once per item.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    out_locs: list[Mapping[Dim, CoordinateValue]] = [
+        {
+            "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+            "lead_time": LEAD_TIMES[0],
+        }
+        for init_idx in range(4)
+    ]
+    expected = [job.chunk_key(out_loc, var) for out_loc in out_locs]
+
+    call_count = 0
+    original_getitem = xr.DataTree.__getitem__
+
+    def counting_getitem(self: xr.DataTree, key: str) -> xr.DataTree | xr.DataArray:
+        nonlocal call_count
+        call_count += 1
+        return original_getitem(self, key)
+
+    monkeypatch.setattr(xr.DataTree, "__getitem__", counting_getitem)
+    results = job._resolve_chunk_keys([(out_loc, var) for out_loc in out_locs])
+
+    assert results == expected
+    # One template lookup for the whole group (dims/chunks/sizes and both labeled
+    # dims' positions all reuse it), not one per item (4).
+    assert call_count == 1
+
+
+def test_resolve_chunk_keys_rejects_inconsistent_labeled_dims() -> None:
+    # Every ref for a given var must label the same set of dims -- if it didn't,
+    # peeking at the first item's labels to decide which dims to vectorize over
+    # would silently miscompute the rest. Fail loudly instead.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    items: list[tuple[Mapping[Dim, CoordinateValue], VirtualTestDataVar]] = [
+        ({"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]}, var),
+        ({"init_time": APPEND_DIM_START + APPEND_DIM_FREQ}, var),
+    ]
+    with pytest.raises(AssertionError, match="must label the same set of dims"):
+        job._resolve_chunk_keys(items)
+
+
+def test_resolve_chunk_keys_multi_var_interleaved_preserves_order() -> None:
+    # _resolve_chunk_keys groups items by var.path internally, then must scatter
+    # results back into the caller's original order. With items for only one var, a
+    # stable sort leaves order unchanged, so a bug that swapped which item's result
+    # went where (e.g. writing to the group-local index instead of the original
+    # item index) wouldn't be caught. Two vars with DIFFERENT init_time chunk sizes,
+    # interleaved and queried at the SAME position, produce genuinely different
+    # correct answers -- exactly what's needed to catch a reassembly bug.
+    template_ds = _create_template_ds(4, chunks=(1, 1, N_LAT, N_LON))
+    ds = template_ds.to_dataset()
+    ds["dewpoint_2m"] = ds["temperature_2m"].copy(deep=False)
+    ds["dewpoint_2m"].encoding = {
+        **ds["temperature_2m"].encoding,
+        "chunks": (2, 1, N_LAT, N_LON),
+    }
+    template_ds = xr.DataTree.from_dict({"/": ds})
+
+    var_a = VirtualTestDataVar(name="temperature_2m")  # init_time chunk size 1
+    var_b = VirtualTestDataVar(name="dewpoint_2m")  # init_time chunk size 2
+    job = VirtualTestRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[var_a, var_b],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    def out_loc(init_idx: int) -> Mapping[Dim, CoordinateValue]:
+        return {
+            "init_time": APPEND_DIM_START + init_idx * APPEND_DIM_FREQ,
+            "lead_time": LEAD_TIMES[0],
+        }
+
+    # Interleaved, not grouped by var -- init index 2 lands on a chunk boundary for
+    # both vars (chunk sizes 1 and 2), so it's safe to query for both while still
+    # giving different chunk indices (2 vs. 1).
+    items = [
+        (out_loc(2), var_b),  # -> (1, 0, 0, 0)
+        (out_loc(0), var_a),  # -> (0, 0, 0, 0)
+        (out_loc(2), var_a),  # -> (2, 0, 0, 0)
+        (out_loc(0), var_b),  # -> (0, 0, 0, 0)
+    ]
+    results = job._resolve_chunk_keys(items)
+
+    assert results == [(1, 0, 0, 0), (0, 0, 0, 0), (2, 0, 0, 0), (0, 0, 0, 0)]
+    assert results == [job.chunk_key(out_loc, var) for out_loc, var in items]
+
+
+def test_resolve_chunk_keys_mixed_present_and_absent_in_one_group() -> None:
+    # Within a single var's vectorized group, an absent label must not corrupt a
+    # neighboring present item's resolved index (np.where clamps the absent
+    # position to 0 before divmod so it never raises, and the boundary assert only
+    # checks the present subset), and must land as None at exactly its own slot.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    var = job.data_vars[0]
+    items: list[tuple[Mapping[Dim, CoordinateValue], VirtualTestDataVar]] = [
+        ({"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]}, var),
+        (
+            {"init_time": pd.Timestamp("2030-01-01"), "lead_time": LEAD_TIMES[0]},
+            var,
+        ),  # not in the template's coords
+        (
+            {
+                "init_time": APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+                "lead_time": LEAD_TIMES[1],
+            },
+            var,
+        ),
+    ]
+    results = job._resolve_chunk_keys(items)
+
+    assert results == [(0, 0, 0, 0), None, (2, 1, 0, 0)]
+    assert results == [job.chunk_key(out_loc, v) for out_loc, v in items]
+
+
 def test_needed_append_dim_size() -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
     refs = [
@@ -446,6 +740,34 @@ def test_needed_append_dim_size() -> None:
         )
     ]
     assert job._needed_append_dim_size(refs) == 3  # init index 2 -> size 3
+
+
+def test_virtual_get_jobs_regions_in_append_dim_order() -> None:
+    # Virtual jobs are not spread: contiguous worker blocks keep each flush's
+    # manifest-window rewrites bounded, see docs/parallel_processing.md.
+    assert VirtualTestRegionJob.worker_assignment == "contiguous"
+    jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(8),
+        append_dim="init_time",
+        all_data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        reformat_job_name="test",
+    )
+    assert [j.region for j in jobs] == [slice(i, i + 1) for i in range(8)]
+
+
+def test_virtual_worker_jobs_are_contiguous_along_append_dim() -> None:
+    jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(8),
+        append_dim="init_time",
+        all_data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        reformat_job_name="test",
+    )
+    worker_jobs = get_worker_jobs(
+        jobs, worker_index=1, workers_total=3, worker_assignment="contiguous"
+    )
+    assert [j.region for j in worker_jobs] == [slice(3, 4), slice(4, 5), slice(5, 6)]
 
 
 def test_processing_region_rejects_buffered_region() -> None:
@@ -494,7 +816,7 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         reformat_job_name="test",
     )
     with pytest.raises(AssertionError, match="empty batch"):
-        job.process_virtual(repo, [], "main")
+        _process_virtual(job, repo)
 
 
 def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> None:
@@ -532,7 +854,7 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
         reformat_job_name="test",
     )
     with pytest.raises(AssertionError, match="do not cover representative chunk"):
-        job.process_virtual(repo, [], "main")
+        _process_virtual(job, repo)
 
 
 def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
@@ -623,7 +945,7 @@ def test_backfill_emits_refs_and_reads_back_values(tmp_path: Path) -> None:
 
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 4))
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
 
     _assert_all_values(dataset, n_inits=4)
 
@@ -635,12 +957,12 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     repo = _primary_repo(dataset.store_factory)
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     snapshots_after_first = _snapshot_count(repo)
 
     # Second run: every candidate is already present, so the filter drops them
     # all, the generator yields nothing, and no new commit is made.
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     assert _snapshot_count(repo) == snapshots_after_first
 
     candidates = job.generate_source_file_coords(
@@ -658,7 +980,7 @@ def test_filter_already_present_mixed_candidates(tmp_path: Path) -> None:
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
     # Emit only init 0's files.
-    _make_region_job(template_ds, region=slice(0, 1)).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 1)), repo)
 
     present = VirtualTestSourceFileCoord(
         init_time=APPEND_DIM_START, lead_time=LEAD_TIMES[0]
@@ -758,8 +1080,93 @@ def test_yield_is_the_commit_unit(tmp_path: Path) -> None:
     VirtualTestRegionJob.backfill_batch_files = 2
     job = _make_region_job(template_ds, region=slice(0, 4))
     before = _snapshot_count(repo)
-    job.process_virtual(repo, [], "main")
+    _process_virtual(job, repo)
     assert _snapshot_count(repo) - before == 4
+
+
+def test_backfill_worker_commits_once_across_multiple_jobs(tmp_path: Path) -> None:
+    # The core of the batching change: a worker handed several region jobs (one per
+    # init, as get_jobs partitions a backfill) makes exactly ONE icechunk commit for
+    # the whole worker, not one per job, and every init reads back.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    # A single sweep over the union of all jobs' coords (as the base generator does
+    # for a backfill), so the whole worker is one commit.
+    VirtualTestRegionJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        _make_region_job(template_ds, region=slice(i, i + 1)) for i in range(4)
+    ]
+
+    before = _snapshot_count(repo)
+    results = VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    assert results == {}
+    assert _snapshot_count(repo) - before == 1
+    _assert_all_values(dataset, n_inits=4)
+
+
+def test_all_present_worker_makes_no_commit(tmp_path: Path) -> None:
+    # A worker whose jobs are all already present yields no remaining coords; it must
+    # skip the write loop (an empty icechunk commit would raise).
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    VirtualTestRegionJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        _make_region_job(template_ds, region=slice(i, i + 1)) for i in range(4)
+    ]
+    VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    after_first = _snapshot_count(repo)
+
+    VirtualTestRegionJob.process_worker_jobs(
+        worker_jobs, dataset.store_factory, "main", worker_index=0
+    )
+    assert _snapshot_count(repo) == after_first
+
+
+def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
+    # The batched write loop spans every job's region, so a method that reads
+    # self.region would silently narrow the batch to jobs[0]. The driver's region is
+    # poisoned, so such a leak raises loudly instead of corrupting the write set.
+    class RegionReadingJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            _ = self.region.start  # the leak the poison guards against
+            yield from super().process_virtual_refs(remaining)
+
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+
+    RegionReadingJob.backfill_batch_files = 4 * N_LEADS
+    worker_jobs = [
+        RegionReadingJob(
+            tmp_store=Path("unused-tmp.zarr"),
+            template_ds=template_ds,
+            data_vars=[VirtualTestDataVar(name="temperature_2m")],
+            append_dim="init_time",
+            region=slice(i, i + 1),
+            reformat_job_name="test",
+            processing_mode="backfill",
+        )
+        for i in range(4)
+    ]
+    with pytest.raises(AssertionError, match=r"self\.region"):
+        RegionReadingJob.process_worker_jobs(
+            worker_jobs, dataset.store_factory, "main", worker_index=0
+        )
 
 
 # --- driver fork integration (operational + backfill routing) ---
@@ -820,6 +1227,25 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=4)
 
 
+def test_update_still_commits_per_tick(tmp_path: Path) -> None:
+    # Batching commits per worker for backfill must not collapse the update cadence:
+    # the operational update still commits once per yielded tick, so readers see each
+    # tick's files within seconds rather than waiting for the whole window.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    full_template = _create_template_ds(4)
+
+    # 4 inits x 2 leads = 8 files, yielded 2 at a time -> 4 ticks -> 4 commits.
+    VirtualTestRegionJob.backfill_batch_files = 2
+    job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
+
+    before = _snapshot_count(repo)
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    assert _snapshot_count(repo) - before == 4
+    _assert_all_values(dataset, n_inits=4)
+
+
 def test_update_routes_virtual_to_single_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -862,9 +1288,7 @@ def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
     # Emit only inits 0-1; inits 2-3 stay missing (a partially-published state).
-    _make_region_job(_create_template_ds(4), region=slice(0, 2)).process_virtual(
-        repo, [], "main"
-    )
+    _process_virtual(_make_region_job(_create_template_ds(4), region=slice(0, 2)), repo)
     dataset.validate_dataset("test")  # must not raise
 
 
@@ -877,7 +1301,7 @@ def _backfilled_store(
     """Pre-size main to the template, emit refs for `emit`, return the readonly store."""
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
-    _make_region_job(template_ds, region=emit).process_virtual(repo, [], "main")
+    _process_virtual(_make_region_job(template_ds, region=emit), repo)
     return repo.readonly_session("main").store
 
 
@@ -1065,7 +1489,7 @@ def test_process_virtual_writes_refs_to_replica(tmp_path: Path) -> None:
     )
 
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
-    job.process_virtual(primary_repo, [replica_repo], "main")
+    _process_virtual(job, primary_repo, [replica_repo])
 
     for repo in (primary_repo, replica_repo):
         _assert_store_values(repo.readonly_session("main").store, n_inits=4)
@@ -1084,8 +1508,8 @@ def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
     )
 
     # Partial commit: the replica committed (grew to 4 + refs); the primary did not.
-    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
-        replica_repo, [], "main"
+    _process_virtual(
+        _make_region_job(_create_template_ds(4), region=slice(0, 4)), replica_repo
     )
     primary_now = xr.open_zarr(
         primary_repo.readonly_session("main").store, decode_timedelta=True
@@ -1094,8 +1518,10 @@ def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
     _assert_store_values(replica_repo.readonly_session("main").store, n_inits=4)
 
     # Next fire catches the primary up and idempotently replays on the replica.
-    _make_region_job(_create_template_ds(4), region=slice(0, 4)).process_virtual(
-        primary_repo, [replica_repo], "main"
+    _process_virtual(
+        _make_region_job(_create_template_ds(4), region=slice(0, 4)),
+        primary_repo,
+        [replica_repo],
     )
     for repo in (primary_repo, replica_repo):
         _assert_store_values(repo.readonly_session("main").store, n_inits=4)

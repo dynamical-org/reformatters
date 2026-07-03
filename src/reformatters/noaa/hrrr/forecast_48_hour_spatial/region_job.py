@@ -123,6 +123,10 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         finally:
             index_path.unlink()
 
+        if not index_lines:
+            log.warning(f"Skipping {coord.get_url()}: empty or unparseable grib index")
+            return []
+
         lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
         # Each message's end byte is the next message's start; the last is the file end.
         starts = [start for start, *_ in index_lines]

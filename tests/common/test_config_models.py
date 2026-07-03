@@ -194,3 +194,46 @@ class TestDataVarAttrs:
                 units="K",
                 step_type="invalid",  # ty: ignore[invalid-argument-type]
             )
+
+    def test_valid_flag_attrs(self) -> None:
+        attrs = DataVarAttrs(
+            long_name="Categorical rain",
+            short_name="crain",
+            units="1",
+            step_type="instant",
+            flag_values=(0, 1),
+            flag_meanings="no yes",
+        )
+        assert attrs.flag_values == (0, 1)
+        assert attrs.flag_meanings == "no yes"
+
+    def test_flag_values_without_meanings_raises(self) -> None:
+        with pytest.raises(ValidationError, match="set together"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_values=(0, 1),
+            )
+
+    def test_flag_meanings_without_values_raises(self) -> None:
+        with pytest.raises(ValidationError, match="set together"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_meanings="no yes",
+            )
+
+    def test_flag_values_meanings_length_mismatch_raises(self) -> None:
+        with pytest.raises(ValidationError, match="same number"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_values=(0, 1, 2),
+                flag_meanings="no yes",
+            )

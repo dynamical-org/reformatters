@@ -73,6 +73,20 @@ class DataVarAttrs(FrozenBaseModel):
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
+    # CF flag attributes for categorical variables, see CF Conventions section 3.5.
+    # flag_values lists the coded values; flag_meanings is a blank separated label per value.
+    flag_values: tuple[int, ...] | None = None
+    flag_meanings: Annotated[str, pydantic.Field(min_length=1)] | None = None
+
+    @pydantic.model_validator(mode="after")
+    def validate_flag_attrs(self) -> DataVarAttrs:
+        if (self.flag_values is None) != (self.flag_meanings is None):
+            raise ValueError("flag_values and flag_meanings must be set together")
+        if self.flag_values is not None and self.flag_meanings is not None:
+            assert len(self.flag_values) == len(self.flag_meanings.split()), (
+                "flag_values and flag_meanings must have the same number of entries"
+            )
+        return self
 
 
 type CfAxis = Literal["X", "Y", "Z", "T"]

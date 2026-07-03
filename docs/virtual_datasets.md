@@ -6,14 +6,14 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 
 ## The write loop
 
-`VirtualRegionJob.process_virtual` runs the same loop for backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
+`process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
 
-1. `generate_source_file_coords` lists candidate source files for the region.
-2. `filter_already_present` drops files whose refs are already in the manifest.
+1. `generate_source_file_coords` lists candidate source files for each of the worker's region jobs.
+2. `filter_already_present` drops files whose refs are already in the manifest; the survivors across the worker's jobs are unioned into `remaining`.
 3. `process_virtual_refs(remaining)` — a concrete `VirtualRegionJob` generator — each tick asks `discover_available` which files are ready, builds their refs with `file_refs`, and yields batches of `(source file coord, its VirtualRefs)` pairs.
 4. Each yield is committed atomically: open fresh writable sessions (a committed icechunk session is read-only), grow the append dim if needed (`sync_dims_to`), `set_virtual_refs`, commit.
 
-**The yield is the commit unit.** The loop's batching policy: operational updates yield everything that arrived since the last poll tick (typically ~one file) for per-file visibility; backfills yield everything available. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The loop asserts each file's refs cover the representative cell `filter_already_present` probes, so a file the filter could never see as ingested fails loudly instead of being re-ingested forever.
+**The yield is the commit unit.** The loop's batching policy: a backfill sweeps once and yields everything available across the worker's jobs, so the whole worker is **one commit** — this keeps the commit count at `workers_total` rather than one-per-init, relieving shared-branch CAS contention (`jobs_per_pod` sets the batch = inits per commit, mirroring `MaterializedRegionJob`). An operational update yields everything that arrived since the last poll tick (typically ~one file) for per-file visibility. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The loop asserts each file's refs cover the representative cell `filter_already_present` probes, so a file the filter could never see as ingested fails loudly instead of being re-ingested forever.
 
 `processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested, with the pod's active deadline bounding how long it waits on a file that never publishes. `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
@@ -41,9 +41,9 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 
 **Discovery utilities** (opt-in, off the base, in `virtual_source_listing.py`): `discover_available_by_obstore_listing(pending, *, store, location_prefix)` works for any obstore backend (S3, GCS, Azure, local) — a file is ready once `store` lists both its data object and its index; the caller passes the built store. A source obstore can't list (an HTTP file server whose directory index is HTML, a frontier that must be probed) gets its own discovery util in the same module and a custom `discover_available`.
 
-## Reader safety: one source file → one atomic commit
+## Reader safety: whole files, atomic commits
 
-All refs from a single source file, plus any append-dim expansion their positions require, land in one icechunk commit. A reader on `main` sees either none of a file's data or all of it. Atomicity is per *file*, not per init — readers see each lead time's data as its file is ingested, within seconds.
+Every ref from a source file, plus any append-dim expansion its positions require, lands in the same icechunk commit as the rest of that file — a reader on `main` sees either none of a file's data or all of it, never a partially-ingested file. A commit may hold one file (an operational tick) or many (a backfill worker's whole batch); atomicity is per *commit*, and each file is wholly inside one. Operational updates commit per tick, so readers see each lead time's data within seconds of its file publishing.
 
 This invariant is also what lets the filter probe a single representative cell per file: if one cell a file covers is present, the whole file is present.
 
@@ -57,12 +57,27 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 ## Backfill: parallel on a pre-sized temp branch
 
-Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards).
+Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards). Workers are assigned contiguous append-dim blocks of jobs (`worker_assignment = "contiguous"`), so each flush rewrites only the manifest windows its own block covers rather than most windows of every array (see [parallel_processing.md](parallel_processing.md#append-dim-region-spreading-and-worker-assignment)).
+
+Commit latency ≈ `(1 + rebase_attempts) × flush cost`. A flush read-modify-writes every manifest window the session's refs touch (manifests are immutable), and every lost branch-HEAD CAS race re-runs the flush, so rebase attempts scale with parallelism. Keeping each worker's refs within its own few windows — contiguous append-dim assignment — is what bounds flush cost: measured on the HRRR-spatial backfill, commits held flat (~10–30s at parallelism 10) from empty to full archive, where scattered (spread) assignment touched most windows of every array per flush and commits grew ~40s → 1000s+ as windows filled. Icechunk stamps `rebase_attempts` into each snapshot's metadata (`repo.ancestry`) — read it to distinguish contention from flush cost when commits are slow.
+
+Backfill parallelism has a low ceiling: measured on HRRR-spatial, throughput peaked by ~10 concurrent workers, and doubling to 20 added contention without adding throughput. The failure mode is a starvation tail, not a slow mean — most commits land within a few rebase attempts while a few spiral to dozens (freshly started sessions repeatedly beat long-stuck ones to the branch HEAD), so watch the max `rebase_attempts`, not just the mean.
 
 Two operational rules when backfilling a live virtual dataset:
 
 - **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
 - **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
+
+## Manifest splitting
+
+Icechunk stores each array's chunk references in one or more manifest objects, split along a dimension via `IcechunkVirtualConfig.manifest_split` (built with `manifest_append_dim_split`). Two independent costs pull in opposite directions:
+
+- **Manifest size (bytes)** — a reader downloads a whole manifest to resolve *any* chunk in it, and a commit rewrites the active split's whole manifest each time it grows. Keep a full manifest within a reader-friendly size: rough budgets are ≤ 3 MiB per single-level variable (a small web app plotting one field pays one manifest + one chunk) and 5–8 MiB for vertical-group variables (those readers expect bulk downloads). Larger split → bigger manifests. A manifest's size is `split_size × refs_per_index × bytes_per_ref`, so arrays with more refs per append index (more levels, ensemble members, lead times) reach a given size at a smaller `split_size`.
+- **Total manifest count `M`** — `M = array_count × ceil(appends / split_size)`. Every commit's cost grows with `M` (it re-serializes the snapshot's manifest list and touches every split of every array). Smaller split → more manifests → larger `M`. For a many-variable dataset `M` is dominated by `array_count`, so over-splitting the low-ref-count arrays is the biggest, least useful contributor.
+
+These two are set per array, so size them per array group: give low-ref-count arrays (e.g. single-level) a **coarse** split (few splits, each manifest still small) and high-ref-count arrays (e.g. vertical groups) a **finer** split (more splits, but each manifest stays within the reader budget). `manifest_append_dim_split` takes either one `split_size` for all arrays or a `{path_regex: size, None: catch_all_size}` mapping for this per-group policy.
+
+To convert a size budget into a `split_size` you need **bytes per ref**. Measured on HRRR-spatial: **~16.4 bytes/ref** (weighted; median ~17). This is a rough number from a single dataset — location compressibility varies with URL structure, so **check it on each new dataset** once some data is written: `repo.list_manifest_files(snapshot_id)` returns every live manifest's exact `size_bytes` and `num_chunk_refs`. Don't estimate from S3 object sizes (partially-filled splits skew low, and you can't tell fullness from the outside). Two gotchas: icechunk's zstd location compression only engages at ≥ `min_num_chunks` refs per manifest (default 1000) — below that, raw ~80-byte URLs are stored, so keep every group's split above ~1000 refs; and refs are only this small when a `VirtualChunkContainer` prefix covers the locations.
 
 ## Filtering: the manifest is the source of truth
 

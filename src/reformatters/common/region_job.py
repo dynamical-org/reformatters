@@ -7,6 +7,7 @@ from typing import (
     Any,
     ClassVar,
     Generic,
+    Literal,
     Self,
     TypeVar,
     get_args,
@@ -30,7 +31,6 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import (
     chunk_slices,
     split_groups,
-    spread_evenly,
     walk_data_arrays,
 )
 from reformatters.common.logging import get_logger
@@ -129,6 +129,12 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # Limit the number of variables processed in each job if set.
     # Rule of thumb: leave unset unless a job takes > 15 minutes.
     max_vars_per_job: ClassVar[int | None] = None
+
+    # How get_worker_jobs divides the append-dim-ordered job list: "spread" scatters each
+    # worker's jobs across the append dim to avoid source-prefix hot-spotting, "contiguous"
+    # gives each worker one block. See "Append dim region spreading and worker assignment"
+    # in docs/parallel_processing.md.
+    worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "spread"
 
     @classmethod
     def source_file_var_groups(
@@ -420,10 +426,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     for i, r in enumerate(regions, start=start_shard)
                     if i in shard_indices
                 ]
-
-        # Spread regions so any contiguous worker-index window (the workers
-        # running concurrently) covers the whole append dim, not a clustered band.
-        regions = spread_evenly(regions)
 
         all_jobs = [
             cls(

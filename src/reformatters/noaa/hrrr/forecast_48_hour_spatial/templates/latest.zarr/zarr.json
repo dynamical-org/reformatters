@@ -1,7 +1,7 @@
 {
   "attributes": {
     "dataset_id": "noaa-hrrr-forecast-48-hour-spatial",
-    "dataset_version": "0.1.0",
+    "dataset_version": "0.5.0",
     "name": "NOAA HRRR forecast, 48 hour, spatial",
     "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -437,6 +437,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -491,6 +496,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -545,6 +555,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -599,6 +614,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -4711,7 +4731,7 @@
       "model_level": {
         "attributes": {
           "dataset_id": "noaa-hrrr-forecast-48-hour-spatial",
-          "dataset_version": "0.1.0",
+          "dataset_version": "0.5.0",
           "name": "NOAA HRRR forecast, 48 hour, spatial",
           "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
           "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
@@ -7027,7 +7047,7 @@
       "pressure_level": {
         "attributes": {
           "dataset_id": "noaa-hrrr-forecast-48-hour-spatial",
-          "dataset_version": "0.1.0",
+          "dataset_version": "0.5.0",
           "name": "NOAA HRRR forecast, 48 hour, spatial",
           "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
           "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",

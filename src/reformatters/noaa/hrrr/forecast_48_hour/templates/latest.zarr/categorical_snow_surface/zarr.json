@@ -73,6 +73,11 @@
     "units": "1",
     "comment": "0=no; 1=yes",
     "step_type": "instant",
+    "flag_values": [
+      0,
+      1
+    ],
+    "flag_meanings": "no yes",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

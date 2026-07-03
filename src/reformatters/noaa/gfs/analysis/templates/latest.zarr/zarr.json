@@ -88,6 +88,11 @@
           "units": "1",
           "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -172,6 +177,11 @@
           "units": "1",
           "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -256,6 +266,11 @@
           "units": "1",
           "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -340,6 +355,11 @@
           "units": "1",
           "comment": "Presence/absence over the previous 1-6 hours, reset every 6-hour forecast step (00Z, 06Z, 12Z, 18Z). 0=no; 1=yes.",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
         },
