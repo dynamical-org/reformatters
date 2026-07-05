@@ -21,7 +21,15 @@ def _extract_per_var_html(html: str) -> list[str]:
     return re.findall(r"<h3><code>([^<]+)</code></h3>", html)
 
 
-def _wrap_variable_sections(html: str) -> str:
+_PLOT_TYPES = (
+    ("nulls", "null fraction"),
+    ("value_timeseries", "full-period value time series"),
+    ("spatial", "spatial comparison"),
+    ("temporal", "time series comparison"),
+)
+
+
+def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
     pattern = re.compile(
         r"<h3><code>(?P<var>[^<]+)</code></h3>(?P<body>.*?)(?=<h[23][\s>]|\Z)",
         re.DOTALL,
@@ -31,22 +39,18 @@ def _wrap_variable_sections(html: str) -> str:
         var = m.group("var")
         body = m.group("body")
         slug = var_slug(var)
-        plots = (
-            '<div class="plots">'
-            f'<a href="nulls_{slug}.png" target="_blank">'
-            f'<img src="nulls_{slug}.png" alt="{var} — null fraction"></a>'
-            f'<a href="value_timeseries_{slug}.png" target="_blank">'
-            f'<img src="value_timeseries_{slug}.png" alt="{var} — full-period value time series"></a>'
-            f'<a href="spatial_{slug}.png" target="_blank">'
-            f'<img src="spatial_{slug}.png" alt="{var} — spatial comparison"></a>'
-            f'<a href="temporal_{slug}.png" target="_blank">'
-            f'<img src="temporal_{slug}.png" alt="{var} — time series comparison"></a>'
-            "</div>"
+        # Skip plots the run didn't produce (e.g. no nulls_ plots on a virtual run).
+        plots = "".join(
+            f'<a href="{filename}" target="_blank">'
+            f'<img src="{filename}" alt="{var} — {label}"></a>'
+            for prefix, label in _PLOT_TYPES
+            if (filename := f"{prefix}_{slug}.png")
+            and (available_files is None or filename in available_files)
         )
         return (
             f'<section class="variable" id="var-{slug}" data-var="{slug}">'
             f'<h3 class="var-heading"><code>{var}</code></h3>'
-            f"{body}{plots}</section>"
+            f'{body}<div class="plots">{plots}</div></section>'
         )
 
     return pattern.sub(replace, html)
@@ -315,14 +319,16 @@ def _extract_dataset_name(md_text: str, fallback: str) -> str:
     return m.group(1) if m else fallback
 
 
-def render_html(md_text: str, dataset_id: str) -> str:
+def render_html(
+    md_text: str, dataset_id: str, available_files: set[str] | None = None
+) -> str:
     md = MarkdownIt("commonmark").enable("table")
     html = md.render(md_text)
     html = _png_links_open_in_new_tab(html)
     variables = _extract_per_var_html(html)
     html, sections = _annotate_h2(html)
     html = _annotate_non_var_h3(html)
-    html = _wrap_variable_sections(html)
+    html = _wrap_variable_sections(html, available_files)
     html = _wrap_tables(html)
     dataset_name = _extract_dataset_name(md_text, dataset_id)
     toc = _build_toc(sections, variables, dataset_name)
@@ -354,7 +360,8 @@ def render_report(run_dir: Path) -> Path:
     assert md_path.exists(), f"validation_summary.md not found in {run_dir}"
     dataset_id = run_dir.parent.name
     out_path = run_dir / REPORT_FILENAME
-    out_path.write_text(render_html(md_path.read_text(), dataset_id))
+    available_files = {f.name for f in run_dir.iterdir() if f.is_file()}
+    out_path.write_text(render_html(md_path.read_text(), dataset_id, available_files))
     return out_path
 
 
