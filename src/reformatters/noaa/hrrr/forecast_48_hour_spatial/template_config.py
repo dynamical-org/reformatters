@@ -37,6 +37,10 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 
 EXPECTED_FORECAST_LENGTH = pd.Timedelta(hours=48)
+# HRRR v3 ran the 00/06/12/18Z cycles to 36h; v4 extended them to 48h starting with the
+# 2020-12-02T12Z init (the first init with f37-f48 files on NODD).
+HRRR_V4_FIRST_INIT = pd.Timestamp("2020-12-02T12:00")
+EXPECTED_FORECAST_LENGTH_V3 = pd.Timedelta(hours=36)
 
 # HRRR CONUS Lambert Conformal grid, from NoaaHrrrCommonTemplateConfig._spatial_info.
 # Asserted against _spatial_info in data_vars so the two cannot drift.
@@ -156,8 +160,10 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
             "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (
                 ("init_time",),
-                np.full(
-                    ds["init_time"].size, EXPECTED_FORECAST_LENGTH.to_timedelta64()
+                np.where(
+                    ds["init_time"].values < HRRR_V4_FIRST_INIT.to_datetime64(),
+                    EXPECTED_FORECAST_LENGTH_V3.to_timedelta64(),
+                    EXPECTED_FORECAST_LENGTH.to_timedelta64(),
                 ),
             ),
             "latitude": (("y", "x"), latitudes),
@@ -301,7 +307,7 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
-                        min=str(EXPECTED_FORECAST_LENGTH),
+                        min=str(EXPECTED_FORECAST_LENGTH_V3),
                         max=str(EXPECTED_FORECAST_LENGTH),
                     ),
                 ),
