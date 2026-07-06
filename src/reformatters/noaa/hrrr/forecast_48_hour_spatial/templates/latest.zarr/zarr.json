@@ -1861,7 +1861,7 @@
         "attributes": {
           "long_name": "Expected forecast length",
           "statistics_approximate": {
-            "min": "2 days 00:00:00",
+            "min": "1 days 12:00:00",
             "max": "2 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
@@ -4906,7 +4906,7 @@
         "attributes": {
           "long_name": "Expected forecast length",
           "statistics_approximate": {
-            "min": "2 days 00:00:00",
+            "min": "1 days 12:00:00",
             "max": "2 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
@@ -7342,7 +7342,7 @@
         "attributes": {
           "long_name": "Expected forecast length",
           "statistics_approximate": {
-            "min": "2 days 00:00:00",
+            "min": "1 days 12:00:00",
             "max": "2 days 00:00:00"
           },
           "dtype": "timedelta64[us]",
