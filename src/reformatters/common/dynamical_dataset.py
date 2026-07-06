@@ -493,15 +493,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert len(all_jobs) == 1, (
             f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
         )
-        for job in all_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            assert job.processing_mode == "update", (
-                "operational_update_jobs must construct jobs with processing_mode='update'"
-            )
-            # Deploy code-side metadata fixes (attrs, coordinate values) before
-            # ingesting, matching materialized updates which rewrite metadata each
-            # fire. No-op commit-wise when the store already matches the template.
-            job.refresh_metadata(self.store_factory, self._tmp_store())
+        (job,) = all_jobs
+        assert isinstance(job, VirtualRegionJob)
+        assert job.processing_mode == "update", (
+            "operational_update_jobs must construct jobs with processing_mode='update'"
+        )
+        # Deploy checked-in template metadata fixes (attrs, coordinate values) before
+        # ingesting. No-op commit-wise when the store already matches the template.
+        job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", worker_index
         )

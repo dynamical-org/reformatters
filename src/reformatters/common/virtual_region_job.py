@@ -452,9 +452,8 @@ class VirtualRegionJob(
         self, store_factory: storage.StoreFactory, tmp_store: Path
     ) -> None:
         """Rewrite attrs + coordinate values from the current template, trimmed to each
-        group's committed extent, so code-side metadata fixes deploy on the next
-        operational update — matching materialized updates, which rewrite metadata every
-        fire (parallel_coordination.finalize). Trimming preserves lazy growth: the
+        group's committed extent, so checked-in template metadata fixes deploy on the
+        next operational update. Trimming preserves lazy growth: the
         append dim is never sized past ingested data. Commits only when something
         actually changed, so an in-sync store adds no history noise.
         """
