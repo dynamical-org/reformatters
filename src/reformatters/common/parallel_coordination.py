@@ -49,9 +49,10 @@ def parallel_setup(
     template_ds: xr.DataTree,
     tmp_store: Path,
     icechunk_repos: list[tuple[str, icechunk.Repository]],
+    consolidated: bool,
 ) -> SetupInfo:
     if is_first:
-        template_utils.write_metadata(template_ds, tmp_store)
+        template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
 
         # On retry, reuse snapshots from the prior attempt's ready.json so
         # original_snapshot stays stable. This keeps finalize's
@@ -158,6 +159,7 @@ def finalize(
     setup_info: SetupInfo,
     workers_total: int,
     update_template_with_results: bool,
+    consolidated: bool,
 ) -> None:
     if update_template_with_results:
         assert len(all_jobs) > 0
@@ -166,7 +168,9 @@ def finalize(
         updated_template = template_ds
     # Ensure tmp_store has written metadata. Virtual workers (besides worker 0)
     # do not otherwise write to tmp_store.
-    template_utils.write_metadata(updated_template, tmp_store)
+    template_utils.write_metadata(
+        updated_template, tmp_store, consolidated=consolidated
+    )
 
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"

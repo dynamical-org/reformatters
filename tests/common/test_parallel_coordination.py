@@ -154,9 +154,12 @@ class TestParallelSetupFirstWorker:
             template_ds=ds,
             tmp_store=tmp_path,
             icechunk_repos=[],
+            consolidated=True,
         )
 
-        stub_io["write_metadata"].assert_called_once_with(ds, tmp_path)
+        stub_io["write_metadata"].assert_called_once_with(
+            ds, tmp_path, consolidated=True
+        )
         # Single-worker: no ready.json is written.
         assert factory.files == {}
         assert result == {}
@@ -175,6 +178,7 @@ class TestParallelSetupFirstWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=[],
+            consolidated=True,
         )
 
         assert result == {}
@@ -201,6 +205,7 @@ class TestParallelSetupFirstWorker:
             template_ds=ds,
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
+            consolidated=True,
         )
 
         # Each repo had create_branch called with the main snapshot captured.
@@ -265,6 +270,7 @@ class TestParallelSetupFirstWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
+            consolidated=True,
         )
 
         # setdefault must preserve the prior-attempt snapshot, not refresh from main.
@@ -292,6 +298,7 @@ class TestParallelSetupFirstWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=[("primary", primary_repo)],  # ty: ignore[invalid-argument-type]
+            consolidated=True,
         )
 
         assert primary_repo.create_branch_calls == [
@@ -321,6 +328,7 @@ class TestParallelSetupFirstWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
+            consolidated=True,
         )
 
         assert primary_repo.create_branch_calls == []
@@ -342,6 +350,7 @@ class TestParallelSetupLaterWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=[],
+            consolidated=True,
         )
         assert result == {}
         stub_io["write_metadata"].assert_not_called()
@@ -374,6 +383,7 @@ class TestParallelSetupLaterWorker:
             template_ds=_template(),
             tmp_store=tmp_path,
             icechunk_repos=[],
+            consolidated=True,
         )
 
         assert result == payload
@@ -469,6 +479,7 @@ class TestFinalize:
             setup_info={},
             workers_total=1,
             update_template_with_results=False,
+            consolidated=True,
         )
 
         # No metadata copies, no commits, and no replicas/primary stores queried.
@@ -509,6 +520,7 @@ class TestFinalize:
             setup_info=setup_info,
             workers_total=1,
             update_template_with_results=False,
+            consolidated=True,
         )
 
         # Replica processed before primary per primary-last order.
@@ -552,6 +564,7 @@ class TestFinalize:
             setup_info=setup_info,
             workers_total=1,
             update_template_with_results=False,
+            consolidated=True,
         )
 
         # First pass was skipped — no session, no reset, no icechunk_only copy.
@@ -578,6 +591,7 @@ class TestFinalize:
             setup_info={},
             workers_total=1,
             update_template_with_results=False,
+            consolidated=True,
         )
         stub_io["copy_zarr_metadata"].assert_not_called()
         # Even without update_template_with_results, finalize writes template
@@ -608,6 +622,7 @@ class TestFinalize:
             setup_info={},
             workers_total=1,
             update_template_with_results=True,
+            consolidated=True,
         )
         job.update_template_with_results.assert_called_once_with(merged)
         assert stub_io["copy_zarr_metadata"].call_count == 1
@@ -633,6 +648,7 @@ class TestFinalize:
             setup_info={},
             workers_total=1,
             update_template_with_results=False,
+            consolidated=True,
         )
         assert "job" in factory.files  # not cleared
 
@@ -647,5 +663,6 @@ class TestFinalize:
             setup_info={},
             workers_total=2,
             update_template_with_results=False,
+            consolidated=True,
         )
         assert "job" not in factory.files  # cleared

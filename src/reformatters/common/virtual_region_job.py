@@ -62,6 +62,11 @@ class VirtualRegionJob(
     # (scattered regions rewrite most windows every flush), see docs/parallel_processing.md.
     worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "contiguous"
 
+    # Virtual stores carry no consolidated metadata so every metadata writer
+    # (setup/finalize, appends, refresh) produces byte-identical documents,
+    # see "Metadata refresh" in docs/virtual_datasets.md.
+    consolidated_metadata: ClassVar[bool] = False
+
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
@@ -538,6 +543,16 @@ class VirtualRegionJob(
                     continue
                 slice_ds = node.to_dataset().isel(
                     {self.append_dim: slice(current_size, needed_append_dim_size)}
+                )
+                # to_zarr(append_dim=...) overwrites variables without the append dim,
+                # deleting chunks that equal fill_value (e.g. spatial_ref) since it
+                # writes with write_empty_chunks=False. Append only what grows.
+                slice_ds = slice_ds.drop_vars(
+                    [
+                        name
+                        for name, variable in slice_ds.variables.items()
+                        if self.append_dim not in variable.dims
+                    ]
                 )
                 slice_ds.to_zarr(
                     store,

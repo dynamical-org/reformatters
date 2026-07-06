@@ -136,6 +136,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # in docs/parallel_processing.md.
     worker_assignment: ClassVar[Literal["spread", "contiguous"]] = "spread"
 
+    # Whether setup/finalize metadata writes embed zarr consolidated metadata.
+    consolidated_metadata: ClassVar[bool] = True
+
     @classmethod
     def source_file_var_groups(
         cls,
