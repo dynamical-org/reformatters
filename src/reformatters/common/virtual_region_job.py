@@ -491,6 +491,16 @@ class VirtualRegionJob(
             trimmed, existing, self.append_dim
         )
 
+        # A coordinate the template renders entirely null is runtime state the template
+        # cannot derive (e.g. ingested_forecast_length, all-NaT from derive_coordinates):
+        # never overwrite its store-written values. Its zarr.json/attrs still refresh.
+        store_written_coords = {
+            str(name)
+            for node in trimmed.subtree
+            for name, coord in node.to_dataset(inherit=False).coords.items()
+            if bool(coord.isnull().all())
+        }
+
         template_utils.write_metadata(trimmed, tmp_store)
         for role, repo in repos:
             session = repo.writable_session("main")
@@ -500,6 +510,7 @@ class VirtualRegionJob(
                 session.store,
                 icechunk_only=True,
                 skip_unchanged=True,
+                exclude_coord_value_chunks=store_written_coords,
             )
             if session.has_uncommitted_changes:
                 session.commit(

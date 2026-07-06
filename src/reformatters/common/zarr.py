@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -98,15 +98,21 @@ def _copy_data_var_chunks(
         sync_to_store(store, key, file.read_bytes())
 
 
-def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
+def _coord_chunk_globs(
+    template_ds: xr.DataTree, exclude_coords: Collection[str] = ()
+) -> list[str]:
     """Glob patterns for every coordinate's chunk files, group-prefixed. The `c/**/*`
     pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
     a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
-    drops the `c/` directory matched by the bare pattern for non-scalar coords)."""
+    drops the `c/` directory matched by the bare pattern for non-scalar coords).
+    `exclude_coords` names (matched in every group) get no value-chunk globs — used to
+    protect store-written coordinate values from a template metadata refresh."""
     globs = []
     for node in template_ds.subtree:
         prefix = node_path_prefix(node)
         for coord in node.to_dataset().coords:
+            if coord in exclude_coords:
+                continue
             globs.append(f"{prefix}{coord}/c/**/*")
             globs.append(f"{prefix}{coord}/c")
     return globs
@@ -120,6 +126,7 @@ def copy_zarr_metadata(
     icechunk_only: bool = False,
     zarr3_only: bool = False,
     skip_unchanged: bool = False,
+    exclude_coord_value_chunks: Collection[str] = (),
 ) -> None:
     """
     Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
@@ -134,7 +141,7 @@ def copy_zarr_metadata(
     assert not (icechunk_only and zarr3_only)
 
     coord_chunk_files: list[Path] = []
-    for coord_glob in _coord_chunk_globs(template_ds):
+    for coord_glob in _coord_chunk_globs(template_ds, exclude_coord_value_chunks):
         coord_chunk_files.extend(f for f in tmp_store.glob(coord_glob) if f.is_file())
     # Shallowest first so a parent group's metadata is written before its children's
     # (icechunk rejects a child array whose parent group does not yet exist).

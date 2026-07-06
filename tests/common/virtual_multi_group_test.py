@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
@@ -754,3 +755,54 @@ def test_refresh_metadata_rejects_structural_drift(tmp_path: Path) -> None:
     job = _make_region_job(drifted, region=slice(0, 2), processing_mode="update")
     with pytest.raises(ValueError, match="missing from update template"):
         job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+
+def _with_runtime_state_coord(template: xr.DataTree, n_inits: int) -> xr.DataTree:
+    """Add an all-NaN runtime-state coord (the ingested_forecast_length convention)."""
+    root = template.to_dataset(inherit=False).assign_coords(
+        runtime_state=("init_time", np.full(n_inits, np.nan))
+    )
+    root["runtime_state"].encoding.update({"dtype": "float64", "fill_value": np.nan})
+    pressure_node = template["pressure_level"]
+    assert isinstance(pressure_node, xr.DataTree)
+    return xr.DataTree.from_dict(
+        {"/": root, "pressure_level": pressure_node.to_dataset(inherit=False)}
+    )
+
+
+def test_refresh_metadata_preserves_store_written_coord_values(tmp_path: Path) -> None:
+    # A coordinate the template renders entirely null (e.g. ingested_forecast_length)
+    # is runtime state: an update process writes its real values into the store, and a
+    # metadata refresh must not overwrite them with the template's placeholder.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _with_runtime_state_coord(_create_template_ds(2), 2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    # Simulate an update process having recorded runtime state in the store.
+    session = _primary_repo(dataset.store_factory).writable_session("main")
+    group = zarr.open_group(session.store, mode="r+")
+    array = group["runtime_state"]
+    assert isinstance(array, zarr.Array)
+    array[:] = [1.5, 2.5]
+    session.commit("simulate update-written runtime state")
+
+    # Refresh from a template carrying a metadata fix; runtime_state is still all-NaN.
+    fixed = _with_runtime_state_coord(_create_template_ds(2), 2)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    job = _make_region_job(fixed, region=slice(0, 2), processing_mode="update")
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+    store = repo.readonly_session("main").store
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+        decode_timedelta=True,
+    )
+    assert tree["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+    runtime_state = tree["runtime_state"]
+    assert isinstance(runtime_state, xr.DataArray)
+    np.testing.assert_array_equal(runtime_state.values, [1.5, 2.5])
