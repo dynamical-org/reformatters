@@ -139,8 +139,10 @@ def _create_template_ds(
         "units": "seconds since 1970-01-01 00:00:00",
         "calendar": "proleptic_gregorian",
     }
-    ds["init_time"].encoding.update(time_encoding)
-    ds["valid_time"].encoding.update(time_encoding)
+    # Fixed append-dim coord chunk sizes (like prod) so growth never changes the
+    # chunk grid and a metadata refresh render is byte-identical to the store.
+    ds["init_time"].encoding.update({**time_encoding, "chunks": (8,)})
+    ds["valid_time"].encoding.update({**time_encoding, "chunks": (8, N_LEADS)})
     ds["lead_time"].encoding.update(
         {"dtype": "int64", "fill_value": -1, "units": "seconds"}
     )
@@ -1542,7 +1544,9 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
     repo = _primary_repo(dataset.store_factory)
     snapshots_after_first = _snapshot_count(repo)
 
-    fire()  # everything already present -> no new commits
+    # No new data and no template drift -> no new commits: the metadata refresh's
+    # unconsolidated render is byte-identical to what appends leave in the store.
+    fire()
     assert _snapshot_count(repo) == snapshots_after_first
 
 

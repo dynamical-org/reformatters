@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -98,15 +98,21 @@ def _copy_data_var_chunks(
         sync_to_store(store, key, file.read_bytes())
 
 
-def _coord_chunk_globs(template_ds: xr.DataTree) -> list[str]:
+def _coord_chunk_globs(
+    template_ds: xr.DataTree, exclude_coords: Collection[str] = ()
+) -> list[str]:
     """Glob patterns for every coordinate's chunk files, group-prefixed. The `c/**/*`
     pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
     a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
-    drops the `c/` directory matched by the bare pattern for non-scalar coords)."""
+    drops the `c/` directory matched by the bare pattern for non-scalar coords).
+    `exclude_coords` names (matched in every group) get no value-chunk globs — used to
+    protect store-written coordinate values from a template metadata refresh."""
     globs = []
     for node in template_ds.subtree:
         prefix = node_path_prefix(node)
         for coord in node.to_dataset().coords:
+            if coord in exclude_coords:
+                continue
             globs.append(f"{prefix}{coord}/c/**/*")
             globs.append(f"{prefix}{coord}/c")
     return globs
@@ -119,6 +125,8 @@ def copy_zarr_metadata(
     replica_stores: Iterable[Store] = (),
     icechunk_only: bool = False,
     zarr3_only: bool = False,
+    skip_unchanged: bool = False,
+    exclude_coord_value_chunks: Collection[str] = (),
 ) -> None:
     """
     Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
@@ -133,7 +141,7 @@ def copy_zarr_metadata(
     assert not (icechunk_only and zarr3_only)
 
     coord_chunk_files: list[Path] = []
-    for coord_glob in _coord_chunk_globs(template_ds):
+    for coord_glob in _coord_chunk_globs(template_ds, exclude_coord_value_chunks):
         coord_chunk_files.extend(f for f in tmp_store.glob(coord_glob) if f.is_file())
     # Shallowest first so a parent group's metadata is written before its children's
     # (icechunk rejects a child array whose parent group does not yet exist).
@@ -165,7 +173,9 @@ def copy_zarr_metadata(
         log.info(
             f"Copying metadata to replica store ({_store_repr(replica_store)}) from {tmp_store}"
         )
-        _copy_metadata_files(_ordered_files(replica_store), tmp_store, replica_store)
+        _copy_metadata_files(
+            _ordered_files(replica_store), tmp_store, replica_store, skip_unchanged
+        )
 
     if _should_skip(primary_store):
         return
@@ -173,17 +183,32 @@ def copy_zarr_metadata(
     log.info(
         f"Copying metadata to primary store ({_store_repr(primary_store)}) from {tmp_store}"
     )
-    _copy_metadata_files(_ordered_files(primary_store), tmp_store, primary_store)
+    _copy_metadata_files(
+        _ordered_files(primary_store), tmp_store, primary_store, skip_unchanged
+    )
 
 
 def _copy_metadata_files(
     metadata_files: list[Path],
     tmp_store: Path,
     store: Store,
+    skip_unchanged: bool = False,
 ) -> None:
     for file in metadata_files:
         relative_path = str(file.relative_to(tmp_store))
-        sync_to_store(store, relative_path, file.read_bytes())
+        data = file.read_bytes()
+        # skip_unchanged keeps a metadata refresh from dirtying the session (and so
+        # committing) when the store already matches the template byte-for-byte.
+        if skip_unchanged and _store_bytes_equal(store, relative_path, data):
+            continue
+        sync_to_store(store, relative_path, data)
+
+
+def _store_bytes_equal(store: Store, key: str, data: bytes) -> bool:
+    existing = zarr.core.sync.sync(
+        store.get(key, prototype=zarr.buffer.default_buffer_prototype())
+    )
+    return existing is not None and existing.to_bytes() == data
 
 
 def sync_to_store(store: Store, key: str, data: bytes) -> None:

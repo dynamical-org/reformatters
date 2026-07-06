@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
@@ -682,3 +683,126 @@ def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:
 
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
     _assert_all_values(dataset, n_inits=2)
+
+
+def test_refresh_metadata_deploys_template_fixes_trimmed(tmp_path: Path) -> None:
+    # A code-side metadata fix (attrs, coordinate values) must reach the live store on
+    # the next operational update, trimmed to the committed extent (never growing the
+    # append dim toward the operational template's end), and an in-sync store must not
+    # accrue a commit per fire.
+    dataset = _make_dataset(tmp_path, n_inits=4)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    # Simulate the deployed fix: the operational template extends to 4 inits and
+    # carries changed attrs (root + group var) and a changed coordinate value.
+    fixed = _create_template_ds(4)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    fixed["pressure_level/temperature"].attrs["comment"] = "deployed group fix"
+    # A non-dimension coordinate value fix (dimension coord values are structural and
+    # rejected by the drift guard).
+    fixed_valid_time = fixed["valid_time"]
+    assert isinstance(fixed_valid_time, xr.DataArray)
+    fixed_valid_time = fixed_valid_time.copy(deep=True)
+    fixed_valid_time.values[0, 0] += np.timedelta64(30, "m")
+    pressure_node = fixed["pressure_level"]
+    assert isinstance(pressure_node, xr.DataTree)
+    fixed = xr.DataTree.from_dict(
+        {
+            "/": fixed.to_dataset(inherit=False).assign_coords(
+                valid_time=fixed_valid_time
+            ),
+            "pressure_level": pressure_node.to_dataset(inherit=False),
+        }
+    )
+    job = _make_region_job(fixed, region=slice(0, 4), processing_mode="update")
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+    store = repo.readonly_session("main").store
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+        decode_timedelta=True,
+    )
+    assert tree["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+    assert tree["pressure_level/temperature"].attrs["comment"] == "deployed group fix"
+    tree_valid_time = tree["valid_time"]
+    assert isinstance(tree_valid_time, xr.DataArray)
+    assert tree_valid_time.values[0, 0] == fixed_valid_time.values[0, 0]
+    # Trimmed: committed extent preserved, not grown toward the template's 4 inits.
+    assert tree.to_dataset().sizes["init_time"] == 2
+    assert tree["pressure_level"].to_dataset().sizes["init_time"] == 2
+
+    # A second refresh with the same template makes no new commit.
+    n_commits = len(list(repo.ancestry(branch="main")))
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp2.zarr")
+    assert len(list(repo.ancestry(branch="main"))) == n_commits
+
+
+def test_refresh_metadata_rejects_structural_drift(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    drifted = _create_template_ds(2)
+    drifted = drifted.drop_nodes("pressure_level")
+    job = _make_region_job(drifted, region=slice(0, 2), processing_mode="update")
+    with pytest.raises(ValueError, match="missing from update template"):
+        job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+
+def _with_runtime_state_coord(template: xr.DataTree, n_inits: int) -> xr.DataTree:
+    """Add an all-NaN runtime-state coord (the ingested_forecast_length convention)."""
+    root = template.to_dataset(inherit=False).assign_coords(
+        runtime_state=("init_time", np.full(n_inits, np.nan))
+    )
+    root["runtime_state"].encoding.update({"dtype": "float64", "fill_value": np.nan})
+    pressure_node = template["pressure_level"]
+    assert isinstance(pressure_node, xr.DataTree)
+    return xr.DataTree.from_dict(
+        {"/": root, "pressure_level": pressure_node.to_dataset(inherit=False)}
+    )
+
+
+def test_refresh_metadata_preserves_store_written_coord_values(tmp_path: Path) -> None:
+    # A coordinate the template renders entirely null (e.g. ingested_forecast_length)
+    # is runtime state: an update process writes its real values into the store, and a
+    # metadata refresh must not overwrite them with the template's placeholder.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _with_runtime_state_coord(_create_template_ds(2), 2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    # Simulate an update process having recorded runtime state in the store.
+    session = _primary_repo(dataset.store_factory).writable_session("main")
+    group = zarr.open_group(session.store, mode="r+")
+    array = group["runtime_state"]
+    assert isinstance(array, zarr.Array)
+    array[:] = [1.5, 2.5]
+    session.commit("simulate update-written runtime state")
+
+    # Refresh from a template carrying a metadata fix; runtime_state is still all-NaN.
+    fixed = _with_runtime_state_coord(_create_template_ds(2), 2)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    job = _make_region_job(fixed, region=slice(0, 2), processing_mode="update")
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+    store = repo.readonly_session("main").store
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+        decode_timedelta=True,
+    )
+    assert tree["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+    runtime_state = tree["runtime_state"]
+    assert isinstance(runtime_state, xr.DataArray)
+    np.testing.assert_array_equal(runtime_state.values, [1.5, 2.5])

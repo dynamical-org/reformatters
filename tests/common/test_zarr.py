@@ -89,7 +89,7 @@ def test_copy_zarr_metadata_calls_copy_metadata_files_for_all_stores(
     # Instead of exact call matching, check the calls contain the right elements
     assert len(calls) == 3
     for call_args in calls:
-        files, _store_path, store = call_args[0]
+        files, _store_path, store, _skip = call_args[0]
         # Verify the files list contains the expected files (order-independent)
         assert set(files) == set(expected_metadata_files)
         _assert_format_specific_order(files, store)
@@ -136,7 +136,7 @@ def test_copy_zarr_metadata_skips_non_icechunk_stores_when_icechunk_only(
     for call_args, expected_store in zip(
         calls, [mock_replica_store_icechunk, mock_primary_icechunk], strict=True
     ):
-        files, store_path, store = call_args[0]
+        files, store_path, store, _skip = call_args[0]
         assert set(files) == set(expected_metadata_files)
         _assert_format_specific_order(files, store)
         assert store_path == tmp_store
@@ -214,7 +214,7 @@ def test_coord_chunk_globs_collects_group_nested_coord_chunk(
     captured: dict[str, list[Path]] = {}
 
     def fake_copy_metadata_files(
-        files: list[Path], _store_path: Path, _store: Store
+        files: list[Path], _store_path: Path, _store: Store, _skip: bool = False
     ) -> None:
         captured["files"] = files
 
@@ -247,7 +247,9 @@ def test_coord_chunk_globs_collects_scalar_coord_chunk(
     monkeypatch.setattr(
         zarr_module,
         "_copy_metadata_files",
-        lambda files, _store_path, _store: captured.__setitem__("files", files),
+        lambda files, _store_path, _store, _skip=False: captured.__setitem__(
+            "files", files
+        ),
     )
     copy_zarr_metadata(template, store, Mock(spec=Store))
 
@@ -264,7 +266,7 @@ def test_copy_zarr_metadata_icechunk_writes_root_zarr_json_before_group(
     captured: dict[str, list[Path]] = {}
 
     def fake_copy_metadata_files(
-        files: list[Path], _store_path: Path, _store: Store
+        files: list[Path], _store_path: Path, _store: Store, _skip: bool = False
     ) -> None:
         captured["files"] = files
 

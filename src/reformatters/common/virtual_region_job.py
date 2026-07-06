@@ -3,6 +3,7 @@ import time
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
+from pathlib import Path
 from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
 
 import icechunk
@@ -14,7 +15,7 @@ from icechunk import VirtualChunkSpec
 from icechunk.store import IcechunkStore
 from zarr.core.metadata import ArrayV3Metadata
 
-from reformatters.common import storage
+from reformatters.common import storage, template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import node_group_name
 from reformatters.common.logging import get_logger
@@ -26,6 +27,7 @@ from reformatters.common.region_job import (
     SourceFileResult,
 )
 from reformatters.common.types import Dim, Timedelta
+from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
 
@@ -445,6 +447,79 @@ class VirtualRegionJob(
                     else None  # label not in coords -> not yet a position in this dataset
                 )
         return results
+
+    def refresh_metadata(
+        self, store_factory: storage.StoreFactory, tmp_store: Path
+    ) -> None:
+        """Rewrite attrs + coordinate values from the current template, trimmed to each
+        group's committed extent, so checked-in template metadata fixes deploy on the
+        next operational update. Trimming preserves lazy growth: the
+        append dim is never sized past ingested data. Commits only when something
+        actually changed, so an in-sync store adds no history noise.
+        """
+        repos = store_factory.icechunk_repos(sort="primary-last")
+        primary_repo = repos[-1][1]
+        primary_store = primary_repo.readonly_session("main").store
+        if self._append_dim_size(primary_store) == 0:
+            return  # empty store: initial sizing is the backfill's job
+
+        # Trim per group: a crash between groups can leave sizes unequal, and writing a
+        # template larger (or smaller) than a group's committed extent would NaN-pad
+        # (or truncate) it for readers.
+        trimmed = xr.DataTree.from_dict(
+            {
+                node.path: node.to_dataset(inherit=False).isel(
+                    {
+                        self.append_dim: slice(
+                            0,
+                            self._append_dim_size(primary_store, node_group_name(node)),
+                        )
+                    }
+                )
+                for node in self.template_ds.subtree
+            }
+        )
+        existing = xr.open_datatree(
+            primary_store,  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            chunks=None,
+            consolidated=False,
+            decode_timedelta=True,
+        )
+        template_utils.assert_no_structural_drift_from_existing_store(
+            trimmed, existing, self.append_dim
+        )
+
+        # A coordinate the template renders entirely null is runtime state the template
+        # cannot derive (e.g. ingested_forecast_length, all-NaT from derive_coordinates):
+        # never overwrite its store-written values. Its zarr.json/attrs still refresh.
+        store_written_coords = {
+            str(name)
+            for node in trimmed.subtree
+            for name, coord in node.to_dataset(inherit=False).coords.items()
+            if bool(coord.isnull().all())
+        }
+
+        # consolidated=False matches how sync_dims_to's appends serialize group docs:
+        # embedded consolidated metadata carries every array's shape, which changes on
+        # each append and would force a refresh commit per fire.
+        template_utils.write_metadata(trimmed, tmp_store, consolidated=False)
+        for role, repo in repos:
+            session = repo.writable_session("main")
+            copy_zarr_metadata(
+                trimmed,
+                tmp_store,
+                session.store,
+                icechunk_only=True,
+                skip_unchanged=True,
+                exclude_coord_value_chunks=store_written_coords,
+            )
+            if session.has_uncommitted_changes:
+                session.commit(
+                    "Refresh metadata from template",
+                    rebase_with=icechunk.ConflictDetector(),
+                )
+                log.info(f"Refreshed metadata from template on {role}")
 
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
