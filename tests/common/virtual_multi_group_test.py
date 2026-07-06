@@ -682,3 +682,75 @@ def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:
 
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
     _assert_all_values(dataset, n_inits=2)
+
+
+def test_refresh_metadata_deploys_template_fixes_trimmed(tmp_path: Path) -> None:
+    # A code-side metadata fix (attrs, coordinate values) must reach the live store on
+    # the next operational update, trimmed to the committed extent (never growing the
+    # append dim toward the operational template's end), and an in-sync store must not
+    # accrue a commit per fire.
+    dataset = _make_dataset(tmp_path, n_inits=4)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    # Simulate the deployed fix: the operational template extends to 4 inits and
+    # carries changed attrs (root + group var) and a changed coordinate value.
+    fixed = _create_template_ds(4)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    fixed["pressure_level/temperature"].attrs["comment"] = "deployed group fix"
+    # A non-dimension coordinate value fix (dimension coord values are structural and
+    # rejected by the drift guard).
+    fixed_valid_time = fixed["valid_time"]
+    assert isinstance(fixed_valid_time, xr.DataArray)
+    fixed_valid_time = fixed_valid_time.copy(deep=True)
+    fixed_valid_time.values[0, 0] += np.timedelta64(30, "m")
+    pressure_node = fixed["pressure_level"]
+    assert isinstance(pressure_node, xr.DataTree)
+    fixed = xr.DataTree.from_dict(
+        {
+            "/": fixed.to_dataset(inherit=False).assign_coords(
+                valid_time=fixed_valid_time
+            ),
+            "pressure_level": pressure_node.to_dataset(inherit=False),
+        }
+    )
+    job = _make_region_job(fixed, region=slice(0, 4), processing_mode="update")
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+    store = repo.readonly_session("main").store
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+        decode_timedelta=True,
+    )
+    assert tree["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+    assert tree["pressure_level/temperature"].attrs["comment"] == "deployed group fix"
+    tree_valid_time = tree["valid_time"]
+    assert isinstance(tree_valid_time, xr.DataArray)
+    assert tree_valid_time.values[0, 0] == fixed_valid_time.values[0, 0]
+    # Trimmed: committed extent preserved, not grown toward the template's 4 inits.
+    assert tree.to_dataset().sizes["init_time"] == 2
+    assert tree["pressure_level"].to_dataset().sizes["init_time"] == 2
+
+    # A second refresh with the same template makes no new commit.
+    n_commits = len(list(repo.ancestry(branch="main")))
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp2.zarr")
+    assert len(list(repo.ancestry(branch="main"))) == n_commits
+
+
+def test_refresh_metadata_rejects_structural_drift(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    drifted = _create_template_ds(2)
+    drifted = drifted.drop_nodes("pressure_level")
+    job = _make_region_job(drifted, region=slice(0, 2), processing_mode="update")
+    with pytest.raises(ValueError, match="missing from update template"):
+        job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")

@@ -119,6 +119,7 @@ def copy_zarr_metadata(
     replica_stores: Iterable[Store] = (),
     icechunk_only: bool = False,
     zarr3_only: bool = False,
+    skip_unchanged: bool = False,
 ) -> None:
     """
     Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
@@ -165,7 +166,9 @@ def copy_zarr_metadata(
         log.info(
             f"Copying metadata to replica store ({_store_repr(replica_store)}) from {tmp_store}"
         )
-        _copy_metadata_files(_ordered_files(replica_store), tmp_store, replica_store)
+        _copy_metadata_files(
+            _ordered_files(replica_store), tmp_store, replica_store, skip_unchanged
+        )
 
     if _should_skip(primary_store):
         return
@@ -173,17 +176,32 @@ def copy_zarr_metadata(
     log.info(
         f"Copying metadata to primary store ({_store_repr(primary_store)}) from {tmp_store}"
     )
-    _copy_metadata_files(_ordered_files(primary_store), tmp_store, primary_store)
+    _copy_metadata_files(
+        _ordered_files(primary_store), tmp_store, primary_store, skip_unchanged
+    )
 
 
 def _copy_metadata_files(
     metadata_files: list[Path],
     tmp_store: Path,
     store: Store,
+    skip_unchanged: bool = False,
 ) -> None:
     for file in metadata_files:
         relative_path = str(file.relative_to(tmp_store))
-        sync_to_store(store, relative_path, file.read_bytes())
+        data = file.read_bytes()
+        # skip_unchanged keeps a metadata refresh from dirtying the session (and so
+        # committing) when the store already matches the template byte-for-byte.
+        if skip_unchanged and _store_bytes_equal(store, relative_path, data):
+            continue
+        sync_to_store(store, relative_path, data)
+
+
+def _store_bytes_equal(store: Store, key: str, data: bytes) -> bool:
+    existing = zarr.core.sync.sync(
+        store.get(key, prototype=zarr.buffer.default_buffer_prototype())
+    )
+    return existing is not None and existing.to_bytes() == data
 
 
 def sync_to_store(store: Store, key: str, data: bytes) -> None:

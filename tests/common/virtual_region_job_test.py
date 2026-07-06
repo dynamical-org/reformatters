@@ -1542,8 +1542,14 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
     repo = _primary_repo(dataset.store_factory)
     snapshots_after_first = _snapshot_count(repo)
 
-    fire()  # everything already present -> no new commits
-    assert _snapshot_count(repo) == snapshots_after_first
+    # Second fire ingests nothing, but its metadata refresh makes one commit: the
+    # first fire grew the append dim via appends, which leave the root zarr.json's
+    # consolidated metadata stale, and the refresh repairs it.
+    fire()
+    assert _snapshot_count(repo) == snapshots_after_first + 1
+
+    fire()  # in sync and no new data -> no new commits
+    assert _snapshot_count(repo) == snapshots_after_first + 1
 
 
 def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -> None:

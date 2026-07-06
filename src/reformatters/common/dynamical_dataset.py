@@ -498,6 +498,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             assert job.processing_mode == "update", (
                 "operational_update_jobs must construct jobs with processing_mode='update'"
             )
+            # Deploy code-side metadata fixes (attrs, coordinate values) before
+            # ingesting, matching materialized updates which rewrite metadata each
+            # fire. No-op commit-wise when the store already matches the template.
+            job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", worker_index
         )

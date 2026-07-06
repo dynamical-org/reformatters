@@ -53,6 +53,8 @@ This invariant is also what lets the filter probe a single representative cell p
 
 Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly to the data ingested (never NaN-padded toward "now"), and a resize can never race another writer. If an update falls far behind, run a backfill to catch up rather than scaling operational updates to multiple workers.
 
+Each update fire first refreshes metadata from the current template, trimmed to each group's committed extent (`VirtualRegionJob.refresh_metadata`): code-side attrs and coordinate-value fixes deploy operationally, matching materialized updates, while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
+
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
 
 ## Backfill: parallel on a pre-sized temp branch
