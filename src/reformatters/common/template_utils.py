@@ -24,7 +24,10 @@ log = get_logger(__name__)
 
 
 def _to_zarr_metadata(
-    template: xr.DataTree, store: Store | Path, mode: Literal["w", "w-"]
+    template: xr.DataTree,
+    store: Store | Path,
+    mode: Literal["w", "w-"],
+    consolidated: bool = True,
 ) -> None:
     # safe_chunks=False avoids a per-chunk dask graph that OOMs large arrays (compute=False
     # writes no data chunks anyway). write_inherited_coords=True duplicates shared coords
@@ -36,6 +39,7 @@ def _to_zarr_metadata(
         write_inherited_coords=True,
         safe_chunks=False,
         write_empty_chunks=True,
+        consolidated=consolidated,
     )
 
 
@@ -44,6 +48,7 @@ def write_metadata(
     storage: zarr.storage.StoreLike | StoreFactory,
     mode: Literal["w", "w-"] | None = None,
     skip_icechunk_commit: bool = False,
+    consolidated: bool = True,
 ) -> None:
     store: Store | Path
     replica_stores: list[Store]
@@ -80,12 +85,12 @@ def write_metadata(
 
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            _to_zarr_metadata(template_ds, replica_store, mode)
+            _to_zarr_metadata(template_ds, replica_store, mode, consolidated)
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        _to_zarr_metadata(template_ds, store, mode)
+        _to_zarr_metadata(template_ds, store, mode, consolidated)
 
-    if isinstance(store, Path | str):
+    if isinstance(store, Path | str) and consolidated:
         sort_consolidated_metadata(Path(store) / "zarr.json")
 
     if not skip_icechunk_commit:

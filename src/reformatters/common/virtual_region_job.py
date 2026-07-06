@@ -501,7 +501,11 @@ class VirtualRegionJob(
             if bool(coord.isnull().all())
         }
 
-        template_utils.write_metadata(trimmed, tmp_store)
+        # consolidated=False matches how sync_dims_to's appends serialize group docs:
+        # embedded consolidated metadata carries every array's shape, which changes on
+        # each append and would force a refresh commit per fire (and a consolidated
+        # view lagging the live extent misleads readers).
+        template_utils.write_metadata(trimmed, tmp_store, consolidated=False)
         for role, repo in repos:
             session = repo.writable_session("main")
             copy_zarr_metadata(
