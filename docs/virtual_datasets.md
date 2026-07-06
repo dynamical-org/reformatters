@@ -55,7 +55,7 @@ Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly
 
 Each update fire first refreshes metadata from the checked-in template, trimmed to each group's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
 
-Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. The refresh renders unconsolidated and strips any consolidated block it finds.
+Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
 
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
 

@@ -10,6 +10,7 @@ expansion without the decode-only codec ever being invoked.
 """
 
 import asyncio
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched
@@ -25,6 +26,7 @@ import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
 from pydantic import ValidationError, computed_field
+from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import template_utils, validation
@@ -129,6 +131,9 @@ def _create_template_ds(
                 ("init_time", "lead_time"),
                 init_times.values[:, None] + LEAD_TIMES.values[None, :],
             ),
+            # Like prod spatial_ref: value equals fill_value, so any writer using
+            # write_empty_chunks=False deletes the chunk instead of writing it.
+            "spatial_ref": ((), np.int64(0)),
         },
         attrs={"dataset_id": DATASET_ID, "dataset_version": "v1.0"},
     )
@@ -148,6 +153,7 @@ def _create_template_ds(
     )
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
+    ds["spatial_ref"].encoding.update({"dtype": "int64", "fill_value": 0})
     return xr.DataTree.from_dict({"/": ds})
 
 
@@ -338,6 +344,12 @@ def _primary_repo(factory: StoreFactory) -> icechunk.Repository:
 
 def _snapshot_count(repo: icechunk.Repository, branch: str = "main") -> int:
     return sum(1 for _ in repo.ancestry(branch=branch))
+
+
+def _main_store_bytes(factory: StoreFactory, key: str) -> bytes | None:
+    store = _primary_repo(factory).readonly_session("main").store
+    buffer = asyncio.run(store.get(key, prototype=default_buffer_prototype()))
+    return None if buffer is None else bytes(buffer.to_bytes())
 
 
 def _process_virtual(
@@ -1543,11 +1555,57 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
     fire()
     repo = _primary_repo(dataset.store_factory)
     snapshots_after_first = _snapshot_count(repo)
+    # The first fire's append must not delete spatial_ref (value == fill_value),
+    # or the next fire's refresh would restore it and commit every fire.
+    spatial_ref_chunk = _main_store_bytes(dataset.store_factory, "spatial_ref/c")
+    assert spatial_ref_chunk is not None
 
     # No new data and no template drift -> no new commits: the metadata refresh's
     # unconsolidated render is byte-identical to what appends leave in the store.
     fire()
     assert _snapshot_count(repo) == snapshots_after_first
+    assert (
+        _main_store_bytes(dataset.store_factory, "spatial_ref/c") == spatial_ref_chunk
+    )
+
+
+def test_virtual_backfill_then_fire_leaves_metadata_stable(tmp_path: Path) -> None:
+    # The prod sequence that exposed writer misalignment: a backfill through
+    # parallel_setup/finalize, then an operational fire whose refresh should
+    # find nothing to fix.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    # Seed with consolidated metadata (as older code wrote) to prove the
+    # backfill's own metadata writes remove it.
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+
+    all_jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=dataset._tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=dataset.template_config.data_vars,
+        reformat_job_name="test",
+    )
+    dataset._process_region_jobs(
+        all_jobs=all_jobs,
+        worker_index=0,
+        workers_total=1,
+        reformat_job_name="test",
+        template_ds=template_ds,
+        tmp_store=tmp_path / "worker-tmp.zarr",
+        update_template_with_results=False,
+    )
+
+    root_metadata = _main_store_bytes(dataset.store_factory, "zarr.json")
+    assert root_metadata is not None
+    assert json.loads(root_metadata).get("consolidated_metadata") is None
+    assert _main_store_bytes(dataset.store_factory, "spatial_ref/c") is not None
+
+    repo = _primary_repo(dataset.store_factory)
+    snapshots_after_backfill = _snapshot_count(repo)
+    job = _make_region_job(template_ds, region=slice(0, 4), processing_mode="update")
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    assert _snapshot_count(repo) == snapshots_after_backfill
 
 
 def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -> None:

@@ -429,6 +429,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_ds=template_ds,
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
+            consolidated=self.region_job_class.consolidated_metadata,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -473,6 +474,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 setup_info=setup_info,
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
+                consolidated=self.region_job_class.consolidated_metadata,
             )
 
     def _run_virtual_operational_update(
