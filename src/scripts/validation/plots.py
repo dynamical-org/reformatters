@@ -17,6 +17,7 @@ from scripts.validation.compare_timeseries import (
     compare_timeseries,
     run_compare_timeseries,
 )
+from scripts.validation.decode_scan import decode_scan, run_decode_scan
 from scripts.validation.render import render_report_command
 from scripts.validation.summary import write_summary_md
 from scripts.validation.upload import upload_command
@@ -58,6 +59,10 @@ app.command(
     "availability",
     help="Per-variable availability over the append dim (manifest-probed for virtual stores)",
 )(availability)
+app.command(
+    "decode-scan",
+    help="Decode a bounded sample of a virtual store's references and check health",
+)(decode_scan)
 app.command(
     "value-timeseries",
     help="Full-period value time series (mean ± std), one PNG per variable",
@@ -117,7 +122,8 @@ def run_all(
     if is_virtual:
         log.info(
             "Virtual store: availability is manifest-probed whole-archive "
-            "(no value-based null scan); value time series are sampled."
+            "(no value-based null scan); decode health and value time series "
+            "are sampled."
         )
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
@@ -161,6 +167,7 @@ def run_all(
 
     if ctx.is_virtual:
         run_manifest_availability(ctx)
+        run_decode_scan(ctx)
     else:
         run_value_availability(ctx)
     run_value_timeseries(ctx)

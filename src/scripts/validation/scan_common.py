@@ -4,8 +4,9 @@ These scans need the dataset's own region job to reach the icechunk manifest (ch
 resolution + ref-existence probing). Resolving the dataset from the registry lets them
 reuse `VirtualRegionJob.source_file_coords` / `filter_already_present` and the
 operational validators in `common/validation.py`, so the offline whole-archive checks
-and the bounded operational ones share their core logic. The manifest scan resolves the
-dataset from the store's `dataset_id` attribute; `decode_scan` takes a dataset id.
+and the bounded operational ones share their core logic. Both scans resolve the
+registered dataset from the store's `dataset_id` attribute, so they take a store URL
+like every other validation command.
 """
 
 from datetime import datetime
@@ -14,24 +15,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import typer
-from icechunk.store import IcechunkStore
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob
-from scripts.validation.utils import open_icechunk_readonly
-
-dataset_id_argument = typer.Argument(..., help="Registered dataset id to scan")
-
-start_option = typer.Option(
-    None, "--start", help="Restrict the scan to append-dim positions at/after this date"
-)
-end_option = typer.Option(
-    None,
-    "--end",
-    help="Last append-dim position to scan (default: now). For a post-backfill pass, "
-    "pass the backfill's published end so unpublished positions aren't flagged missing.",
-)
 
 
 def resolve_virtual_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
@@ -50,15 +37,6 @@ def resolve_virtual_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
             "virtual (reference) stores."
         )
     return dataset
-
-
-def primary_icechunk_store(dataset: DynamicalDataset[Any, Any]) -> IcechunkStore:
-    """The dataset's primary store, opened read-only and anonymously by URL.
-
-    store_factory.primary_store() loads write credentials from Kubernetes secrets; these
-    scans only read, so they open the public URL directly and run without cluster access.
-    """
-    return open_icechunk_readonly(dataset.store_factory.primary_url())
 
 
 def build_virtual_jobs(

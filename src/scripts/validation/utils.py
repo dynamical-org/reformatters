@@ -201,6 +201,9 @@ class RunContext:
     unavailable_timestamps_file: str | None = None
     # One-sentence description of how availability was measured, for the report.
     availability_method_note: str | None = None
+    # Sampled decode health (virtual stores); None until run_decode_scan runs.
+    decode_note: str | None = None
+    decode_failures: list[str] | None = None
     availability: dict[str, AvailabilitySeries] = field(default_factory=dict)
     combined_availability_plot: str | None = None
     combined_value_timeseries_plot: str | None = None

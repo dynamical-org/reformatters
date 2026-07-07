@@ -409,21 +409,15 @@ def run_manifest_availability(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, 
     return result.file_availability
 
 
-def availability(
+def build_run_context(
     dataset_url: str,
-    variables: list[str] | None = variables_option,
-    start_date: str | None = start_date_option,
-    end_date: str | None = end_date_option,
-    level: float | None = level_option,
-    output_dir: Path | None = output_dir_option,
-    min_fraction: float = typer.Option(
-        1.0,
-        "--min-fraction",
-        help="Virtual stores: exit non-zero if any position has less than this "
-        "fraction of its expected source files (the post-backfill completeness gate)",
-    ),
-) -> None:
-    """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
+    variables: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    level: float | None = None,
+    output_dir: Path | None = None,
+) -> RunContext:
+    """The RunContext a standalone command runs against (run-all builds its own)."""
     ds = load_zarr_dataset(dataset_url)
     if start_date or end_date:
         ds = scope_time_period(ds, start_date, end_date)
@@ -434,7 +428,7 @@ def availability(
     out = resolve_output_dir(dataset_url, output_dir)
     log.info(f"output dir: {out}")
 
-    ctx = RunContext(
+    return RunContext(
         output_dir=out,
         validation_url=dataset_url,
         reference_url=None,
@@ -453,6 +447,26 @@ def availability(
         end_date=end_date,
         is_virtual=is_virtual_store(dataset_url),
         level_override=level,
+    )
+
+
+def availability(
+    dataset_url: str,
+    variables: list[str] | None = variables_option,
+    start_date: str | None = start_date_option,
+    end_date: str | None = end_date_option,
+    level: float | None = level_option,
+    output_dir: Path | None = output_dir_option,
+    min_fraction: float = typer.Option(
+        1.0,
+        "--min-fraction",
+        help="Virtual stores: exit non-zero if any position has less than this "
+        "fraction of its expected source files (the post-backfill completeness gate)",
+    ),
+) -> None:
+    """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
+    ctx = build_run_context(
+        dataset_url, variables, start_date, end_date, level, output_dir
     )
     if ctx.is_virtual:
         file_availability = run_manifest_availability(ctx)

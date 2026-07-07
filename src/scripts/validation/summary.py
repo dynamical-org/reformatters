@@ -1,6 +1,7 @@
 import math
 from pathlib import Path
 
+from scripts.validation.decode_scan import decode_summary_lines
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
@@ -328,6 +329,12 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
             f"- Unavailable timestamps + retry filters: "
             f"[`{ctx.unavailable_timestamps_file}`]({ctx.unavailable_timestamps_file})"
         )
+        lines.append("")
+
+    if ctx.decode_note is not None:
+        lines.append("## Decode health (sampled)")
+        lines.append("")
+        lines.extend(decode_summary_lines(ctx))
         lines.append("")
 
     lines.append("## Per-variable details")
