@@ -18,6 +18,7 @@ from scripts.validation.utils import (
     is_virtual_store,
     level_label,
     level_option,
+    load_retried,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -262,7 +263,7 @@ def _reference_data(
         if dim not in ref_data.dims:
             return None  # reference lacks this level dim; nothing to compare against
         ref_data = ref_data.sel(level_sel, method="nearest")
-    return ref_data.load()
+    return load_retried(ref_data)
 
 
 def run_compare_spatial(  # noqa: PLR0915
@@ -322,7 +323,7 @@ def run_compare_spatial(  # noqa: PLR0915
         data = ds[var]
         if level_sel:
             data = data.sel(level_sel)
-        data = data.load()
+        data = load_retried(data)
         ref_data = _reference_data(ref_ds, var, level_sel)
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 

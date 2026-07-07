@@ -33,6 +33,7 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.retry import retry
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from scripts.validation.scan_common import (
     build_virtual_jobs,
@@ -69,7 +70,10 @@ def _probe_job(
 ) -> list[tuple[SourceFileCoord, bool]]:
     """(coord, is_present) for every source file one region job covers."""
     candidates = list(job.source_file_coords())
-    missing_ids = {id(c) for c in job.filter_already_present(candidates, store)}
+    # Retried: a whole-archive scan makes enough reads that a transient object store
+    # failure is near-certain, and one un-retried probe would kill the run.
+    missing = retry(lambda: job.filter_already_present(candidates, store))
+    missing_ids = {id(c) for c in missing}
     return [(coord, id(coord) not in missing_ids) for coord in candidates]
 
 
@@ -246,7 +250,8 @@ def _flush_var_probes(
     probes: list[tuple[str, pd.Timestamp, str]],
     out: dict[str, dict[pd.Timestamp, bool]],
 ) -> None:
-    present = _exists_many(store, [key for _, _, key in probes])
+    keys = [key for _, _, key in probes]
+    present = retry(lambda: _exists_many(store, keys))
     for var_path, position, key in probes:
         out.setdefault(var_path, {})[position] = present[key]
     probes.clear()

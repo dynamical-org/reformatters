@@ -748,7 +748,12 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
                 selection = {dim: value for dim, value in loc.items() if dim in da.dims}
                 da = self._sample_levels(da.sel(selection))
                 try:
-                    values = da.copy(deep=True).load().values
+                    # Retried so a transient object store failure is not reported as
+                    # a decode failure; a genuine decode error still fails fast.
+                    values = retry(
+                        lambda da=da: da.copy(deep=True).load().values,
+                        max_attempts=3,
+                    )
                     results.append((var.path, float(np.isnan(values).mean()), None))
                 except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
                     results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))

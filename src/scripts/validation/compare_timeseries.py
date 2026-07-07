@@ -17,6 +17,7 @@ from scripts.validation.utils import (
     is_virtual_store,
     level_label,
     level_option,
+    load_retried,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -140,8 +141,8 @@ def _load_timeseries_for_var(
     val = validation_subset[var]
     if level_sel:
         val = val.sel(level_sel)
-    val_p1 = val.isel(ctx.point1_sel).load()
-    val_p2 = val.isel(ctx.point2_sel).load()
+    val_p1 = load_retried(val.isel(ctx.point1_sel))
+    val_p2 = load_retried(val.isel(ctx.point2_sel))
     ref_p1: xr.DataArray | None = None
     ref_p2: xr.DataArray | None = None
     if var in reference_subset.data_vars and (
@@ -152,12 +153,12 @@ def _load_timeseries_for_var(
         ref = reference_subset[var]
         if level_sel:
             ref = ref.sel(level_sel, method="nearest")
-        ref_p1 = ref.sel(
-            latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest"
-        ).load()
-        ref_p2 = ref.sel(
-            latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest"
-        ).load()
+        ref_p1 = load_retried(
+            ref.sel(latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest")
+        )
+        ref_p2 = load_retried(
+            ref.sel(latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest")
+        )
     return val_p1, ref_p1, val_p2, ref_p2
 
 

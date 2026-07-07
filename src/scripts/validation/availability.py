@@ -28,6 +28,7 @@ from scripts.validation.utils import (
     get_two_random_points,
     is_virtual_store,
     level_option,
+    load_retried,
     load_zarr_dataset,
     open_icechunk_readonly,
     output_dir_option,
@@ -312,8 +313,8 @@ def run_value_availability(ctx: RunContext) -> None:
         if level_sel:
             da_p1 = da_p1.sel(level_sel)
             da_p2 = da_p2.sel(level_sel)
-        da_p1 = da_p1.load()
-        da_p2 = da_p2.load()
+        da_p1 = load_retried(da_p1)
+        da_p2 = load_retried(da_p2)
         ctx.loaded_point_data[var] = (da_p1, da_p2)
 
         null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(da_p1)

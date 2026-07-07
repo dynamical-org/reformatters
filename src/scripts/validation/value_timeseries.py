@@ -17,6 +17,7 @@ from scripts.validation.utils import (
     is_virtual_store,
     level_label,
     level_option,
+    load_retried,
     load_zarr_dataset,
     output_dir_option,
     resolve_output_dir,
@@ -153,7 +154,7 @@ def _point_arrays(
             f"  value-timeseries {var}: virtual sampled read "
             f"~{virtual_message_count(da_p1) + virtual_message_count(da_p2)} decodes"
         )
-    return da_p1.load(), da_p2.load()
+    return load_retried(da_p1), load_retried(da_p2)
 
 
 def run_value_timeseries(ctx: RunContext) -> None:

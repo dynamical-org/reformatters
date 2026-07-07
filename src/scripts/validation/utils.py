@@ -13,6 +13,7 @@ import typer
 import xarray as xr
 from zarr.storage import ObjectStore, StoreLike
 
+from reformatters.common.retry import retry
 from reformatters.common.validation import open_flattened_dataset
 
 OUTPUT_DIR = "data/output"
@@ -288,6 +289,12 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
         authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
     )
     return repo.readonly_session("main").store
+
+
+def load_retried(da: xr.DataArray) -> xr.DataArray:
+    """Hours-long runs make enough object store reads that a transient failure is
+    near-certain; reads are idempotent so retry them."""
+    return retry(da.load)
 
 
 def load_zarr_dataset(url: str) -> xr.Dataset:
