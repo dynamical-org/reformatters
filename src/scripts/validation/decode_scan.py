@@ -11,6 +11,7 @@ Entry points: the `decode-scan` command (URL-driven, resolves the registered dat
 the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
@@ -20,6 +21,7 @@ import zarr
 
 from reformatters.common import validation
 from reformatters.common.logging import get_logger
+from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from scripts.validation.availability import build_run_context
 from scripts.validation.scan_common import (
@@ -43,6 +45,7 @@ zarr.config.set({"async.concurrency": 32})
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
 SAMPLED_LEVELS = 3
+JOB_CONCURRENCY = 3
 
 
 def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> None:
@@ -79,12 +82,18 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         sampled_leads=SAMPLED_LEADS,
         sampled_levels=SAMPLED_LEVELS,
     )
+
+    def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
+        return checker(cast("VirtualRegionJob[Any, Any]", job), store, ds)
+
     failures = []
-    for i, job in enumerate(sampled):
-        result = checker(cast("VirtualRegionJob[Any, Any]", job), store, ds)
-        log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
-        if not result.passed:
-            failures.append(result.message)
+    # A job's decodes are network-latency-bound and parallelize only across its own
+    # source files, so a few jobs run concurrently to fill the idle time.
+    with ThreadPoolExecutor(max_workers=JOB_CONCURRENCY) as pool:
+        for i, result in enumerate(pool.map(check, sampled)):
+            log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
+            if not result.passed:
+                failures.append(result.message)
 
     ctx.decode_note = (
         "Decode health is sampled, not exhaustive: "
