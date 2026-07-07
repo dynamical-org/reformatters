@@ -87,6 +87,19 @@ level_option = typer.Option(
 
 
 @dataclass
+class AvailabilitySeries:
+    """Fraction of one variable's data available per append-dim position.
+
+    Built from manifest ref probes on a virtual store and from value (null) scans on a
+    materialized store — see scripts/validation/availability.py. NaN fraction means the
+    position was not probed (no present source file to probe against).
+    """
+
+    positions: np.ndarray  # datetime64[ns], sorted
+    fraction: np.ndarray  # float in [0, 1], NaN = not probed
+
+
+@dataclass
 class VariableStats:
     """Stats + metadata accumulated for one variable across plot types."""
 
@@ -101,8 +114,15 @@ class VariableStats:
     level_dim: str | None = None
     level_value: float | None = None
 
-    # Null analysis
-    null_plot: str | None = None
+    # Availability over the append dim (manifest-probed on virtual stores,
+    # value-scanned on materialized stores).
+    availability_plot: str | None = None
+    positions_total: int | None = None
+    positions_complete: int | None = None
+    first_incomplete: str | None = None
+    last_incomplete: str | None = None
+
+    # Null value counts at the two run points (materialized stores only)
     null_count_p1: int | None = None
     null_count_p2: int | None = None
     total_count_p1: int | None = None
@@ -171,7 +191,7 @@ class RunContext:
     start_date: str | None = None
     end_date: str | None = None
     # Virtual stores decode source files on read, inverting the cost model: a spatial
-    # snapshot is cheap, an append-dim point column is expensive. Routes report_nulls /
+    # snapshot is cheap, an append-dim point column is expensive. Routes availability /
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
     level_override: float | None = None
@@ -179,11 +199,15 @@ class RunContext:
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
     unavailable_timestamps_file: str | None = None
-    combined_nulls_plot: str | None = None
+    missing_source_files_file: str | None = None
+    # One-sentence description of how availability was measured, for the report.
+    availability_method_note: str | None = None
+    availability: dict[str, AvailabilitySeries] = field(default_factory=dict)
+    combined_availability_plot: str | None = None
     combined_value_timeseries_plot: str | None = None
     combined_spatial_plot: str | None = None
     combined_temporal_plot: str | None = None
-    # Point arrays loaded once by run_report_nulls (var -> (point1, point2)) and reused
+    # Point arrays loaded once by run_value_availability (var -> (point1, point2)) and reused
     # by run_value_timeseries to avoid reading the point data a second time.
     loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(
         default_factory=dict

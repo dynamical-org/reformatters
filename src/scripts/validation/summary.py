@@ -23,16 +23,6 @@ def _fmt_count(n: int | None, total: int | None) -> str:
     return f"{n}/{total}"
 
 
-def _unavailable_summary(unavailable: list[str]) -> str:
-    if not unavailable:
-        return "none"
-    if len(unavailable) <= 6:
-        return f"{len(unavailable)} unavailable: {', '.join(unavailable)}"
-    head = ", ".join(unavailable[:3])
-    tail = ", ".join(unavailable[-3:])
-    return f"{len(unavailable)} unavailable (first: {head} … last: {tail})"
-
-
 def _append_dim_range(ctx: RunContext) -> tuple[str, str]:
     """Min and max of the append dimension (already scoped if start/end were applied)."""
     ds = ctx.validation_ds
@@ -172,16 +162,25 @@ def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     return lines
 
 
-def _nulls_line(stats: VariableStats) -> str:
-    p1 = (
-        f"P1: {_fmt_count(stats.null_count_p1, stats.total_count_p1)} "
-        f"({_unavailable_summary(stats.unavailable_timestamps_p1)})"
-    )
-    p2 = (
-        f"P2: {_fmt_count(stats.null_count_p2, stats.total_count_p2)} "
-        f"({_unavailable_summary(stats.unavailable_timestamps_p2)})"
-    )
-    return f"**Nulls** — {p1}; {p2}"
+def _availability_line(stats: VariableStats) -> str:
+    if stats.positions_total is None:
+        return "**Availability** — n/a"
+    if stats.positions_complete == stats.positions_total:
+        detail = (
+            f"{stats.positions_total} of {stats.positions_total} positions complete"
+        )
+    else:
+        detail = (
+            f"{stats.positions_complete} of {stats.positions_total} positions complete "
+            f"(incomplete {stats.first_incomplete} → {stats.last_incomplete}, "
+            f"see [plot]({stats.availability_plot}))"
+        )
+    if stats.null_count_p1 is not None:
+        detail += (
+            f"; nulls P1 {_fmt_count(stats.null_count_p1, stats.total_count_p1)}, "
+            f"P2 {_fmt_count(stats.null_count_p2, stats.total_count_p2)}"
+        )
+    return f"**Availability** — {detail}"
 
 
 def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
@@ -190,7 +189,7 @@ def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
     lines += _value_ts_table(stats, ctx)
     lines += _spatial_table(stats, ctx)
     lines += _temporal_table(stats, ctx)
-    lines += [_nulls_line(stats), ""]
+    lines += [_availability_line(stats), ""]
     return "\n".join(lines)
 
 
@@ -225,7 +224,7 @@ def _run_parameters_table(ctx: RunContext) -> list[str]:
         rows.append(
             (
                 "Store type",
-                "virtual — availability via manifest_scan.py; value series sampled",
+                "virtual — availability manifest-probed; value series sampled",
             )
         )
 
@@ -244,27 +243,6 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     ref_id = ref.attrs.get("dataset_id", "n/a") if ref is not None else "n/a"
     ref_ver = ref.attrs.get("dataset_version", "n/a") if ref is not None else "n/a"
     ref_name = ref.attrs.get("name", ref_id) if ref is not None else "n/a"
-
-    unavailable_rows: list[tuple[str, str, int, int, float, str, str]] = []
-    for var in ctx.variables:
-        stats = ctx.stats[var]
-        for point, unavailable, total in (
-            ("P1", stats.unavailable_timestamps_p1, stats.total_count_p1),
-            ("P2", stats.unavailable_timestamps_p2, stats.total_count_p2),
-        ):
-            if unavailable and total:
-                pct = len(unavailable) / total * 100
-                unavailable_rows.append(
-                    (
-                        var,
-                        point,
-                        len(unavailable),
-                        total,
-                        pct,
-                        unavailable[0],
-                        unavailable[-1],
-                    )
-                )
 
     lines: list[str] = []
     # No H1 here — the dynamical.org page template generates the title from the catalog entry.
@@ -303,7 +281,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("## Combined plots")
     lines.append("")
     combined_items = [
-        ("Unavailable values", ctx.combined_nulls_plot),
+        ("Availability heatmap", ctx.combined_availability_plot),
         ("Value time series (full period)", ctx.combined_value_timeseries_plot),
         ("Spatial and distributions", ctx.combined_spatial_plot),
         ("Time series", ctx.combined_temporal_plot),
@@ -313,32 +291,45 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
             lines.append(f"- {label}: [`{filename}`]({filename})")
     lines.append("")
 
-    lines.append("## Unavailable timestamps")
+    lines.append("## Availability")
     lines.append("")
-    if ctx.is_virtual:
-        lines.append(
-            "Not value-scanned (virtual store). Whole-archive availability is checked "
-            "by `manifest_scan.py`; include its output when publishing this report."
-        )
-    elif not unavailable_rows:
-        lines.append("None detected at the two sampled points.")
+    if ctx.availability_method_note:
+        lines.append(ctx.availability_method_note)
+        lines.append("")
+    if ctx.combined_availability_plot:
+        lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
+        lines.append("")
+    incomplete = [
+        ctx.stats[var]
+        for var in ctx.variables
+        if var in ctx.stats
+        and ctx.stats[var].positions_total is not None
+        and ctx.stats[var].positions_complete != ctx.stats[var].positions_total
+    ]
+    if not incomplete:
+        lines.append("Every variable is complete at every scanned position.")
     else:
         lines.append(
-            f"Full list: [`{ctx.unavailable_timestamps_file or 'unavailable_timestamps.txt'}`]"
-            f"({ctx.unavailable_timestamps_file or 'unavailable_timestamps.txt'})"
+            "| Variable | Complete positions | Incomplete % "
+            "| First incomplete | Last incomplete |"
         )
-        lines.append("")
-        lines.append(
-            "| Variable | Point | Unavailable count | Total count | Unavailable % "
-            "| Earliest unavailable | Latest unavailable |"
-        )
-        lines.append("|---|---|---|---|---|---|---|")
-        for var, point, count, total, pct, earliest, latest in unavailable_rows:
+        lines.append("|---|---|---|---|---|")
+        for stats in incomplete:
+            assert stats.positions_total is not None
+            assert stats.positions_complete is not None
+            pct = 100 * (1 - stats.positions_complete / stats.positions_total)
             lines.append(
-                f"| `{var}` | {point} | {count} | {total} | {pct:.2f}% "
-                f"| {earliest} | {latest} |"
+                f"| `{stats.name}` | {stats.positions_complete}/{stats.positions_total} "
+                f"| {pct:.2f}% | {stats.first_incomplete} | {stats.last_incomplete} |"
             )
     lines.append("")
+    for label, filename in (
+        ("Unavailable timestamps + retry filters", ctx.unavailable_timestamps_file),
+        ("Missing source files + retry filters", ctx.missing_source_files_file),
+    ):
+        if filename:
+            lines.append(f"- {label}: [`{filename}`]({filename})")
+            lines.append("")
 
     lines.append("## Per-variable details")
     lines.append("")

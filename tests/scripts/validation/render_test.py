@@ -23,7 +23,7 @@ FIXTURE_MD = """\
 
 ## Combined plots
 
-- nulls: [`combined_nulls.png`](combined_nulls.png)
+- availability: [`availability_heatmap.png`](availability_heatmap.png)
 
 ## Per-variable details
 
@@ -63,15 +63,15 @@ def test_render_html_structure() -> None:
         'data-var="precipitation_surface">'
     ) in html
 
-    # Each variable section embeds its three plot images, each wrapped in <a target=_blank>.
-    for plot_type in ("nulls", "value_timeseries", "spatial", "temporal"):
+    # Each variable section embeds its plot images, each wrapped in <a target=_blank>.
+    for plot_type in ("availability", "value_timeseries", "spatial", "temporal"):
         assert (
             f'<a href="{plot_type}_temperature_2m.png" target="_blank">'
             f'<img src="{plot_type}_temperature_2m.png"'
         ) in html
 
     # PNG links from elsewhere in the doc get target="_blank" too.
-    assert '<a href="combined_nulls.png" target="_blank">' in html
+    assert '<a href="availability_heatmap.png" target="_blank">' in html
 
     # TOC contains a checkbox per variable + section links.
     assert 'data-var="temperature_2m"' in html
@@ -97,7 +97,7 @@ def test_render_html_slugs_group_pathed_variables() -> None:
         '<section class="variable" id="var-pressure_level__temperature" '
         'data-var="pressure_level__temperature">'
     ) in html
-    for plot_type in ("nulls", "value_timeseries", "spatial", "temporal"):
+    for plot_type in ("availability", "value_timeseries", "spatial", "temporal"):
         assert f'<img src="{plot_type}_pressure_level__temperature.png"' in html
     assert (
         "pressure_level/temperature.png" not in html

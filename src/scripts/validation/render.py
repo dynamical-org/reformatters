@@ -22,7 +22,7 @@ def _extract_per_var_html(html: str) -> list[str]:
 
 
 _PLOT_TYPES = (
-    ("nulls", "null fraction"),
+    ("availability", "availability over append dim"),
     ("value_timeseries", "full-period value time series"),
     ("spatial", "spatial comparison"),
     ("temporal", "time series comparison"),
@@ -39,7 +39,7 @@ def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
         var = m.group("var")
         body = m.group("body")
         slug = var_slug(var)
-        # Skip plots the run didn't produce (e.g. no nulls_ plots on a virtual run).
+        # Skip plots the run didn't produce (availability plots exist only for incomplete vars).
         plots = "".join(
             f'<a href="{filename}" target="_blank">'
             f'<img src="{filename}" alt="{var} — {label}"></a>'

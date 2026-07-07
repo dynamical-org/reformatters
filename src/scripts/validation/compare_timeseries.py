@@ -205,7 +205,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     )
 
     # Temporal plots are over a single member; ctx.validation_ds keeps the full
-    # ensemble dim so report_nulls can scan every member.
+    # ensemble dim so the availability scan can see every member.
     validation_ds = ctx.validation_ds
     if "ensemble_member" in validation_ds.dims:
         if ctx.ensemble_member is None:

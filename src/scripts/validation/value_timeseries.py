@@ -137,7 +137,7 @@ def _pin_and_sample(da: xr.DataArray) -> xr.DataArray:
 def _point_arrays(
     ctx: RunContext, var: str, stats: VariableStats
 ) -> tuple[xr.DataArray, xr.DataArray]:
-    """Reuse arrays loaded by run_report_nulls, else load them (standalone / virtual)."""
+    """Reuse arrays loaded by run_value_availability, else load them (standalone / virtual)."""
     if var in ctx.loaded_point_data:
         return ctx.loaded_point_data[var]
     level_sel = select_var_level(ctx, var, stats)

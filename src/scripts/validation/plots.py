@@ -4,6 +4,11 @@ import pandas as pd
 import typer
 
 from reformatters.common.logging import get_logger
+from scripts.validation.availability import (
+    availability,
+    run_manifest_availability,
+    run_value_availability,
+)
 from scripts.validation.compare_spatial import (
     compare_spatial,
     run_compare_spatial,
@@ -13,7 +18,6 @@ from scripts.validation.compare_timeseries import (
     run_compare_timeseries,
 )
 from scripts.validation.render import render_report_command
-from scripts.validation.report_nulls import report_nulls, run_report_nulls
 from scripts.validation.summary import write_summary_md
 from scripts.validation.upload import upload_command
 from scripts.validation.utils import (
@@ -50,7 +54,10 @@ app.command("compare-spatial", help="Spatial comparison, one PNG per variable")(
 app.command("compare-timeseries", help="Timeseries comparison, one PNG per variable")(
     compare_timeseries
 )
-app.command("report-nulls", help="Null analysis, one PNG per variable")(report_nulls)
+app.command(
+    "availability",
+    help="Per-variable availability over the append dim (manifest-probed for virtual stores)",
+)(availability)
 app.command(
     "value-timeseries",
     help="Full-period value time series (mean ± std), one PNG per variable",
@@ -91,7 +98,7 @@ def run_all(
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Produce nulls / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
+    """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
 
     log.info(f"Loading validation dataset: {dataset_url}")
@@ -109,8 +116,8 @@ def run_all(
     is_virtual = is_virtual_store(dataset_url)
     if is_virtual:
         log.info(
-            "Virtual store: availability is covered whole-archive by manifest_scan.py "
-            "(value-based null scan skipped); value time series are sampled."
+            "Virtual store: availability is manifest-probed whole-archive "
+            "(no value-based null scan); value time series are sampled."
         )
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
@@ -152,7 +159,10 @@ def run_all(
         level_override=level,
     )
 
-    run_report_nulls(ctx)
+    if ctx.is_virtual:
+        run_manifest_availability(ctx)
+    else:
+        run_value_availability(ctx)
     run_value_timeseries(ctx)
     run_compare_timeseries(ctx)
     run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
