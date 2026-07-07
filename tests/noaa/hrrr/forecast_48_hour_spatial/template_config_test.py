@@ -73,14 +73,16 @@ def test_non_temperature_var_has_no_filter() -> None:
 def test_grid_is_north_first() -> None:
     # north_up decodes every message north-first, so the y/latitude coords descend to
     # match: y from largest (north) to smallest, and the 2D latitude grid's first row
-    # is the northernmost. x ascends west to east.
+    # is the northernmost. x ascends west to east, so the 2D longitude grid's first
+    # column is the westernmost.
     dim_coords = CONFIG.dimension_coordinates()
     y, x = dim_coords["y"], dim_coords["x"]
     assert np.all(np.diff(y) < 0), "y must descend (row 0 = north)"
     assert np.all(np.diff(x) > 0), "x must ascend (col 0 = west)"
 
-    latitudes, _ = CONFIG._latitude_longitude_coordinates(x, y)
+    latitudes, longitudes = CONFIG._latitude_longitude_coordinates(x, y)
     assert latitudes[0].mean() > latitudes[-1].mean()
+    assert longitudes[:, 0].mean() < longitudes[:, -1].mean()
 
     spatial_ref = next(c for c in CONFIG.coords if c.name == "spatial_ref")
     geo_transform = spatial_ref.attrs.GeoTransform
