@@ -1,3 +1,5 @@
+import numpy as np
+
 from reformatters.common.config_models import ROOT
 from reformatters.noaa.hrrr.forecast_48_hour_spatial.template_config import (
     MODEL_LEVELS,
@@ -66,3 +68,22 @@ def test_non_temperature_var_has_no_filter() -> None:
     var = get_var("wind_u_10m")
     assert var.encoding.filters in (None, (), [])
     assert var.attrs.units == "m s-1"
+
+
+def test_grid_is_north_first() -> None:
+    # north_up decodes every message north-first, so the y/latitude coords descend to
+    # match: y from largest (north) to smallest, and the 2D latitude grid's first row
+    # is the northernmost. x ascends west to east.
+    dim_coords = CONFIG.dimension_coordinates()
+    y, x = dim_coords["y"], dim_coords["x"]
+    assert np.all(np.diff(y) < 0), "y must descend (row 0 = north)"
+    assert np.all(np.diff(x) > 0), "x must ascend (col 0 = west)"
+
+    latitudes, _ = CONFIG._latitude_longitude_coordinates(x, y)
+    assert latitudes[0].mean() > latitudes[-1].mean()
+
+    spatial_ref = next(c for c in CONFIG.coords if c.name == "spatial_ref")
+    geo_transform = spatial_ref.attrs.GeoTransform
+    assert geo_transform is not None
+    y_pixel_size = float(geo_transform.split()[5])
+    assert y_pixel_size < 0, "north-first GeoTransform has a negative y pixel size"
