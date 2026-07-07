@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -5,8 +6,9 @@ import typer
 
 from reformatters.common.logging import get_logger
 from scripts.validation.availability import (
+    apply_availability,
     availability,
-    run_manifest_availability,
+    run_manifest_scan,
     run_value_availability,
 )
 from scripts.validation.compare_spatial import (
@@ -166,13 +168,24 @@ def run_all(
     )
 
     if ctx.is_virtual:
-        run_manifest_availability(ctx)
-        run_decode_scan(ctx)
+        # The manifest scan shares no state with the decode + plot phases and renders
+        # nothing itself (matplotlib is main-thread-only), so it runs concurrently;
+        # its availability artifacts render after everything joins.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            manifest_scan = pool.submit(run_manifest_scan, ctx)
+            run_decode_scan(ctx)
+            run_value_timeseries(ctx)
+            run_compare_timeseries(ctx)
+            run_compare_spatial(
+                ctx, init_time=init_time, lead_time=lead_time, time=time
+            )
+            manifest_scan.result()
+        apply_availability(ctx)
     else:
         run_value_availability(ctx)
-    run_value_timeseries(ctx)
-    run_compare_timeseries(ctx)
-    run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
+        run_value_timeseries(ctx)
+        run_compare_timeseries(ctx)
+        run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 
     summary_path = write_summary_md(ctx)
     log.info(f"Done. Summary: {summary_path}")

@@ -50,7 +50,7 @@ Budget accordingly: a full `run-all` on a virtual store decodes roughly 200 mess
 
 ### Whole-archive scans (manifest completeness, decode health)
 
-These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the cheap operational `-validate` checks. Both reach the dataset's own region job (for expected source files and manifest chunk-key logic) by resolving the registered dataset from the store's `dataset_id` attribute, so both take a store URL like every other command. `run-all` runs both automatically for a virtual store, so one command produces the complete report; the standalone commands are the strict post-backfill gates (exit code).
+These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the cheap operational `-validate` checks. Both reach the dataset's own region job (for expected source files and manifest chunk-key logic) by resolving the registered dataset from the store's `dataset_id` attribute, so both take a store URL like every other command. `run-all` runs both automatically for a virtual store, so one command produces the complete report — the manifest scan runs concurrently with the decode + plot phases, so it adds no wall-clock time when the plots take longer; the standalone commands are the strict post-backfill gates (exit code).
 
 ```bash
 uv run src/scripts/validation/plots.py availability <DATASET_URL> [--start-date <date>] [--end-date <date>] [--min-fraction 1.0]

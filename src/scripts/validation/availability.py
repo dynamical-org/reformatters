@@ -357,10 +357,12 @@ def run_value_availability(ctx: RunContext) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_manifest_availability(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
-    """Manifest-probe availability across the whole archive (virtual stores).
-
-    Returns the per-position source file availability so callers can gate on it.
+def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
+    """Manifest-probe availability across the whole archive (virtual stores),
+    filling ctx.availability but rendering nothing — matplotlib is main-thread-only,
+    so run-all runs this concurrently with the decode + plot phases and calls
+    apply_availability after joining. Returns the per-position source file
+    availability so callers can gate on it.
     """
     # Late import: manifest_scan imports this module for the shared rendering.
     from scripts.validation.manifest_scan import (  # noqa: PLC0415
@@ -406,8 +408,14 @@ def run_manifest_availability(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, 
         ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
             incomplete_files, ctx.output_dir
         )
-    apply_availability(ctx)
     return result.file_availability
+
+
+def run_manifest_availability(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
+    """Manifest-probe availability plus rendered artifacts (the standalone command)."""
+    file_availability = run_manifest_scan(ctx)
+    apply_availability(ctx)
+    return file_availability
 
 
 def build_run_context(
