@@ -9,11 +9,12 @@ from zarr.storage import MemoryStore
 
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
-    _file_availability,
+    _flush_var_probes,
+    _fold_file_availability,
     _probe_coord_for_var,
     _probe_jobs,
-    _var_availability,
     _var_chunk_key,
+    _var_probes,
     result_availability_series,
 )
 from scripts.validation.scan_common import evenly_spaced_subset
@@ -81,6 +82,16 @@ def test_evenly_spaced_subset() -> None:
     assert evenly_spaced_subset([1, 2, 3], 0) == [1, 2, 3]
 
 
+def _fold_jobs(
+    jobs: list[_Job],
+    lead_limits: dict[pd.Timestamp, pd.Timedelta],
+) -> dict[pd.Timestamp, list[int]]:
+    counts: dict[pd.Timestamp, list[int]] = {}
+    for _job, coord_presence in _probe_jobs(jobs, store=None):  # ty: ignore[invalid-argument-type]
+        _fold_file_availability(coord_presence, lead_limits, counts)
+    return counts
+
+
 def test_availability_counts_present_and_missing() -> None:
     p1 = pd.Timestamp("2024-01-01")
     p2 = pd.Timestamp("2024-01-02")
@@ -92,28 +103,23 @@ def test_availability_counts_present_and_missing() -> None:
     ]
     job = _Job(coords, missing=[coords[3]])  # p2/b is missing
 
-    probed = _probe_jobs([job], store=None)  # ty: ignore[invalid-argument-type]
-    availability = _file_availability(probed, lead_limits={})
+    counts = _fold_jobs([job], lead_limits={})
 
-    assert availability[p1] == (2, 2)
-    assert availability[p2] == (1, 2)
+    assert counts[p1] == [2, 2]
+    assert counts[p2] == [1, 2]
 
 
-def test_availability_dedups_file_shared_across_jobs() -> None:
+def test_availability_dedups_file_shared_within_job() -> None:
     p1 = pd.Timestamp("2024-01-01")
-    # Two jobs (e.g. variable groups) both reference the same source file at p1.
-    job_a = _Job([_Coord(p1, "shared")], missing=[])
-    job_b_coord = _Coord(p1, "shared")
-    job_b = _Job([job_b_coord], missing=[job_b_coord])  # one job sees it missing
+    # Two coords in one job reference the same source file at p1; one probe missed it.
+    shared_a = _Coord(p1, "shared")
+    shared_b = _Coord(p1, "shared")
+    job = _Job([shared_a, shared_b], missing=[shared_b])
 
-    probed = _probe_jobs(
-        [job_a, job_b],  # ty: ignore[invalid-argument-type]
-        store=None,  # ty: ignore[invalid-argument-type]
-    )
-    availability = _file_availability(probed, lead_limits={})
+    counts = _fold_jobs([job], lead_limits={})
 
-    # Deduped to a single expected file; present because at least one job saw it present.
-    assert availability[p1] == (1, 1)
+    # Deduped to a single expected file; present because one coord saw it present.
+    assert counts[p1] == [1, 1]
 
 
 def test_file_availability_trims_to_expected_forecast_length() -> None:
@@ -127,13 +133,12 @@ def test_file_availability_trims_to_expected_forecast_length() -> None:
     ]
     # p1/f12 never existed upstream (beyond p1's expected length) and is missing.
     job = _Job(coords, missing=[coords[1]])
-    probed = _probe_jobs([job], store=None)  # ty: ignore[invalid-argument-type]
     lead_limits = {p1: pd.Timedelta(hours=6), p2: pd.Timedelta(hours=12)}
 
-    availability = _file_availability(probed, lead_limits)
+    counts = _fold_jobs([job], lead_limits)
 
-    assert availability[p1] == (1, 1)  # f12 not expected, so p1 is complete
-    assert availability[p2] == (2, 2)
+    assert counts[p1] == [1, 1]  # f12 not expected, so p1 is complete
+    assert counts[p2] == [2, 2]
 
 
 def test_probe_coord_prefers_smallest_nonzero_lead() -> None:
@@ -233,10 +238,18 @@ def test_var_availability_probes_written_chunks() -> None:
         data_vars=[_var("temperature_2m")],
         template_ds=template,
     )
-    probed = [(job, [(coord_p0, True), (coord_p1, True), (coord_p2_missing, False)])]
+    coord_presence = [(coord_p0, True), (coord_p1, True), (coord_p2_missing, False)]
 
-    availability = _var_availability(probed, store)  # ty: ignore[invalid-argument-type]
+    probes = _var_probes(
+        job,  # ty: ignore[invalid-argument-type]
+        coord_presence,  # ty: ignore[invalid-argument-type]
+        root,
+        metadata_by_var={},
+    )
+    availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    _flush_var_probes(store, probes, availability)  # ty: ignore[invalid-argument-type]
 
+    assert probes == []  # flushed
     # Position 2 has no present source file -> not probed (absent from the mapping).
     assert availability == {"temperature_2m": {p0: True, p1: False}}
 

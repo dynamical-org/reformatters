@@ -1,7 +1,8 @@
 """Whole-archive manifest completeness scan for a virtual dataset.
 
 The offline analog of the operational `CheckVirtualManifestCompleteness`: instead of a
-recent window it probes the whole archive for ref existence (no decode), in two passes:
+recent window it probes the whole archive for ref existence (no decode), streaming job
+by job so peak memory is independent of the scan window length. Two measures:
 
 1. **Per source file** — every expected file's representative ref, the strict
    completeness gate. Emits backfill retry filters for any gaps.
@@ -14,9 +15,10 @@ from the store's `dataset_id` attribute) and `run-all`, via
 `availability.run_manifest_availability`. See docs/validation.md.
 """
 
-from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 from typing import Any, cast
 
@@ -75,19 +77,23 @@ def _probe_jobs(
     jobs: Sequence[VirtualRegionJob[Any, Any]],
     store: IcechunkStore,
     max_workers: int = 16,
-) -> list[tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]]:
-    """Probe every job's source files concurrently, returning (job, [(coord, present)])."""
-    results: list[
-        tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]
-    ] = []
-    progress_every = max(1, len(jobs) // 20)
+) -> Iterator[tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]]:
+    """Probe every job's source files concurrently, yielding (job, [(coord, present)])
+    as jobs complete. In-flight work is bounded so a whole-archive scan never holds
+    more than a window of jobs' coords at once."""
+    job_iter = iter(jobs)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_probe_job, job, store): job for job in jobs}
-        for i, future in enumerate(as_completed(futures), start=1):
-            results.append((futures[future], future.result()))
-            if i % progress_every == 0 or i == len(jobs):
-                log.info(f"  probed {i}/{len(jobs)} region jobs")
-    return results
+        futures = {
+            pool.submit(_probe_job, job, store): job
+            for job in islice(job_iter, max_workers * 4)
+        }
+        while futures:
+            done, _ = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                job = futures.pop(future)
+                for refill in islice(job_iter, 1):
+                    futures[pool.submit(_probe_job, refill, store)] = refill
+                yield job, future.result()
 
 
 def _expected_lead_limits(store: IcechunkStore) -> dict[pd.Timestamp, pd.Timedelta]:
@@ -115,30 +121,29 @@ def _coord_is_expected(
     return limit is None or pd.isna(limit) or lead <= limit
 
 
-def _file_availability(
-    probed: Sequence[tuple[Any, Sequence[tuple[SourceFileCoord, bool]]]],
+def _fold_file_availability(
+    coord_presence: Sequence[tuple[SourceFileCoord, bool]],
     lead_limits: dict[pd.Timestamp, pd.Timedelta],
-) -> dict[pd.Timestamp, tuple[int, int]]:
-    """Map each append-dim position to (present_files, expected_files).
+    counts: dict[pd.Timestamp, list[int]],
+) -> None:
+    """Fold one job's probes into per-position [present_files, expected_files] counts.
 
-    Dedups source files by (position, url) so a file shared across variable groups is
-    counted once; present if any job saw it present. Files past a position's
+    Dedups source files by (position, url) so a file shared by several of the job's
+    coords is counted once (virtual jobs carry one variable group per region, so a file
+    never spans jobs); present if any coord saw it present. Files past a position's
     expected_forecast_length are not expected (e.g. leads beyond a 36-hour-era init).
     """
     present_by_file: dict[tuple[pd.Timestamp, str], bool] = {}
-    for _job, coord_presence in probed:
-        for coord, is_present in coord_presence:
-            if not _coord_is_expected(coord, lead_limits):
-                continue
-            key = (_position(coord), coord.get_url())
-            present_by_file[key] = present_by_file.get(key, False) or is_present
+    for coord, is_present in coord_presence:
+        if not _coord_is_expected(coord, lead_limits):
+            continue
+        key = (_position(coord), coord.get_url())
+        present_by_file[key] = present_by_file.get(key, False) or is_present
 
-    counts: dict[pd.Timestamp, list[int]] = {}
     for (position, _url), is_present in present_by_file.items():
         bucket = counts.setdefault(position, [0, 0])
         bucket[1] += 1
         bucket[0] += int(is_present)
-    return {position: (p, e) for position, (p, e) in counts.items()}
 
 
 def _coord_carries(coord: SourceFileCoord, var: DataVar[Any]) -> bool:
@@ -205,49 +210,46 @@ def _var_chunk_key(
     return f"{var.path}/{encoded}"
 
 
-def _var_availability(
-    probed: Sequence[
-        tuple[VirtualRegionJob[Any, Any], Sequence[tuple[SourceFileCoord, bool]]]
-    ],
-    store: IcechunkStore,
-) -> dict[str, dict[pd.Timestamp, bool]]:
-    """Probe each variable's ref at one present source file per position."""
-    group = zarr.open_group(store, mode="r")
-    metadata_by_var: dict[str, ArrayV3Metadata] = {}
+def _var_probes(
+    job: VirtualRegionJob[Any, Any],
+    coord_presence: Sequence[tuple[SourceFileCoord, bool]],
+    group: zarr.Group,
+    metadata_by_var: dict[str, ArrayV3Metadata],
+) -> list[tuple[str, pd.Timestamp, str]]:
+    """One (var path, position, chunk key) probe per variable per position with a
+    present source file: each variable's ref at one present source file per position."""
+    by_position: dict[pd.Timestamp, list[SourceFileCoord]] = {}
+    for coord, is_present in coord_presence:
+        if is_present:
+            by_position.setdefault(_position(coord), []).append(coord)
 
     probes: list[tuple[str, pd.Timestamp, str]] = []
-    out: dict[str, dict[pd.Timestamp, bool]] = {}
-    for job, coord_presence in probed:
-        by_position: dict[pd.Timestamp, list[SourceFileCoord]] = {}
-        for coord, is_present in coord_presence:
-            if is_present:
-                by_position.setdefault(_position(coord), []).append(coord)
-        for var in job.data_vars:
-            out.setdefault(var.path, {})
-            if var.path not in metadata_by_var:
-                array = group[var.path]
-                assert isinstance(array, zarr.Array)
-                assert isinstance(array.metadata, ArrayV3Metadata)
-                metadata_by_var[var.path] = array.metadata
-            for position, present_coords in by_position.items():
-                coord = _probe_coord_for_var(present_coords, var)
-                if coord is None:
-                    continue
-                key = _var_chunk_key(
-                    job.template_ds, metadata_by_var[var.path], var, coord.out_loc()
-                )
-                probes.append((var.path, position, key))
+    for var in job.data_vars:
+        if var.path not in metadata_by_var:
+            array = group[var.path]
+            assert isinstance(array, zarr.Array)
+            assert isinstance(array.metadata, ArrayV3Metadata)
+            metadata_by_var[var.path] = array.metadata
+        for position, present_coords in by_position.items():
+            coord = _probe_coord_for_var(present_coords, var)
+            if coord is None:
+                continue
+            key = _var_chunk_key(
+                job.template_ds, metadata_by_var[var.path], var, coord.out_loc()
+            )
+            probes.append((var.path, position, key))
+    return probes
 
-    log.info(f"Probing {len(probes)} per-variable refs")
-    present: dict[str, bool] = {}
-    keys = [key for _, _, key in probes]
-    for start in range(0, len(keys), _EXISTS_BATCH_SIZE):
-        present.update(_exists_many(store, keys[start : start + _EXISTS_BATCH_SIZE]))
-        log.info(f"  probed {min(start + _EXISTS_BATCH_SIZE, len(keys))}/{len(keys)}")
 
+def _flush_var_probes(
+    store: IcechunkStore,
+    probes: list[tuple[str, pd.Timestamp, str]],
+    out: dict[str, dict[pd.Timestamp, bool]],
+) -> None:
+    present = _exists_many(store, [key for _, _, key in probes])
     for var_path, position, key in probes:
         out.setdefault(var_path, {})[position] = present[key]
-    return out
+    probes.clear()
 
 
 def scan_manifest(
@@ -271,10 +273,29 @@ def scan_manifest(
         build_virtual_jobs(dataset, end=end, start=start, variables=variables),
     )
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
-    probed = _probe_jobs(jobs, store)
-    file_availability = _file_availability(probed, _expected_lead_limits(store))
+    lead_limits = _expected_lead_limits(store)
+    group = zarr.open_group(store, mode="r")
+    metadata_by_var: dict[str, ArrayV3Metadata] = {}
+
+    # Fold each job's probes as it completes; only per-position counts, per-var
+    # booleans, and at most one _exists_many batch of pending probes stay resident.
+    file_counts: dict[pd.Timestamp, list[int]] = {}
+    var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    pending_probes: list[tuple[str, pd.Timestamp, str]] = []
+    progress_every = max(1, len(jobs) // 20)
+    for i, (job, coord_presence) in enumerate(_probe_jobs(jobs, store), start=1):
+        _fold_file_availability(coord_presence, lead_limits, file_counts)
+        for var in job.data_vars:
+            var_availability.setdefault(var.path, {})
+        pending_probes.extend(_var_probes(job, coord_presence, group, metadata_by_var))
+        if len(pending_probes) >= _EXISTS_BATCH_SIZE:
+            _flush_var_probes(store, pending_probes, var_availability)
+        if i % progress_every == 0 or i == len(jobs):
+            log.info(f"  probed {i}/{len(jobs)} region jobs")
+    _flush_var_probes(store, pending_probes, var_availability)
+
+    file_availability = {position: (p, e) for position, (p, e) in file_counts.items()}
     assert file_availability, "No source files generated for the requested window"
-    var_availability = _var_availability(probed, store)
     return ManifestScanResult(
         append_dim=append_dim,
         file_availability=file_availability,

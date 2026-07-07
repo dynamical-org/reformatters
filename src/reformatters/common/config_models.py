@@ -149,7 +149,6 @@ class Encoding(pydantic.BaseModel):
         arbitrary_types_allowed=True,  # allow numcodecs.abc.Codec values
         frozen=True,
         strict=True,
-        revalidate_instances="always",
     )
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
