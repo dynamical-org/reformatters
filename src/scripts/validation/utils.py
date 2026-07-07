@@ -199,7 +199,6 @@ class RunContext:
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
     unavailable_timestamps_file: str | None = None
-    missing_source_files_file: str | None = None
     # One-sentence description of how availability was measured, for the report.
     availability_method_note: str | None = None
     availability: dict[str, AvailabilitySeries] = field(default_factory=dict)

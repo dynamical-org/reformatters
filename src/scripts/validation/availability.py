@@ -16,6 +16,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import typer
 import xarray as xr
 import zarr
 
@@ -28,6 +29,7 @@ from scripts.validation.utils import (
     is_virtual_store,
     level_option,
     load_zarr_dataset,
+    open_icechunk_readonly,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
@@ -48,11 +50,15 @@ MAX_HEATMAP_COLUMNS = 1200
 
 @dataclass
 class VarAvailabilitySummary:
-    plot: str | None  # trace plot filename, written only for incomplete variables
+    plot: str
     positions_total: int
     positions_complete: int
     first_incomplete: str | None
     last_incomplete: str | None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.positions_complete == self.positions_total
 
 
 def _position_labels(positions: np.ndarray) -> list[str]:
@@ -145,7 +151,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
 def write_availability_artifacts(
     output_dir: Path, series_by_var: dict[str, AvailabilitySeries]
 ) -> tuple[str, dict[str, VarAvailabilitySummary]]:
-    """Write the heatmap + per-incomplete-var trace plots. Returns (heatmap filename, per-var summaries)."""
+    """Write the heatmap + a trace plot per variable. Returns (heatmap filename, per-var summaries)."""
     assert series_by_var, "no availability series to render"
     _plot_heatmap(series_by_var, output_dir / HEATMAP_FILENAME)
 
@@ -154,10 +160,8 @@ def write_availability_artifacts(
         probed = ~np.isnan(series.fraction)
         complete = probed & (series.fraction >= 1.0)
         incomplete_positions = series.positions[probed & ~complete]
-        plot_name = None
-        if incomplete_positions.size:
-            plot_name = f"availability_{var_slug(var)}.png"
-            _plot_var_availability(series, output_dir / plot_name, var)
+        plot_name = f"availability_{var_slug(var)}.png"
+        _plot_var_availability(series, output_dir / plot_name, var)
         labels = _position_labels(incomplete_positions)
         summaries[var] = VarAvailabilitySummary(
             plot=plot_name,
@@ -180,7 +184,7 @@ def apply_availability(ctx: RunContext) -> None:
         stats.positions_complete = summary.positions_complete
         stats.first_incomplete = summary.first_incomplete
         stats.last_incomplete = summary.last_incomplete
-        if summary.plot:
+        if not summary.is_complete:
             log.info(
                 f"  availability {var}: {summary.positions_complete}/"
                 f"{summary.positions_total} positions complete "
@@ -352,13 +356,16 @@ def run_value_availability(ctx: RunContext) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_manifest_availability(ctx: RunContext) -> None:
-    """Manifest-probe availability across the whole archive (virtual stores)."""
+def run_manifest_availability(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
+    """Manifest-probe availability across the whole archive (virtual stores).
+
+    Returns the per-position source file availability so callers can gate on it.
+    """
     # Late import: manifest_scan imports this module for the shared rendering.
     from scripts.validation.manifest_scan import (  # noqa: PLC0415
         result_availability_series,
         scan_manifest,
-        write_missing_source_files,
+        write_unavailable_timestamps_file,
     )
     from scripts.validation.scan_common import resolve_virtual_dataset  # noqa: PLC0415
 
@@ -373,7 +380,10 @@ def run_manifest_availability(ctx: RunContext) -> None:
     )
     start = pd.Timestamp(ctx.start_date) if ctx.start_date else None
 
-    result = scan_manifest(dataset, start=start, end=end, variables=ctx.variables)
+    store = open_icechunk_readonly(ctx.validation_url)
+    result = scan_manifest(
+        dataset, store, start=start, end=end, variables=ctx.variables
+    )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
 
@@ -392,10 +402,11 @@ def run_manifest_availability(ctx: RunContext) -> None:
         "missing at least one source file."
     )
     if incomplete_files:
-        ctx.missing_source_files_file = write_missing_source_files(
+        ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
             incomplete_files, ctx.output_dir
         )
     apply_availability(ctx)
+    return result.file_availability
 
 
 def availability(
@@ -405,6 +416,12 @@ def availability(
     end_date: str | None = end_date_option,
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
+    min_fraction: float = typer.Option(
+        1.0,
+        "--min-fraction",
+        help="Virtual stores: exit non-zero if any position has less than this "
+        "fraction of its expected source files (the post-backfill completeness gate)",
+    ),
 ) -> None:
     """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
     ds = load_zarr_dataset(dataset_url)
@@ -438,6 +455,21 @@ def availability(
         level_override=level,
     )
     if ctx.is_virtual:
-        run_manifest_availability(ctx)
+        file_availability = run_manifest_availability(ctx)
+        below = [
+            position
+            for position, (present, expected) in file_availability.items()
+            if present / expected < min_fraction
+        ]
+        if below:
+            log.error(
+                f"Manifest incomplete: {len(below)} of {len(file_availability)} "
+                f"positions below {min_fraction:.0%} of expected source files"
+            )
+            raise typer.Exit(1)
+        log.info(
+            f"Manifest complete: all {len(file_availability)} positions "
+            f"≥ {min_fraction:.0%}"
+        )
     else:
         run_value_availability(ctx)

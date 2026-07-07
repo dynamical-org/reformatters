@@ -323,13 +323,12 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
                 f"| {pct:.2f}% | {stats.first_incomplete} | {stats.last_incomplete} |"
             )
     lines.append("")
-    for label, filename in (
-        ("Unavailable timestamps + retry filters", ctx.unavailable_timestamps_file),
-        ("Missing source files + retry filters", ctx.missing_source_files_file),
-    ):
-        if filename:
-            lines.append(f"- {label}: [`{filename}`]({filename})")
-            lines.append("")
+    if ctx.unavailable_timestamps_file:
+        lines.append(
+            f"- Unavailable timestamps + retry filters: "
+            f"[`{ctx.unavailable_timestamps_file}`]({ctx.unavailable_timestamps_file})"
+        )
+        lines.append("")
 
     lines.append("## Per-variable details")
     lines.append("")

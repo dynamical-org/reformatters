@@ -1,10 +1,11 @@
 """Shared helpers for the dataset-aware virtual store scans (manifest + decode).
 
-Unlike the URL-driven plots, these scans need the dataset's own region job to reach the
-icechunk manifest (chunk-key resolution + ref-existence probing). Resolving the dataset
-from the registry lets them reuse `VirtualRegionJob.source_file_coords` /
-`filter_already_present` and the operational validators in `common/validation.py`, so the
-offline whole-archive checks and the bounded operational ones share their core logic.
+These scans need the dataset's own region job to reach the icechunk manifest (chunk-key
+resolution + ref-existence probing). Resolving the dataset from the registry lets them
+reuse `VirtualRegionJob.source_file_coords` / `filter_already_present` and the
+operational validators in `common/validation.py`, so the offline whole-archive checks
+and the bounded operational ones share their core logic. The manifest scan resolves the
+dataset from the store's `dataset_id` attribute; `decode_scan` takes a dataset id.
 """
 
 from datetime import datetime

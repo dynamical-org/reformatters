@@ -9,20 +9,19 @@ recent window it probes the whole archive for ref existence (no decode), in two 
    which catches a variable missing from otherwise-ingested files (e.g. a variable the
    model only started producing partway through the archive).
 
-Feeds the availability section of the validation report via
+Entry points: the `availability` command (URL-driven, resolves the registered dataset
+from the store's `dataset_id` attribute) and `run-all`, via
 `availability.run_manifest_availability`. See docs/validation.md.
 """
 
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-import typer
 import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
@@ -33,19 +32,11 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
-from scripts.validation.availability import write_availability_artifacts
 from scripts.validation.scan_common import (
     build_virtual_jobs,
-    dataset_id_argument,
-    end_option,
-    primary_icechunk_store,
-    resolve_virtual_dataset,
-    start_option,
 )
 from scripts.validation.utils import (
     AvailabilitySeries,
-    output_dir_option,
-    resolve_output_dir,
 )
 
 log = get_logger(__name__)
@@ -261,14 +252,18 @@ def _var_availability(
 
 def scan_manifest(
     dataset: DynamicalDataset[Any, Any],
+    store: IcechunkStore,
     *,
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     variables: list[str] | None = None,
 ) -> ManifestScanResult:
-    """Probe the archive's manifest per source file and per variable. No decode."""
+    """Probe `store`'s manifest per source file and per variable. No decode.
+
+    `dataset` supplies the region-job machinery (expected source files, chunk keys);
+    `store` is the archive actually probed, so a staging store is scanned as itself.
+    """
     append_dim = dataset.template_config.append_dim
-    store = primary_icechunk_store(dataset)
 
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
@@ -306,14 +301,14 @@ def result_availability_series(
     return series
 
 
-def write_missing_source_files(
+def write_unavailable_timestamps_file(
     incomplete: dict[pd.Timestamp, tuple[int, int]], output_dir: Path
 ) -> str:
-    """Write missing_source_files.txt with backfill retry filters. Returns filename."""
-    filename = "missing_source_files.txt"
+    """Write unavailable_timestamps.txt with backfill retry filters. Returns filename."""
+    filename = "unavailable_timestamps.txt"
     positions = sorted(incomplete)
     lines = [
-        "# Incomplete append-dim positions (present/expected source files)",
+        "# Unavailable timestamps (present/expected source files per position)",
         "# Retry with backfill --filter-contains <position> to re-ingest missing files.",
         "",
         "combined-retry-filter: "
@@ -325,75 +320,3 @@ def write_missing_source_files(
         lines.append(f"{position.isoformat()}: {present}/{expected} present")
     (output_dir / filename).write_text("\n".join(lines))
     return filename
-
-
-def scan(
-    dataset_id: str = dataset_id_argument,
-    start: datetime | None = start_option,
-    end: datetime | None = end_option,
-    min_fraction: float = typer.Option(
-        1.0,
-        "--min-fraction",
-        help="Required fraction of source files present per position",
-    ),
-    output_dir: Path | None = output_dir_option,
-) -> None:
-    """Probe the whole archive for missing refs, per source file and per variable."""
-    dataset = resolve_virtual_dataset(dataset_id)
-    result = scan_manifest(
-        dataset,
-        start=pd.Timestamp(start) if start else None,
-        end=pd.Timestamp(end) if end else None,
-    )
-    out = resolve_output_dir(dataset.store_factory.primary_url(), output_dir)
-
-    heatmap, var_summaries = write_availability_artifacts(
-        out, result_availability_series(result)
-    )
-
-    incomplete_files = {
-        position: (present, expected)
-        for position, (present, expected) in result.file_availability.items()
-        if present / expected < min_fraction
-    }
-    n_positions = len(result.file_availability)
-    n_present = sum(p for p, _ in result.file_availability.values())
-    n_expected = sum(e for _, e in result.file_availability.values())
-    incomplete_vars = {var: s for var, s in var_summaries.items() if s.plot is not None}
-
-    summary = [
-        f"# Manifest completeness — {dataset.dataset_id}",
-        "",
-        f"- Positions scanned: {n_positions}",
-        f"- Source files present: {n_present}/{n_expected} "
-        f"({n_present / n_expected:.2%})",
-        f"- Required fraction per position: {min_fraction:.0%}",
-        f"- Incomplete positions: {len(incomplete_files)}",
-        f"- Variables with incomplete positions: {len(incomplete_vars)} "
-        f"of {len(var_summaries)}",
-        "",
-        f"![availability]({heatmap})",
-        "",
-    ]
-    for var, s in sorted(incomplete_vars.items()):
-        summary.append(
-            f"- `{var}`: {s.positions_complete}/{s.positions_total} positions complete "
-            f"({s.first_incomplete} → {s.last_incomplete}), [plot]({s.plot})"
-        )
-    if incomplete_files:
-        missing_filename = write_missing_source_files(incomplete_files, out)
-        summary.append(f"\nIncomplete positions listed in `{missing_filename}`.")
-    (out / "manifest_scan_summary.md").write_text("\n".join(summary))
-
-    log.info(f"Wrote manifest scan to {out}")
-    if incomplete_files:
-        log.error(
-            f"Manifest incomplete: {len(incomplete_files)} of {n_positions} positions "
-            f"below {min_fraction:.0%} present"
-        )
-        raise typer.Exit(1)
-    log.info(f"Manifest complete: all {n_positions} positions ≥ {min_fraction:.0%}")
-
-
-if __name__ == "__main__":
-    typer.run(scan)

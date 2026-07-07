@@ -106,8 +106,10 @@ def test_run_value_availability_exempts_accum_hour_zero(tmp_path: Path) -> None:
     precipitation = ctx.stats["precipitation_surface"]
     # Structural hour-0 NaNs are excluded: the variable is fully available.
     assert precipitation.positions_complete == precipitation.positions_total == 6
-    assert precipitation.availability_plot is None
-    assert not (tmp_path / "availability_precipitation_surface.png").exists()
+    assert precipitation.first_incomplete is None
+    # The plot is still written (every variable gets one for rendering consistency).
+    assert precipitation.availability_plot == "availability_precipitation_surface.png"
+    assert (tmp_path / "availability_precipitation_surface.png").exists()
     np.testing.assert_allclose(
         ctx.availability["precipitation_surface"].fraction, np.ones(6)
     )
