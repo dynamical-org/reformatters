@@ -11,6 +11,11 @@ import xarray as xr
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import template_utils, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.virtual_region_job import VirtualRegionJob
+
+_VIRTUAL_DATASETS = [
+    d for d in DYNAMICAL_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
+]
 
 
 @dataclass
@@ -230,6 +235,23 @@ def test_coordinates_have_single_chunk(
         assert chunk_file_names == ["0"], (
             f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
         )
+
+
+@pytest.mark.parametrize(
+    "dataset", _VIRTUAL_DATASETS, ids=[d.dataset_id for d in _VIRTUAL_DATASETS]
+)
+def test_virtual_serializers_flip_to_shared_orientation(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Every virtual data var's GribberishCodec flips decoded messages into our shared
+    orientation: north_up (first row = largest latitude, matching materialized datasets'
+    GDAL flip) and adjust_longitude_range (monotonic -180..180 longitude)."""
+    for var in dataset.template_config.data_vars:
+        serializer = var.encoding.serializer
+        assert serializer is not None, var.name
+        assert serializer["name"] == "gribberish", var.name
+        assert serializer["configuration"]["north_up"] is True, var.name
+        assert serializer["configuration"]["adjust_longitude_range"] is True, var.name
 
 
 @pytest.mark.parametrize(

@@ -60,7 +60,7 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
 
     Virtual icechunk dataset: chunks are references to GRIB messages in NOAA's
     archive, decoded at read time, so the grid is the native 0.25 degree s file
-    grid (latitude 90 to -90, longitude 0 to 359.75) with one chunk per message,
+    grid (latitude 90 to -90, longitude -180 to 179.75) with one chunk per message,
     and lead times stop at 240h where the s files end. See docs/virtual_datasets.md.
     """
 
@@ -104,9 +104,8 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
             ),
             "ensemble_member": np.arange(31),
             "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
-            # Native GEFS 0.25 degree grid: latitude descends, longitude is 0-360.
             "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-            "longitude": np.arange(0, 360, 0.25),
+            "longitude": np.arange(-180, 180, 0.25),
         }
 
     def derive_coordinates(
@@ -313,5 +312,9 @@ def _virtual_encoding(var: GEFSDataVar, message_chunks: tuple[int, ...]) -> Enco
         shards=None,
         compressors=(),
         filters=(),
-        serializer=GribberishCodec(var=var.internal_attrs.grib_element).to_dict(),
+        serializer=GribberishCodec(
+            var=var.internal_attrs.grib_element,
+            adjust_longitude_range=True,
+            north_up=True,
+        ).to_dict(),
     )

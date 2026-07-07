@@ -90,12 +90,11 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
         """
         # Virtual chunks decode the raw source message, so the grid here must be the
         # source file's NATIVE grid - one chunk per message means no regridding is
-        # possible. (A materialized dataset is free to choose any output grid.) It must
-        # also match the serializer's decode ORIENTATION, which may differ from GDAL's:
-        # some codecs decode projected grids bottom-up (row 0 = south) where a
-        # materialized/GDAL template is top-down. Decode one real message and compare
-        # before reusing a materialized dataset's y/latitude/spatial_ref; flip the y
-        # ordering (and the spatial_ref GeoTransform) if they disagree.
+        # possible. (A materialized dataset should also align with the native grid unless
+        # a different output grid meaningfully improves usability.) The GribberishCodec
+        # `north_up=True` option (see `data_vars`) makes every decoded message north-first
+        # (row 0 = largest latitude), matching GDAL's automatic flip baked into our
+        # materialized datasets, so order latitude/y descending here.
         # return {
         #     self.append_dim: self.append_dim_coordinates(
         #         self.append_dim_start + self.append_dim_frequency
@@ -334,7 +333,9 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     shards=None,
         #     compressors=(),  # no compression of our own; bytes stay as the source wrote them
         #     filters=(),  # or e.g. (ScaleOffset(offset=-273.15, scale=1.0).to_dict(),) to serve degC
-        #     serializer=GribberishCodec(var="TMP").to_dict(),  # decodes the raw message
+        #     # north_up=True flips each message north-first (row 0 = largest latitude);
+        #     # set it on every GribberishCodec so all our datasets share one orientation.
+        #     serializer=GribberishCodec(var="TMP", north_up=True).to_dict(),
         # )
 
         # return [

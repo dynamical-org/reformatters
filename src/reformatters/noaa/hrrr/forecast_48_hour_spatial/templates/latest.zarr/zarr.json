@@ -49,7 +49,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "AOTK",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -103,7 +104,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "BGRUN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -157,7 +159,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "4LFTX",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -211,7 +214,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SBT113",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -265,7 +269,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SBT114",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -319,7 +324,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SBT123",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -373,7 +379,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SBT124",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -427,7 +434,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CFRZR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -486,7 +494,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CICEP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -545,7 +554,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CRAIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -604,7 +614,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CSNOW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -663,7 +674,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CFNSF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -716,7 +728,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "COLMD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -769,7 +782,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "REFC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -823,7 +837,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CAPE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -877,7 +892,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CAPE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -931,7 +947,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CAPE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -985,7 +1002,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CAPE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1039,7 +1057,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CAPE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1093,7 +1112,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1147,7 +1167,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1201,7 +1222,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1255,7 +1277,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1309,7 +1332,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CANGLE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1362,7 +1386,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "REFD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1416,7 +1441,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "REFD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1470,7 +1496,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "REFD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1530,7 +1557,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "DPT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1584,7 +1612,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "DLWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1638,7 +1667,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "DSWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1692,7 +1722,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RETOP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1745,7 +1776,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "EFHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1798,7 +1830,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ESP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1906,7 +1939,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "FRZR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1959,7 +1993,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "FRICV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2013,7 +2048,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "FROZR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2066,7 +2102,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "FROZR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2119,7 +2156,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2173,7 +2211,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2227,7 +2266,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2281,7 +2321,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2335,7 +2376,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2389,7 +2431,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2443,7 +2486,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2497,7 +2541,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2551,7 +2596,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2605,7 +2651,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2659,7 +2706,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2713,7 +2761,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "GFLUX",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2767,7 +2816,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HCDC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2821,7 +2871,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MAXREF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2875,7 +2926,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ICEC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -2984,7 +3036,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LAND",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3038,7 +3091,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LHTFL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3150,7 +3204,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LAYTH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3259,7 +3314,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LAI",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3313,7 +3369,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LTNG",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3366,7 +3423,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LTNGSD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3419,7 +3477,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LTNGSD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3530,7 +3589,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LCDC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3584,7 +3644,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MASSDEN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3637,7 +3698,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TCOLG",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3691,7 +3753,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "REFD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3745,7 +3808,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MAXDVV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3798,7 +3862,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HAIL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3851,7 +3916,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HAIL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3904,7 +3970,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HAIL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -3957,7 +4024,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RELV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4011,7 +4079,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RELV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4065,7 +4134,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MXUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4118,7 +4188,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MXUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4171,7 +4242,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MXUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4224,7 +4296,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MAXUVV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4278,7 +4351,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VEGMAX",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4332,7 +4406,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "WIND",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4386,7 +4461,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MAXUW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4439,7 +4515,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MAXVW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4492,7 +4569,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MCDC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4546,7 +4624,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MNUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4599,7 +4678,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MNUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4652,7 +4732,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MNUPHL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4705,7 +4786,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VEGMIN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4784,7 +4866,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIMIXR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4841,7 +4924,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CLMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -4953,7 +5037,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "FRACCC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5010,7 +5095,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5067,7 +5153,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "GRLE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5350,7 +5437,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MASSDEN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5460,7 +5548,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "NCONCD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5516,7 +5605,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "NCCICE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5572,7 +5662,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SPNCR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5628,7 +5719,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PMTC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5684,7 +5776,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PMTF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5740,7 +5833,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5797,7 +5891,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RWMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5853,7 +5948,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SNMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -5919,7 +6015,7 @@
           "horizontal_datum_name": "unnamed",
           "grid_mapping_name": "lambert_conformal_conic",
           "spatial_ref": "PROJCS[\"unnamed\",GEOGCS[\"Coordinate System imported from GRIB file\",DATUM[\"unnamed\",SPHEROID[\"Sphere\",6371229,0]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",38.5],PARAMETER[\"central_meridian\",-97.5],PARAMETER[\"standard_parallel_1\",38.5],PARAMETER[\"standard_parallel_2\",38.5],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"Metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
-          "GeoTransform": "-2699020.142521929 3000.0 0.0 -1588806.152556665 0.0 3000.0",
+          "GeoTransform": "-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0",
           "false_easting": 0.0,
           "false_northing": 0.0,
           "latitude_of_projection_origin": 38.5,
@@ -5967,7 +6063,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SPFH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6030,7 +6127,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TMP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6087,7 +6185,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TKE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6202,7 +6301,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VVEL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6259,7 +6359,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "UGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6316,7 +6417,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6483,7 +6585,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MSTAV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6536,7 +6639,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CPOFP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6589,7 +6693,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HPBL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6643,7 +6748,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CNWAT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6697,7 +6803,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "POT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6751,7 +6858,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PWAT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6805,7 +6913,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRATE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6859,7 +6968,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6913,7 +7023,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -6967,7 +7078,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7021,7 +7133,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7100,7 +7213,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ABSV",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7157,7 +7271,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CIMIXR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7214,7 +7329,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "CLMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7277,7 +7393,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "DPT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7389,7 +7506,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HGT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7446,7 +7564,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "GRLE",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7784,7 +7903,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RWMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7840,7 +7960,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7897,7 +8018,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SNMR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -7963,7 +8085,7 @@
           "horizontal_datum_name": "unnamed",
           "grid_mapping_name": "lambert_conformal_conic",
           "spatial_ref": "PROJCS[\"unnamed\",GEOGCS[\"Coordinate System imported from GRIB file\",DATUM[\"unnamed\",SPHEROID[\"Sphere\",6371229,0]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",38.5],PARAMETER[\"central_meridian\",-97.5],PARAMETER[\"standard_parallel_1\",38.5],PARAMETER[\"standard_parallel_2\",38.5],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"Metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
-          "GeoTransform": "-2699020.142521929 3000.0 0.0 -1588806.152556665 0.0 3000.0",
+          "GeoTransform": "-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0",
           "false_easting": 0.0,
           "false_northing": 0.0,
           "latitude_of_projection_origin": 38.5,
@@ -8011,7 +8133,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SPFH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8074,7 +8197,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TMP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8189,7 +8313,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VVEL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8246,7 +8371,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "UGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8303,7 +8429,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8470,7 +8597,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PLPL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8524,7 +8652,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "MSLMA",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8578,7 +8707,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "PRES",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8632,7 +8762,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8686,7 +8817,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8740,7 +8872,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8794,7 +8927,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "RHPW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8847,7 +8981,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SHTFL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8907,7 +9042,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SNOWC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -8961,7 +9097,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SNOD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9021,7 +9158,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "WEASD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9075,7 +9213,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "WEASD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9129,7 +9268,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "WEASD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9195,7 +9335,7 @@
           "horizontal_datum_name": "unnamed",
           "grid_mapping_name": "lambert_conformal_conic",
           "spatial_ref": "PROJCS[\"unnamed\",GEOGCS[\"Coordinate System imported from GRIB file\",DATUM[\"unnamed\",SPHEROID[\"Sphere\",6371229,0]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",38.5],PARAMETER[\"central_meridian\",-97.5],PARAMETER[\"standard_parallel_1\",38.5],PARAMETER[\"standard_parallel_2\",38.5],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"Metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
-          "GeoTransform": "-2699020.142521929 3000.0 0.0 -1588806.152556665 0.0 3000.0",
+          "GeoTransform": "-2699020.142521929 3000.0 0.0 1588193.847443335 0.0 -3000.0",
           "false_easting": 0.0,
           "false_northing": 0.0,
           "latitude_of_projection_origin": 38.5,
@@ -9241,7 +9381,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SPFH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9295,7 +9436,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HLCY",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9348,7 +9490,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "HLCY",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9401,7 +9544,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SSRUN",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9455,7 +9599,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "LFTX",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9509,7 +9654,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "SFCR",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9569,7 +9715,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TMP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9629,7 +9776,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TMP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9683,7 +9831,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TCDC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9737,7 +9886,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TCDC",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9791,7 +9941,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TCOLI",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9845,7 +9996,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "TCOLW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9899,7 +10051,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "APCP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -9953,7 +10106,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "APCP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10007,7 +10161,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ASNOW",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10061,7 +10216,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "USTM",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10114,7 +10270,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ULWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10168,7 +10325,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "ULWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10222,7 +10380,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "USWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10276,7 +10435,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "USWRF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10330,7 +10490,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VSTM",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10441,7 +10602,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VEG",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10495,7 +10657,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VGTYP",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10548,7 +10711,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VUCSH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10601,7 +10765,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VUCSH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10654,7 +10819,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VVCSH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10707,7 +10873,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VVCSH",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10760,7 +10927,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "DZDT",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10814,7 +10982,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VIL",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10867,7 +11036,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VIS",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10921,7 +11091,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VBDSF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -10974,7 +11145,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VDDSF",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -11027,7 +11199,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "GUST",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -11081,7 +11254,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "UGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -11135,7 +11309,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "UGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -11189,7 +11364,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -11243,7 +11419,8 @@
             "name": "gribberish",
             "configuration": {
               "var": "VGRD",
-              "adjust_longitude_range": true
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],

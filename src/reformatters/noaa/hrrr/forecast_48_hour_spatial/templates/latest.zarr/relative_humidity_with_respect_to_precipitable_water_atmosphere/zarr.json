@@ -29,7 +29,8 @@
       "name": "gribberish",
       "configuration": {
         "var": "RHPW",
-        "adjust_longitude_range": true
+        "adjust_longitude_range": true,
+        "north_up": true
       }
     }
   ],

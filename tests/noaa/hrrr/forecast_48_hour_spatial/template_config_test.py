@@ -66,9 +66,3 @@ def test_non_temperature_var_has_no_filter() -> None:
     var = get_var("wind_u_10m")
     assert var.encoding.filters in (None, (), [])
     assert var.attrs.units == "m s-1"
-
-
-def test_serializer_adjusts_longitude_range() -> None:
-    var = get_var("temperature_2m")
-    assert var.encoding.serializer is not None
-    assert var.encoding.serializer["configuration"]["adjust_longitude_range"] is True

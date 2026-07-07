@@ -18,11 +18,9 @@ from reformatters.common.config_models import (
     Group,
     StatisticsApproximate,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.types import (
     AppendDim,
-    Array1D,
     CodecConfig,
     Dim,
     Timedelta,
@@ -120,23 +118,6 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
             forecast_resolution="Hourly",
         )
 
-    def _y_x_coordinates(self) -> tuple[Array1D[np.float64], Array1D[np.float64]]:
-        # gribberish decodes the HRRR grid south-first (row 0 = southernmost), the
-        # opposite of GDAL's north-first order the materialized config uses. Order y
-        # ascending so the virtual chunk data aligns with its coordinates. x is unaffected.
-        # Interim: the catalog convention is north-first/descending (see AGENTS.md); this
-        # dataset stays south-first until gribberish can flip latitude on decode, then
-        # re-orients to match. It is not published until then.
-        y_north_first, x_coords = super()._y_x_coordinates()
-        return np.ascontiguousarray(y_north_first[::-1]), x_coords
-
-    def _south_first_geotransform(self) -> str:
-        # The GeoTransform's y origin / sign must match the south-first y ordering above.
-        _, bounds, resolution, _ = self._spatial_info()
-        left, bottom, _right, _top = bounds
-        dx = resolution[0]
-        return f"{left} {dx} 0.0 {bottom} 0.0 {dx}"
-
     def dimension_coordinates(self) -> dict[str, Any]:
         y_coords, x_coords = self._y_x_coordinates()
         return {
@@ -177,19 +158,8 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        # Reuse the common HRRR grid coords (x, y, latitude, longitude, spatial_ref) but
-        # repoint the spatial_ref GeoTransform to the south-first y ordering.
-        common_coords = [
-            replace(
-                c, attrs=replace(c.attrs, GeoTransform=self._south_first_geotransform())
-            )
-            if c.name == "spatial_ref"
-            else c
-            for c in super().coords
-        ]
-
         return [
-            *common_coords,
+            *super().coords,
             Coordinate(
                 name="init_time",
                 encoding=Encoding(
@@ -341,8 +311,9 @@ def _virtual_encoding(
         shards=None,
         compressors=(),
         filters=filters,
-        # adjust_longitude_range is a no-op on HRRR's projected grid; applied for cross dataset consistency.
-        serializer=GribberishCodec(var=element, adjust_longitude_range=True).to_dict(),
+        serializer=GribberishCodec(
+            var=element, adjust_longitude_range=True, north_up=True
+        ).to_dict(),
     )
 
 

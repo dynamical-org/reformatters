@@ -30,7 +30,9 @@
     {
       "name": "gribberish",
       "configuration": {
-        "var": "TMIN"
+        "var": "TMIN",
+        "adjust_longitude_range": true,
+        "north_up": true
       }
     }
   ],
