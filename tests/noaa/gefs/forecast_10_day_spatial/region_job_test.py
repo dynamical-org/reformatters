@@ -396,11 +396,14 @@ def test_real_source_all_vars_resolve_and_decode(template_ds: xr.DataTree) -> No
     assert data.size == 721 * 1440
     assert 180 < np.nanmin(data) < 280 < np.nanmax(data) < 340  # plausible Kelvin
 
-    # Virtual chunks serve the raw message grid; it must match the template exactly.
+    # The template grid is the codec's decoded grid: latitude north-first (the GEFS
+    # message is already north-first) and longitude rewrapped by adjust_longitude_range
+    # from the raw 0-360 message grid to a monotonic -180..180.
     lat, lon = parse_grib_message_metadata(response.content, 0).latlng()
     dim_coords = TEMPLATE_CONFIG.dimension_coordinates()
     np.testing.assert_allclose(np.asarray(lat), dim_coords["latitude"])
-    np.testing.assert_allclose(np.asarray(lon), dim_coords["longitude"])
+    rewrapped_lon = np.sort(((np.asarray(lon) + 180) % 360) - 180)
+    np.testing.assert_allclose(rewrapped_lon, dim_coords["longitude"])
 
 
 def test_operational_update_jobs(monkeypatch: pytest.MonkeyPatch) -> None:

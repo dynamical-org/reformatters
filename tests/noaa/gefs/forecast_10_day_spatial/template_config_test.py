@@ -85,8 +85,8 @@ def test_dimension_coordinates_native_quarter_degree_grid() -> None:
 
     longitude = dim_coords["longitude"]
     assert len(longitude) == 1440
-    assert longitude[0] == 0.0
-    assert longitude[-1] == 359.75
+    assert longitude[0] == -180.0
+    assert longitude[-1] == 179.75
 
     lead_time = dim_coords["lead_time"]
     assert len(lead_time) == 81
@@ -121,7 +121,11 @@ def test_data_vars_are_s_file_vars_with_virtual_encoding() -> None:
         assert np.isnan(encoding.fill_value)
         assert encoding.serializer == {
             "name": "gribberish",
-            "configuration": {"var": var.internal_attrs.grib_element},
+            "configuration": {
+                "var": var.internal_attrs.grib_element,
+                "adjust_longitude_range": True,
+                "north_up": True,
+            },
         }
 
 

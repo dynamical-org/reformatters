@@ -30,7 +30,9 @@
     {
       "name": "gribberish",
       "configuration": {
-        "var": "HGT"
+        "var": "HGT",
+        "adjust_longitude_range": true,
+        "north_up": true
       }
     }
   ],

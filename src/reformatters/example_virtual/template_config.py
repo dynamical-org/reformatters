@@ -90,19 +90,21 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
         """
         # Virtual chunks decode the raw source message, so the grid here must be the
         # source file's NATIVE grid - one chunk per message means no regridding is
-        # possible. (A materialized dataset is free to choose any output grid.) It must
-        # also match the serializer's decode ORIENTATION, which may differ from GDAL's:
-        # some codecs decode projected grids bottom-up (row 0 = south) where a
-        # materialized/GDAL template is top-down. Decode one real message and compare
-        # before reusing a materialized dataset's y/latitude/spatial_ref; flip the y
-        # ordering (and the spatial_ref GeoTransform) if they disagree.
+        # possible. (A materialized dataset should also align with the native grid unless
+        # a different output grid meaningfully improves usability.) Two GribberishCodec
+        # options (see `data_vars`) normalize the decoded grid to our conventions, so the
+        # coordinates here must match their output: `north_up=True` makes every message
+        # north-first (row 0 = largest latitude), matching GDAL's automatic flip baked into
+        # our materialized datasets, so order latitude/y descending; and on a global grid
+        # `adjust_longitude_range=True` rewraps longitude to a monotonic -180..+180 (a
+        # no-op on non-global grids), so use that range for longitude.
         # return {
         #     self.append_dim: self.append_dim_coordinates(
         #         self.append_dim_start + self.append_dim_frequency
         #     ),
         #     "lead_time": pd.timedelta_range("0h", "240h", freq="3h"),
         #     "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        #     "longitude": np.arange(0, 360, 0.25),
+        #     "longitude": np.arange(-180, 180, 0.25),
         # }
         raise NotImplementedError("Subclasses implement `dimension_coordinates`")
 
@@ -334,7 +336,12 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     shards=None,
         #     compressors=(),  # no compression of our own; bytes stay as the source wrote them
         #     filters=(),  # or e.g. (ScaleOffset(offset=-273.15, scale=1.0).to_dict(),) to serve degC
-        #     serializer=GribberishCodec(var="TMP").to_dict(),  # decodes the raw message
+        #     # north_up flips each message north-first (row 0 = largest latitude) and
+        #     # adjust_longitude_range rewraps a global grid to -180..+180 (no-op otherwise);
+        #     # set both on every GribberishCodec so all our datasets share one grid convention.
+        #     serializer=GribberishCodec(
+        #         var="TMP", north_up=True, adjust_longitude_range=True
+        #     ).to_dict(),
         # )
 
         # return [

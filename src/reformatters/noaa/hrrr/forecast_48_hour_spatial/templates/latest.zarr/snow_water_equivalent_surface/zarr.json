@@ -35,7 +35,8 @@
       "name": "gribberish",
       "configuration": {
         "var": "WEASD",
-        "adjust_longitude_range": true
+        "adjust_longitude_range": true,
+        "north_up": true
       }
     }
   ],

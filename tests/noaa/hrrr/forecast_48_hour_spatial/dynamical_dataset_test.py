@@ -25,8 +25,8 @@ from tests.common.dynamical_dataset_test import (
     assert_configured_validators,
 )
 
-# A heavy-rain cell in the 2024-06-01T00 init (gribberish row/col, south-first y).
-_Y, _X = 423, 1062
+# A heavy-rain cell in the 2024-06-01T00 init (north-first y, row 0 = largest latitude).
+_Y, _X = 635, 1062
 _INIT = "2024-06-01T00:00"
 
 # Variables spanning root + pressure_level + model_level. "temperature" matches both

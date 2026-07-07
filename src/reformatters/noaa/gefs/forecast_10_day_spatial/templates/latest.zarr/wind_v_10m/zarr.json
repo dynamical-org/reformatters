@@ -30,7 +30,9 @@
     {
       "name": "gribberish",
       "configuration": {
-        "var": "VGRD"
+        "var": "VGRD",
+        "adjust_longitude_range": true,
+        "north_up": true
       }
     }
   ],
