@@ -87,6 +87,10 @@ Two operational rules when backfilling a live virtual dataset:
 - **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
 - **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
 
+### Metadata-only backfills
+
+When a template change touches only metadata and coordinates — new codec options (e.g. a `GribberishCodec` decode flag), reordered coordinates, changed attrs — but not the chunk data, an operational `-update` cannot deploy it: updates never rewrite existing coordinates or encoding, and a reordered dimension coordinate makes the update's drift check fail. Re-emitting every ref is also unnecessary because the refs are unchanged. `backfill-kubernetes --metadata-only` handles exactly this case: it runs a single pod that pre-sizes the template on a temp branch (rewriting coordinates and every array's `zarr.json` via `copy_zarr_metadata`) and finalizes to `main` without generating any jobs, so the existing chunk manifest carries over untouched. Pass the `append_dim_end` matching the store's current extent — it must match exactly, or the run aborts before writing. The same two operational rules above apply (suspend the `-update` CronJob; size `append_dim_end` to the published extent).
+
 ## Manifest splitting
 
 Icechunk stores each array's chunk references in one or more immutable manifest objects, split along a dimension via `IcechunkVirtualConfig.manifest_split` (built with `manifest_append_dim_split`). A commit rewrites only the split(s) whose refs changed: an operational append lands in the current (highest-index) split of each touched array while historical splits carry over unchanged, so operational commit cost is the active splits' size, not the archive's. Two independent costs pull in opposite directions when sizing splits:

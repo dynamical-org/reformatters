@@ -964,6 +964,83 @@ def test_backfill_emits_refs_and_reads_back_values(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=4)
 
 
+def test_metadata_only_backfill_rewrites_coords_keeping_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Backfill: emit refs + write initial metadata for 4 inits.
+    dataset = _make_dataset(tmp_path)
+    v1 = _create_template_ds(4)
+    template_utils.write_metadata(v1, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(v1, region=slice(0, 4)), repo)
+    _assert_all_values(dataset, n_inits=4)
+
+    # A template whose coordinates and a data-var attr have changed but whose structure
+    # (dims/dtype/chunks) is unchanged - like adopting a new codec option or reordering
+    # latitude. Same 4-init extent so no truncation.
+    base = _create_template_ds(4).to_dataset()
+    reversed_latitude = base["latitude"].values[::-1].copy()
+    lat_encoding = dict(base["latitude"].encoding)
+    root = base.assign_coords(latitude=reversed_latitude)
+    root["latitude"].encoding = lat_encoding
+    root["temperature_2m"].attrs["comment"] = "refreshed via metadata-only backfill"
+    v2 = xr.DataTree.from_dict({"/": root})
+
+    monkeypatch.setattr(dataset, "_get_template", lambda _append_dim_end: v2)
+    dataset.backfill(
+        APPEND_DIM_START + 4 * APPEND_DIM_FREQ,
+        "metadata-refresh",
+        worker_index=0,
+        workers_total=1,
+        metadata_only=True,
+    )
+
+    result = xr.open_zarr(dataset.store_factory.primary_store(), decode_timedelta=True)
+    # Coordinates and encoding metadata were overwritten...
+    np.testing.assert_array_equal(result["latitude"].values, reversed_latitude)
+    assert (
+        result["temperature_2m"].attrs["comment"]
+        == "refreshed via metadata-only backfill"
+    )
+    # ...while the virtual chunk refs (and their values) were left untouched.
+    _assert_all_values(dataset, n_inits=4)
+
+
+def test_metadata_only_backfill_rejects_extent_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
+
+    # Template sized to a different append-dim extent than the store would truncate data.
+    monkeypatch.setattr(dataset, "_get_template", lambda _end: _create_template_ds(2))
+    with pytest.raises(AssertionError, match="match the store's current"):
+        dataset.backfill(
+            APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+            "metadata-refresh",
+            worker_index=0,
+            workers_total=1,
+            metadata_only=True,
+        )
+
+
+def test_backfill_rejects_append_extent_truncation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A regular backfill into an existing store may grow it but must not shrink it.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
+
+    monkeypatch.setattr(dataset, "_get_template", lambda _end: _create_template_ds(2))
+    with pytest.raises(AssertionError, match="would truncate"):
+        dataset.backfill(
+            APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
+            "shrink-attempt",
+            worker_index=0,
+            workers_total=1,
+        )
+
+
 def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)

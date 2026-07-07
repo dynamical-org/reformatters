@@ -205,8 +205,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
         docker_image: str | None = None,
         overwrite_existing: bool = False,
+        metadata_only: bool = False,
     ) -> None:
-        """Run dataset reformatting using Kubernetes index jobs."""
+        """Run dataset reformatting using Kubernetes index jobs.
+
+        With metadata_only, rewrite the existing store's coordinates and encoding from
+        the current template without emitting any chunks - use it to propagate a template
+        change (e.g. new codec options, reordered coordinates) to an already-published
+        store. append_dim_end must match the store's current extent.
+        """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
         )
@@ -230,41 +237,50 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_ds = self._get_template(append_dim_end)
 
-        if overwrite_existing:
+        if metadata_only or overwrite_existing:
+            flag = "metadata_only" if metadata_only else "overwrite_existing"
             assert self.store_factory.all_stores_exist(), (
-                "Not all stores exist, cannot run with overwrite_existing=True"
+                f"Not all stores exist, cannot run with {flag}=True"
             )
             log.info("Writing to existing stores, skipping metadata write.")
         elif not self.store_factory.all_stores_icechunk():
             # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
 
-        num_jobs = len(
-            self.region_job_class.get_jobs(
-                tmp_store=self._tmp_store(),
-                template_ds=template_ds,
-                append_dim=self.template_config.append_dim,
-                all_data_vars=self.template_config.data_vars,
-                # The jobs returned from this call are only counted,
-                # the real job named will be filled in by kubernetes
-                reformat_job_name="placeholder",
-                filter_start=pd.Timestamp(filter_start) if filter_start else None,
-                filter_end=pd.Timestamp(filter_end) if filter_end else None,
-                filter_contains=(
-                    [pd.Timestamp(t) for t in filter_contains]
-                    if filter_contains
-                    else None
-                ),
-                filter_variable_names=filter_variable_names,
+        if metadata_only:
+            # No chunks to write: a single pod does setup + finalize, which rewrite
+            # coordinates and encoding on the existing store (see `backfill`).
+            workers_total = 1
+            parallelism = 1
+        else:
+            num_jobs = len(
+                self.region_job_class.get_jobs(
+                    tmp_store=self._tmp_store(),
+                    template_ds=template_ds,
+                    append_dim=self.template_config.append_dim,
+                    all_data_vars=self.template_config.data_vars,
+                    # The jobs returned from this call are only counted,
+                    # the real job named will be filled in by kubernetes
+                    reformat_job_name="placeholder",
+                    filter_start=pd.Timestamp(filter_start) if filter_start else None,
+                    filter_end=pd.Timestamp(filter_end) if filter_end else None,
+                    filter_contains=(
+                        [pd.Timestamp(t) for t in filter_contains]
+                        if filter_contains
+                        else None
+                    ),
+                    filter_variable_names=filter_variable_names,
+                )
             )
-        )
-        workers_total = int(np.ceil(num_jobs / jobs_per_pod))
-        parallelism = min(workers_total, max_parallelism)
+            workers_total = int(np.ceil(num_jobs / jobs_per_pod))
+            parallelism = min(workers_total, max_parallelism)
 
         command = [
             "backfill",
             pd.Timestamp(append_dim_end).isoformat(),
         ]
+        if metadata_only:
+            command.append("--metadata-only")
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
         if filter_end is not None:
@@ -314,6 +330,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
+        metadata_only: bool = False,
     ) -> None:
         """Run dataset reformatting locally in this process."""
         assert Config.is_dev or Config.is_test, (
@@ -322,7 +339,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_ds = self._get_template(append_dim_end)
         # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
-        if not self.store_factory.all_stores_icechunk():
+        # metadata_only rewrites metadata on an existing store via backfill's setup/finalize.
+        if not metadata_only and not self.store_factory.all_stores_icechunk():
             template_utils.write_metadata(template_ds, self.store_factory)
 
         self.backfill(
@@ -334,6 +352,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             filter_end=filter_end,
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
+            metadata_only=metadata_only,
         )
         log.info(f"Done writing to {self.store_factory.primary_store()}")
 
@@ -348,24 +367,41 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
+        metadata_only: bool = False,
     ) -> None:
-        """Orchestrate running RegionJob instances."""
+        """Orchestrate running RegionJob instances.
+
+        With metadata_only no jobs are generated: setup and finalize rewrite the existing
+        store's coordinates and encoding from the template while the icechunk temp branch
+        keeps the existing chunks untouched. See docs/virtual_datasets.md.
+        """
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
-        all_jobs = self.region_job_class.get_jobs(
-            tmp_store=tmp_store,
-            template_ds=template_ds,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name=reformat_job_name,
-            filter_start=pd.Timestamp(filter_start) if filter_start else None,
-            filter_end=pd.Timestamp(filter_end) if filter_end else None,
-            filter_contains=(
-                [pd.Timestamp(t) for t in filter_contains] if filter_contains else None
-            ),
-            filter_variable_names=filter_variable_names,
-        )
+        if worker_index == 0:
+            self._assert_append_extent_not_truncated(
+                template_ds, require_exact_match=metadata_only
+            )
+
+        all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+        if metadata_only:
+            all_jobs = []
+        else:
+            all_jobs = self.region_job_class.get_jobs(
+                tmp_store=tmp_store,
+                template_ds=template_ds,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name=reformat_job_name,
+                filter_start=pd.Timestamp(filter_start) if filter_start else None,
+                filter_end=pd.Timestamp(filter_end) if filter_end else None,
+                filter_contains=(
+                    [pd.Timestamp(t) for t in filter_contains]
+                    if filter_contains
+                    else None
+                ),
+                filter_variable_names=filter_variable_names,
+            )
 
         self._process_region_jobs(
             all_jobs=all_jobs,
@@ -376,6 +412,37 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store=tmp_store,
             update_template_with_results=False,
         )
+
+    def _assert_append_extent_not_truncated(
+        self, template_ds: xr.DataTree, *, require_exact_match: bool
+    ) -> None:
+        """Guard a backfill against dropping already-published append-dim positions.
+
+        metadata_only (require_exact_match) must not change the extent at all. Any other
+        backfill into an existing store may grow it but must not shrink it, which would
+        orphan published chunks. A fresh backfill (no store yet) has nothing to protect.
+        """
+        if require_exact_match:
+            assert self.store_factory.all_stores_exist(), (
+                "metadata_only requires the store to already exist"
+            )
+        elif not self.store_factory.all_stores_exist():
+            return
+
+        append_dim = self.template_config.append_dim
+        existing = xr.open_zarr(self.store_factory.primary_store(), consolidated=False)
+        template_size = int(template_ds[append_dim].size)
+        existing_size = int(existing.sizes[append_dim])
+        if require_exact_match:
+            assert template_size == existing_size, (
+                f"metadata_only requires append_dim_end to match the store's current "
+                f"{append_dim} extent (template has {template_size}, store has {existing_size})"
+            )
+        else:
+            assert template_size >= existing_size, (
+                f"append_dim_end would truncate the store's {append_dim} extent "
+                f"(template has {template_size}, store has {existing_size})"
+            )
 
     def _process_region_jobs(
         self,
@@ -396,11 +463,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
-        worker_jobs = get_worker_jobs(
-            all_jobs,
-            worker_index,
-            workers_total,
-            worker_assignment=self.region_job_class.worker_assignment,
+        # A metadata-only run has no jobs: setup + finalize still rewrite metadata.
+        worker_jobs = (
+            get_worker_jobs(
+                all_jobs,
+                worker_index,
+                workers_total,
+                worker_assignment=self.region_job_class.worker_assignment,
+            )
+            if all_jobs
+            else []
         )
 
         jobs_summary = ", ".join(repr(j) for j in worker_jobs)

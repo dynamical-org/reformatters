@@ -417,6 +417,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         filter_end=None,
         filter_contains=None,
         filter_variable_names=None,
+        metadata_only=False,
     )
 
 
