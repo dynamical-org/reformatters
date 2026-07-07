@@ -45,7 +45,7 @@ zarr.config.set({"async.concurrency": 32})
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
 SAMPLED_LEVELS = 3
-JOB_CONCURRENCY = 3
+JOB_CONCURRENCY = 4
 
 
 def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> None:
