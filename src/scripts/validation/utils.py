@@ -422,14 +422,14 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
     )
 
 
-_SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
+SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
 _NON_VERTICAL_DIMS = (
     "init_time",
     "time",
     "valid_time",
     "lead_time",
     "ensemble_member",
-    *_SPATIAL_DIMS,
+    *SPATIAL_DIMS,
 )
 
 
@@ -490,7 +490,7 @@ def virtual_message_count(da: xr.DataArray) -> int:
     """
     count = 1
     for dim, size in da.sizes.items():
-        if dim not in _SPATIAL_DIMS:
+        if dim not in SPATIAL_DIMS:
             count *= size
     return count
 

@@ -155,70 +155,113 @@ def _coord_carries(coord: SourceFileCoord, var: DataVar[Any]) -> bool:
     return coord_vars is None or any(v.name == var.name for v in coord_vars)
 
 
+def _sort_coords_for_probe(
+    coords: Sequence[SourceFileCoord],
+) -> list[tuple[pd.Timedelta | None, SourceFileCoord]]:
+    """(lead, coord) pairs in probe-preference order: smallest nonzero lead first,
+    lead 0 last (analysis coords have no lead and keep append order). Sorted once per
+    position and reused for every variable — a per-variable sort dominates scan CPU."""
+
+    def sort_key(pair: tuple[pd.Timedelta | None, SourceFileCoord]) -> tuple[bool, Any]:
+        lead, coord = pair
+        if lead is None:
+            return (False, coord.append_dim_coord)
+        return (lead == pd.Timedelta(0), lead)
+
+    pairs: list[tuple[pd.Timedelta | None, SourceFileCoord]] = []
+    for coord in coords:
+        lead = coord.out_loc().get("lead_time")
+        assert lead is None or isinstance(lead, pd.Timedelta)
+        pairs.append((lead, coord))
+    return sorted(pairs, key=sort_key)
+
+
 def _probe_coord_for_var(
-    present_coords: Sequence[SourceFileCoord], var: DataVar[Any]
+    sorted_coords: Sequence[tuple[pd.Timedelta | None, SourceFileCoord]],
+    var: DataVar[Any],
 ) -> SourceFileCoord | None:
-    """The present source file to probe `var` at: smallest nonzero lead, else smallest.
+    """The present source file to probe `var` at: the first carrier in
+    `_sort_coords_for_probe` order.
 
     Accumulated variables have no ref at lead 0 by design, so if only a lead-0 file is
     present the variable is not probed at this position. Analysis datasets (no
     lead_time in out_loc) probe at any present file.
     """
-    carriers = [c for c in present_coords if _coord_carries(c, var)]
-
-    def sort_key(coord: SourceFileCoord) -> tuple[bool, Any]:
-        lead = coord.out_loc().get("lead_time")
-        if lead is None:
-            return (False, coord.append_dim_coord)
-        return (lead == pd.Timedelta(0), lead)
-
-    for coord in sorted(carriers, key=sort_key):
-        lead = coord.out_loc().get("lead_time")
-        if (
-            var.attrs.step_type != "instant"
-            and lead is not None
-            and lead == pd.Timedelta(0)
-        ):
+    is_accum = var.attrs.step_type != "instant"
+    for lead, coord in sorted_coords:
+        if is_accum and lead is not None and lead == pd.Timedelta(0):
             continue
-        return coord
+        if _coord_carries(coord, var):
+            return coord
     return None
 
 
-def _var_chunk_key(
-    template_ds: xr.DataTree,
-    array_metadata: ArrayV3Metadata,
-    var: DataVar[Any],
-    out_loc: Mapping[Any, Any],
-) -> str:
-    """`var`'s chunk key at `out_loc`, taking the middle chunk of any unlabeled dim.
+@dataclass(frozen=True)
+class _VarKeys:
+    """Per-variable chunk-key machinery, resolved once: the scan keys each variable at
+    thousands of positions and per-probe DataTree/index lookups dominate scan CPU."""
+
+    path: str
+    metadata: ArrayV3Metadata
+    dims: tuple[str, ...]
+    chunks: tuple[int, ...]
+    indexes: Mapping[str, pd.Index]
+    # Middle chunk of each dim, used for dims out_loc doesn't label (levels).
+    middle_chunk: tuple[int, ...]
+
+
+def _var_keys(
+    template_ds: xr.DataTree, group: zarr.Group, var: DataVar[Any]
+) -> _VarKeys:
+    array = group[var.path]
+    assert isinstance(array, zarr.Array)
+    assert isinstance(array.metadata, ArrayV3Metadata)
+    template_var = template_ds[var.path]
+    dims = tuple(str(d) for d in template_var.dims)
+    chunks = tuple(template_var.encoding["chunks"])
+    middle_chunk = tuple(
+        (-(-int(template_var.sizes[dim]) // chunk_size)) // 2
+        for dim, chunk_size in zip(dims, chunks, strict=True)
+    )
+    return _VarKeys(
+        path=var.path,
+        metadata=array.metadata,
+        dims=dims,
+        chunks=chunks,
+        indexes={str(d): index for d, index in template_var.indexes.items()},
+        middle_chunk=middle_chunk,
+    )
+
+
+def _var_chunk_key(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> str:
+    """The variable's chunk key at `out_loc`, taking the middle chunk of any unlabeled dim.
 
     Unlike the write path's chunk resolution (which requires unlabeled dims to be
     single-chunk), a vertical group var's level dim spans many chunks; probing its
     middle chunk mirrors the plots' middle-level sampling.
     """
-    template_var = template_ds[var.path]
-    dims = tuple(str(d) for d in template_var.dims)
-    chunks = tuple(template_var.encoding["chunks"])
     index = []
-    for dim, chunk_size in zip(dims, chunks, strict=True):
+    for dim, chunk_size, middle in zip(
+        keys.dims, keys.chunks, keys.middle_chunk, strict=True
+    ):
         if dim in out_loc:
-            position = template_var.get_index(dim).get_loc(out_loc[dim])
+            position = keys.indexes[dim].get_loc(out_loc[dim])
+            assert isinstance(position, int)
             assert position % chunk_size == 0, (
-                f"{var.path} {dim} label {out_loc[dim]} is not on a chunk boundary"
+                f"{keys.path} {dim} label {out_loc[dim]} is not on a chunk boundary"
             )
             index.append(position // chunk_size)
         else:
-            n_chunks = -(-int(template_var.sizes[dim]) // chunk_size)
-            index.append(n_chunks // 2)
-    encoded = array_metadata.chunk_key_encoding.encode_chunk_key(tuple(index))
-    return f"{var.path}/{encoded}"
+            index.append(middle)
+    encoded = keys.metadata.chunk_key_encoding.encode_chunk_key(tuple(index))
+    return f"{keys.path}/{encoded}"
 
 
 def _var_probes(
     job: VirtualRegionJob[Any, Any],
     coord_presence: Sequence[tuple[SourceFileCoord, bool]],
     group: zarr.Group,
-    metadata_by_var: dict[str, ArrayV3Metadata],
+    keys_by_var: dict[str, _VarKeys],
 ) -> list[tuple[str, pd.Timestamp, str]]:
     """One (var path, position, chunk key) probe per variable per position with a
     present source file: each variable's ref at one present source file per position."""
@@ -226,22 +269,21 @@ def _var_probes(
     for coord, is_present in coord_presence:
         if is_present:
             by_position.setdefault(_position(coord), []).append(coord)
+    sorted_by_position = {
+        position: _sort_coords_for_probe(coords)
+        for position, coords in by_position.items()
+    }
 
     probes: list[tuple[str, pd.Timestamp, str]] = []
     for var in job.data_vars:
-        if var.path not in metadata_by_var:
-            array = group[var.path]
-            assert isinstance(array, zarr.Array)
-            assert isinstance(array.metadata, ArrayV3Metadata)
-            metadata_by_var[var.path] = array.metadata
-        for position, present_coords in by_position.items():
-            coord = _probe_coord_for_var(present_coords, var)
+        if var.path not in keys_by_var:
+            keys_by_var[var.path] = _var_keys(job.template_ds, group, var)
+        keys = keys_by_var[var.path]
+        for position, sorted_coords in sorted_by_position.items():
+            coord = _probe_coord_for_var(sorted_coords, var)
             if coord is None:
                 continue
-            key = _var_chunk_key(
-                job.template_ds, metadata_by_var[var.path], var, coord.out_loc()
-            )
-            probes.append((var.path, position, key))
+            probes.append((var.path, position, _var_chunk_key(keys, coord.out_loc())))
     return probes
 
 
@@ -280,7 +322,7 @@ def scan_manifest(
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
     lead_limits = _expected_lead_limits(store)
     group = zarr.open_group(store, mode="r")
-    metadata_by_var: dict[str, ArrayV3Metadata] = {}
+    keys_by_var: dict[str, _VarKeys] = {}
 
     # Fold each job's probes as it completes; only per-position counts, per-var
     # booleans, and at most one _exists_many batch of pending probes stay resident.
@@ -292,7 +334,7 @@ def scan_manifest(
         _fold_file_availability(coord_presence, lead_limits, file_counts)
         for var in job.data_vars:
             var_availability.setdefault(var.path, {})
-        pending_probes.extend(_var_probes(job, coord_presence, group, metadata_by_var))
+        pending_probes.extend(_var_probes(job, coord_presence, group, keys_by_var))
         if len(pending_probes) >= _EXISTS_BATCH_SIZE:
             _flush_var_probes(store, pending_probes, var_availability)
         if i % progress_every == 0 or i == len(jobs):

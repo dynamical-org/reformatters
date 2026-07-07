@@ -7,6 +7,7 @@ import xarray as xr
 from scripts.validation.utils import RunContext
 from scripts.validation.value_timeseries import (
     _compute_value_series,
+    _sample_virtual_points,
     run_value_timeseries,
 )
 
@@ -147,13 +148,51 @@ def test_run_value_timeseries_selects_and_records_level(tmp_path: Path) -> None:
     assert stats.value_std_p1 > 0.0
 
 
-def test_run_value_timeseries_virtual_pins_to_single_value(tmp_path: Path) -> None:
+def test_run_value_timeseries_virtual_samples_one_message_per_position(
+    tmp_path: Path,
+) -> None:
     ds = _grouped_forecast_dataset()
     ctx = _ctx(ds, tmp_path, variables=["pressure_level/temperature"])
     ctx.is_virtual = True
     run_value_timeseries(ctx)
 
     stats = ctx.stats["pressure_level/temperature"]
-    assert stats.level_dim == "pressure_level"
-    # Virtual pins one (lead, member, level): a single value per timestep, so std is n/a.
+    # Levels rotate with position rather than pinning one, so no level is recorded.
+    assert stats.level_dim is None
+    # One message per position: a single value per timestep, so std is n/a.
     assert stats.value_std_p1 is None
+    assert (tmp_path / "value_timeseries_pressure_level__temperature.png").exists()
+
+
+def test_sample_virtual_points_rotates_dims_and_shares_reads() -> None:
+    ds = _grouped_forecast_dataset()
+    ctx = _ctx(ds, Path("/unused"), variables=["pressure_level/temperature"])
+    ctx.is_virtual = True
+
+    da = _sample_virtual_points(ctx, "pressure_level/temperature")
+
+    # One value per (position, point): lead/level became rotating per-position coords.
+    assert dict(da.sizes) == {"init_time": 4, "point": 2}
+    # Rotation cycles each non-spatial dim with position (3 leads/levels over 4 inits).
+    np.testing.assert_array_equal(
+        da.lead_time.values, ds.lead_time.values[[0, 1, 2, 0]]
+    )
+    np.testing.assert_array_equal(
+        da.pressure_level.values, ds.pressure_level.values[[0, 1, 2, 0]]
+    )
+    # Both points come from the same message; values match direct selection.
+    expected_p1 = ds["pressure_level/temperature"].values[
+        np.arange(4), [0, 1, 2, 0], 0, 0, [0, 1, 2, 0]
+    ]
+    np.testing.assert_array_equal(da.isel(point=0).values, expected_p1)
+
+
+def test_sample_virtual_points_accum_skips_lead_zero() -> None:
+    ds = _forecast_dataset()
+    ds["temperature_2m"].attrs["step_type"] = "accum"
+    ctx = _ctx(ds, Path("/unused"))
+    ctx.is_virtual = True
+
+    da = _sample_virtual_points(ctx, "temperature_2m")
+
+    assert (da.lead_time.values > pd.Timedelta(0)).all()

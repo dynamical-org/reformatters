@@ -1,5 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +10,7 @@ from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
+    SPATIAL_DIMS,
     RunContext,
     VariableStats,
     end_date_option,
@@ -27,12 +28,13 @@ from scripts.validation.utils import (
     start_date_option,
     var_slug,
     variables_option,
-    virtual_message_count,
 )
 
-# Target number of append-dim points to sample on a virtual store, where each point at a
-# pinned (lead, member, level) is one source-file decode.
+# Target number of append-dim positions to sample on a virtual store, where each
+# sampled position is one source-file decode (both run points share the message).
 VIRTUAL_VALUE_TS_SAMPLES = 200
+# Per-variable loads run ahead of the plotting loop in a pool this size.
+LOAD_CONCURRENCY = 4
 
 log = get_logger(__name__)
 
@@ -115,24 +117,36 @@ def _store_value_stats(
         stats.value_max_p2 = overall_max
 
 
-def _pin_and_sample(da: xr.DataArray) -> xr.DataArray:
-    """Pin lead/member to one each and stride the append dim for a tractable virtual read.
+def _sample_virtual_points(ctx: RunContext, var: str) -> xr.DataArray:
+    """One decode per sampled position, both run points read from that one message.
 
-    Reducing mean +/- std over lead x member at every init would decode every message in the
-    point column. Pinning a single (mid) lead and member and sampling the append dim leaves
-    one decode per sampled position — enough to surface drift and unit step-changes.
+    The value time series exists to surface magnitude shifts (e.g. a units change), so
+    at each strided position one message suffices — and rather than pinning them,
+    lead/member/level rotate with position so the series samples every non-spatial dim.
+    A chunk is a full spatial field, so both points come from the same decode; the
+    result has a final `point` dim of size 2.
     """
-    sel: dict[str, Any] = {}
-    if "lead_time" in da.dims:
-        # A mid lead avoids the hour-0 structural NaN of accumulated variables.
-        sel["lead_time"] = da["lead_time"].values[da.sizes["lead_time"] // 2]
-    if "ensemble_member" in da.dims:
-        sel["ensemble_member"] = da["ensemble_member"].values[0]
-    if sel:
-        da = da.sel(sel)
+    da = ctx.validation_ds[var]
     append_dim = "init_time" if "init_time" in da.dims else "time"
     stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
-    return da.isel({append_dim: slice(None, None, stride)})
+    da = da.isel({append_dim: slice(None, None, stride)})
+
+    position = np.arange(da.sizes[append_dim])
+    is_accum = da.attrs.get("step_type", "instant") != "instant"
+    indexers: dict[str, xr.DataArray] = {
+        dim: xr.DataArray([ctx.point1_sel[dim], ctx.point2_sel[dim]], dims="point")
+        for dim in ctx.point1_sel
+    }
+    for dim in map(str, da.dims):
+        if dim == append_dim or dim in SPATIAL_DIMS:
+            continue
+        # Accumulated variables are structurally NaN at lead 0; rotate leads from 1.
+        start = 1 if dim == "lead_time" and is_accum else 0
+        assert da.sizes[dim] > start, f"{var} {dim} has no sampleable values"
+        indexers[dim] = xr.DataArray(
+            start + position % (da.sizes[dim] - start), dims=append_dim
+        )
+    return da.isel(indexers)
 
 
 def _point_arrays(
@@ -141,19 +155,21 @@ def _point_arrays(
     """Reuse arrays loaded by run_value_availability, else load them (standalone / virtual)."""
     if var in ctx.loaded_point_data:
         return ctx.loaded_point_data[var]
+    if ctx.is_virtual:
+        da = _sample_virtual_points(ctx, var)
+        append_dim = "init_time" if "init_time" in da.dims else "time"
+        log.info(
+            f"  value-timeseries {var}: virtual sampled read "
+            f"~{da.sizes[append_dim]} decodes (both points per message)"
+        )
+        points = load_retried(da)
+        return points.isel(point=0), points.isel(point=1)
     level_sel = select_var_level(ctx, var, stats)
     da_p1 = ctx.validation_ds.isel(ctx.point1_sel)[var]
     da_p2 = ctx.validation_ds.isel(ctx.point2_sel)[var]
     if level_sel:
         da_p1 = da_p1.sel(level_sel)
         da_p2 = da_p2.sel(level_sel)
-    if ctx.is_virtual:
-        da_p1 = _pin_and_sample(da_p1)
-        da_p2 = _pin_and_sample(da_p2)
-        log.info(
-            f"  value-timeseries {var}: virtual sampled read "
-            f"~{virtual_message_count(da_p1) + virtual_message_count(da_p2)} decodes"
-        )
     return load_retried(da_p1), load_retried(da_p2)
 
 
@@ -167,62 +183,78 @@ def run_value_timeseries(ctx: RunContext) -> None:
 
     fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False)
 
-    for i, var in enumerate(ctx.variables):
-        stats = ctx.stats_for(var)
-        units = stats.units or ""
+    # Loads are network-bound and independent per variable; they run ahead in a small
+    # pool while the main thread plots. Each result is just the two point series.
+    with ThreadPoolExecutor(max_workers=LOAD_CONCURRENCY) as pool:
+        loads = [
+            pool.submit(_point_arrays, ctx, var, ctx.stats_for(var))
+            for var in ctx.variables
+        ]
 
-        da_p1, da_p2 = _point_arrays(ctx, var, stats)
-        mean_p1, std_p1 = _compute_value_series(da_p1)
-        mean_p2, std_p2 = _compute_value_series(da_p2)
-        _store_value_stats(stats, mean_p1, std_p1, 1)
-        _store_value_stats(stats, mean_p2, std_p2, 2)
+        for i, (var, load) in enumerate(zip(ctx.variables, loads, strict=True)):
+            stats = ctx.stats_for(var)
+            units = stats.units or ""
 
-        # std is only meaningful when there are non-time dims (lead_time / ensemble) to
-        # reduce over — a single value per timestep (analysis datasets, or the virtual
-        # pinned-lead sample) would report a misleading 0; report n/a instead.
-        has_std = any(d not in ("time", "init_time") for d in da_p1.dims)
-        if not has_std:
-            stats.value_std_p1 = stats.value_std_p2 = None
+            da_p1, da_p2 = load.result()
+            mean_p1, std_p1 = _compute_value_series(da_p1)
+            mean_p2, std_p2 = _compute_value_series(da_p2)
+            _store_value_stats(stats, mean_p1, std_p1, 1)
+            _store_value_stats(stats, mean_p2, std_p2, 2)
 
-        # Per-variable figure.
-        fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3.375), squeeze=False)
-        _draw_value_trace(
-            axes_v[0, 0], mean_p1, std_p1, "blue", "fuchsia", p1_label, units, has_std
-        )
-        _draw_value_trace(
-            axes_v[0, 1], mean_p2, std_p2, "orange", "red", p2_label, units, has_std
-        )
-        title = f"{var}{level_label(stats)}"
-        fig_v.suptitle(
-            f"{title} — full-period mean ± std" if has_std else title, fontsize=11
-        )
-        fig_v.tight_layout()
-        out_path = ctx.output_dir / f"value_timeseries_{var_slug(var)}.png"
-        fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
-        plt.close(fig_v)
-        stats.value_ts_plot = out_path.name
+            # std is only meaningful when there are non-time dims (lead_time /
+            # ensemble) to reduce over — a single value per timestep (analysis
+            # datasets, or the virtual one-message sample) would report a misleading
+            # 0; report n/a instead.
+            has_std = any(d not in ("time", "init_time") for d in da_p1.dims)
+            if not has_std:
+                stats.value_std_p1 = stats.value_std_p2 = None
 
-        # Combined figure row.
-        _draw_value_trace(
-            axes_c[i, 0],
-            mean_p1,
-            std_p1,
-            "blue",
-            "fuchsia",
-            f"{var} — {p1_label}",
-            units,
-            has_std,
-        )
-        _draw_value_trace(
-            axes_c[i, 1],
-            mean_p2,
-            std_p2,
-            "orange",
-            "red",
-            f"{var} — {p2_label}",
-            units,
-            has_std,
-        )
+            # Per-variable figure.
+            fig_v, axes_v = plt.subplots(1, 2, figsize=(14, 3.375), squeeze=False)
+            _draw_value_trace(
+                axes_v[0, 0],
+                mean_p1,
+                std_p1,
+                "blue",
+                "fuchsia",
+                p1_label,
+                units,
+                has_std,
+            )
+            _draw_value_trace(
+                axes_v[0, 1], mean_p2, std_p2, "orange", "red", p2_label, units, has_std
+            )
+            title = f"{var}{level_label(stats)}"
+            fig_v.suptitle(
+                f"{title} — full-period mean ± std" if has_std else title, fontsize=11
+            )
+            fig_v.tight_layout()
+            out_path = ctx.output_dir / f"value_timeseries_{var_slug(var)}.png"
+            fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
+            plt.close(fig_v)
+            stats.value_ts_plot = out_path.name
+
+            # Combined figure row.
+            _draw_value_trace(
+                axes_c[i, 0],
+                mean_p1,
+                std_p1,
+                "blue",
+                "fuchsia",
+                f"{var} — {p1_label}",
+                units,
+                has_std,
+            )
+            _draw_value_trace(
+                axes_c[i, 1],
+                mean_p2,
+                std_p2,
+                "orange",
+                "red",
+                f"{var} — {p2_label}",
+                units,
+                has_std,
+            )
 
     fig_c.suptitle("Full-period value time series — all variables", fontsize=13)
     fig_c.tight_layout()

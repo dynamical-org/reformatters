@@ -13,7 +13,9 @@ from scripts.validation.manifest_scan import (
     _fold_file_availability,
     _probe_coord_for_var,
     _probe_jobs,
+    _sort_coords_for_probe,
     _var_chunk_key,
+    _var_keys,
     _var_probes,
     result_availability_series,
 )
@@ -147,7 +149,8 @@ def test_probe_coord_prefers_smallest_nonzero_lead() -> None:
     lead6 = _Coord(p, "f06", lead_time=pd.Timedelta(hours=6))
     lead12 = _Coord(p, "f12", lead_time=pd.Timedelta(hours=12))
 
-    chosen = _probe_coord_for_var([lead0, lead12, lead6], _var("temperature_2m"))  # ty: ignore[invalid-argument-type]
+    sorted_coords = _sort_coords_for_probe([lead0, lead12, lead6])  # ty: ignore[invalid-argument-type]
+    chosen = _probe_coord_for_var(sorted_coords, _var("temperature_2m"))  # ty: ignore[invalid-argument-type]
     assert chosen is lead6
 
 
@@ -155,10 +158,11 @@ def test_probe_coord_accumulated_var_skips_lead_zero() -> None:
     p = pd.Timestamp("2024-01-01")
     lead0 = _Coord(p, "f00", lead_time=pd.Timedelta(0))
 
+    sorted_coords = _sort_coords_for_probe([lead0])  # ty: ignore[invalid-argument-type]
     # Only lead 0 present: an accumulated var has no ref there by design -> not probed.
-    assert _probe_coord_for_var([lead0], _var("precipitation", "accum")) is None  # ty: ignore[invalid-argument-type]
+    assert _probe_coord_for_var(sorted_coords, _var("precipitation", "accum")) is None  # ty: ignore[invalid-argument-type]
     # An instant var probes fine at lead 0.
-    assert _probe_coord_for_var([lead0], _var("temperature_2m")) is lead0  # ty: ignore[invalid-argument-type]
+    assert _probe_coord_for_var(sorted_coords, _var("temperature_2m")) is lead0  # ty: ignore[invalid-argument-type]
 
 
 def test_probe_coord_respects_coord_data_vars() -> None:
@@ -167,8 +171,9 @@ def test_probe_coord_respects_coord_data_vars() -> None:
     sfc = _Coord(p, "sfc", lead_time=pd.Timedelta(hours=6), data_vars=[temperature])
     prs = _Coord(p, "prs", lead_time=pd.Timedelta(hours=1), data_vars=[_var("other")])
 
+    sorted_coords = _sort_coords_for_probe([sfc, prs])  # ty: ignore[invalid-argument-type]
     # prs has the smaller lead but does not carry temperature.
-    assert _probe_coord_for_var([sfc, prs], temperature) is sfc  # ty: ignore[invalid-argument-type]
+    assert _probe_coord_for_var(sorted_coords, temperature) is sfc  # ty: ignore[invalid-argument-type]
 
 
 def _template() -> xr.Dataset:
@@ -200,20 +205,19 @@ def _template() -> xr.Dataset:
 def test_var_chunk_key_uses_middle_chunk_for_unlabeled_dims() -> None:
     template = _template()
     store = MemoryStore()
-    array = zarr.create_array(
-        store, name="temperature", shape=(3, 3, 3), chunks=(1, 1, 1), dtype="f4"
-    )
+    root = zarr.open_group(store, mode="w")
+    root.create_array("temperature", shape=(3, 3, 3), chunks=(1, 1, 1), dtype="f4")
 
+    keys = _var_keys(
+        template,  # ty: ignore[invalid-argument-type]
+        root,
+        _var("temperature"),  # ty: ignore[invalid-argument-type]
+    )
     out_loc = {
         "init_time": pd.Timestamp("2024-01-02"),
         "lead_time": pd.Timedelta(hours=6),
     }
-    key = _var_chunk_key(
-        template,  # ty: ignore[invalid-argument-type]
-        array.metadata,  # ty: ignore[invalid-argument-type]
-        _var("temperature"),  # ty: ignore[invalid-argument-type]
-        out_loc,
-    )
+    key = _var_chunk_key(keys, out_loc)
     # pressure_level is not in out_loc -> middle of its 3 chunks.
     assert key == "temperature/c/1/1/1"
 
@@ -244,7 +248,7 @@ def test_var_availability_probes_written_chunks() -> None:
         job,  # ty: ignore[invalid-argument-type]
         coord_presence,  # ty: ignore[invalid-argument-type]
         root,
-        metadata_by_var={},
+        keys_by_var={},
     )
     availability: dict[str, dict[pd.Timestamp, bool]] = {}
     _flush_var_probes(store, probes, availability)  # ty: ignore[invalid-argument-type]
