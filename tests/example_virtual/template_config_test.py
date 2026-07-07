@@ -22,10 +22,12 @@
 #     assert var.encoding.serializer is not None  # e.g. GribberishCodec(...).to_dict()
 
 
-# def test_coords_match_native_source_grid() -> None:
-#     # Virtual chunks decode the raw message, so the grid must be the source's native
-#     # grid (here GEFS-style: latitude descending, longitude 0-360), not a regridded one.
+# def test_coords_match_codec_decoded_grid() -> None:
+#     # Virtual chunks decode the raw message, so the grid must match the codec's decoded
+#     # grid (not a regridded one): north-first latitude and, for a global grid,
+#     # adjust_longitude_range's monotonic -180..+180 longitude.
 #     config = ExampleSpatialTemplateConfig()
 #     dim_coords = config.dimension_coordinates()
 #     assert dim_coords["latitude"][0] > dim_coords["latitude"][-1]
-#     assert dim_coords["longitude"].min() >= 0
+#     assert dim_coords["longitude"].min() >= -180
+#     assert dim_coords["longitude"].max() < 180
