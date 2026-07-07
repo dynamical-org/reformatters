@@ -4,7 +4,7 @@
 # import xarray as xr
 
 # from reformatters.common import validation
-# from reformatters.example.dynamical_dataset import ExampleDataset
+# from reformatters.example_materialized.dynamical_dataset import ExampleTemporalDynamicalDataset
 # from tests.common.dynamical_dataset_test import (
 #     NOOP_STORAGE_CONFIG,
 #     assert_configured_validators,
@@ -12,13 +12,13 @@
 
 
 # @pytest.fixture
-# def dataset() -> ExampleDataset:
-#     return ExampleDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+# def dataset() -> ExampleTemporalDynamicalDataset:
+#     return ExampleTemporalDynamicalDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
 
 
 # @pytest.mark.slow
 # def test_backfill_local_and_operational_update(
-#     monkeypatch: pytest.MonkeyPatch, dataset: ExampleDataset
+#     monkeypatch: pytest.MonkeyPatch, dataset: ExampleTemporalDynamicalDataset
 # ) -> None:
 #     # Local backfill reformat
 #     dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
@@ -59,7 +59,7 @@
 
 
 # def test_operational_kubernetes_resources(
-#     dataset: ExampleDataset,
+#     dataset: ExampleTemporalDynamicalDataset,
 # ) -> None:
 #     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
@@ -75,7 +75,7 @@
 #     ]
 
 
-# def test_validators(dataset: ExampleDataset) -> None:
+# def test_validators(dataset: ExampleTemporalDynamicalDataset) -> None:
 #     validators = tuple(dataset.validators())
 #     assert len(validators) == 2
 #     assert all(isinstance(v, validation.DataValidator) for v in validators)

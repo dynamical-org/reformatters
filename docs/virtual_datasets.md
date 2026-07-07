@@ -4,6 +4,21 @@ A virtual dataset is an Icechunk store whose chunks are references — `(locatio
 
 How virtual jobs plug into worker parallelism and coordination is covered in [parallel_processing.md](parallel_processing.md); this doc covers what is specific to writing and reading virtual datasets.
 
+## Why virtual
+
+A virtual dataset complements the materialized (rechunked) time-series dataset over the same source data:
+
+- **Spatial / map-optimized chunking.** Chunks follow the native source-file layout — usually one time step over the full spatial grid — so a virtual `-spatial` dataset serves map and spatial queries efficiently, while the materialized dataset provides the complementary time-series chunking.
+- **Every curated source variable, cheaply.** A variable costs only a handful of byte-range refs, not a rechunked copy, so a virtual dataset can include every variable we have metadata for rather than just the materialized subset.
+- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data is visible within seconds of publication (target ≤ 5 s end to end). See [Operational updates](#operational-updates-single-writer).
+
+## Scale
+
+Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — one `(variable, …, lead/time)` field — becomes one virtual chunk, so ref counts track the full Cartesian product of the dataset's dimensions *including the variable axis*. A multi-year ensemble dataset reaches order 10⁹ refs and tens of millions of source index files. Two consequences shape the design:
+
+- **Manifests must be split** (see [Manifest splitting](#manifest-splitting)) — a single per-array manifest at this ref count is too large to rewrite on every commit.
+- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and run single-writer.
+
 ## The write loop
 
 `process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
@@ -34,7 +49,7 @@ How virtual jobs plug into worker parallelism and coordination is covered in [pa
 **On the `SourceFileCoord` subclass** (identifies one source file):
 
 - `get_url() -> str` — the canonical data-file URL refs point at (must match the virtual chunk container prefix).
-- `out_loc() -> {dim: label}` — the output cell the file fills. The inherited default works when the coord's fields are all dim names; override otherwise (e.g. a representative ensemble member for a multi-member file).
+- `out_loc() -> {dim: label}` — the output cell the file fills. The inherited default works when the coord's fields are all dim names; override otherwise (e.g. a representative ensemble member for a multi-member file). A file holding *only* vertical-group variables (no root var) must include a representative level (e.g. `pressure_level: <a real level>`) so the per-file manifest probe — which resolves `out_loc` to a single chunk — has a concrete level to probe; per-file commit atomicity makes that one level's presence imply the whole file's. The per-ref `out_loc` overrides this representative level with the ref's actual level. (HRRR `wrfprs`/`wrfnat` files are group-only.)
 - `get_index_url() -> str` — *optional*, only if the files have a sidecar byte-range index; used by the obstore-listing discovery util and by index-based `file_refs`. Nothing on the base calls it.
 
 **Optional overrides (working defaults):** `filter_already_present` (manifest probe), `representative_var` (first instant var among the coord's own `data_vars` — only override for a packing that rule misses), the `tick_interval` (1s) / `download_concurrency` (32) class attrs, and `process_virtual_refs` itself (only for a fundamentally different batching policy).
@@ -65,7 +80,7 @@ Virtual backfills use the standard parallel temp-branch flow (see [parallel_proc
 
 Commit latency ≈ `(1 + rebase_attempts) × flush cost`. A flush read-modify-writes every manifest window the session's refs touch (manifests are immutable), and every lost branch-HEAD CAS race re-runs the flush, so rebase attempts scale with parallelism. Keeping each worker's refs within its own few windows — contiguous append-dim assignment — is what bounds flush cost: measured on the HRRR-spatial backfill, commits held flat (~10–30s at parallelism 10) from empty to full archive, where scattered (spread) assignment touched most windows of every array per flush and commits grew ~40s → 1000s+ as windows filled. Icechunk stamps `rebase_attempts` into each snapshot's metadata (`repo.ancestry`) — read it to distinguish contention from flush cost when commits are slow.
 
-Backfill parallelism has a low ceiling: measured on HRRR-spatial, throughput peaked by ~10 concurrent workers, and doubling to 20 added contention without adding throughput. The failure mode is a starvation tail, not a slow mean — most commits land within a few rebase attempts while a few spiral to dozens (freshly started sessions repeatedly beat long-stuck ones to the branch HEAD), so watch the max `rebase_attempts`, not just the mean. If a backfill ever needs more parallelism than this ceiling allows, options to raise it (with spikes and tradeoffs) are evaluated in [docs/plans/virtual_commit_contention_options.md](plans/virtual_commit_contention_options.md).
+Backfill parallelism has a low ceiling: measured on HRRR-spatial, throughput peaked by ~10 concurrent workers, and doubling to 20 added contention without adding throughput. The failure mode is gridlock, not a slow mean: once a worker's flush round takes longer than its competitors' inter-commit spacing, it almost never wins the branch-HEAD race and re-flushes indefinitely — most commits land within a few rebase attempts while a stuck few spiral until competitors drain. Watch the max `rebase_attempts`, not just the mean. Deleting a stuck worker's pod is safe: nothing it wrote is durable before its commit, and the replacement worker re-filters and resumes. If a backfill ever needs more parallelism than this ceiling allows, options to raise it (with spikes and tradeoffs) are evaluated in [docs/plans/virtual_commit_contention_options.md](plans/virtual_commit_contention_options.md).
 
 Two operational rules when backfilling a live virtual dataset:
 
@@ -74,7 +89,7 @@ Two operational rules when backfilling a live virtual dataset:
 
 ## Manifest splitting
 
-Icechunk stores each array's chunk references in one or more manifest objects, split along a dimension via `IcechunkVirtualConfig.manifest_split` (built with `manifest_append_dim_split`). Two independent costs pull in opposite directions:
+Icechunk stores each array's chunk references in one or more immutable manifest objects, split along a dimension via `IcechunkVirtualConfig.manifest_split` (built with `manifest_append_dim_split`). A commit rewrites only the split(s) whose refs changed: an operational append lands in the current (highest-index) split of each touched array while historical splits carry over unchanged, so operational commit cost is the active splits' size, not the archive's. Two independent costs pull in opposite directions when sizing splits:
 
 - **Manifest size (bytes)** — a reader downloads a whole manifest to resolve *any* chunk in it, and a commit rewrites the active split's whole manifest each time it grows. Keep a full manifest within a reader-friendly size: rough budgets are ≤ 3 MiB per single-level variable (a small web app plotting one field pays one manifest + one chunk) and 5–8 MiB for vertical-group variables (those readers expect bulk downloads). Larger split → bigger manifests. A manifest's size is `split_size × refs_per_index × bytes_per_ref`, so arrays with more refs per append index (more levels, ensemble members, lead times) reach a given size at a smaller `split_size`.
 - **Total manifest count `M`** — `M = array_count × ceil(appends / split_size)`. Every commit's cost grows with `M` (it re-serializes the snapshot's manifest list and touches every split of every array). Smaller split → more manifests → larger `M`. For a many-variable dataset `M` is dominated by `array_count`, so over-splitting the low-ref-count arrays is the biggest, least useful contributor.
@@ -115,4 +130,15 @@ Tuning (completeness's `min_present_fraction`; decode health's `positions`, `sam
 
 ## Storage and reading
 
-A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` registering the source buckets as virtual chunk containers (`DynamicalDataset` validates this). Container definitions are stored in the repo's persistent config; readers supply an (anonymous) credentials map via `authorize_virtual_chunk_access` when opening the store.
+A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
+
+### Containers as indirection
+
+A virtual chunk container is more than anonymous credentials — refs are stored *relative* to the registered container prefix:
+
+- **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
+- **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
+
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+
+How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).

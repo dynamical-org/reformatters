@@ -31,7 +31,7 @@ def _to_zarr_metadata(
 ) -> None:
     # safe_chunks=False avoids a per-chunk dask graph that OOMs large arrays (compute=False
     # writes no data chunks anyway). write_inherited_coords=True duplicates shared coords
-    # into each group so groups open standalone; see docs/plans/vertical_dimension_structure.md.
+    # into each group so groups open standalone.
     template.to_zarr(
         store,
         mode=mode,

@@ -32,7 +32,8 @@ src/reformatters/
 │           └── templates/
 │               └── latest.zarr/  # Checked-in zarr metadata
 ├── contrib/                 # Community-contributed datasets
-└── example/                 # Template for new integrations
+├── example_materialized/    # Teaching template for a materialized (time-optimized) dataset
+└── example_virtual/         # Teaching template for a virtual (spatial-optimized) dataset
 
 tests/                       # Mirrors src/ structure
 docs/
@@ -55,10 +56,10 @@ deploy/                      # Docker and kubernetes configs
 
 ## Core classes
 
-Integrating a dataset requires subclassing three base classes. For a step by step walkthrough, see [docs/dataset_integration_guide.md](docs/dataset_integration_guide.md) and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example/{dynamical_dataset|template_config|region_job}.py`.
+Integrating a dataset requires subclassing three base classes. For a step by step walkthrough, see [docs/dataset_integration_guide.md](docs/dataset_integration_guide.md) and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
 
 ### TemplateConfig
-Base class: `src/reformatters/common/template_config.py`, commented example subclass: `src/reformatters/example/template_config.py`.
+Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.
 
 Defines the **structure** of a dataset: dimensions, coordinates, data variables, and their attributes/encodings. Key responsibilities:
 - Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group: `dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`).
@@ -77,19 +78,15 @@ Categorical / flag variables set `flag_values` (the coded values) and `flag_mean
 
 
 ### RegionJob
-Base class: `src/reformatters/common/region_job.py`, commented example subclass: `src/reformatters/example/region_job.py`.
+Base class: `src/reformatters/common/region_job.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/region_job.py`.
 
-Defines the **process** for reformatting a region of the dataset: downloading, reading, and writing data. `RegionJob` is the shared base (partitioning via `get_jobs()`, `generate_source_file_coords()`, `operational_update_jobs()`, `update_template_with_results()`); `MaterializedRegionJob(RegionJob)` adds the concrete download → read → write pipeline (`download_file()`, `read_data()`, `apply_data_transformations()`, `process()` and the parallelism tunables). Materialized (rechunked) datasets subclass `MaterializedRegionJob`. Key responsibilities:
-- Implement `generate_source_file_coords()` - list source files needed for a region
-- Implement `download_file()` - retrieve a source file to local disk
-- Implement `read_data()` - load data from a local file into a numpy array
-- Implement `operational_update_jobs()` (class method) - factory for operational update jobs
-- Optionally override `source_file_var_groups()` (vars that share a source file; a single source file may span vertical groups), `get_processing_region()` (buffer processed region to support deaccumulation & interpolation), `apply_data_transformations()` (deaccumulation, etc.), `update_template_with_results()` (trim based on actual data processed).
+Defines the **process** for reformatting a region — a slice of the append dim (e.g. one shard along `init_time` or `time`) for a group of data variables. `RegionJob` is the shared base: partitioning (`get_jobs()`), `generate_source_file_coords()` (list a region's source files), and `operational_update_jobs()` (class-method factory for update jobs). Both are required; the rest is subclass-specific.
 
-A `RegionJob` processes a slice of the append dimension (e.g., one shard along `init_time` or `time`) for a group of data variables.
+- **`MaterializedRegionJob`** rechunks and rewrites bytes. Implement `download_file()` (fetch a source file to disk) and `read_data()` (load one variable into a numpy array); the base runs the download → read → transform → write pipeline. Optionally override `source_file_var_groups()` (vars sharing a source file, which may span vertical groups), `get_processing_region()` (buffer for deaccumulation/interpolation), `apply_data_transformations()`, `update_template_with_results()` (trim to processed data).
+- **`VirtualRegionJob`** writes chunk references, not bytes. Implement `discover_available()` (which pending files are fetchable now) and `file_refs()` (the byte-range references one file contributes); the base owns the write loop and atomic commits. See [docs/virtual_datasets.md](docs/virtual_datasets.md).
 
 ### DynamicalDataset
-Base class: `src/reformatters/common/dynamical_dataset.py`, commented example subclass: `src/reformatters/example/dynamical_dataset.py`.
+Base class: `src/reformatters/common/dynamical_dataset.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/dynamical_dataset.py`.
 
 **Brings together** a `TemplateConfig` and `RegionJob` class, plus storage and operational configuration. Key responsibilities:
 - Declare `template_config` and `region_job_class`
@@ -103,7 +100,9 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 2. **Analysis dataset** Dimensions time, latitude/y, longitude/x [, ensemble_member]. When creating an analysis dataset from a forecast archive we take the shortest available lead time, flattening the init_time and lead_time dims into a single time dim.
 
-Vertical levels: Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted.
+Vertical levels: Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted. A variable's group is a per-variable property (it sets the variable's zarr path and dims), not a job boundary. The materialized write path is not yet group-aware, so multi-group datasets are currently virtual only (a `DynamicalDataset` guard rejects a materialized dataset with any non-root variable); materialized multi-group support is planned.
+
+Variable naming: A single-level or surface variable encodes its level in the name as `<var>_<level>` (e.g. `temperature_2m`); a variable carried on a vertical dimension is just `<var>` (the level lives in the dimension). Names also encode any aggregation; match an existing equivalent variable's name across datasets exactly (see Metadata conventions). Spell aggregation prefixes out in full — `maximum_`/`minimum_` (e.g. `maximum_wind_speed_10m`), not `max_`/`min_`. When a name spans a layer between two levels, order the two numbers to match the source GRIB level string (a `100-1000 mb` layer is `..._100_1000mb`; a `5000-2000 m` layer is `..._5000_2000m`).
 
 Spatial dimensions: If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
 
