@@ -39,7 +39,8 @@ def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
         var = m.group("var")
         body = m.group("body")
         slug = var_slug(var)
-        # Skip plots the run didn't produce (availability plots exist only for incomplete vars).
+        # Skip plots the run didn't produce (e.g. spatial/temporal comparisons a
+        # variables-filtered or reference-less run left out).
         plots = "".join(
             f'<a href="{filename}" target="_blank">'
             f'<img src="{filename}" alt="{var} — {label}"></a>'

@@ -11,10 +11,15 @@ import obstore
 import pandas as pd
 import typer
 import xarray as xr
+import zarr
 from zarr.storage import ObjectStore, StoreLike
 
 from reformatters.common.retry import retry
 from reformatters.common.validation import open_flattened_dataset
+
+# Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
+# concurrency once here; every validation entry point imports this module.
+zarr.config.set({"async.concurrency": 32})
 
 OUTPUT_DIR = "data/output"
 
@@ -190,7 +195,6 @@ class RunContext:
     ensemble_member: int | None
     variables: list[str]
     start_date: str | None = None
-    end_date: str | None = None
     # Virtual stores decode source files on read, inverting the cost model: a spatial
     # snapshot is cheap, an append-dim point column is expensive. Routes availability /
     # value_timeseries to manifest- and sample-based paths instead of full reads.
@@ -479,20 +483,6 @@ def level_label(stats: VariableStats) -> str:
     if stats.level_dim is None:
         return ""
     return f" [{stats.level_dim}={stats.level_value:g}]"
-
-
-def virtual_message_count(da: xr.DataArray) -> int:
-    """Number of source messages (= decodes) a virtual read of `da` will trigger.
-
-    For a virtual store one chunk is one GRIB message spanning a full spatial field at a
-    single (init, lead, member, level), so the decode count is the product of every
-    non-spatial dim — independent of how the spatial dims are sliced.
-    """
-    count = 1
-    for dim, size in da.sizes.items():
-        if dim not in SPATIAL_DIMS:
-            count *= size
-    return count
 
 
 def is_virtual_store(url: str) -> bool:

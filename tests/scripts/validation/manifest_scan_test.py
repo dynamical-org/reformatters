@@ -71,9 +71,16 @@ class _Job:
         return self._missing
 
 
-def _var(name: str, step_type: str = "instant") -> SimpleNamespace:
+def _var(
+    name: str,
+    step_type: str = "instant",
+    hour_0_values_override: bool | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
-        name=name, path=name, attrs=SimpleNamespace(step_type=step_type)
+        name=name,
+        path=name,
+        attrs=SimpleNamespace(step_type=step_type),
+        internal_attrs=SimpleNamespace(hour_0_values_override=hour_0_values_override),
     )
 
 
@@ -163,6 +170,19 @@ def test_probe_coord_accumulated_var_skips_lead_zero() -> None:
     assert _probe_coord_for_var(sorted_coords, _var("precipitation", "accum")) is None  # ty: ignore[invalid-argument-type]
     # An instant var probes fine at lead 0.
     assert _probe_coord_for_var(sorted_coords, _var("temperature_2m")) is lead0  # ty: ignore[invalid-argument-type]
+
+
+def test_probe_coord_honors_hour_0_values_override() -> None:
+    p = pd.Timestamp("2024-01-01")
+    lead0 = _Coord(p, "f00", lead_time=pd.Timedelta(0))
+
+    # An instant var whose override says it has no hour-0 data is skipped at lead 0.
+    no_hour_0 = _var("radar_only", "instant", hour_0_values_override=False)
+    assert _probe_coord_for_var(_sort_coords_for_probe([lead0]), no_hour_0) is None  # ty: ignore[invalid-argument-type]
+
+    # An accumulated var whose override says it does have hour-0 data probes at lead 0.
+    has_hour_0 = _var("accum_with_analysis", "accum", hour_0_values_override=True)
+    assert _probe_coord_for_var(_sort_coords_for_probe([lead0]), has_hour_0) is lead0  # ty: ignore[invalid-argument-type]
 
 
 def test_probe_coord_respects_coord_data_vars() -> None:
@@ -261,7 +281,6 @@ def test_var_availability_probes_written_chunks() -> None:
 def test_result_availability_series_marks_unprobed_positions_nan() -> None:
     p0, p1, p2 = pd.date_range("2024-01-01", periods=3, freq="D")
     result = ManifestScanResult(
-        append_dim="init_time",
         file_availability={p0: (2, 2), p1: (2, 2), p2: (0, 2)},
         var_availability={"temperature_2m": {p0: True, p1: False}},
     )

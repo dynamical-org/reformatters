@@ -6,7 +6,6 @@ from scripts.validation.utils import (
     choose_level,
     var_slug,
     vertical_dims,
-    virtual_message_count,
 )
 
 
@@ -67,15 +66,3 @@ def test_choose_level_override_selects_nearest() -> None:
         "pressure_level": 700
     }
     assert choose_level(ds, "pressure_level/temperature", 50) == {"pressure_level": 100}
-
-
-def test_virtual_message_count() -> None:
-    ds = _grouped_ds()
-    # A point column (y, x scalar) over init x lead x level = 3 * 4 * 6 messages.
-    point = ds["pressure_level/temperature"].isel(y=0, x=0)
-    assert virtual_message_count(point) == 3 * 4 * 6
-    # A single spatial field at one (init, lead, level) is one message.
-    field = ds["pressure_level/temperature"].isel(
-        init_time=0, lead_time=0, pressure_level=0
-    )
-    assert virtual_message_count(field) == 1

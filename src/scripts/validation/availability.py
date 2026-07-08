@@ -5,7 +5,7 @@ value-scanned (`.isnull()`) at the two run points, while on a virtual store that
 decode every chunk it touches, so availability comes from manifest ref probes
 (`manifest_scan.scan_manifest`), which are exhaustive per source file and per-variable
 per position. Both paths produce an `AvailabilitySeries` per variable and render the
-same artifacts: an all-variable heatmap and a trace plot for each incomplete variable.
+same artifacts: an all-variable heatmap and a trace plot per variable.
 See docs/validation.md.
 """
 
@@ -18,9 +18,14 @@ import numpy as np
 import pandas as pd
 import typer
 import xarray as xr
-import zarr
 
 from reformatters.common.logging import get_logger
+from scripts.validation.manifest_scan import (
+    result_availability_series,
+    scan_manifest,
+    write_incomplete_positions_file,
+)
+from scripts.validation.scan_common import resolve_scan_window
 from scripts.validation.utils import (
     AvailabilitySeries,
     RunContext,
@@ -30,7 +35,6 @@ from scripts.validation.utils import (
     level_option,
     load_retried,
     load_zarr_dataset,
-    open_icechunk_readonly,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
@@ -42,8 +46,6 @@ from scripts.validation.utils import (
 )
 
 log = get_logger(__name__)
-
-zarr.config.set({"async.concurrency": 32})
 
 HEATMAP_FILENAME = "availability_heatmap.png"
 MAX_HEATMAP_COLUMNS = 1200
@@ -363,31 +365,17 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     apply_availability after joining. Returns the per-position source file
     availability so callers can gate on it.
     """
-    # Late import: manifest_scan imports this module for the shared rendering.
-    from scripts.validation.manifest_scan import (  # noqa: PLC0415
-        result_availability_series,
-        scan_manifest,
-        write_unavailable_timestamps_file,
-    )
-    from scripts.validation.scan_common import resolve_virtual_dataset  # noqa: PLC0415
-
-    dataset_id = ctx.validation_ds.attrs["dataset_id"]
-    dataset = resolve_virtual_dataset(dataset_id)
-    append_dim = dataset.template_config.append_dim
-    # End is exclusive; extend one step past the committed extent so the newest
-    # position is scanned without flagging not-yet-published ones.
-    end = (
-        pd.Timestamp(ctx.validation_ds[append_dim].max().item())
-        + dataset.template_config.append_dim_frequency
-    )
-    start = pd.Timestamp(ctx.start_date) if ctx.start_date else None
-
-    store = open_icechunk_readonly(ctx.validation_url)
+    dataset, store, start, end = resolve_scan_window(ctx)
     result = scan_manifest(
         dataset, store, start=start, end=end, variables=ctx.variables
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
+    ctx.availability_method_note = (
+        "Availability is manifest-ref-probed across the whole archive, not value-scanned: "
+        "per position, the fraction of expected source-file references present, plus a "
+        "per-variable ref probe at one present source file per position. No chunk is decoded."
+    )
 
     incomplete_files = {
         position: (present, expected)
@@ -395,7 +383,7 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
         if present < expected
     }
     if incomplete_files:
-        ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
+        ctx.unavailable_timestamps_file = write_incomplete_positions_file(
             incomplete_files, ctx.output_dir
         )
     return result.file_availability
@@ -443,7 +431,6 @@ def build_run_context(
         ensemble_member=None,
         variables=selected_vars,
         start_date=start_date,
-        end_date=end_date,
         is_virtual=is_virtual_store(dataset_url),
         level_override=level,
     )

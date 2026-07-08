@@ -12,6 +12,7 @@ like every other validation command.
 from datetime import datetime
 from typing import Any
 
+import icechunk
 import numpy as np
 import pandas as pd
 import typer
@@ -19,6 +20,7 @@ import typer
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from scripts.validation.utils import RunContext, open_icechunk_readonly
 
 
 def resolve_virtual_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
@@ -60,6 +62,30 @@ def build_virtual_jobs(
             filter_variable_names=variables,
         )
     )
+
+
+def resolve_scan_window(
+    ctx: RunContext,
+) -> tuple[
+    DynamicalDataset[Any, Any],
+    icechunk.IcechunkStore,
+    pd.Timestamp | None,
+    pd.Timestamp,
+]:
+    """The (dataset, store, start, end) a virtual whole-archive scan runs over.
+
+    End is exclusive and one append-dim step past the committed extent, so the newest
+    committed position is scanned without flagging not-yet-published ones.
+    """
+    dataset = resolve_virtual_dataset(ctx.validation_ds.attrs["dataset_id"])
+    append_dim = dataset.template_config.append_dim
+    end = (
+        pd.Timestamp(ctx.validation_ds[append_dim].max().item())
+        + dataset.template_config.append_dim_frequency
+    )
+    start = pd.Timestamp(ctx.start_date) if ctx.start_date else None
+    store = open_icechunk_readonly(ctx.validation_url)
+    return dataset, store, start, end
 
 
 def evenly_spaced_subset(items: list[Any], n: int) -> list[Any]:

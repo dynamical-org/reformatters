@@ -44,8 +44,6 @@ from scripts.validation.utils import (
 
 log = get_logger(__name__)
 
-zarr.config.set({"async.concurrency": 32})
-
 _EXISTS_BATCH_SIZE = 20_000
 # A whole-archive scan issues enough object-store reads that a transient outage
 # (e.g. a connect timeout) is near-certain; ride out a ~minute of trouble rather
@@ -55,7 +53,6 @@ _SCAN_MAX_RETRIES = 12
 
 @dataclass
 class ManifestScanResult:
-    append_dim: str
     # position -> (present source files, expected source files)
     file_availability: dict[pd.Timestamp, tuple[int, int]]
     # var path -> position -> representative ref present. A position with no present
@@ -158,6 +155,15 @@ def _fold_file_availability(
         bucket[0] += int(is_present)
 
 
+def _has_hour_0_values(var: DataVar[Any]) -> bool:
+    """Whether `var` has a ref at lead 0 — mirrors the providers' has_hour_0_values,
+    reading only common fields so it works for any virtual dataset."""
+    override = var.internal_attrs.hour_0_values_override
+    if override is not None:
+        return override
+    return var.attrs.step_type == "instant"
+
+
 def _coord_carries(coord: SourceFileCoord, var: DataVar[Any]) -> bool:
     coord_vars = getattr(coord, "data_vars", None)
     return coord_vars is None or any(v.name == var.name for v in coord_vars)
@@ -195,9 +201,9 @@ def _probe_coord_for_var(
     present the variable is not probed at this position. Analysis datasets (no
     lead_time in out_loc) probe at any present file.
     """
-    is_accum = var.attrs.step_type != "instant"
+    skip_lead_0 = not _has_hour_0_values(var)
     for lead, coord in sorted_coords:
-        if is_accum and lead is not None and lead == pd.Timedelta(0):
+        if skip_lead_0 and lead is not None and lead == pd.Timedelta(0):
             continue
         if _coord_carries(coord, var):
             return coord
@@ -320,8 +326,6 @@ def scan_manifest(
     `dataset` supplies the region-job machinery (expected source files, chunk keys);
     `store` is the archive actually probed, so a staging store is scanned as itself.
     """
-    append_dim = dataset.template_config.append_dim
-
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
         "list[VirtualRegionJob[Any, Any]]",
@@ -352,7 +356,6 @@ def scan_manifest(
     file_availability = {position: (p, e) for position, (p, e) in file_counts.items()}
     assert file_availability, "No source files generated for the requested window"
     return ManifestScanResult(
-        append_dim=append_dim,
         file_availability=file_availability,
         var_availability=var_availability,
     )
@@ -377,7 +380,7 @@ def result_availability_series(
     return series
 
 
-def write_unavailable_timestamps_file(
+def write_incomplete_positions_file(
     incomplete: dict[pd.Timestamp, tuple[int, int]], output_dir: Path
 ) -> str:
     """Write unavailable_timestamps.txt listing incomplete positions. Returns filename."""

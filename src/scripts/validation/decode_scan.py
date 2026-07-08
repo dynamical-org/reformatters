@@ -16,7 +16,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
-import pandas as pd
 import typer
 import zarr
 
@@ -29,20 +28,17 @@ from scripts.validation.manifest_scan import _var_chunk_key, _var_keys, _VarKeys
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     evenly_spaced_subset,
-    resolve_virtual_dataset,
+    resolve_scan_window,
 )
 from scripts.validation.utils import (
     RunContext,
     end_date_option,
-    open_icechunk_readonly,
     output_dir_option,
     start_date_option,
     variables_option,
 )
 
 log = get_logger(__name__)
-
-zarr.config.set({"async.concurrency": 32})
 
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
@@ -53,17 +49,7 @@ JOB_CONCURRENCY = 4
 def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> None:
     """Decode a bounded sample of present references and record health on ctx."""
     assert ctx.is_virtual, "decode scan reads refs from a virtual store's manifest"
-    dataset = resolve_virtual_dataset(ctx.validation_ds.attrs["dataset_id"])
-    append_dim = dataset.template_config.append_dim
-    # End is exclusive; extend one step past the committed extent so the newest
-    # position is sampled without flagging not-yet-published ones.
-    end = (
-        pd.Timestamp(ctx.validation_ds[append_dim].max().item())
-        + dataset.template_config.append_dim_frequency
-    )
-    start = pd.Timestamp(ctx.start_date) if ctx.start_date else None
-
-    store = open_icechunk_readonly(ctx.validation_url)
+    dataset, store, start, end = resolve_scan_window(ctx)
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
     template_ds = dataset.template_config.get_template(end)

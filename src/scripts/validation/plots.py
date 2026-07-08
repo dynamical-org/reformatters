@@ -162,7 +162,6 @@ def run_all(
         ensemble_member=None,
         variables=selected_vars,
         start_date=start_date,
-        end_date=end_date,
         is_virtual=is_virtual,
         level_override=level,
     )
@@ -173,13 +172,17 @@ def run_all(
         # its availability artifacts render after everything joins.
         with ThreadPoolExecutor(max_workers=1) as pool:
             manifest_scan = pool.submit(run_manifest_scan, ctx)
-            run_decode_scan(ctx)
-            run_value_timeseries(ctx)
-            run_compare_timeseries(ctx)
-            run_compare_spatial(
-                ctx, init_time=init_time, lead_time=lead_time, time=time
-            )
-            manifest_scan.result()
+            try:
+                run_decode_scan(ctx)
+                run_value_timeseries(ctx)
+                run_compare_timeseries(ctx)
+                run_compare_spatial(
+                    ctx, init_time=init_time, lead_time=lead_time, time=time
+                )
+            finally:
+                # Always join so a background scan failure surfaces rather than being
+                # discarded when a foreground phase raises.
+                manifest_scan.result()
         apply_availability(ctx)
     else:
         run_value_availability(ctx)

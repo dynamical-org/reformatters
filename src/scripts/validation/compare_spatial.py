@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
 from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
@@ -34,8 +33,6 @@ from scripts.validation.utils import (
 )
 
 log = get_logger(__name__)
-
-zarr.config.set({"async.concurrency": 32})
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
