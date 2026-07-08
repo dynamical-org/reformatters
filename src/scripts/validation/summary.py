@@ -279,19 +279,6 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.extend(_run_parameters_table(ctx))
     lines.append("")
 
-    lines.append("## Combined plots")
-    lines.append("")
-    combined_items = [
-        ("Availability heatmap", ctx.combined_availability_plot),
-        ("Value time series (full period)", ctx.combined_value_timeseries_plot),
-        ("Spatial and distributions", ctx.combined_spatial_plot),
-        ("Time series", ctx.combined_temporal_plot),
-    ]
-    for label, filename in combined_items:
-        if filename:
-            lines.append(f"- {label}: [`{filename}`]({filename})")
-    lines.append("")
-
     lines.append("## Availability")
     lines.append("")
     if ctx.availability_method_note:

@@ -21,9 +21,9 @@ FIXTURE_MD = """\
 
 - everything else
 
-## Combined plots
+## Availability
 
-- availability: [`availability_heatmap.png`](availability_heatmap.png)
+![availability heatmap](availability_heatmap.png)
 
 ## Per-variable details
 
@@ -46,7 +46,7 @@ def test_render_html_structure() -> None:
 
     assert '<h2 id="datasets">Datasets</h2>' in html
     assert '<h2 id="summary">Summary</h2>' in html
-    assert '<h2 id="combined-plots">Combined plots</h2>' in html
+    assert '<h2 id="availability">Availability</h2>' in html
     assert '<h2 id="per-variable-details">Per-variable details</h2>' in html
 
     # Non-variable h3s get ids but are NOT wrapped in <section>.
@@ -70,8 +70,8 @@ def test_render_html_structure() -> None:
             f'<img src="{plot_type}_temperature_2m.png"'
         ) in html
 
-    # PNG links from elsewhere in the doc get target="_blank" too.
-    assert '<a href="availability_heatmap.png" target="_blank">' in html
+    # The availability heatmap embedded elsewhere in the doc renders as an image.
+    assert '<img src="availability_heatmap.png"' in html
 
     # TOC contains a checkbox per variable + section links.
     assert 'data-var="temperature_2m"' in html

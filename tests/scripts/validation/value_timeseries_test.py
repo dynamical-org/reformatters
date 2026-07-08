@@ -112,8 +112,6 @@ def test_run_value_timeseries_writes_plots_and_stats(tmp_path: Path) -> None:
     run_value_timeseries(ctx)
 
     assert (tmp_path / "value_timeseries_temperature_2m.png").exists()
-    assert (tmp_path / "combined_value_timeseries.png").exists()
-    assert ctx.combined_value_timeseries_plot == "combined_value_timeseries.png"
 
     stats = ctx.stats["temperature_2m"]
     assert stats.value_ts_plot == "value_timeseries_temperature_2m.png"

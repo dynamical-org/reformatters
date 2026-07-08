@@ -18,12 +18,6 @@ from reformatters.common.validation import open_flattened_dataset
 
 OUTPUT_DIR = "data/output"
 
-# Above this variable count the per-phase combined_*.png figures (one row per
-# variable, all rows held in memory until a single savefig) grow to tens of GB
-# and OOM the box. Per-variable PNGs are the review artifact; combined images are
-# skipped above this cap (docs already tell AI reviewers to skip them).
-COMBINED_PLOT_MAX_VARS = 50
-
 STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
 GEFS_ANALYSIS_COLLECTION_ID = "noaa-gefs-analysis"
 
@@ -213,9 +207,6 @@ class RunContext:
     decode_failures: list[str] | None = None
     availability: dict[str, AvailabilitySeries] = field(default_factory=dict)
     combined_availability_plot: str | None = None
-    combined_value_timeseries_plot: str | None = None
-    combined_spatial_plot: str | None = None
-    combined_temporal_plot: str | None = None
     # Point arrays loaded once by run_value_availability (var -> (point1, point2)) and reused
     # by run_value_timeseries to avoid reading the point data a second time.
     loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(

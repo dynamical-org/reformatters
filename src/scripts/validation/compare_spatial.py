@@ -10,7 +10,6 @@ from matplotlib.axes import Axes
 from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
-    COMBINED_PLOT_MAX_VARS,
     RunContext,
     VariableStats,
     end_date_option,
@@ -267,13 +266,13 @@ def _reference_data(
     return load_retried(ref_data)
 
 
-def run_compare_spatial(  # noqa: PLR0915
+def run_compare_spatial(
     ctx: RunContext,
     init_time: str | None = None,
     lead_time: str | None = None,
     time: str | None = None,
 ) -> None:
-    """Produce per-variable + combined spatial comparison plots in ctx.output_dir."""
+    """Produce per-variable spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
 
     # Spatial plots are over a single member; ctx.validation_ds keeps the full
@@ -314,19 +313,7 @@ def run_compare_spatial(  # noqa: PLR0915
         f"(ref {ref_time_label})"
     )
 
-    if n_vars <= COMBINED_PLOT_MAX_VARS:
-        fig_c, axes_c = plt.subplots(
-            n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False
-        )
-    else:
-        fig_c = axes_c = None
-        log.info(
-            f"compare-spatial: {n_vars} variables exceeds combined-plot cap "
-            f"{COMBINED_PLOT_MAX_VARS}; skipping combined_spatial.png (per-variable "
-            "PNGs unaffected)"
-        )
-
-    for i, var in enumerate(ctx.variables):
+    for var in ctx.variables:
         stats = ctx.stats_for(var)
         level_sel = select_var_level(ctx, var, stats)
         level_note = level_label(stats)
@@ -370,22 +357,6 @@ def run_compare_spatial(  # noqa: PLR0915
         fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
 
-        # Combined row
-        if axes_c is not None:
-            _draw_spatial_triplet(
-                axes_c[i, 0],
-                axes_c[i, 1],
-                axes_c[i, 2],
-                var,
-                data,
-                ref_data,
-                data_clean,
-                ref_clean,
-                stats.units,
-                ds_title,
-                ref_title,
-            )
-
         ref_note = (
             f"ref[{stats.ref_spatial_min:.3g}, {stats.ref_spatial_max:.3g}]"
             if stats.ref_available_spatial and stats.ref_spatial_min is not None
@@ -395,18 +366,6 @@ def run_compare_spatial(  # noqa: PLR0915
             f"  spatial {var}: val[{stats.val_spatial_min:.3g}, "
             f"{stats.val_spatial_max:.3g}] mean={stats.val_spatial_mean:.3g} {ref_note}"
         )
-
-    if fig_c is not None:
-        fig_c.suptitle(
-            f"Spatial comparison — all variables\n{val_label} @ {val_time_label} vs "
-            f"{ref_label} @ {ref_time_label}",
-            fontsize=13,
-        )
-        fig_c.tight_layout()
-        combined_path = ctx.output_dir / "combined_spatial.png"
-        fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-        plt.close(fig_c)
-        ctx.combined_spatial_plot = combined_path.name
 
 
 def compare_spatial(
@@ -422,7 +381,7 @@ def compare_spatial(
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Create per-variable + combined spatial comparison plots between two zarr datasets."""
+    """Create per-variable spatial comparison plots between two zarr datasets."""
     log.info(f"Loading validation dataset: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
