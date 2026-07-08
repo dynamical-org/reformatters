@@ -71,6 +71,9 @@ class DataVarAttrs(FrozenBaseModel):
     # Must follow CF Conventions if CF defines a standard name for this variable
     units: Annotated[str, pydantic.Field(min_length=1)]
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
+    # CF missing_value: a sentinel the source stores in the data (e.g. -999 for "no
+    # echo") which CF-aware readers such as xarray mask to NaN on read.
+    missing_value: float | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
     # CF flag attributes for categorical variables, see CF Conventions section 3.5.

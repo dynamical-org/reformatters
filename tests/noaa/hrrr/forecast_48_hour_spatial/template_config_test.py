@@ -19,7 +19,7 @@ def test_group_structure_and_counts() -> None:
     by_group: dict[object, int] = {}
     for var in CONFIG.data_vars:
         by_group[var.group] = by_group.get(var.group, 0) + 1
-    assert by_group[ROOT] == 143
+    assert by_group[ROOT] == 142
     assert by_group["pressure_level"] == 14
     assert by_group["model_level"] == 20
 

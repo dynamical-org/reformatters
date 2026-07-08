@@ -156,6 +156,11 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
                 "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
             )
             var_array.encoding["fill_value"] = var.encoding.fill_value
+            # xarray's zarr decode invents encoding["_FillValue"] = nan, which for a
+            # var with a missing_value sentinel (== its fill value, e.g. -999)
+            # conflicts with encoding["missing_value"] and fails re-encoding; align it.
+            if var.attrs.missing_value is not None:
+                var_array.encoding["_FillValue"] = var.encoding.fill_value
 
         template = xr.DataTree.from_dict(nodes)
 

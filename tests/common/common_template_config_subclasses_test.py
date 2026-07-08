@@ -146,8 +146,12 @@ def test_update_template_fill_values_are_correct(
     )
     for var in template_config.data_vars:
         var_da = ds[var.path]
+        # A missing_value sentinel equals the fill value and is masked to NaN on read.
+        expected = (
+            np.nan if var.attrs.missing_value is not None else var.encoding.fill_value
+        )
         np.testing.assert_array_equal(
-            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
+            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, expected
         )
 
 

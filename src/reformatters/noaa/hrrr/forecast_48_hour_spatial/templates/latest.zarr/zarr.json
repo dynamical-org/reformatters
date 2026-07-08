@@ -643,60 +643,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "cloud_forcing_net_solar_flux_surface": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CFNSF",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Cloud Forcing Net Solar Flux",
-          "short_name": "cfnsf",
-          "units": "W m-2",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "column_integrated_mass_density_atmosphere": {
         "shape": [
           1,
@@ -1716,7 +1662,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -999.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -1731,9 +1677,11 @@
           "long_name": "Echo top",
           "short_name": "retop",
           "units": "m",
+          "comment": "-999 encodes no echo; CF-aware readers like xarray mask it to NaN via the missing_value attribute.",
+          "missing_value": -999.0,
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAA4j8A="
         },
         "dimension_names": [
           "init_time",
@@ -3392,7 +3340,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "lightning_standard_deviation_1m": {
+      "lightning_threat_1m": {
         "shape": [
           1,
           49,
@@ -3429,9 +3377,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Lightning standard deviation",
+          "long_name": "Maximum lightning threat 1 (graupel flux)",
           "short_name": "ltngsd",
           "units": "1",
+          "comment": "GSD maximum lightning threat 1 derived from upward graupel flux, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 1 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3446,7 +3395,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "lightning_standard_deviation_2m": {
+      "lightning_threat_2m": {
         "shape": [
           1,
           49,
@@ -3483,9 +3432,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Lightning standard deviation",
+          "long_name": "Maximum lightning threat 2 (vertically integrated ice)",
           "short_name": "ltngsd",
           "units": "1",
+          "comment": "GSD maximum lightning threat 2 derived from vertically integrated ice, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 2 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3653,6 +3603,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
+          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5046,7 +4997,7 @@
           "long_name": "Cloud cover",
           "short_name": "ccl",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
-          "units": "percent",
+          "units": "1",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5446,6 +5397,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
+          "comment": "Smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5629,6 +5581,64 @@
         "node_type": "array",
         "storage_transformers": []
       },
+      "model_level/number_concentration_ice_friendly_aerosol": {
+        "shape": [
+          1,
+          49,
+          1059,
+          1799,
+          50
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799,
+              1
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "PMTC",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Number concentration of ice-friendly aerosols",
+          "short_name": "ncifa",
+          "units": "kg-1",
+          "comment": "Climatological ice-friendly (non-hygroscopic, dust-like) aerosol number concentration from the Thompson-Eidhammer aerosol-aware microphysics, encoded in HRRR GRIB as PMTC 'Particulate matter (coarse)'.",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x",
+          "model_level"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "model_level/number_concentration_rain": {
         "shape": [
           1,
@@ -5686,64 +5696,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "model_level/particulate_matter_coarse": {
-        "shape": [
-          1,
-          49,
-          1059,
-          1799,
-          50
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799,
-              1
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "PMTC",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Particulate matter (coarse)",
-          "short_name": "pmtc",
-          "units": "kg m-3",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x",
-          "model_level"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "model_level/particulate_matter_fine": {
+      "model_level/number_concentration_water_friendly_aerosol": {
         "shape": [
           1,
           49,
@@ -5782,9 +5735,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Particulate matter (fine)",
-          "short_name": "pmtf",
-          "units": "kg m-3",
+          "long_name": "Number concentration of water-friendly aerosols",
+          "short_name": "ncwfa",
+          "units": "kg-1",
+          "comment": "Climatological water-friendly (hygroscopic) aerosol number concentration from the Thompson-Eidhammer aerosol-aware microphysics, encoded in HRRR GRIB as PMTF 'Particulate matter (fine)'.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

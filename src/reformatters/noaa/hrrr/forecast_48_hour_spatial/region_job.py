@@ -178,16 +178,23 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         ] = {}
         for var in data_vars:
             window = _lead_time_str(var, lead_hours)
-            element = var.internal_attrs.grib_element
-            if var.group is ROOT:
-                key = (element, var.internal_attrs.grib_index_level, window)
-                lookup.setdefault(key, []).append((var, {}))
-            else:
-                dim = var.group  # group name equals its dimension name
-                level_format = var.internal_attrs.grib_index_level
-                for level in self.template_ds[var.path].get_index(dim):
-                    key = (element, level_format.format(level=level), window)
-                    lookup.setdefault(key, []).append((var, {dim: int(level)}))
+            # Index element spellings vary by era and by the wgrib2 build that made the
+            # index (e.g. TCOLWold, CLWMR, raw "var discipline=..." strings), so match
+            # grib_element_alternatives too; a file carries only one spelling.
+            elements = (
+                var.internal_attrs.grib_element,
+                *var.internal_attrs.grib_element_alternatives,
+            )
+            for element in elements:
+                if var.group is ROOT:
+                    key = (element, var.internal_attrs.grib_index_level, window)
+                    lookup.setdefault(key, []).append((var, {}))
+                else:
+                    dim = var.group  # group name equals its dimension name
+                    level_format = var.internal_attrs.grib_index_level
+                    for level in self.template_ds[var.path].get_index(dim):
+                        key = (element, level_format.format(level=level), window)
+                        lookup.setdefault(key, []).append((var, {dim: int(level)}))
         return lookup
 
     @classmethod
