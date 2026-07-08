@@ -47,6 +47,10 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 32})
 
 _EXISTS_BATCH_SIZE = 20_000
+# A whole-archive scan issues enough object-store reads that a transient outage
+# (e.g. a connect timeout) is near-certain; ride out a ~minute of trouble rather
+# than let one blip kill the whole scan. Backoff grows with attempt in retry().
+_SCAN_MAX_RETRIES = 12
 
 
 @dataclass
@@ -72,7 +76,10 @@ def _probe_job(
     candidates = list(job.source_file_coords())
     # Retried: a whole-archive scan makes enough reads that a transient object store
     # failure is near-certain, and one un-retried probe would kill the run.
-    missing = retry(lambda: job.filter_already_present(candidates, store))
+    missing = retry(
+        lambda: job.filter_already_present(candidates, store),
+        max_attempts=_SCAN_MAX_RETRIES,
+    )
     missing_ids = {id(c) for c in missing}
     return [(coord, id(coord) not in missing_ids) for coord in candidates]
 
@@ -293,7 +300,7 @@ def _flush_var_probes(
     out: dict[str, dict[pd.Timestamp, bool]],
 ) -> None:
     keys = [key for _, _, key in probes]
-    present = retry(lambda: _exists_many(store, keys))
+    present = retry(lambda: _exists_many(store, keys), max_attempts=_SCAN_MAX_RETRIES)
     for var_path, position, key in probes:
         out.setdefault(var_path, {})[position] = present[key]
     probes.clear()
