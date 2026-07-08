@@ -140,8 +140,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
         fontsize=7,
     )
     ax.set_title(
-        "Availability by variable over the append dim (green=available, red=missing, "
-        "grey=not probed)",
+        "Availability by variable over the append dim (green=available, red=missing)",
         fontsize=11,
     )
     fig.tight_layout()
@@ -390,20 +389,11 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
 
-    n_present = sum(p for p, _ in result.file_availability.values())
-    n_expected = sum(e for _, e in result.file_availability.values())
     incomplete_files = {
         position: (present, expected)
         for position, (present, expected) in result.file_availability.items()
         if present < expected
     }
-    ctx.availability_method_note = (
-        "Availability is manifest-probed (no decode), exhaustively per source file and "
-        "per variable at one present source file per position. "
-        f"Source files: {n_present:,}/{n_expected:,} present; "
-        f"{len(incomplete_files)} of {len(result.file_availability):,} positions are "
-        "missing at least one source file."
-    )
     if incomplete_files:
         ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
             incomplete_files, ctx.output_dir

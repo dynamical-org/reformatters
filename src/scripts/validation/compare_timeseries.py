@@ -200,7 +200,7 @@ def _fmt(v: float | None) -> str:
 
 
 def run_compare_timeseries(ctx: RunContext) -> None:
-    """Produce per-variable + combined timeseries comparison plots in ctx.output_dir."""
+    """Produce per-variable timeseries comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, (
         "compare-timeseries requires a reference dataset"
     )
@@ -232,14 +232,10 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     n_vars = len(ctx.variables)
     log.info(f"compare-timeseries: {n_vars} variables — {title_suffix}")
 
-    fig_c, axes_c = plt.subplots(
-        n_vars, 2, figsize=(14, 3.0 * n_vars), squeeze=False, constrained_layout=True
-    )
-
     p1_title_suffix = f"(lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_title_suffix = f"(lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
 
-    for i, var in enumerate(ctx.variables):
+    for var in ctx.variables:
         stats = ctx.stats_for(var)
         level_sel = select_var_level(ctx, var, stats)
         level_note = level_label(stats)
@@ -284,44 +280,11 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         plt.close(fig_v)
         stats.temporal_plot = out_path.name
 
-        # Combined row
-        _draw_timeseries_at_point(
-            axes_c[i, 0],
-            val_p1,
-            ref_p1,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var}{level_note} — {p1_title_suffix}",
-        )
-        _draw_timeseries_at_point(
-            axes_c[i, 1],
-            val_p2,
-            ref_p2,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var}{level_note} — {p2_title_suffix}",
-        )
-
         log.info(
             f"  temporal {var}: "
             f"P1 val=[{_fmt(stats.val_temporal_min_p1)}, {_fmt(stats.val_temporal_max_p1)}] "
             f"P2 val=[{_fmt(stats.val_temporal_min_p2)}, {_fmt(stats.val_temporal_max_p2)}]"
         )
-
-    fig_c.suptitle(
-        f"Timeseries comparison — all variables\n{val_label} vs {ref_label}\n{title_suffix}",
-        fontsize=13,
-    )
-    combined_path = ctx.output_dir / "combined_temporal.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_temporal_plot = combined_path.name
 
 
 def compare_timeseries(
@@ -334,7 +297,7 @@ def compare_timeseries(
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Create per-variable + combined timeseries comparison plots."""
+    """Create per-variable timeseries comparison plots."""
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)

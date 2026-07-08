@@ -53,11 +53,15 @@ def align_to_valid_time_forecast(
 ) -> tuple[xr.Dataset, xr.Dataset]:
     rng = np.random.default_rng()
 
-    selected_init_time = (
-        pd.Timestamp(rng.choice(ds.init_time, 1)[0])
-        if init_time is None
-        else pd.Timestamp(init_time)
-    )
+    if init_time is None:
+        # Default to a recent-but-settled position (10 steps back) so the snapshot has
+        # complete forecasts and all mid-archive-introduced variables present, instead
+        # of a random init that may land in an early era with many not-yet-introduced
+        # (all-NaN) variables. Tiny archives (< 10 inits) fall back to the first init.
+        idx = max(-10, -ds.sizes["init_time"])
+        selected_init_time = pd.Timestamp(ds.init_time.isel(init_time=idx).item())
+    else:
+        selected_init_time = pd.Timestamp(init_time)
     if lead_time is None:
         # Prefer leads whose valid time the reference covers; a lead past the
         # reference's last analysis compares against a snapshot hours older.
@@ -81,10 +85,13 @@ def align_to_valid_time_forecast(
 def align_to_valid_time_analysis(
     ds: xr.Dataset, reference_ds: xr.Dataset, time: str | None
 ) -> tuple[xr.Dataset, xr.Dataset]:
-    rng = np.random.default_rng()
-    selected_time = (
-        pd.Timestamp(rng.choice(ds.time, 1)[0]) if time is None else pd.Timestamp(time)
-    )
+    if time is None:
+        # Default to a recent-but-settled position (10 steps back); see
+        # align_to_valid_time_forecast. Tiny archives fall back to the first time.
+        idx = max(-10, -ds.sizes["time"])
+        selected_time = pd.Timestamp(ds.time.isel(time=idx).item())
+    else:
+        selected_time = pd.Timestamp(time)
     ds = ds.sel(time=selected_time)
     reference_ds = reference_ds.sel(time=selected_time, method="nearest")
     return ds, reference_ds
@@ -266,13 +273,13 @@ def _reference_data(
     return load_retried(ref_data)
 
 
-def run_compare_spatial(  # noqa: PLR0915
+def run_compare_spatial(
     ctx: RunContext,
     init_time: str | None = None,
     lead_time: str | None = None,
     time: str | None = None,
 ) -> None:
-    """Produce per-variable + combined spatial comparison plots in ctx.output_dir."""
+    """Produce per-variable spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
 
     # Spatial plots are over a single member; ctx.validation_ds keeps the full
@@ -313,9 +320,7 @@ def run_compare_spatial(  # noqa: PLR0915
         f"(ref {ref_time_label})"
     )
 
-    fig_c, axes_c = plt.subplots(n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False)
-
-    for i, var in enumerate(ctx.variables):
+    for var in ctx.variables:
         stats = ctx.stats_for(var)
         level_sel = select_var_level(ctx, var, stats)
         level_note = level_label(stats)
@@ -359,21 +364,6 @@ def run_compare_spatial(  # noqa: PLR0915
         fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
 
-        # Combined row
-        _draw_spatial_triplet(
-            axes_c[i, 0],
-            axes_c[i, 1],
-            axes_c[i, 2],
-            var,
-            data,
-            ref_data,
-            data_clean,
-            ref_clean,
-            stats.units,
-            ds_title,
-            ref_title,
-        )
-
         ref_note = (
             f"ref[{stats.ref_spatial_min:.3g}, {stats.ref_spatial_max:.3g}]"
             if stats.ref_available_spatial and stats.ref_spatial_min is not None
@@ -383,17 +373,6 @@ def run_compare_spatial(  # noqa: PLR0915
             f"  spatial {var}: val[{stats.val_spatial_min:.3g}, "
             f"{stats.val_spatial_max:.3g}] mean={stats.val_spatial_mean:.3g} {ref_note}"
         )
-
-    fig_c.suptitle(
-        f"Spatial comparison — all variables\n{val_label} @ {val_time_label} vs "
-        f"{ref_label} @ {ref_time_label}",
-        fontsize=13,
-    )
-    fig_c.tight_layout()
-    combined_path = ctx.output_dir / "combined_spatial.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_spatial_plot = combined_path.name
 
 
 def compare_spatial(
@@ -409,7 +388,7 @@ def compare_spatial(
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Create per-variable + combined spatial comparison plots between two zarr datasets."""
+    """Create per-variable spatial comparison plots between two zarr datasets."""
     log.info(f"Loading validation dataset: {validation_url}")
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
