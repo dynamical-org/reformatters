@@ -10,6 +10,7 @@ from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
+    COMBINED_PLOT_MAX_VARS,
     SPATIAL_DIMS,
     RunContext,
     VariableStats,
@@ -181,7 +182,17 @@ def run_value_timeseries(ctx: RunContext) -> None:
 
     log.info(f"value-timeseries: {n_vars} variables at {p1_label} / {p2_label}")
 
-    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False)
+    if n_vars <= COMBINED_PLOT_MAX_VARS:
+        fig_c, axes_c = plt.subplots(
+            n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False
+        )
+    else:
+        fig_c = axes_c = None
+        log.info(
+            f"value-timeseries: {n_vars} variables exceeds combined-plot cap "
+            f"{COMBINED_PLOT_MAX_VARS}; skipping combined_value_timeseries.png "
+            "(per-variable PNGs unaffected)"
+        )
 
     # Loads are network-bound and independent per variable; they run ahead in a small
     # pool while the main thread plots. Each result is just the two point series.
@@ -235,33 +246,35 @@ def run_value_timeseries(ctx: RunContext) -> None:
             stats.value_ts_plot = out_path.name
 
             # Combined figure row.
-            _draw_value_trace(
-                axes_c[i, 0],
-                mean_p1,
-                std_p1,
-                "blue",
-                "fuchsia",
-                f"{var} — {p1_label}",
-                units,
-                has_std,
-            )
-            _draw_value_trace(
-                axes_c[i, 1],
-                mean_p2,
-                std_p2,
-                "orange",
-                "red",
-                f"{var} — {p2_label}",
-                units,
-                has_std,
-            )
+            if axes_c is not None:
+                _draw_value_trace(
+                    axes_c[i, 0],
+                    mean_p1,
+                    std_p1,
+                    "blue",
+                    "fuchsia",
+                    f"{var} — {p1_label}",
+                    units,
+                    has_std,
+                )
+                _draw_value_trace(
+                    axes_c[i, 1],
+                    mean_p2,
+                    std_p2,
+                    "orange",
+                    "red",
+                    f"{var} — {p2_label}",
+                    units,
+                    has_std,
+                )
 
-    fig_c.suptitle("Full-period value time series — all variables", fontsize=13)
-    fig_c.tight_layout()
-    combined_path = ctx.output_dir / "combined_value_timeseries.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_value_timeseries_plot = combined_path.name
+    if fig_c is not None:
+        fig_c.suptitle("Full-period value time series — all variables", fontsize=13)
+        fig_c.tight_layout()
+        combined_path = ctx.output_dir / "combined_value_timeseries.png"
+        fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
+        plt.close(fig_c)
+        ctx.combined_value_timeseries_plot = combined_path.name
 
 
 def value_timeseries(

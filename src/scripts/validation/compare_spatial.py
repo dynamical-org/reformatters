@@ -10,6 +10,7 @@ from matplotlib.axes import Axes
 from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
+    COMBINED_PLOT_MAX_VARS,
     RunContext,
     VariableStats,
     end_date_option,
@@ -313,7 +314,17 @@ def run_compare_spatial(  # noqa: PLR0915
         f"(ref {ref_time_label})"
     )
 
-    fig_c, axes_c = plt.subplots(n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False)
+    if n_vars <= COMBINED_PLOT_MAX_VARS:
+        fig_c, axes_c = plt.subplots(
+            n_vars, 3, figsize=(15, 3.375 * n_vars), squeeze=False
+        )
+    else:
+        fig_c = axes_c = None
+        log.info(
+            f"compare-spatial: {n_vars} variables exceeds combined-plot cap "
+            f"{COMBINED_PLOT_MAX_VARS}; skipping combined_spatial.png (per-variable "
+            "PNGs unaffected)"
+        )
 
     for i, var in enumerate(ctx.variables):
         stats = ctx.stats_for(var)
@@ -360,19 +371,20 @@ def run_compare_spatial(  # noqa: PLR0915
         plt.close(fig_v)
 
         # Combined row
-        _draw_spatial_triplet(
-            axes_c[i, 0],
-            axes_c[i, 1],
-            axes_c[i, 2],
-            var,
-            data,
-            ref_data,
-            data_clean,
-            ref_clean,
-            stats.units,
-            ds_title,
-            ref_title,
-        )
+        if axes_c is not None:
+            _draw_spatial_triplet(
+                axes_c[i, 0],
+                axes_c[i, 1],
+                axes_c[i, 2],
+                var,
+                data,
+                ref_data,
+                data_clean,
+                ref_clean,
+                stats.units,
+                ds_title,
+                ref_title,
+            )
 
         ref_note = (
             f"ref[{stats.ref_spatial_min:.3g}, {stats.ref_spatial_max:.3g}]"
@@ -384,16 +396,17 @@ def run_compare_spatial(  # noqa: PLR0915
             f"{stats.val_spatial_max:.3g}] mean={stats.val_spatial_mean:.3g} {ref_note}"
         )
 
-    fig_c.suptitle(
-        f"Spatial comparison — all variables\n{val_label} @ {val_time_label} vs "
-        f"{ref_label} @ {ref_time_label}",
-        fontsize=13,
-    )
-    fig_c.tight_layout()
-    combined_path = ctx.output_dir / "combined_spatial.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_spatial_plot = combined_path.name
+    if fig_c is not None:
+        fig_c.suptitle(
+            f"Spatial comparison — all variables\n{val_label} @ {val_time_label} vs "
+            f"{ref_label} @ {ref_time_label}",
+            fontsize=13,
+        )
+        fig_c.tight_layout()
+        combined_path = ctx.output_dir / "combined_spatial.png"
+        fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
+        plt.close(fig_c)
+        ctx.combined_spatial_plot = combined_path.name
 
 
 def compare_spatial(

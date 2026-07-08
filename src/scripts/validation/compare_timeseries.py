@@ -9,6 +9,7 @@ from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
+    COMBINED_PLOT_MAX_VARS,
     RunContext,
     VariableStats,
     end_date_option,
@@ -232,9 +233,21 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     n_vars = len(ctx.variables)
     log.info(f"compare-timeseries: {n_vars} variables — {title_suffix}")
 
-    fig_c, axes_c = plt.subplots(
-        n_vars, 2, figsize=(14, 3.0 * n_vars), squeeze=False, constrained_layout=True
-    )
+    if n_vars <= COMBINED_PLOT_MAX_VARS:
+        fig_c, axes_c = plt.subplots(
+            n_vars,
+            2,
+            figsize=(14, 3.0 * n_vars),
+            squeeze=False,
+            constrained_layout=True,
+        )
+    else:
+        fig_c = axes_c = None
+        log.info(
+            f"compare-timeseries: {n_vars} variables exceeds combined-plot cap "
+            f"{COMBINED_PLOT_MAX_VARS}; skipping combined_temporal.png (per-variable "
+            "PNGs unaffected)"
+        )
 
     p1_title_suffix = f"(lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_title_suffix = f"(lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
@@ -285,28 +298,29 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         stats.temporal_plot = out_path.name
 
         # Combined row
-        _draw_timeseries_at_point(
-            axes_c[i, 0],
-            val_p1,
-            ref_p1,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var}{level_note} — {p1_title_suffix}",
-        )
-        _draw_timeseries_at_point(
-            axes_c[i, 1],
-            val_p2,
-            ref_p2,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var}{level_note} — {p2_title_suffix}",
-        )
+        if axes_c is not None:
+            _draw_timeseries_at_point(
+                axes_c[i, 0],
+                val_p1,
+                ref_p1,
+                time_coord,
+                ref_time_coord,
+                val_label,
+                ref_label,
+                units,
+                f"{var}{level_note} — {p1_title_suffix}",
+            )
+            _draw_timeseries_at_point(
+                axes_c[i, 1],
+                val_p2,
+                ref_p2,
+                time_coord,
+                ref_time_coord,
+                val_label,
+                ref_label,
+                units,
+                f"{var}{level_note} — {p2_title_suffix}",
+            )
 
         log.info(
             f"  temporal {var}: "
@@ -314,14 +328,15 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             f"P2 val=[{_fmt(stats.val_temporal_min_p2)}, {_fmt(stats.val_temporal_max_p2)}]"
         )
 
-    fig_c.suptitle(
-        f"Timeseries comparison — all variables\n{val_label} vs {ref_label}\n{title_suffix}",
-        fontsize=13,
-    )
-    combined_path = ctx.output_dir / "combined_temporal.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_temporal_plot = combined_path.name
+    if fig_c is not None:
+        fig_c.suptitle(
+            f"Timeseries comparison — all variables\n{val_label} vs {ref_label}\n{title_suffix}",
+            fontsize=13,
+        )
+        combined_path = ctx.output_dir / "combined_temporal.png"
+        fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
+        plt.close(fig_c)
+        ctx.combined_temporal_plot = combined_path.name
 
 
 def compare_timeseries(
