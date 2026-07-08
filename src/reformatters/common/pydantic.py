@@ -13,7 +13,4 @@ def replace(obj: B, **kwargs: Any) -> B:  # noqa: ANN401
 
 
 class FrozenBaseModel(pydantic.BaseModel):
-    # Instances are immutable so they are shared, not revalidated (deep-copied), when
-    # passed as field values -- e.g. every RegionJob and SourceFileCoord reuses the
-    # same DataVar instances.
     model_config = pydantic.ConfigDict(frozen=True, strict=True)
