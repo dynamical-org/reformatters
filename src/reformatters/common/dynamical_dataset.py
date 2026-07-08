@@ -209,10 +209,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
-        With metadata_only, rewrite the existing store's coordinates and encoding from
-        the current template without emitting any chunks - use it to propagate a template
-        change (e.g. new codec options, reordered coordinates) to an already-published
-        store. append_dim_end must match the store's current extent.
+        With metadata_only (icechunk stores only), rewrite the existing store's
+        coordinates and encoding from the current template without emitting any chunks -
+        use it to propagate a template change (e.g. new codec options, reordered
+        coordinates) to an already-published store. append_dim_end is exclusive and must
+        reproduce the store's current extent exactly, so pass the next append-dim step
+        after the last published position (last_position + append_dim_frequency).
         """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
@@ -237,6 +239,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         template_ds = self._get_template(append_dim_end)
 
+        if metadata_only:
+            assert self.store_factory.all_stores_icechunk(), (
+                "--metadata-only is only supported for icechunk stores"
+            )
         if metadata_only or overwrite_existing:
             flag = "metadata_only" if metadata_only else "overwrite_existing"
             assert self.store_factory.all_stores_exist(), (
@@ -375,6 +381,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         store's coordinates and encoding from the template while the icechunk temp branch
         keeps the existing chunks untouched. See docs/virtual_datasets.md.
         """
+        if metadata_only:
+            assert self.store_factory.all_stores_icechunk(), (
+                "metadata_only is only supported for icechunk stores"
+            )
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 

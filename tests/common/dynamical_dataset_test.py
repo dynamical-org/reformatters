@@ -421,6 +421,29 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     )
 
 
+def test_metadata_only_backfill_rejects_zarr3_stores() -> None:
+    # metadata_only rewrites metadata via the icechunk temp-branch path; a zarr3 primary
+    # or replica has no equivalent, so fail early.
+    dataset = ExampleDataset(
+        primary_storage_config=ExampleDatasetStorageConfig(
+            format=DatasetFormat.ICECHUNK
+        ),
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica/path", format=DatasetFormat.ZARR3
+            )
+        ],
+    )
+    with pytest.raises(AssertionError, match="icechunk"):
+        dataset.backfill(
+            pd.Timestamp("2000-01-02"),
+            "metadata-refresh",
+            worker_index=0,
+            workers_total=1,
+            metadata_only=True,
+        )
+
+
 def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
