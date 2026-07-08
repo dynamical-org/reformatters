@@ -40,6 +40,7 @@
     "long_name": "Mass density",
     "short_name": "mdens",
     "units": "kg m-3",
+    "comment": "Smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

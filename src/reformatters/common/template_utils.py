@@ -267,6 +267,12 @@ def assign_var_metadata(
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
+    # xarray defaults a float variable's _FillValue attribute to NaN on write; a var
+    # with a missing_value sentinel must write _FillValue == missing_value (CF
+    # requires them equal and xarray refuses to encode them unequal).
+    if getattr(var_config.attrs, "missing_value", None) is not None:
+        var.encoding["_FillValue"] = var_config.encoding.fill_value
+
     # Encoding time data requires a `units` key in `encoding`.
     # Ensure the value matches units value in the usual `attributes` location.
     if var_config.encoding.units is not None and var_config.attrs.units is not None:

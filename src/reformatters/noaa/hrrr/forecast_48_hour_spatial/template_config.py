@@ -81,6 +81,14 @@ _WINDOW_ATTRS: dict[WindowKind, tuple[str, Timedelta | None]] = {
 }
 
 
+# Some cycles' .idx files were built by a wgrib2 without the NCEP local table, which
+# renders NCEP-local parameters as raw "var discipline=..." strings (e.g. all of
+# 2020-12 -> 2023-02 for VEGMIN/VEGMAX, scattered days through 2024-04-15 for others).
+# These spellings go in grib_element_alternatives so the idx scan matches every era.
+def _raw_idx_element(discipline: int, category: int, parameter: int) -> str:
+    return f"var discipline={discipline} center=7 local_table=1 parmcat={category} parm={parameter}"
+
+
 class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     """Virtual, spatially-chunked (map-optimized) HRRR 48-hour forecast.
 
@@ -294,7 +302,10 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
 
 
 def _virtual_encoding(
-    element: str, group: Group, filters: Sequence[CodecConfig]
+    element: str,
+    group: Group,
+    filters: Sequence[CodecConfig],
+    fill_value: float = np.nan,
 ) -> Encoding:
     """One chunk per GRIB message: chunk 1 along init_time/lead_time/vertical, full
     y/x, no shards, no compressors. GribberishCodec decodes the raw message and any
@@ -306,7 +317,7 @@ def _virtual_encoding(
     return Encoding(
         # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
         dtype="float64",
-        fill_value=np.nan,
+        fill_value=fill_value,
         chunks=chunks,
         shards=None,
         compressors=(),
@@ -321,6 +332,7 @@ def _data_var(
     name: str,
     *,
     element: str,
+    element_alternatives: tuple[str, ...] = (),
     grib_index_level: str,
     file_type: NoaaHrrrFileType,
     group: Group,
@@ -330,6 +342,7 @@ def _data_var(
     units: str,
     standard_name: str | None,
     comment: str | None,
+    missing_value: float | None = None,
     hour_0: bool | None,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
@@ -346,7 +359,12 @@ def _data_var(
     return NoaaHrrrDataVar(
         name=name,
         group=group,
-        encoding=_virtual_encoding(element, group, resolved_filters),
+        encoding=_virtual_encoding(
+            element,
+            group,
+            resolved_filters,
+            fill_value=missing_value if missing_value is not None else np.nan,
+        ),
         attrs=DataVarAttrs(
             short_name=short_name,
             long_name=long_name,
@@ -354,11 +372,13 @@ def _data_var(
             standard_name=standard_name,
             step_type=step_type,  # ty: ignore[invalid-argument-type]
             comment=comment,
+            missing_value=missing_value,
             flag_values=flag_values,
             flag_meanings=flag_meanings,
         ),
         internal_attrs=NoaaHrrrInternalAttrs(
             grib_element=element,
+            grib_element_alternatives=element_alternatives,
             # Group vars carry a "{level} ..." format string the region job fills per
             # level; root vars carry the literal idx level string.
             grib_index_level=grib_index_level,
@@ -378,6 +398,7 @@ def _root_var(
     name: str,
     *,
     element: str,
+    element_alternatives: tuple[str, ...] = (),
     level: str,
     window: WindowKind = "instant",
     short_name: str,
@@ -385,6 +406,7 @@ def _root_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
+    missing_value: float | None = None,
     hour_0: bool | None = None,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
@@ -393,6 +415,7 @@ def _root_var(
     return _data_var(
         name,
         element=element,
+        element_alternatives=element_alternatives,
         grib_index_level=level,
         file_type="sfc",
         group=ROOT,
@@ -402,6 +425,7 @@ def _root_var(
         units=units,
         standard_name=standard_name,
         comment=comment,
+        missing_value=missing_value,
         hour_0=hour_0,
         filters=filters,
         flag_values=flag_values,
@@ -413,14 +437,17 @@ def _pressure_var(
     name: str,
     *,
     element: str,
+    element_alternatives: tuple[str, ...] = (),
     short_name: str,
     long_name: str,
     units: str,
     standard_name: str | None = None,
+    comment: str | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
         element=element,
+        element_alternatives=element_alternatives,
         grib_index_level="{level} mb",
         file_type="prs",
         group="pressure_level",
@@ -429,7 +456,7 @@ def _pressure_var(
         long_name=long_name,
         units=units,
         standard_name=standard_name,
-        comment=None,
+        comment=comment,
         hour_0=None,
     )
 
@@ -438,14 +465,17 @@ def _model_var(
     name: str,
     *,
     element: str,
+    element_alternatives: tuple[str, ...] = (),
     short_name: str,
     long_name: str,
     units: str,
     standard_name: str | None = None,
+    comment: str | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
         element=element,
+        element_alternatives=element_alternatives,
         grib_index_level="{level} hybrid level",
         file_type="nat",
         group="model_level",
@@ -454,7 +484,7 @@ def _model_var(
         long_name=long_name,
         units=units,
         standard_name=standard_name,
-        comment=None,
+        comment=comment,
         hour_0=None,
     )
 
@@ -477,6 +507,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="retop",
             long_name="Echo top",
             units="m",
+            comment="-999 encodes no echo; CF-aware readers mask it to NaN.",
+            missing_value=-999.0,
         ),
         _root_var(
             "vertically_integrated_liquid_atmosphere",
@@ -601,6 +633,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "minimum_updraft_helicity_5000_2000m",
             element="MNUPHL",
+            element_alternatives=(_raw_idx_element(0, 7, 200),),
             level="5000-2000 m above ground",
             window="min",
             short_name="mnuphl",
@@ -619,6 +652,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "minimum_updraft_helicity_2000_0m",
             element="MNUPHL",
+            element_alternatives=(_raw_idx_element(0, 7, 200),),
             level="2000-0 m above ground",
             window="min",
             short_name="mnuphl",
@@ -637,6 +671,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "minimum_updraft_helicity_3000_0m",
             element="MNUPHL",
+            element_alternatives=(_raw_idx_element(0, 7, 200),),
             level="3000-0 m above ground",
             window="min",
             short_name="mnuphl",
@@ -701,20 +736,22 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             standard_name="atmosphere_mass_content_of_graupel",
         ),
         _root_var(
-            "lightning_standard_deviation_1m",
+            "lightning_threat_1m",
             element="LTNGSD",
             level="1 m above ground",
             short_name="ltngsd",
-            long_name="Lightning standard deviation",
+            long_name="Maximum lightning threat 1 (graupel flux)",
             units="1",
+            comment="GSD maximum lightning threat 1 derived from upward graupel flux, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 1 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
         ),
         _root_var(
-            "lightning_standard_deviation_2m",
+            "lightning_threat_2m",
             element="LTNGSD",
             level="2 m above ground",
             short_name="ltngsd",
-            long_name="Lightning standard deviation",
+            long_name="Maximum lightning threat 2 (vertically integrated ice)",
             units="1",
+            comment="GSD maximum lightning threat 2 derived from vertically integrated ice, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 2 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
         ),
         _root_var(
             "lightning_atmosphere",
@@ -877,6 +914,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="mdens",
             long_name="Mass density",
             units="kg m-3",
+            comment="Near-surface smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
         ),
         _root_var(
             "wind_u_10m",
@@ -1125,6 +1163,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "minimum_vegetation_surface",
             element="VEGMIN",
+            element_alternatives=(_raw_idx_element(2, 0, 231),),
             level="surface",
             short_name="vegmin",
             long_name="Minimum vegetation fraction",
@@ -1134,6 +1173,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "maximum_vegetation_surface",
             element="VEGMAX",
+            element_alternatives=(_raw_idx_element(2, 0, 232),),
             level="surface",
             short_name="vegmax",
             long_name="Maximum vegetation fraction",
@@ -1222,6 +1262,9 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "total_column_cloud_water_atmosphere",
             element="TCOLW",
+            # 2020-12 -> 2022-06-28 the source encoded the deprecated GRIB parameter
+            # (0,6,18), which indexes render as TCOLWold; same quantity.
+            element_alternatives=("TCOLWold",),
             level="entire atmosphere",
             short_name="tcolw",
             long_name="Total column-integrated cloud water",
@@ -1231,6 +1274,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "total_column_cloud_ice_atmosphere",
             element="TCOLI",
+            element_alternatives=("TCOLIold",),
             level="entire atmosphere",
             short_name="tcoli",
             long_name="Total column-integrated cloud ice",
@@ -1372,14 +1416,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             units="W m-2",
             standard_name="surface_upwelling_longwave_flux_in_air",
         ),
-        _root_var(
-            "cloud_forcing_net_solar_flux_surface",
-            element="CFNSF",
-            level="surface",
-            short_name="cfnsf",
-            long_name="Cloud Forcing Net Solar Flux",
-            units="W m-2",
-        ),
+        # CFNSF (cloud forcing net solar flux) is deliberately excluded: the HRRR
+        # source field is unpopulated (byte-identical static noise at every lead).
         _root_var(
             "visible_beam_downward_solar_flux_surface",
             element="VBDSF",
@@ -1661,6 +1699,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "effective_layer_helicity_surface",
             element="EFHL",
+            element_alternatives=(_raw_idx_element(0, 7, 204),),
             level="surface",
             short_name="efhl",
             long_name="Effective layer helicity",
@@ -1669,6 +1708,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "critical_angle_0_500m",
             element="CANGLE",
+            element_alternatives=(_raw_idx_element(0, 7, 206),),
             level="0-500 m above ground",
             short_name="cangle",
             long_name="Critical angle",
@@ -1685,6 +1725,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
         _root_var(
             "enhanced_stretching_potential_0_3000m",
             element="ESP",
+            element_alternatives=(_raw_idx_element(0, 7, 205),),
             level="0-3000 m above ground",
             short_name="esp",
             long_name="Enhanced stretching potential",
@@ -1776,6 +1817,8 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
         _pressure_var(
             "cloud_mixing_ratio",
             element="CLMR",
+            # Some cycles' indexes spell WMO parameter (0,1,22) with NCEP's CLWMR.
+            element_alternatives=("CLWMR",),
             short_name="clwmr",
             long_name="Cloud mixing ratio",
             units="kg kg-1",
@@ -1938,6 +1981,7 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
         _model_var(
             "cloud_mixing_ratio",
             element="CLMR",
+            element_alternatives=("CLWMR",),
             short_name="clwmr",
             long_name="Cloud mixing ratio",
             units="kg kg-1",
@@ -1978,13 +2022,14 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="mdens",
             long_name="Mass density",
             units="kg m-3",
+            comment="Smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
         ),
         _model_var(
             "fraction_of_cloud_cover",
             element="FRACCC",
             short_name="ccl",
             long_name="Cloud cover",
-            units="percent",
+            units="1",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
         _model_var(
@@ -2009,17 +2054,19 @@ def _model_data_vars() -> list[NoaaHrrrDataVar]:
             units="kg-1",
         ),
         _model_var(
-            "particulate_matter_fine",
+            "number_concentration_water_friendly_aerosol",
             element="PMTF",
-            short_name="pmtf",
-            long_name="Particulate matter (fine)",
-            units="kg m-3",
+            short_name="ncwfa",
+            long_name="Number concentration of water-friendly aerosols",
+            units="kg-1",
+            comment="Climatological water-friendly (hygroscopic) aerosol number concentration from the Thompson-Eidhammer aerosol-aware microphysics, encoded in HRRR GRIB as PMTF 'Particulate matter (fine)'.",
         ),
         _model_var(
-            "particulate_matter_coarse",
+            "number_concentration_ice_friendly_aerosol",
             element="PMTC",
-            short_name="pmtc",
-            long_name="Particulate matter (coarse)",
-            units="kg m-3",
+            short_name="ncifa",
+            long_name="Number concentration of ice-friendly aerosols",
+            units="kg-1",
+            comment="Climatological ice-friendly (non-hygroscopic, dust-like) aerosol number concentration from the Thompson-Eidhammer aerosol-aware microphysics, encoded in HRRR GRIB as PMTC 'Particulate matter (coarse)'.",
         ),
     ]

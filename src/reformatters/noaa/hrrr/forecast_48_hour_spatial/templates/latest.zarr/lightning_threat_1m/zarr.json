@@ -35,9 +35,10 @@
     }
   ],
   "attributes": {
-    "long_name": "Lightning standard deviation",
+    "long_name": "Maximum lightning threat 1 (graupel flux)",
     "short_name": "ltngsd",
     "units": "1",
+    "comment": "GSD maximum lightning threat 1 derived from upward graupel flux, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 1 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

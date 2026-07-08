@@ -342,7 +342,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
     # HRRR forecast-48-hour-spatial single-level/surface fields with no CF standard name.
-    "cloud_forcing_net_solar_flux_surface",
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",
     "echo_top",
@@ -353,8 +352,8 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "frozen_precipitation_surface",
     "layer_thickness_261k_256k",
     "lightning_atmosphere",
-    "lightning_standard_deviation_1m",
-    "lightning_standard_deviation_2m",
+    "lightning_threat_1m",
+    "lightning_threat_2m",
     "mass_density_8m",
     "maximum_downward_vertical_velocity_100_1000mb",
     "maximum_hail_diameter_0p1sigma",
@@ -387,8 +386,8 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "number_concentration_cloud_ice",
     "number_concentration_cloud_droplets",
     "number_concentration_rain",
-    "particulate_matter_fine",
-    "particulate_matter_coarse",
+    "number_concentration_water_friendly_aerosol",
+    "number_concentration_ice_friendly_aerosol",
     "rain_mixing_ratio",
     "snow_mixing_ratio",
     "graupel",
@@ -560,7 +559,9 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "vegmin",
     # HRRR model_level (wrfnat) microphysics short names with no ECMWF entry.
     "nccice",
+    "ncifa",
     "nconcd",
+    "ncwfa",
     "spncr",
 }
 
@@ -584,7 +585,8 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Enhanced stretching potential",
     "Frozen precipitation",
     "Hourly maximum of simulated reflectivity",
-    "Lightning standard deviation",
+    "Maximum lightning threat 1 (graupel flux)",
+    "Maximum lightning threat 2 (vertically integrated ice)",
     "Maximum 10 metre wind speed u component",
     "Maximum 10 metre wind speed v component",
     "Maximum downward vertical velocity",
@@ -602,6 +604,8 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Vertical velocity (geometric)",
     # HRRR model_level (wrfnat) microphysics long names with no ECMWF entry.
     "Number concentration of cloud ice",
+    "Number concentration of water-friendly aerosols",
+    "Number concentration of ice-friendly aerosols",
     "Number concentration of cloud droplets",
     "Number concentration of rain",
 }
