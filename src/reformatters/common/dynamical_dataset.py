@@ -207,15 +207,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         overwrite_existing: bool = False,
         metadata_only: bool = False,
     ) -> None:
-        """Run dataset reformatting using Kubernetes index jobs.
-
-        With metadata_only (icechunk stores only), rewrite the existing store's
-        coordinates and encoding from the current template without emitting any chunks -
-        use it to propagate a template change (e.g. new codec options, reordered
-        coordinates) to an already-published store. append_dim_end is exclusive and must
-        reproduce the store's current extent exactly, so pass the next append-dim step
-        after the last published position (last_position + append_dim_frequency).
-        """
+        """Run dataset reformatting using Kubernetes index jobs."""
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
         )
@@ -248,7 +240,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             assert self.store_factory.all_stores_exist(), (
                 f"Not all stores exist, cannot run with {flag}=True"
             )
-            log.info("Writing to existing stores, skipping metadata write.")
+            self._assert_append_extent_not_truncated(
+                template_ds, require_exact_match=metadata_only
+            )
+            if metadata_only:
+                log.info(
+                    "Rewriting metadata on the existing stores; no chunks emitted."
+                )
+            else:
+                log.info("Writing to existing stores, skipping metadata write.")
         elif not self.store_factory.all_stores_icechunk():
             # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
@@ -375,12 +375,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
         metadata_only: bool = False,
     ) -> None:
-        """Orchestrate running RegionJob instances.
-
-        With metadata_only no jobs are generated: setup and finalize rewrite the existing
-        store's coordinates and encoding from the template while the icechunk temp branch
-        keeps the existing chunks untouched. See docs/virtual_datasets.md.
-        """
+        """Orchestrate running RegionJob instances."""
         if metadata_only:
             assert self.store_factory.all_stores_icechunk(), (
                 "metadata_only is only supported for icechunk stores"
@@ -388,9 +383,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
-        if worker_index == 0:
+        # metadata_only writes into an existing store; a fresh backfill has no store yet
+        # (worker 0 creates it in setup), so only the metadata_only case checks the extent.
+        if worker_index == 0 and metadata_only:
             self._assert_append_extent_not_truncated(
-                template_ds, require_exact_match=metadata_only
+                template_ds, require_exact_match=True
             )
 
         all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]

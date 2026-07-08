@@ -1024,20 +1024,19 @@ def test_metadata_only_backfill_rejects_extent_mismatch(
         )
 
 
-def test_backfill_rejects_append_extent_truncation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # A regular backfill into an existing store may grow it but must not shrink it.
+def test_backfill_rejects_append_extent_truncation(tmp_path: Path) -> None:
+    # Any backfill into an existing store (e.g. --overwrite-existing) may grow it but
+    # must not shrink it; backfill_kubernetes runs this guard once the store is known
+    # to exist.
     dataset = _make_dataset(tmp_path)
     template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
 
-    monkeypatch.setattr(dataset, "_get_template", lambda _end: _create_template_ds(2))
+    dataset._assert_append_extent_not_truncated(
+        _create_template_ds(4), require_exact_match=False
+    )  # equal extent is allowed
     with pytest.raises(AssertionError, match="would truncate"):
-        dataset.backfill(
-            APPEND_DIM_START + 2 * APPEND_DIM_FREQ,
-            "shrink-attempt",
-            worker_index=0,
-            workers_total=1,
+        dataset._assert_append_extent_not_truncated(
+            _create_template_ds(2), require_exact_match=False
         )
 
 
