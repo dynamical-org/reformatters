@@ -12,7 +12,7 @@ exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for 
 exclude-newer-span = "P5D"
 
 [options.exclude-newer-package]
-gribberish = "2026-06-27T00:00:00Z"
+gribberish = "2026-07-09T00:00:00Z"
 
 [[package]]
 name = "affine"
@@ -492,22 +492,22 @@ wheels = [
 
 [[package]]
 name = "gribberish"
-version = "1.3.0"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/d6/fea504698e30f1572e3193bd6afce1cdbbed68432e74df413fd269c35ace/gribberish-1.3.0.tar.gz", hash = "sha256:c6eb66b24bfcd2bf6a05358f08953978b9c59e2f9cbf60b0ed4204f6f8bfba4c", size = 3253464, upload-time = "2026-06-26T14:19:12.134Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/9b/070032bb286b3d4f65c87261fcb1325b55be4c3e4bf0fbbd4b1d9c379c07/gribberish-1.5.0.tar.gz", hash = "sha256:652bfcd5714e34d60b39eff16b8ade7c919ab37af503a72124d4ba2449907e7f", size = 3266820, upload-time = "2026-07-07T12:45:42.182Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/84/3ff2ebc984092766a5fcd0a3d0ccf826ac7db3b794769005f0dd90f1e8a2/gribberish-1.3.0-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:2061cfe5e3d5f9ee3710c1c45d139721b81128d23b9f2053a072b9f1ba1d75d7", size = 765897, upload-time = "2026-06-26T14:18:51.117Z" },
-    { url = "https://files.pythonhosted.org/packages/dd/bc/8ea2f9f9d79a4a8f0bff3a31abd497c38e47590b7f842381cf9106b933c9/gribberish-1.3.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:851d9f9861f76f5b1781c88afffb10a2eacad8b604ecc909c805fc86e5a78779", size = 710781, upload-time = "2026-06-26T14:18:45.545Z" },
-    { url = "https://files.pythonhosted.org/packages/ca/cf/cd8d1bfcd58ae3c3afc4271f9227654ebde9c4f9609e9f12e4174a03baf6/gribberish-1.3.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:81c3f5d36f8f32f6a638a1d54224f660119ed24d842b49e1a13458bd21f589a9", size = 744634, upload-time = "2026-06-26T14:18:28.142Z" },
-    { url = "https://files.pythonhosted.org/packages/fd/7c/093b6bd759dd32942556f161a49619577a28fc1d14c0d394aba958c86242/gribberish-1.3.0-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:a89bcd00f0ebb0932543436741dc1414ac24c2561daf35642ab891c859e70735", size = 768716, upload-time = "2026-06-26T14:18:33.483Z" },
-    { url = "https://files.pythonhosted.org/packages/96/07/819d0b165fe27b5e3677148bb21f24cc15ff31e7ca4c01bb371c8106006e/gribberish-1.3.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e145f4c3e1e87d9c336abb1ec2a4cb92f8183c3f08c6901bba595a6b2341913b", size = 795544, upload-time = "2026-06-26T14:18:39.416Z" },
-    { url = "https://files.pythonhosted.org/packages/68/ab/5a7fee3ca274dfbb0e6fa516e8b0af478b6f1151af30d9f1273e4ee93af6/gribberish-1.3.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:05e611e7da500c4ebdc0a333aa141022380e777b8744dfe0b1ad7598f12256c5", size = 927499, upload-time = "2026-06-26T14:18:57.2Z" },
-    { url = "https://files.pythonhosted.org/packages/af/13/403b4fe619312bc512c83fde72b8247cb2d4f872150b25a7232937ab3190/gribberish-1.3.0-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:7ee14fd0d06cf9ac98878009524dd2917f2648d767adaa7e0401fbbecc0b5c50", size = 1048169, upload-time = "2026-06-26T14:19:03.775Z" },
-    { url = "https://files.pythonhosted.org/packages/fb/06/f95aa1d48666ff7a3feb51eaaf4966bc5f105ddb4c2d525526eb9be4693c/gribberish-1.3.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:2b9b903d495a1512e983d6e699058ea8df490aac41c365f3db5e23ce03c448dc", size = 1010468, upload-time = "2026-06-26T14:19:09.798Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/1d/f95a2902a19365e4ce4ab94007054655b9ce80fb01091cbe3d2864ae0732/gribberish-1.3.0-cp314-cp314-win_amd64.whl", hash = "sha256:38d760966fea13f40e1ad19696f4ae38b3a14119b9125e764ee934ec89b8c3ee", size = 691750, upload-time = "2026-06-26T14:19:16.667Z" },
+    { url = "https://files.pythonhosted.org/packages/51/60/ee7b17e9f5b10fcb5697be4ffb8ac4fba1fd87e231fdcdfab2baed16deb8/gribberish-1.5.0-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:5dcda352fb0f0589262a46a68e384f3002a81de5c430d7c8c0d3da040a7a7294", size = 774373, upload-time = "2026-07-07T12:45:19.769Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/aa/469727408d1eb8ca3ee5058c75eee9f6ef66873bd5103ee929933f9b30f2/gribberish-1.5.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:11375e0ee228a2e74dcc26efd473e16a4f6aa85b7e450ea169735c3e5bc64889", size = 714917, upload-time = "2026-07-07T12:45:13.7Z" },
+    { url = "https://files.pythonhosted.org/packages/42/4d/50482adeb3770ce095028ad5cf2d4f057aded1b79ac3cd3cb22cf767f8ae/gribberish-1.5.0-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d86d0bc1c123254ceacca74d8da8ff5bb2e1a82b6ea3c4728505ace66c53f83a", size = 750490, upload-time = "2026-07-07T12:44:55.849Z" },
+    { url = "https://files.pythonhosted.org/packages/22/c5/2a0042792c8c74469e31164d370f948189eb76b75b5013f3e8e41d33e9e0/gribberish-1.5.0-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:01831e26f7c63370e6080749477eb838ce23e93cc5f1f2571ca2bbab27970002", size = 776561, upload-time = "2026-07-07T12:45:01.872Z" },
+    { url = "https://files.pythonhosted.org/packages/60/d1/b43793ae6e00967b6328ff3976e74fe5671c7176b621434760216aa0af5e/gribberish-1.5.0-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5ea5d8dfb18ccf0a0438584fe8b2b9945517670757b0abf5a716dd88f0c844de", size = 803394, upload-time = "2026-07-07T12:45:07.773Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/34/c82544e1d09438958eff34e363582968b52383179c05bcd563c17288e5d9/gribberish-1.5.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:08af39eb2f72d850bfd653bcd74a99a02f745b13e8fdaf1b8a84464fa6006cd8", size = 934829, upload-time = "2026-07-07T12:45:26.378Z" },
+    { url = "https://files.pythonhosted.org/packages/66/a0/449614fcc3048ebc7dba77e8f6c7588ec1b673a7da08ff984b02cfc0443d/gribberish-1.5.0-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:888028a4850b49eda6d8a1f5ee199e802da768b22db745f3b1587389ce4df8a7", size = 1054828, upload-time = "2026-07-07T12:45:33.114Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/ab/88d7e469dff79b0f730a04e5f0577a59d4a962a8667e8dd53d00cda4cdb9/gribberish-1.5.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:5ad2bfc0d366f318eaa07d0c454f53463207ed672d8008db497c1028ac9bf96c", size = 1017295, upload-time = "2026-07-07T12:45:39.621Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/99/497540aedf1125c8520947770ed0de79f0df0f9901885b18a9e7ebefb25c/gribberish-1.5.0-cp314-cp314-win_amd64.whl", hash = "sha256:db6e478d8dfb9fbf2c07bb55e5ab5a6a3aee648cfe32ee969fab982508c7f36b", size = 699699, upload-time = "2026-07-07T12:45:47.106Z" },
 ]
 
 [[package]]
@@ -1363,7 +1363,7 @@ dev = [
 requires-dist = [
     { name = "dask", specifier = "~=2026.0" },
     { name = "google-crc32c", specifier = ">=1.8.0" },
-    { name = "gribberish", specifier = "==1.3.0" },
+    { name = "gribberish", specifier = "==1.5.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "icechunk", specifier = "~=2.0" },
     { name = "kubernetes", specifier = ">=36.0.1,<37" },
