@@ -28,8 +28,45 @@ When the run completes, stdout prints the path of `validation_summary.md` (relat
 - `--start-date <YYYY-MM-DD>` / `--end-date <YYYY-MM-DD>` Restrict the append dimension. Useful for reproducing an issue in a specific window.
 - `--init-time` / `--lead-time` (forecast) or `--time` (analysis) Pick the exact spatial snapshot instead of a random one. Use this to reproduce a spatial anomaly deterministically.
 - `--output-dir <path>` Write into an existing directory instead of a new one (useful if rerunning a single plot type into an existing run dir).
+- `--level <value>` For datasets with vertical-level groups, the level value to sample (e.g. `500` for 500 mb). Selects the nearest level on each variable's own vertical dim; the default is the middle level. Single-level variables ignore it.
 
-You can also run a single plot type with `compare-spatial`, `compare-timeseries`, `report-nulls`, or `value-timeseries`. The primary entry point `run-all` runs all of those steps and is the only command that produces the `validation_summary.md` index.
+You can also run a single plot type with `compare-spatial`, `compare-timeseries`, `availability`, or `value-timeseries`. The primary entry point `run-all` runs all of those steps and is the only command that produces the `validation_summary.md` index.
+
+## Virtual and multi-level datasets
+
+Two structural differences change how these tools behave; both are detected automatically from the store URL, but it helps to know what's happening.
+
+### Virtual stores invert the read-cost model
+
+A [virtual dataset](virtual_datasets.md) stores chunks as references into source GRIB files, decoding on read. One chunk is one GRIB message — a whole spatial field at a single (init, lead, member, level). So the cost model is the **opposite** of a materialized store: a spatial snapshot is cheap (one decode), while a point time series across the append dimension is catastrophic (one decode per position — millions for a full archive). `run-all` adapts:
+
+- **Availability is manifest-probed, not value-scanned.** On a materialized store `availability` reads `.isnull()` at two points across all time. On a virtual store that would decode every chunk it touches, and presence is anyway a *manifest* question (does the reference exist?), not a value question. So `run-all` (and the standalone `availability` command) runs the manifest scan instead — exhaustive per source file and per variable across the whole archive (see `manifest_scan` below) — and renders the same availability artifacts either way.
+- **`value-timeseries` is sampled.** Instead of reducing mean ± std over lead × member at every position (which decodes the whole column), it strides the append dimension and decodes **one message per sampled position**, pinning a representative (lead, member, level) slice so the whole-period series is a single, comparable slice. A chunk is a full spatial field, so both run points are read from the same decode. This still surfaces drift and unit step-changes; per-variable loads run a few ahead of the plotting loop. The summary marks the series "sampled" and records the pinned lead/member/level.
+- **Spatial and time series comparisons are unchanged** — both already scope to a single snapshot / single init, the cheap access pattern.
+
+Note that spatial downsampling (`_downsample_for_plot`) only shrinks the plot, not the read: gribberish decodes the full message regardless.
+
+Virtual runs decode many full-field messages, so scope a run with `--variable`/`-v` or `--start-date`/`--end-date` when you don't need the whole archive. Each variable's decode count is logged before its read starts.
+
+### Whole-archive scans (manifest completeness, decode health)
+
+These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the cheap operational `-validate` checks. Both reach the dataset's own region job (for expected source files and manifest chunk-key logic) by resolving the registered dataset from the store's `dataset_id` attribute, so both take a store URL like every other command. `run-all` runs both automatically for a virtual store, so one command produces the complete report — the manifest scan runs alongside the decode + plot phases in the same process, but they contend for I/O, so its cost is not fully hidden; the standalone commands are the strict post-backfill gates (exit code).
+
+```bash
+uv run src/scripts/validation/plots.py availability <DATASET_URL> [--start-date <date>] [--end-date <date>] [--min-fraction 1.0]
+uv run src/scripts/validation/plots.py decode-scan <DATASET_URL> [--start-date <date>] [--end-date <date>] [--max-samples 20]
+```
+
+- **manifest scan** (`availability` on a virtual store) — the strict completeness gate, probing ref existence (no decode) job by job with two measures — the scan streams, folding each region job's probes as they complete, so peak memory stays flat regardless of window length and a whole multi-year archive can be scanned on a modest host. **Per source file**: every expected file's representative ref; the one-file-one-commit invariant ([virtual_datasets.md](virtual_datasets.md)) extends that probe to every ref the file contributed, so a file that never ingested (any lead / member / level-group file) is exactly the gap this catches. Any incomplete position is listed in `unavailable_timestamps.txt` to target a backfill. **Per variable**: each variable's ref at one present source file per position (smallest nonzero lead; middle level for group vars), which catches a variable missing from otherwise-ingested files — e.g. a variable the model only started producing partway through the archive shows as a 0→1 availability step. What neither measure catches is a level missing **within** an ingested file at an unprobed level; only the decode scan's level sampling / NaN checks can surface that. Expected files respect the store's committed `expected_forecast_length` coordinate when the dataset has one, so leads that never existed upstream (e.g. a 36-hour-era init in a 48-hour archive) are not flagged. Exits non-zero if any position is below `--min-fraction` of expected source files. The scan window ends at the store's committed extent, so not-yet-published positions are never flagged; narrow further with `--start-date`/`--end-date`.
+- **decode scan** (`decode-scan`) — sampled decode health. Samples evenly spaced append-dim regions (every variable group at each sampled region), decodes a bounded sample of present references — across lead times, members, and levels — and fails if any sampled chunk errors or decodes entirely NaN. Results render as the "Decode health (sampled)" section of `validation_summary.md` (the standalone command also writes `decode_scan_summary.md`). **This is a sample, not an exhaustive sweep**: a reference that decodes to garbage outside the sample is not caught (a literal every-chunk decode across all leads × members × levels is hours).
+
+The guarantee split is the thing to keep straight: **completeness is exhaustive at file granularity and at (variable, position) granularity**, **decode health is sampled**. "Validated" therefore means every expected source file was ingested, every variable has a ref at every probed position, and a representative sample decodes cleanly — not that every value in the archive was decoded and checked. State this in the published summary so users read it correctly.
+
+### Vertical-level groups
+
+A dataset with vertical groups (e.g. `pressure_level`, `model_level`) exposes group variables by store path, like `pressure_level/temperature`, each carrying its level dimension. The plots **sample one representative level per variable** (the middle level by default), recorded in the summary and the plot title — the same philosophy as sampling one ensemble member and one spatial snapshot. Use `--level <value>` to inspect a specific level deterministically. Different groups have different level dims and lengths; each variable is sampled on its own dim. The manifest scan's file pass is the exception — it covers every source file (and, through the per-file atomic commit, every level those files contributed); its per-variable pass probes the middle level, matching the plots' sampling.
+
+Group variables are addressed by their store path: `-v pressure_level/temperature`, not `-v temperature`.
 
 ## 2. Output layout
 
@@ -38,41 +75,38 @@ Each run writes to a fresh directory under `data/output/`:
 ```
 data/output/<dataset-id>/<version>_<YYYY-MM-DDTHH-MM>/
 ├── validation_summary.md           # start here
-├── combined_nulls.png              # all variables, one image
-├── combined_value_timeseries.png   # all variables, one image
-├── combined_spatial.png            # all variables, one image
-├── combined_temporal.png           # all variables, one image
-├── nulls_<var>.png                 # one per variable
+├── availability_heatmap.png        # all variables × append dim, one image
+├── availability_<var>.png          # one per variable
 ├── value_timeseries_<var>.png      # one per variable
 ├── spatial_<var>.png               # one per variable
 ├── temporal_<var>.png              # one per variable
-└── unavailable_timestamps.txt      # only if any nulls were detected
+└── unavailable_timestamps.txt      # only if any data is missing
 ```
 
 The directory path itself is dense enough to identify the run: dataset id + version + minute-precision timestamp. Multiple runs of the same dataset group under a shared `<dataset-id>/` parent.
 
 ### What each plot type shows
 
-- **`nulls_<var>.png`** — null fraction over time at two spatial points. A flat line at 0 on both panels is the healthy outcome. Catches missing source files, partial writes, or a variable that's silently all-NaN at a subset of timestamps. Unavailable data is expected for some variables; note the pattern.
-- **`value_timeseries_<var>.png`** — the variable's value over the **entire** dataset time range at two spatial points: the per-timestep mean (line, left y-axis). For forecast / ensemble datasets the per-timestep standard deviation across the non-time dims (lead time, ensemble member) is drawn as a second, lighter line on a secondary right y-axis, with a `mean` / `std dev` legend. For analysis datasets (a single value per timestep) std isn't meaningful, so only the mean line is shown — no second axis or legend. Reads the same point data as the nulls check (no extra read). Unlike `temporal_<var>.png` (a short window vs the reference), this spans all time and is meant to surface slow drifts and sudden discontinuities — e.g. a source that begins emitting a variable in different units shows up as a sharp step change in the mean line; a distribution change shows up as a step change in the std line.
+- **`availability_heatmap.png`** — every variable × the full append dim, colored by fraction of data available (green = available, red = missing, grey = not probed because no source file is present at that position). This is the availability overview: era boundaries (a variable that starts partway through the archive), whole-position gaps shared across variables, and per-variable holes are all visible in one image. Availability is manifest-probed on a virtual store (exhaustive) and value-scanned at the two run points on a materialized store.
+- **`availability_<var>.png`** — the same series as one trace, one per variable. Reviewers may skip it for a variable whose summary line reads complete; it is always written so every variable's section renders consistently.
+- **`value_timeseries_<var>.png`** — the variable's value over the **entire** dataset time range at two spatial points: the per-timestep mean (line, left y-axis). On a materialized forecast / ensemble dataset the per-timestep standard deviation across the non-time dims (lead time, ensemble member) is drawn as a second, lighter line on a secondary right y-axis, with a `mean` / `std dev` legend. It is omitted (mean line only, no second axis or legend) when there is nothing to spread over: analysis datasets (a single value per timestep) and virtual stores (the series is a single pinned lead/member/level slice, so each timestep is one value). On a materialized store this reuses the point data already loaded for the availability scan; a virtual store does its own sampled read. Unlike `temporal_<var>.png` (a short window vs the reference), this spans all time and is meant to surface slow drifts and sudden discontinuities — e.g. a source that begins emitting a variable in different units shows up as a sharp step change in the mean line; where a std line is present, a distribution change shows up as a step change in it.
 - **`spatial_<var>.png`** — 3 panels at one time step: reference map (left), validation map (middle), value distribution histogram (right). If the variable isn't in the reference dataset, the left panel reads "Variable not available" and the histogram plots only the validation distribution. Catches flipped / rotated / mis-projected maps, wrong coordinate extents, unit-scale mismatches (different histograms), and over-quantization (visible as banding).
 - **`temporal_<var>.png`** — time series at two spatial points, validation (red) vs reference (blue). If the variable isn't in the reference, only the validation series is plotted. Catches time misalignment, diurnal-cycle phase errors, unit mismatches, trend-level biases, missing/incorrect deaccumulation, and projection errors (uncorrelated / offset timeseries).
-- **`combined_*.png`** — every variable stacked into one tall image per plot type (nulls, value time series, spatial, temporal). Use these for a first scroll through the run (seeing multiple variables together helps spot cross-variable inconsistencies — e.g. radiation peaking while cloud cover is also high — and is fast to open in a single viewer). The per-variable PNGs are higher-resolution for detailed inspection.
+
+Plots are per-variable; `availability_heatmap.png` is the only all-variable image. Compare variables against each other by opening several `*_<var>.png` of the same type together.
 
 ### `validation_summary.md`
 
 The entry point for every run. It contains, in order:
 
 - Validation and reference dataset identity (name, id, version, URL), time ranges, and scope.
-- Run parameters: spatial points used by the null analysis (all ensemble members), and for each of the spatial and time series sections the picked ensemble member plus the chosen init/lead/time (spatial) or timeseries period.
-- Links to the `combined_*.png` images.
-- Unavailable-timestamp summary (count, earliest/latest unavailable per (variable, point), pointer to `unavailable_timestamps.txt` if any were detected).
-- A variables table with nulls at the two points and links to the per-variable images.
-- Per-variable details: metadata (units, long/short/standard name, step type), full-period value min/mean/std/max at each point, spatial + temporal min/max/mean for both validation and reference, and nulls.
+- Run parameters: spatial points used by the value scans (all ensemble members), and for each of the spatial and time series sections the picked ensemble member plus the chosen init/lead/time (spatial) or timeseries period.
+- Availability section: how availability was measured, the heatmap, a table of incomplete variables (complete/total positions, first/last incomplete), and a link to the unavailable-timestamps file (`unavailable_timestamps.txt`).
+- Per-variable details: metadata (units, long/short/standard name, step type), full-period value min/mean/std/max at each point, spatial + temporal min/max/mean for both validation and reference, and an availability line (positions complete, plus null counts at the two points on materialized stores).
 
 ## 3. Step-by-step inspection
 
-Work in this order.
+Work in this order. AI assistants reviewing a dataset with more than ~25 variables must use the batched process in [3f](#3f-batched-review-for-many-variable-datasets-ai-assistants) — a complete-variables dataset's plots do not fit in one agent context — with 3a-3e as the per-batch and aggregation steps.
 
 ### 3a. Read `validation_summary.md` entirely
 
@@ -80,20 +114,19 @@ Open `validation_summary.md` first. It provides text-based information which can
 
 - [ ] **Datasets block**: confirm the validation dataset id + version match what you intend to review. Note the reference dataset and its time range — if the reference doesn't cover your validation window, temporal + spatial comparisons will be empty (expected, not a bug).
 - [ ] **Run parameters**: confirm the ensemble member recorded under each of the spatial and time series subsections (if the dataset has ensembles — the same member is used for both, and the null analysis intentionally runs over all members), the chosen spatial time (init/lead for forecasts), and the timeseries period. The spatial plot is a single snapshot — if you see something weird, you can pass `--init-time`/`--lead-time`/`--time` to reproduce deterministically.
-- [ ] **Unavailable timestamps**: if any, open `unavailable_timestamps.txt`. The file lists exact timestamps by (variable, point) and provides a ready-to-paste `--filter-contains` argument string for a targeted backfill retry. The summary table in `validation_summary.md` also shows the earliest and latest unavailable timestamp per (variable, point), making it easy to spot common patterns across variables about when data is (un)available.
-- [ ] **Variables overview table**: scan the null counts. Unexpected non-zero values are your first lead.
+- [ ] **Availability**: read the method line, the heatmap, and the incomplete-variables table. Any incomplete variable is your first lead. Open `unavailable_timestamps.txt` — it lists the positions missing source files, to target a backfill. Use the first/last incomplete columns to spot patterns shared across variables (e.g. a shared first-incomplete date points to source coverage starting later).
 - [ ] **Per-variable details**: for each variable, compare validation stats to reference stats. Validation min/max that is orders of magnitude off from the reference is a near-certain unit mismatch.
 
 ### 3b. Read every PNG — do not skip this
 
 Statistics miss the visual failure modes. Open the images and walk through the checklist in section 4.
 
-Every per-variable PNG must be reviewed: for each variable, open all four of `nulls_<var>.png`, `value_timeseries_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`. Do not stop after a representative sample — issues can be variable-specific (a unit bug at one level, a flipped map for one field) and only surface when every plot is checked. The only plots you may skip are the `combined_*.png` files, and only as noted below.
+Every per-variable PNG must be reviewed: for each variable, open `value_timeseries_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png`; open `availability_<var>.png` too unless the variable's summary line reads complete. Do not stop after a representative sample — issues can be variable-specific (a unit bug at one level, a flipped map for one field) and only surface when every plot is checked.
 
 A good working rhythm:
 
-1. If you are a human, open the three `combined_*.png` files first. Scroll through each to get an overview of all variables together — this quickly surfaces patterns across variables (e.g. radiation peaks coinciding with cloud cover minima) and spots any variable that looks dramatically off relative to its neighbors. Skip this step if you are an AI assistant, the `combined_*.png` image pixel dimensions exceeds standard limits and attempting to read them can blow up your context or stall the session.
-2. Open `nulls_<var>.png`, `value_timeseries_<var>.png`, `spatial_<var>.png`, and `temporal_<var>.png` for **every** variable in the dataset — not a sample. The per-variable PNGs are higher-resolution. Filenames are consistent, so a pattern like `*_<var>.png` opens all of them at once in most viewers.
+1. Open `availability_heatmap.png` first for the all-variable availability overview (era boundaries, shared gaps) — the only all-variable image. Per-variable comparison happens in step 2.
+2. Open `value_timeseries_<var>.png`, `spatial_<var>.png`, `temporal_<var>.png` (plus `availability_<var>.png` for any incomplete variable) for **every** variable in the dataset — not a sample. Filenames are consistent, so a pattern like `*_<var>.png` opens all of them at once in most viewers; opening a family together surfaces cross-variable patterns (e.g. radiation peaks coinciding with cloud cover minima).
 3. Cross-check against the variable's row in `validation_summary.md` (units, long_name, stats).
 4. Apply the checklist below. Note anomalies as `<variable> + <file> + what's wrong` so they can be acted on.
 
@@ -104,17 +137,17 @@ For any anomaly, reproduce it deterministically so a fix can be verified:
 - If spatial: rerun `run-all` with `--variable <name> --init-time <t> --lead-time <h>` (forecast) or `--time <t>` (analysis).
 - If temporal: the timeseries period is randomized — it's in `validation_summary.md`. Narrow with `--start-date` / `--end-date`.
 - If a discontinuity in `value_timeseries_<var>.png`: narrow the full-period plot to the transition with `value-timeseries <DATASET_URL> --variable <name> --start-date / --end-date`, then fetch the source files on either side of the step to confirm a unit/scale change at the source.
-- If nulls: use the `retry-filter:` line in `unavailable_timestamps.txt` to backfill just those timestamps.
+- If availability gaps: use the positions listed in `unavailable_timestamps.txt` to backfill just those timestamps.
 
 ### 3d. Dig into each follow-up item
 
-Before writing the summary, work through every item you flagged during the review and gather enough evidence to either confirm it as an issue, downgrade it to a documented quirk, or resolve it. The goal is that nothing reaches `### For further review` without you having looked at it twice. Use the single-step entry points (`compare-spatial`, `compare-timeseries`, `report-nulls`) rather than re-running the full `run-all` — they're faster and let you target the exact slice that's in question. Each follow-up category below has a required verification step — completing it is what lets you resolve the item or move it from `### For further review` to `### Review notes`.
+Before writing the summary, work through every item you flagged during the review and gather enough evidence to either confirm it as an issue, downgrade it to a documented quirk, or resolve it. The goal is that nothing reaches `### For further review` without you having looked at it twice. Use the single-step entry points (`compare-spatial`, `compare-timeseries`, `availability`) rather than re-running the full `run-all` — they're faster and let you target the exact slice that's in question. Each follow-up category below has a required verification step — completing it is what lets you resolve the item or move it from `### For further review` to `### Review notes`.
 
 **If you can name a verification, you must run it.** Any time you can write down a specific command, time range, lat/lon, or alternate snapshot that would confirm or rule out an item, run it yourself before stopping. The single-step tools are cheap (under a minute per re-render) and exist for this. Conclusions like "worth re-running on another snapshot", "should re-confirm against the raw GRIB", or "warrants checking at a 3-hourly slot" are unfinished verifications — they must be executed and the bullet updated with what the verification revealed, not left as a to-do for the next reader.
 
 - **Rerun a single plot type targeted at the variable, time, and location in question** to confirm an anomaly is real and not an artifact of the randomly chosen snapshot or timeseries window. For example, `uv run src/scripts/validation/plots.py compare-spatial <DATASET_URL> --variable <name> --time <t> --output-dir <run-dir>` to re-render one spatial plot at a chosen time, or `compare-timeseries` with `--start-date` / `--end-date` and the same lat/lon as the original run to zoom in on a temporal anomaly. Re-rendering into the existing `--output-dir` overwrites the original PNG so the summary's links stay valid.
-  - **Gotcha — a `-v`-filtered re-render shrinks `combined_<type>.png` and desyncs the summary stats.** Each single-step command rebuilds its `combined_spatial.png` / `combined_temporal.png` / `combined_nulls.png` from scratch using **only** the variables passed in that invocation — it does not merge with the previously rendered full set. So `compare-spatial <url> -v one_var --output-dir <run-dir>` leaves you with a combined image containing a single row. Likewise, only `run-all` writes `validation_summary.md`, so a subset re-render updates the PNGs but **not** the per-variable stats tables or the `Spatial comparison time` line in the markdown, leaving them stale. When the random snapshot missed variables that only exist for part of the archive (e.g. a field whose `date_available` is after the chosen `init_time`), don't patch it with a per-variable re-render — instead re-run the **full** `run-all` with the snapshot pinned (`--init-time` / `--lead-time` for forecasts, `--time` for analyses, or `--start-date` / `--end-date`) to a date where every variable is present, so the combined images and the summary stay coherent. Reserve `-v`-filtered single-step runs for throwaway investigation in a scratch `--output-dir`, not for updating the report you intend to publish.
-- **For unexpected unavailable timesteps, you must fetch a representative sample of the unavailable timestamps from the upstream archive before attributing the gap to an upstream cause** — outages happen, but so do ingestion errors, and an LLM or a hurried reviewer will tend to default to "outage" without checking. A single spot-check is not enough: sample across the affected init cycles and lead times so a per-file bug (like a stale sidecar on individual leads) doesn't get mistaken for a clean outage. Verify both the source data file (e.g. the GRIB) **and** any sidecar the reformatter depends on (e.g. the `.idx` byte index for GRIB-based datasets). Compare what you find against what the reformatted archive has at the same timestamp to determine whether to retry the backfill (`retry-filter:` line in `unavailable_timestamps.txt`) or document the gap as a confirmed source outage with the URL(s) you checked.
+  - **Gotcha — a `-v`-filtered re-render shrinks `availability_heatmap.png` and desyncs the summary stats.** A single-step command rebuilds `availability_heatmap.png` from scratch using **only** the variables passed in that invocation — it does not merge with the previously rendered full set, so `availability <url> -v one_var --output-dir <run-dir>` leaves a heatmap with a single row. Likewise, only `run-all` writes `validation_summary.md`, so a subset re-render updates the PNGs but **not** the per-variable stats tables or the `Spatial comparison time` line in the markdown, leaving them stale. When the random snapshot missed variables that only exist for part of the archive (e.g. a field whose `date_available` is after the chosen `init_time`), don't patch it with a per-variable re-render — instead re-run the **full** `run-all` with the snapshot pinned (`--init-time` / `--lead-time` for forecasts, `--time` for analyses, or `--start-date` / `--end-date`) to a date where every variable is present, so the heatmap and the summary stay coherent. Reserve `-v`-filtered single-step runs for throwaway investigation in a scratch `--output-dir`, not for updating the report you intend to publish.
+- **For unexpected unavailable timesteps, you must fetch a representative sample of the unavailable timestamps from the upstream archive before attributing the gap to an upstream cause** — outages happen, but so do ingestion errors, and an LLM or a hurried reviewer will tend to default to "outage" without checking. A single spot-check is not enough: sample across the affected init cycles and lead times so a per-file bug (like a stale sidecar on individual leads) doesn't get mistaken for a clean outage. Verify both the source data file (e.g. the GRIB) **and** any sidecar the reformatter depends on (e.g. the `.idx` byte index for GRIB-based datasets). Compare what you find against what the reformatted archive has at the same timestamp to determine whether to retry the backfill (the positions listed in `unavailable_timestamps.txt`) or document the gap as a confirmed source outage with the URL(s) you checked.
 - **For suspected unit, scale, or coordinate bugs**, cross-check against a third independent source (the raw GRIB/NetCDF file, a public viewer such as NOAA's nowCOAST or ECMWF's open charts, or another reformatted archive) — the GEFS reference is convenient but it's only one comparison and shares some biases with GFS-derived datasets.
 - **For ensemble datasets**, rerun once more without `--variable` filters so a different ensemble member is selected; an anomaly that only appears for one member is structurally different from one that appears across members.
 
@@ -135,6 +168,37 @@ When your review is complete, insert a `## Summary` section into `validation_sum
 **Verification gate on `### Review notes`.** Any entry that attributes a gap, sentinel, or anomaly to an **upstream cause** (source outage, upstream archive gap, model physics, source-GRIB precision) must be backed by direct evidence: a fetched source file (per the unavailable-timestamp tactic in [3d](#3d-dig-into-each-follow-up-item)) or an inspection of the reference dataset at the same timestamps. If you cannot produce that evidence, the item stays in `### For further review`, not `### Review notes` — "looks like an outage" without verification is exactly the failure mode this gate prevents.
 
 **Phrasing gate on `### For further review`.** Bullets in this section must describe an **open question with the evidence already gathered**, not a proposed verification that has not been performed. If a bullet contains "worth re-running", "should re-confirm", "warrants checking", "would be nice to verify", or any other phrasing that names a verification you could run, you have not finished §3d — go run it, then either resolve the item or rewrite the bullet around what the verification revealed.
+
+### 3f. Batched review for many-variable datasets (AI assistants)
+
+A complete-variables dataset (e.g. `noaa-hrrr-forecast-48-hour-spatial`: 177 variables, so ~700 per-variable PNGs) cannot be reviewed in a single agent context: at roughly 300-500 tokens per plot image plus each variable's stats block and reasoning, a full pass is on the order of a million tokens before any follow-up work. At ~25 variables a single context works; well above that, split the review across subagents. The lead (orchestrating) agent must not open plot images itself — every image read happens inside a batch or verification subagent whose context is discarded after it returns.
+
+**Lead agent process:**
+
+1. Produce or locate the run directory (`run-all` — for a virtual store it runs the manifest scan and the sampled decode scan itself, so availability and decode health are already in the report).
+2. From `validation_summary.md` read **only** the header: the Datasets block, Run parameters, and the Availability section (everything above `## Per-variable details`). Availability findings come from that section's table and files, not from plot review. Never read the per-variable details wholesale — at 177 variables that section alone is tens of thousands of tokens.
+3. List the variables (`ls <run-dir>/spatial_*.png` maps slugs back to names) and partition them into **theme-coherent batches of 10-20**: keep families together (all radiation, all reflectivity/precipitation, all cloud, each vertical group's variables together) so within-batch cross-variable checks — radiation peaking while cloud cover is high, temperature vs dew point consistency — remain possible. Note which batch got which family so cross-batch questions have an owner.
+4. Spawn one subagent per batch, in parallel, with the prompt contract below.
+5. Aggregate the structured verdicts. Look specifically for cross-batch patterns the subagents cannot see: the same timestamp flagged in several batches (run-level ingest issue), one member of a physically-linked pair flagged while the other batch reported its partner clean, level-adjacent anomalies in a vertical group split across batches.
+6. Dispatch each SUSPECT/FAIL finding to a **verification subagent** per [3d](#3d-dig-into-each-follow-up-item): give it the exact single-step re-render command (scratch `--output-dir`), or the upstream GRIB/idx URLs to fetch, and the specific question to answer. It returns confirmed/refuted plus evidence. The 3d rule is unchanged: if you can name a verification, run it — via a subagent.
+7. Write the `## Summary` per [3e](#3e-update-validation_summarymd) from the structured findings, citing the plot filenames and evidence the subagents returned.
+
+**Batch subagent prompt contract.** Each batch subagent gets: the run directory path; its explicit variable list; the reproduction parameters from the run header it needs (spatial snapshot time, timeseries period, sampled level); any dataset-specific expectations (e.g. hour-0-NaN accumulated variables, projected y/x grid, known source quirks); and instructions to, per variable, read its PNGs (`value_timeseries_`/`spatial_`/`temporal_<slug>.png`, plus `availability_<slug>.png` for variables whose availability line is not complete; slug = variable name with `/` → `__`), read that variable's heading section in `validation_summary.md`, and apply the full [section 4](#4-data-quality-checklist) checklist. It must return compactly (≤ ~40 lines), e.g.:
+
+```
+VERDICTS
+temperature_2m: OK
+composite_reflectivity: SUSPECT — histogram mass at -10 dBZ sentinel-like spike
+FINDINGS (SUSPECT/FAIL only)
+- var: composite_reflectivity; plot: spatial_composite_reflectivity.png; what: ...;
+  where: init=..., lead=...; suspected-cause: ...; next-verification: <exact command>
+BATCH OBSERVATIONS
+- radiation family diurnal phase consistent across all 4 vars in this batch
+```
+
+Verdicts + precise pointers, not narration: the lead acts on `next-verification` lines and never re-reads the images behind an OK.
+
+**Sizing (measured on noaa-hrrr-forecast-48-hour-spatial).** A batch reviewer spends ~6k tokens per variable all-in (plots + stats section + checklist + reasoning), ~2.5 minutes per 6-variable batch. So budget 10-15 variables per batch subagent (~60-90k tokens); 177 variables → 12-18 parallel batches, then a handful of verification subagents (a targeted source-parity check — idx fetch, byte-range GRIB download, gribberish decode — ran in under a minute and ~18k tokens). Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
 
 ## 4. Data quality checklist
 
@@ -167,19 +231,19 @@ Look for each of these in every image.
 ### Full-period value time series (from `value_timeseries_<var>.png`)
 
 - [ ] **No sharp discontinuities in the mean line.** A sudden step up or down in the value across the full time range — not explained by a real seasonal/physical transition — is the signature of a source data change such as a unit switch (e.g. a GRIB file that begins emitting Kelvin instead of Celsius, or kg m⁻² instead of mm). These step changes are invisible to the short-window `temporal_<var>.png` plot, which is the reason this plot exists.
-- [ ] **No step change in the std line (forecast / ensemble datasets).** The secondary-axis std line reflects the spread across lead time / ensemble members at each timestep. An abrupt rise or drop that persists indicates a distribution change in the source (e.g. a change in precision, smoothing, or member generation). Analysis datasets have no std line, so only the mean-line check applies.
+- [ ] **No step change in the std line (materialized forecast / ensemble datasets).** The secondary-axis std line reflects the spread across lead time / ensemble members at each timestep. An abrupt rise or drop that persists indicates a distribution change in the source (e.g. a change in precision, smoothing, or member generation). Analysis datasets and virtual stores (whose series is a single pinned slice) have no std line, so only the mean-line check applies there.
 - [ ] **Whole plot matches expectations across time.** Drifts, ramps, or level shifts that don't correspond to a known seasonal cycle or source transition warrant investigation — cross-check against the source archive at the timestamps where the change appears.
 
-### Unavailable data (from `nulls_<var>.png` and `unavailable_timestamps.txt`)
+### Availability (from `availability_heatmap.png`, `availability_<var>.png`, and `unavailable_timestamps.txt`)
 
-- [ ] **Null fraction is 0 or explained.** Any non-zero null fraction should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained nulls are the bug.
-- [ ] **Unavailable pattern is not structural.** Nulls concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the earliest/latest unavailable columns in the summary table to spot patterns shared across variables (e.g. a consistent earliest-unavailable date points to source coverage starting later).
-- [ ] **Any non-zero null fraction you intend to label as an upstream outage has been verified by fetching a representative sample of the unavailable timestamps from the upstream archive.** Sample across the affected init cycles and lead times — a single spot-check can miss per-file failure modes like stale sidecars on individual leads. If every sampled file (and its sidecar index, if applicable) is present and intact, the gap is an ingestion bug, not an outage — keep it in `### For further review` and use the `retry-filter:` line in `unavailable_timestamps.txt`.
+- [ ] **Every variable is fully available, or the gaps are explained.** Any incomplete variable should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained gaps are the bug.
+- [ ] **Unavailable pattern is not structural.** Gaps concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the heatmap and the first/last incomplete columns in the summary table to spot patterns shared across variables (e.g. a consistent first-incomplete date points to source coverage starting later; a variable available only after a date is typically a model-version addition — document it, don't retry it).
+- [ ] **Any availability gap you intend to label as an upstream outage has been verified by fetching a representative sample of the unavailable timestamps from the upstream archive.** Sample across the affected init cycles and lead times — a single spot-check can miss per-file failure modes like stale sidecars on individual leads. If every sampled file (and its sidecar index, if applicable) is present and intact, the gap is an ingestion bug, not an outage — keep it in `### For further review` and use the positions listed in `unavailable_timestamps.txt`.
 - [ ] **First step of an analysis dataset is NaN for accumulated variables.** For analysis datasets, `step_type` ≠ `instant` variables (accumulation / average / max / min) are structurally NaN at the very first timestamp — there is no prior window to accumulate / average / extremize over. This is expected and not a bug.
 
-Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). The tool excludes that slice from the null count and from `unavailable_timestamps.txt`, so a "0 / N nulls — none" line for an accumulated variable means *no unexpected* nulls — the structural analysis-step NaN is not counted.
+Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). Both availability paths exclude it — the value scan drops that slice from the null counts, and the manifest probe never probes an accumulated variable at lead 0 — so "complete" for an accumulated variable means *no unexpected* gaps.
 
-For a sampling of unexplained nulls, go manually fetch source data files and inspect them. Do they have the data we expect, or is the data really unavailable at the source?
+For a sampling of unexplained gaps, go manually fetch source data files and inspect them. Do they have the data we expect, or is the data really unavailable at the source?
 
 ### Cross-dataset checks
 
@@ -208,8 +272,6 @@ The HTML mirrors the markdown 1:1 with two viewing affordances:
 - **Left TOC** (slide-out hamburger on mobile) lists the top-level sections plus a Variables group with a checkbox per variable. "All / none" toggles let you compare a subset of variables side-by-side. Each variable section has `id="var-<name>"` so URLs can deep-link (e.g. `validation_report.html#var-temperature_2m`).
 - **Images** are full-width on mobile and wrapped in a link to the underlying file so tap/click opens the full-resolution image.
 
-`combined_*.png` images are linked from the "Combined plots" section (not inlined — they're large).
-
 `upload` re-renders before uploading, so this command is only needed for local-only previews.
 
 ### 5b. Upload drafts and publish the final
@@ -219,7 +281,7 @@ uv run src/scripts/validation/plots.py upload <run-dir>             # draft
 uv run src/scripts/validation/plots.py upload <run-dir> --publish   # publish to stable + archive
 ```
 
-`upload` re-renders the HTML, then uploads the entire run directory (`validation_summary.md`, all `*.png`, `unavailable_timestamps.txt`, `validation_report.html`) to R2.
+`upload` re-renders the HTML, then uploads the entire run directory (`validation_summary.md`, all `*.png`, `unavailable_timestamps.txt` if present, `validation_report.html`) to R2.
 
 Without `--publish`:
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import itertools
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import timedelta
@@ -14,6 +14,7 @@ from typing import (
     Literal,
     Protocol,
     assert_never,
+    cast,
     runtime_checkable,
 )
 
@@ -684,14 +685,26 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     selects which append-dim positions to check: "latest" (default) targets the newest
     position with data — so a broken newest reference is caught at the next validation, not
     a cycle later — while "all" covers the whole window. Within a position it samples
-    `sampled_leads` lead times (first + last + evenly spaced interior) across every member.
-    A variable fails if any sampled chunk errors or all of its sampled chunks decode
-    entirely NaN. Fails — never silently passes — when no references are present to decode.
+    `sampled_leads` lead times (first + last + evenly spaced interior) across every member,
+    and `sampled_levels` levels of any vertical dim (e.g. pressure_level) so a group var is
+    decode-checked at a bounded set of levels rather than every one. `max_positions`
+    optionally caps "all" to an evenly spaced subset of positions for a whole-archive
+    offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks
+    decode entirely NaN. Fails — never silently passes — when no references are present.
     """
 
     positions: Literal["latest", "all"] = "latest"
     sampled_leads: int = 5
+    sampled_levels: int = 3
+    max_positions: int | None = None
     max_workers: int = 32
+    # Offline opt-in. Given (var_path, out_loc), returns whether a chunk reference actually
+    # exists. When provided, a variable with no reference at a sampled position is skipped
+    # (not decoded, not a failure) -- reference existence is the availability check's
+    # concern. When None (operational default) every declared variable is decoded and a
+    # missing reference reads as fill NaN and fails, which is how the operational check
+    # catches removed/renamed/unpulled vars.
+    reference_exists: Callable[[str, Mapping[str, Any]], bool] | None = None
 
     def __call__(
         self,
@@ -715,41 +728,25 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
             )
 
         present_positions = sorted({c.out_loc()[append_dim] for c in present})
-        targets = (
-            {present_positions[-1]}
-            if self.positions == "latest"
-            else set(present_positions)
-        )
+        targets = self._select_targets(present_positions)
         to_decode = self._sample_leads(
             [c for c in present if c.out_loc()[append_dim] in targets]
         )
 
-        def decode(coord: SourceFileCoord) -> list[tuple[str, float, str | None]]:
-            loc = coord.out_loc()
-            # A coord's data_vars are exactly the variables its file carries (e.g. no
-            # accumulated vars at hour 0), so every one should decode to data.
-            file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
-            results = []
-            for var in file_vars:
-                da = ds[var.path]
-                selection = {dim: value for dim, value in loc.items() if dim in da.dims}
-                try:
-                    values = da.sel(selection).copy(deep=True).load().values
-                    results.append((var.path, float(np.isnan(values).mean()), None))
-                except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
-                    results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
-            return results
-
         min_nan_fraction: dict[str, float] = {}
         first_error: dict[str, str] = {}
+        no_reference_vars: set[str] = set()
+        decode = partial(self._decode_coord, region_job=region_job, ds=ds)
         with ThreadPoolExecutor(self.max_workers) as pool:
-            for results in pool.map(decode, to_decode):
+            for results, skipped in pool.map(decode, to_decode):
                 for var_path, nan_fraction, error in results:
                     min_nan_fraction[var_path] = min(
                         min_nan_fraction.get(var_path, float("inf")), nan_fraction
                     )
                     if error is not None and var_path not in first_error:
                         first_error[var_path] = error
+                if self.reference_exists is not None:
+                    no_reference_vars |= skipped
 
         problems = []
         for var_path in sorted(min_nan_fraction):
@@ -765,14 +762,65 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
                 message=f"Decode health failures at {append_dim}={target_label}:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
-        return ValidationResult(
-            passed=True,
-            message=(
-                f"Decoded {len(to_decode)} present source files across "
-                f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
-                "— all readable"
-            ),
+        message = (
+            f"Decoded {len(to_decode)} present source files across "
+            f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
+            "— all readable"
         )
+        if self.reference_exists is not None and no_reference_vars:
+            message += (
+                f" ({len(no_reference_vars)} variable(s) had no reference at sampled "
+                "positions — reference existence is reported by the "
+                "availability/manifest check)"
+            )
+        return ValidationResult(passed=True, message=message)
+
+    def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
+        if self.positions == "latest":
+            return {present_positions[-1]}
+        if self.max_positions and len(present_positions) > self.max_positions:
+            return {
+                present_positions[i]
+                for i in np.unique(
+                    np.linspace(0, len(present_positions) - 1, self.max_positions)
+                    .round()
+                    .astype(int)
+                )
+            }
+        return set(present_positions)
+
+    def _decode_coord(
+        self,
+        coord: SourceFileCoord,
+        region_job: VirtualRegionJob[Any, Any],
+        ds: xr.Dataset,
+    ) -> tuple[list[tuple[str, float, str | None]], set[str]]:
+        loc = coord.out_loc()
+        # A coord's data_vars are exactly the variables its file carries (e.g. no
+        # accumulated vars at hour 0), so every one should decode to data.
+        file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
+        results = []
+        skipped: set[str] = set()
+        for var in file_vars:
+            if self.reference_exists is not None and not self.reference_exists(
+                var.path, cast("Mapping[str, Any]", loc)
+            ):
+                skipped.add(var.path)
+                continue
+            da = ds[var.path]
+            selection = {dim: value for dim, value in loc.items() if dim in da.dims}
+            da = self._sample_levels(da.sel(selection))
+            try:
+                # Retried so a transient object store failure is not reported as
+                # a decode failure; a genuine decode error still fails fast.
+                values = retry(
+                    lambda da=da: da.copy(deep=True).load().values,
+                    max_attempts=3,
+                )
+                results.append((var.path, float(np.isnan(values).mean()), None))
+            except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
+                results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
+        return results, skipped
 
     def _sample_leads(
         self, coords: Sequence[SourceFileCoord]
@@ -792,3 +840,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
             .astype(int)
         }
         return [c for c in coords if c.out_loc().get("lead_time") in keep]
+
+    def _sample_levels(self, da: xr.DataArray) -> xr.DataArray:
+        """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
+        levels, so a group var is decode-checked at a bounded set of levels rather than
+        all of them. Single-level vars (only spatial dims left) are returned unchanged."""
+        spatial = ("y", "x", "latitude", "longitude")
+        isel: dict[Any, Any] = {}
+        for dim in da.dims:
+            if dim in spatial:
+                continue
+            size = da.sizes[dim]
+            if size > self.sampled_levels:
+                isel[dim] = np.unique(
+                    np.linspace(0, size - 1, self.sampled_levels).round().astype(int)
+                )
+        return da.isel(isel) if isel else da

@@ -11,7 +11,15 @@ import obstore
 import pandas as pd
 import typer
 import xarray as xr
+import zarr
 from zarr.storage import ObjectStore, StoreLike
+
+from reformatters.common.retry import retry
+from reformatters.common.validation import open_flattened_dataset
+
+# Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
+# concurrency once here; every validation entry point imports this module.
+zarr.config.set({"async.concurrency": 32})
 
 OUTPUT_DIR = "data/output"
 
@@ -75,6 +83,27 @@ output_dir_option = typer.Option(
     help="Write outputs into this directory instead of creating a new run directory.",
 )
 
+level_option = typer.Option(
+    None,
+    "--level",
+    help="Vertical level value to sample for variables on a level dim (e.g. 500 for "
+    "500 mb). Selects the nearest level on each variable's own vertical dim. "
+    "Default: the middle level. Single-level variables ignore this.",
+)
+
+
+@dataclass
+class AvailabilitySeries:
+    """Fraction of one variable's data available per append-dim position.
+
+    Built from manifest ref probes on a virtual store and from value (null) scans on a
+    materialized store — see scripts/validation/availability.py. NaN fraction means the
+    position was not probed (no present source file to probe against).
+    """
+
+    positions: np.ndarray  # datetime64[ns], sorted
+    fraction: np.ndarray  # float in [0, 1], NaN = not probed
+
 
 @dataclass
 class VariableStats:
@@ -87,8 +116,19 @@ class VariableStats:
     standard_name: str | None = None
     step_type: str | None = None
 
-    # Null analysis
-    null_plot: str | None = None
+    # Vertical level sampled for this variable (None for single-level variables)
+    level_dim: str | None = None
+    level_value: float | None = None
+
+    # Availability over the append dim (manifest-probed on virtual stores,
+    # value-scanned on materialized stores).
+    availability_plot: str | None = None
+    positions_total: int | None = None
+    positions_complete: int | None = None
+    first_incomplete: str | None = None
+    last_incomplete: str | None = None
+
+    # Null value counts at the two run points (materialized stores only)
     null_count_p1: int | None = None
     null_count_p2: int | None = None
     total_count_p1: int | None = None
@@ -155,16 +195,26 @@ class RunContext:
     ensemble_member: int | None
     variables: list[str]
     start_date: str | None = None
-    end_date: str | None = None
+    # Virtual stores decode source files on read, inverting the cost model: a spatial
+    # snapshot is cheap, an append-dim point column is expensive. Routes availability /
+    # value_timeseries to manifest- and sample-based paths instead of full reads.
+    is_virtual: bool = False
+    level_override: float | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
+    # Pinned lead/member of the virtual value-timeseries sample, for the summary header.
+    value_ts_lead_label: str | None = None
+    value_ts_member: int | None = None
     unavailable_timestamps_file: str | None = None
-    combined_nulls_plot: str | None = None
-    combined_value_timeseries_plot: str | None = None
-    combined_spatial_plot: str | None = None
-    combined_temporal_plot: str | None = None
-    # Point arrays loaded once by run_report_nulls (var -> (point1, point2)) and reused
+    # One-sentence description of how availability was measured, for the report.
+    availability_method_note: str | None = None
+    # Sampled decode health (virtual stores); None until run_decode_scan runs.
+    decode_note: str | None = None
+    decode_failures: list[str] | None = None
+    availability: dict[str, AvailabilitySeries] = field(default_factory=dict)
+    combined_availability_plot: str | None = None
+    # Point arrays loaded once by run_value_availability (var -> (point1, point2)) and reused
     # by run_value_timeseries to avoid reading the point data a second time.
     loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(
         default_factory=dict
@@ -193,43 +243,95 @@ def scope_time_period(
     return ds
 
 
+def var_slug(var: str) -> str:
+    """Filesystem/anchor-safe form of a (possibly group-pathed) variable name.
+
+    Flattened group vars are keyed by store path (e.g. `pressure_level/temperature`); the
+    `/` would otherwise be read as a directory separator in plot filenames. Display text
+    keeps the original name; only filenames and HTML ids go through here.
+    """
+    return var.replace("/", "__")
+
+
+def _anonymous_virtual_credentials(
+    storage: icechunk.Storage,
+) -> dict[str, Any] | None:
+    """Anonymous read credentials for a virtual store's persisted chunk containers.
+
+    A virtual icechunk store decodes chunks from source files, which requires authorizing
+    access to the source buckets. The container set is persisted in the repo config (see
+    docs/virtual_datasets.md); every dynamical source is public S3, so anonymous S3
+    credentials per container prefix suffice. Returns None for a materialized store.
+    """
+    config = icechunk.Repository.fetch_config(storage)
+    containers = config.virtual_chunk_containers if config is not None else None
+    if not containers:
+        return None
+    items = containers.values() if isinstance(containers, dict) else containers
+    prefixes = [c.url_prefix if hasattr(c, "url_prefix") else c for c in items]
+    return icechunk.containers_credentials(
+        {prefix: icechunk.s3_anonymous_credentials() for prefix in prefixes}
+    )
+
+
+def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
+    """Open an s3 icechunk store read-only and anonymously (virtual chunk access included).
+
+    Unlike StoreFactory.primary_store this needs no credentials or Kubernetes secret
+    access, so offline validation runs anywhere the bucket is publicly readable.
+    """
+    assert url.startswith("s3://"), url
+    assert url.endswith(".icechunk"), url
+    path = url.removeprefix("s3://")
+    assert "/" in path
+    bucket, prefix = path.split("/", 1)
+    storage = icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    )
+    repo = icechunk.Repository.open(
+        storage,
+        authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
+    )
+    return repo.readonly_session("main").store
+
+
+def load_retried(da: xr.DataArray) -> xr.DataArray:
+    """Hours-long runs make enough object store reads that a transient failure is
+    near-certain; reads are idempotent so retry them."""
+    return retry(da.load)
+
+
 def load_zarr_dataset(url: str) -> xr.Dataset:
     url = url.removesuffix("/")
-    if url.startswith("s3://"):
-        if url.endswith(".icechunk"):
-            path = url.removeprefix("s3://")
-            assert "/" in path
-            i = path.index("/")
-            bucket = path[:i]
-            prefix = path[i + 1 :]
-            storage = icechunk.s3_storage(
-                bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
-            )
-            repo = icechunk.Repository.open(storage)
-            session = repo.readonly_session("main")
-            store: StoreLike = session.store
-        else:
-            store = ObjectStore(
-                obstore.store.from_url(
-                    url,
-                    region="us-west-2",
-                    skip_signature=True,
-                    retry_config={
-                        "max_retries": 16,
-                        "backoff": {
-                            "base": 2,
-                            "init_backoff": timedelta(seconds=1),
-                            "max_backoff": timedelta(seconds=16),
-                        },
-                        # A backstop, shouldn't hit this with the above backoff settings
-                        "retry_timeout": timedelta(minutes=5),
+    if url.startswith("s3://") and url.endswith(".icechunk"):
+        store: StoreLike = open_icechunk_readonly(url)
+        consolidated = False
+    elif url.startswith("s3://"):
+        store = ObjectStore(
+            obstore.store.from_url(
+                url,
+                region="us-west-2",
+                skip_signature=True,
+                retry_config={
+                    "max_retries": 16,
+                    "backoff": {
+                        "base": 2,
+                        "init_backoff": timedelta(seconds=1),
+                        "max_backoff": timedelta(seconds=16),
                     },
-                )
+                    # A backstop, shouldn't hit this with the above backoff settings
+                    "retry_timeout": timedelta(minutes=5),
+                },
             )
+        )
+        consolidated = True
     else:
         store = url
+        consolidated = True
 
-    ds: xr.Dataset = xr.open_zarr(store, chunks=None, decode_timedelta=True)
+    # open_flattened_dataset exposes every vertical group's vars (e.g.
+    # pressure_level/temperature) keyed by store path, not just the root group.
+    ds = open_flattened_dataset(store, consolidated=consolidated)
     if "longitude" in ds.coords and "latitude" in ds.coords:
         ds.longitude.load()
         ds.latitude.load()
@@ -291,12 +393,21 @@ def get_two_random_points(
 def select_variables_for_plotting(
     ds: xr.Dataset, requested_vars: list[str] | None
 ) -> list[str]:
-    """Select and validate variables for plotting."""
+    """Select and validate variables for plotting.
+
+    Raises on any unknown requested variable: silently dropping one makes a partial
+    validation run look complete. Group vars are addressed by store path
+    (`pressure_level/temperature`).
+    """
     available_vars = [str(k) for k in ds.data_vars]
     if requested_vars:
-        selected_vars = [var for var in requested_vars if var in available_vars]
-        if not selected_vars:
-            raise ValueError("No valid variables specified")
+        missing = [var for var in requested_vars if var not in available_vars]
+        if missing:
+            raise ValueError(
+                f"Variables not in dataset: {missing}. Group vars are addressed by "
+                f"store path (e.g. pressure_level/temperature); available: {available_vars}"
+            )
+        selected_vars = list(requested_vars)
     else:
         selected_vars = available_vars
     selected_vars.sort()
@@ -313,6 +424,79 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
+
+
+SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
+_NON_VERTICAL_DIMS = (
+    "init_time",
+    "time",
+    "valid_time",
+    "lead_time",
+    "ensemble_member",
+    *SPATIAL_DIMS,
+)
+
+
+def vertical_dims(ds: xr.Dataset, var: str) -> list[str]:
+    """Vertical (level) dims of a variable — anything that isn't time/lead/member/spatial.
+
+    A var in a vertical group (e.g. ``pressure_level/temperature``) keeps its level dim
+    after flattening; single-level vars (``temperature_2m``) have none. Generic across
+    level types (pressure_level, model_level, …) — no level name is hard-coded.
+    """
+    return [str(d) for d in ds[var].dims if d not in _NON_VERTICAL_DIMS]
+
+
+def choose_level(ds: xr.Dataset, var: str, override: float | None) -> dict[str, Any]:
+    """Pick one representative level for a vertical var, or ``{}`` for a single-level var.
+
+    The report samples a single level per vertical variable (like it samples one ensemble
+    member and one spatial snapshot); use ``override`` to inspect a specific level. Default
+    is the middle level of the var's own vertical dim; override selects the nearest. Returns
+    a ``{level_dim: label}`` mapping ready for ``.sel()``.
+    """
+    vdims = vertical_dims(ds, var)
+    if not vdims:
+        return {}
+    assert len(vdims) == 1, f"{var} has multiple vertical dims {vdims}, not supported"
+    dim = vdims[0]
+    coord = ds[dim].values
+    if override is not None:
+        idx = int(np.abs(coord - override).argmin())
+    else:
+        idx = len(coord) // 2
+    return {dim: coord[idx].item()}
+
+
+def select_var_level(ctx: RunContext, var: str, stats: VariableStats) -> dict[str, Any]:
+    """Resolve and record the level to plot for `var`; ``{}`` for single-level vars."""
+    sel = choose_level(ctx.validation_ds, var, ctx.level_override)
+    if sel:
+        [(dim, value)] = sel.items()
+        stats.level_dim = dim
+        stats.level_value = float(value)
+    return sel
+
+
+def level_label(stats: VariableStats) -> str:
+    """Display suffix for the sampled level, or empty string for single-level vars."""
+    if stats.level_dim is None:
+        return ""
+    return f" [{stats.level_dim}={stats.level_value:g}]"
+
+
+def is_virtual_store(url: str) -> bool:
+    """True if `url` is an icechunk store with persisted virtual chunk containers."""
+    url = url.removesuffix("/")
+    if not (url.startswith("s3://") and url.endswith(".icechunk")):
+        return False
+    path = url.removeprefix("s3://")
+    assert "/" in path
+    bucket, prefix = path.split("/", 1)
+    storage = icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    )
+    return _anonymous_virtual_credentials(storage) is not None
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

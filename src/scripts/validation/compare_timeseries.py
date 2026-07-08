@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
 from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
@@ -14,6 +13,10 @@ from scripts.validation.utils import (
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
+    is_virtual_store,
+    level_label,
+    level_option,
+    load_retried,
     load_zarr_dataset,
     output_dir_option,
     reference_url_option,
@@ -21,14 +24,14 @@ from scripts.validation.utils import (
     resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
+    select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    var_slug,
     variables_option,
 )
 
 log = get_logger(__name__)
-
-zarr.config.set({"async.concurrency": 32})
 
 
 def select_time_period_for_comparison(
@@ -130,23 +133,28 @@ def _load_timeseries_for_var(
     ctx: RunContext,
     validation_subset: xr.Dataset,
     reference_subset: xr.Dataset,
+    level_sel: dict[str, object],
 ) -> tuple[xr.DataArray, xr.DataArray | None, xr.DataArray, xr.DataArray | None]:
-    val_p1 = validation_subset[var].isel(ctx.point1_sel).load()
-    val_p2 = validation_subset[var].isel(ctx.point2_sel).load()
+    val = validation_subset[var]
+    if level_sel:
+        val = val.sel(level_sel)
+    val_p1 = load_retried(val.isel(ctx.point1_sel))
+    val_p2 = load_retried(val.isel(ctx.point2_sel))
     ref_p1: xr.DataArray | None = None
     ref_p2: xr.DataArray | None = None
-    if var in reference_subset.data_vars:
+    if var in reference_subset.data_vars and (
+        not level_sel or next(iter(level_sel)) in reference_subset[var].dims
+    ):
         assert "latitude" in reference_subset.dims
         assert "longitude" in reference_subset.dims
-        ref_p1 = (
-            reference_subset[var]
-            .sel(latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest")
-            .load()
+        ref = reference_subset[var]
+        if level_sel:
+            ref = ref.sel(level_sel, method="nearest")
+        ref_p1 = load_retried(
+            ref.sel(latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest")
         )
-        ref_p2 = (
-            reference_subset[var]
-            .sel(latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest")
-            .load()
+        ref_p2 = load_retried(
+            ref.sel(latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest")
         )
     return val_p1, ref_p1, val_p2, ref_p2
 
@@ -189,13 +197,13 @@ def _fmt(v: float | None) -> str:
 
 
 def run_compare_timeseries(ctx: RunContext) -> None:
-    """Produce per-variable + combined timeseries comparison plots in ctx.output_dir."""
+    """Produce per-variable timeseries comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, (
         "compare-timeseries requires a reference dataset"
     )
 
     # Temporal plots are over a single member; ctx.validation_ds keeps the full
-    # ensemble dim so report_nulls can scan every member.
+    # ensemble dim so the availability scan can see every member.
     validation_ds = ctx.validation_ds
     if "ensemble_member" in validation_ds.dims:
         if ctx.ensemble_member is None:
@@ -221,17 +229,15 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     n_vars = len(ctx.variables)
     log.info(f"compare-timeseries: {n_vars} variables — {title_suffix}")
 
-    fig_c, axes_c = plt.subplots(
-        n_vars, 2, figsize=(14, 3.0 * n_vars), squeeze=False, constrained_layout=True
-    )
-
     p1_title_suffix = f"(lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_title_suffix = f"(lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
 
-    for i, var in enumerate(ctx.variables):
+    for var in ctx.variables:
         stats = ctx.stats_for(var)
+        level_sel = select_var_level(ctx, var, stats)
+        level_note = level_label(stats)
         val_p1, ref_p1, val_p2, ref_p2 = _load_timeseries_for_var(
-            var, ctx, validation_subset, reference_subset
+            var, ctx, validation_subset, reference_subset, level_sel
         )
         _store_temporal_stats(stats, val_p1, val_p2, ref_p1, ref_p2)
         units = stats.units or ""
@@ -249,7 +255,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p1_title_suffix}",
+            f"{var}{level_note} — {p1_title_suffix}",
         )
         _draw_timeseries_at_point(
             axes_v[0, 1],
@@ -260,54 +266,22 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             val_label,
             ref_label,
             units,
-            f"{var} — {p2_title_suffix}",
+            f"{var}{level_note} — {p2_title_suffix}",
         )
         fig_v.suptitle(
-            f"{var}\n{val_label} vs {ref_label}\n{title_suffix}", fontsize=11
+            f"{var}{level_note}\n{val_label} vs {ref_label}\n{title_suffix}",
+            fontsize=11,
         )
-        out_path = ctx.output_dir / f"temporal_{var}.png"
+        out_path = ctx.output_dir / f"temporal_{var_slug(var)}.png"
         fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
         plt.close(fig_v)
         stats.temporal_plot = out_path.name
-
-        # Combined row
-        _draw_timeseries_at_point(
-            axes_c[i, 0],
-            val_p1,
-            ref_p1,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var} — {p1_title_suffix}",
-        )
-        _draw_timeseries_at_point(
-            axes_c[i, 1],
-            val_p2,
-            ref_p2,
-            time_coord,
-            ref_time_coord,
-            val_label,
-            ref_label,
-            units,
-            f"{var} — {p2_title_suffix}",
-        )
 
         log.info(
             f"  temporal {var}: "
             f"P1 val=[{_fmt(stats.val_temporal_min_p1)}, {_fmt(stats.val_temporal_max_p1)}] "
             f"P2 val=[{_fmt(stats.val_temporal_min_p2)}, {_fmt(stats.val_temporal_max_p2)}]"
         )
-
-    fig_c.suptitle(
-        f"Timeseries comparison — all variables\n{val_label} vs {ref_label}\n{title_suffix}",
-        fontsize=13,
-    )
-    combined_path = ctx.output_dir / "combined_temporal.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_temporal_plot = combined_path.name
 
 
 def compare_timeseries(
@@ -317,9 +291,10 @@ def compare_timeseries(
     show_plot: bool = False,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
+    level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
-    """Create per-variable + combined timeseries comparison plots."""
+    """Create per-variable timeseries comparison plots."""
     validation_ds = load_zarr_dataset(validation_url)
     if start_date or end_date:
         validation_ds = scope_time_period(validation_ds, start_date, end_date)
@@ -349,6 +324,8 @@ def compare_timeseries(
         point2_lon=lon2,
         ensemble_member=None,
         variables=selected_vars,
+        is_virtual=is_virtual_store(validation_url),
+        level_override=level,
     )
     run_compare_timeseries(ctx)
 
