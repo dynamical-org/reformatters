@@ -38,7 +38,7 @@
     "long_name": "Echo top",
     "short_name": "retop",
     "units": "m",
-    "comment": "-999 encodes no echo; CF-aware readers like xarray mask it to NaN via the missing_value attribute.",
+    "comment": "-999 encodes no echo; CF-aware readers mask it to NaN.",
     "missing_value": -999.0,
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

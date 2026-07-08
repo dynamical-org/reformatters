@@ -359,9 +359,6 @@ def _data_var(
     return NoaaHrrrDataVar(
         name=name,
         group=group,
-        # A var with a missing_value sentinel uses it as the zarr fill_value too, so
-        # _FillValue == missing_value (CF-consistent, and xarray refuses to encode
-        # them unequal) and missing chunks read as the same masked sentinel.
         encoding=_virtual_encoding(
             element,
             group,
@@ -510,7 +507,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="retop",
             long_name="Echo top",
             units="m",
-            comment="-999 encodes no echo; CF-aware readers like xarray mask it to NaN via the missing_value attribute.",
+            comment="-999 encodes no echo; CF-aware readers mask it to NaN.",
             missing_value=-999.0,
         ),
         _root_var(

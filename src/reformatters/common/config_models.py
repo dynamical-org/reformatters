@@ -71,8 +71,8 @@ class DataVarAttrs(FrozenBaseModel):
     # Must follow CF Conventions if CF defines a standard name for this variable
     units: Annotated[str, pydantic.Field(min_length=1)]
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
-    # CF missing_value: a sentinel the source stores in the data (e.g. -999 for "no
-    # echo") which CF-aware readers such as xarray mask to NaN on read.
+    # CF missing_value: a sentinel the source stores in the data which CF-aware
+    # readers such as xarray mask to NaN on read.
     missing_value: float | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
@@ -231,3 +231,13 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     @property
     def path(self) -> str:
         return var_path(self.group, self.name)
+
+    @pydantic.model_validator(mode="after")
+    def validate_missing_value_matches_fill_value(self) -> DataVar[INTERNAL_ATTRS_co]:
+        if self.attrs.missing_value is not None:
+            assert self.attrs.missing_value == self.encoding.fill_value, (
+                f"{self.name}: missing_value ({self.attrs.missing_value}) must equal "
+                f"encoding.fill_value ({self.encoding.fill_value}) — xarray requires "
+                "_FillValue and missing_value to agree when both are set"
+            )
+        return self
