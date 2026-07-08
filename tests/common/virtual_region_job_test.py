@@ -1441,6 +1441,41 @@ def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> N
     assert "entirely NaN" in result.message
 
 
+def test_check_virtual_decode_health_skips_vars_without_reference(
+    tmp_path: Path,
+) -> None:
+    # Same all-NaN unreadable ref as detects_unreadable_ref, but the offline opt-in
+    # reference_exists oracle reports the var has no reference at the sampled position:
+    # it is skipped (an availability matter) so decode-health PASSES and reports the
+    # no-reference var. With the oracle reporting the ref present (like the operational
+    # default reference_exists=None) the same all-NaN var still FAILS.
+    dataset = _make_dataset(tmp_path)
+    messages = tmp_path / "messages.bin"
+    data = bytearray(messages.read_bytes())
+    nan_block = np.full(N_LAT * N_LON, np.nan, dtype="<f8").tobytes()
+    for lead_idx in range(N_LEADS):
+        offset, length = _message_offset_length(0, lead_idx)
+        data[offset : offset + length] = nan_block
+    messages.write_bytes(bytes(data))
+
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    skipped = validation.CheckVirtualDecodeHealth(
+        reference_exists=lambda var_path, out_loc: False
+    )(job, store, ds)
+    assert skipped.passed, skipped.message
+    assert "no reference" in skipped.message
+
+    present = validation.CheckVirtualDecodeHealth(
+        reference_exists=lambda var_path, out_loc: True
+    )(job, store, ds)
+    assert not present.passed
+    assert "entirely NaN" in present.message
+
+
 def test_validate_dataset_requires_region_job_for_virtual_validator(
     tmp_path: Path,
 ) -> None:

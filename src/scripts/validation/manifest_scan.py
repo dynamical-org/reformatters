@@ -5,7 +5,7 @@ recent window it probes the whole archive for ref existence (no decode), streami
 by job so peak memory is independent of the scan window length. Two measures:
 
 1. **Per source file** — every expected file's representative ref, the strict
-   completeness gate. Emits backfill retry filters for any gaps.
+   completeness gate. Lists any incomplete positions for a targeted backfill.
 2. **Per variable** — each variable's ref at one present source file per position,
    which catches a variable missing from otherwise-ingested files (e.g. a variable the
    model only started producing partway through the archive).
@@ -47,6 +47,10 @@ log = get_logger(__name__)
 zarr.config.set({"async.concurrency": 32})
 
 _EXISTS_BATCH_SIZE = 20_000
+# A whole-archive scan issues enough object-store reads that a transient outage
+# (e.g. a connect timeout) is near-certain; ride out a ~minute of trouble rather
+# than let one blip kill the whole scan. Backoff grows with attempt in retry().
+_SCAN_MAX_RETRIES = 12
 
 
 @dataclass
@@ -72,7 +76,10 @@ def _probe_job(
     candidates = list(job.source_file_coords())
     # Retried: a whole-archive scan makes enough reads that a transient object store
     # failure is near-certain, and one un-retried probe would kill the run.
-    missing = retry(lambda: job.filter_already_present(candidates, store))
+    missing = retry(
+        lambda: job.filter_already_present(candidates, store),
+        max_attempts=_SCAN_MAX_RETRIES,
+    )
     missing_ids = {id(c) for c in missing}
     return [(coord, id(coord) not in missing_ids) for coord in candidates]
 
@@ -80,7 +87,8 @@ def _probe_job(
 def _probe_jobs(
     jobs: Sequence[VirtualRegionJob[Any, Any]],
     store: IcechunkStore,
-    max_workers: int = 16,
+    # 48 network-bound probe workers is the tuned value for the target run host.
+    max_workers: int = 48,
 ) -> Iterator[tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]]:
     """Probe every job's source files concurrently, yielding (job, [(coord, present)])
     as jobs complete. In-flight work is bounded so a whole-archive scan never holds
@@ -293,7 +301,7 @@ def _flush_var_probes(
     out: dict[str, dict[pd.Timestamp, bool]],
 ) -> None:
     keys = [key for _, _, key in probes]
-    present = retry(lambda: _exists_many(store, keys))
+    present = retry(lambda: _exists_many(store, keys), max_attempts=_SCAN_MAX_RETRIES)
     for var_path, position, key in probes:
         out.setdefault(var_path, {})[position] = present[key]
     probes.clear()
@@ -372,15 +380,11 @@ def result_availability_series(
 def write_unavailable_timestamps_file(
     incomplete: dict[pd.Timestamp, tuple[int, int]], output_dir: Path
 ) -> str:
-    """Write unavailable_timestamps.txt with backfill retry filters. Returns filename."""
+    """Write unavailable_timestamps.txt listing incomplete positions. Returns filename."""
     filename = "unavailable_timestamps.txt"
     positions = sorted(incomplete)
     lines = [
         "# Unavailable timestamps (present/expected source files per position)",
-        "# Retry with backfill --filter-contains <position> to re-ingest missing files.",
-        "",
-        "combined-retry-filter: "
-        + " ".join(f"--filter-contains {p.isoformat()}" for p in positions),
         "",
     ]
     for position in positions:

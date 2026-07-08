@@ -9,6 +9,7 @@ import zarr
 from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
+from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     SPATIAL_DIMS,
     RunContext,
@@ -33,8 +34,10 @@ from scripts.validation.utils import (
 # Target number of append-dim positions to sample on a virtual store, where each
 # sampled position is one source-file decode (both run points share the message).
 VIRTUAL_VALUE_TS_SAMPLES = 200
-# Per-variable loads run ahead of the plotting loop in a pool this size.
-LOAD_CONCURRENCY = 4
+# Per-variable loads run ahead of the plotting loop in a pool this size. Each virtual
+# per-variable load materializes ~200 full-field decodes (~GBs); keep the pipeline
+# shallow so concurrent loads stay within host memory.
+LOAD_CONCURRENCY = 2
 
 log = get_logger(__name__)
 
@@ -117,35 +120,46 @@ def _store_value_stats(
         stats.value_max_p2 = overall_max
 
 
-def _sample_virtual_points(ctx: RunContext, var: str) -> xr.DataArray:
+def _sample_virtual_points(
+    ctx: RunContext, var: str, stats: VariableStats
+) -> xr.DataArray:
     """One decode per sampled position, both run points read from that one message.
 
     The value time series exists to surface magnitude shifts (e.g. a units change), so
-    at each strided position one message suffices — and rather than pinning them,
-    lead/member/level rotate with position so the series samples every non-spatial dim.
-    A chunk is a full spatial field, so both points come from the same decode; the
-    result has a final `point` dim of size 2.
+    at each strided position one message suffices. Pins a representative (lead, member,
+    level) slice so the whole-period series is a single, comparable slice rather than
+    sweeping the vertical profile / lead / member with position. A chunk is a full
+    spatial field, so both points come from the same decode; the result has a final
+    `point` dim of size 2.
     """
     da = ctx.validation_ds[var]
     append_dim = "init_time" if "init_time" in da.dims else "time"
     stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
     da = da.isel({append_dim: slice(None, None, stride)})
 
-    position = np.arange(da.sizes[append_dim])
-    is_accum = da.attrs.get("step_type", "instant") != "instant"
-    indexers: dict[str, xr.DataArray] = {
+    indexers: dict[str, xr.DataArray | int] = {
         dim: xr.DataArray([ctx.point1_sel[dim], ctx.point2_sel[dim]], dims="point")
         for dim in ctx.point1_sel
     }
+    for dim, label in select_var_level(ctx, var, stats).items():
+        loc = da.get_index(dim).get_loc(label)
+        assert isinstance(loc, int)
+        indexers[dim] = loc
+
     for dim in map(str, da.dims):
-        if dim == append_dim or dim in SPATIAL_DIMS:
+        if dim == append_dim or dim in SPATIAL_DIMS or dim in indexers:
             continue
-        # Accumulated variables are structurally NaN at lead 0; rotate leads from 1.
-        start = 1 if dim == "lead_time" and is_accum else 0
-        assert da.sizes[dim] > start, f"{var} {dim} has no sampleable values"
-        indexers[dim] = xr.DataArray(
-            start + position % (da.sizes[dim] - start), dims=append_dim
-        )
+        if dim == "lead_time":
+            # Smallest nonzero lead: skips the lead-0 structural NaN of accumulated
+            # vars, uniform for all vars.
+            lead_index = 1 if da.sizes[dim] > 1 else 0
+            indexers[dim] = lead_index
+            lead_value = da[dim].values[lead_index]
+            ctx.value_ts_lead_label = f"{whole_hours(pd.Timedelta(lead_value))}h"
+        else:
+            indexers[dim] = 0
+            if dim == "ensemble_member":
+                ctx.value_ts_member = int(da[dim].values[0])
     return da.isel(indexers)
 
 
@@ -156,7 +170,7 @@ def _point_arrays(
     if var in ctx.loaded_point_data:
         return ctx.loaded_point_data[var]
     if ctx.is_virtual:
-        da = _sample_virtual_points(ctx, var)
+        da = _sample_virtual_points(ctx, var, stats)
         append_dim = "init_time" if "init_time" in da.dims else "time"
         log.info(
             f"  value-timeseries {var}: virtual sampled read "
@@ -174,14 +188,12 @@ def _point_arrays(
 
 
 def run_value_timeseries(ctx: RunContext) -> None:
-    """Produce per-variable + combined full-period value time series plots in ctx.output_dir."""
+    """Produce per-variable full-period value time series plots in ctx.output_dir."""
     n_vars = len(ctx.variables)
     p1_label = f"Point 1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_label = f"Point 2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
 
     log.info(f"value-timeseries: {n_vars} variables at {p1_label} / {p2_label}")
-
-    fig_c, axes_c = plt.subplots(n_vars, 2, figsize=(14, 2.625 * n_vars), squeeze=False)
 
     # Loads are network-bound and independent per variable; they run ahead in a small
     # pool while the main thread plots. Each result is just the two point series.
@@ -191,7 +203,7 @@ def run_value_timeseries(ctx: RunContext) -> None:
             for var in ctx.variables
         ]
 
-        for i, (var, load) in enumerate(zip(ctx.variables, loads, strict=True)):
+        for var, load in zip(ctx.variables, loads, strict=True):
             stats = ctx.stats_for(var)
             units = stats.units or ""
 
@@ -233,35 +245,6 @@ def run_value_timeseries(ctx: RunContext) -> None:
             fig_v.savefig(out_path, dpi=80, bbox_inches="tight")
             plt.close(fig_v)
             stats.value_ts_plot = out_path.name
-
-            # Combined figure row.
-            _draw_value_trace(
-                axes_c[i, 0],
-                mean_p1,
-                std_p1,
-                "blue",
-                "fuchsia",
-                f"{var} — {p1_label}",
-                units,
-                has_std,
-            )
-            _draw_value_trace(
-                axes_c[i, 1],
-                mean_p2,
-                std_p2,
-                "orange",
-                "red",
-                f"{var} — {p2_label}",
-                units,
-                has_std,
-            )
-
-    fig_c.suptitle("Full-period value time series — all variables", fontsize=13)
-    fig_c.tight_layout()
-    combined_path = ctx.output_dir / "combined_value_timeseries.png"
-    fig_c.savefig(combined_path, dpi=120, bbox_inches="tight")
-    plt.close(fig_c)
-    ctx.combined_value_timeseries_plot = combined_path.name
 
 
 def value_timeseries(

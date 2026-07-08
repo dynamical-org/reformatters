@@ -11,6 +11,7 @@ Entry points: the `decode-scan` command (URL-driven, resolves the registered dat
 the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`.
 """
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
@@ -22,8 +23,9 @@ import zarr
 from reformatters.common import validation
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
-from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from scripts.validation.availability import build_run_context
+from scripts.validation.manifest_scan import _var_chunk_key, _var_keys, _VarKeys
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     evenly_spaced_subset,
@@ -64,6 +66,19 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     store = open_icechunk_readonly(ctx.validation_url)
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
+    template_ds = dataset.template_config.get_template(end)
+    group = zarr.open_group(store, mode="r")
+    var_by_path = {v.path: v for v in dataset.template_config.data_vars}
+    # Pre-build all _VarKeys single-threaded so the oracle only READS the cache (decode()
+    # runs in a ThreadPoolExecutor; concurrent cache writes would race).
+    keys_by_var: dict[str, _VarKeys] = {
+        path: _var_keys(template_ds, group, var) for path, var in var_by_path.items()
+    }
+
+    def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
+        key = _var_chunk_key(keys_by_var[var_path], out_loc)
+        return _exists_many(store, [key])[key]
+
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=ctx.variables)
     # Sample evenly over append-dim regions, keeping every var-group job at each sampled
     # region — sampling the raw job list would stride over (region x var group) and could
@@ -81,6 +96,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         positions="latest",
         sampled_leads=SAMPLED_LEADS,
         sampled_levels=SAMPLED_LEVELS,
+        reference_exists=reference_exists,
     )
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
@@ -96,11 +112,12 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
                 failures.append(result.message)
 
     ctx.decode_note = (
-        "Decode health is sampled, not exhaustive: "
-        f"{len(sampled_regions)} of {len(regions)} append-dim regions, the latest "
-        f"present position per region, {SAMPLED_LEADS} leads and {SAMPLED_LEVELS} "
-        "levels per group variable, all members. An unsampled reference that decodes "
-        "to garbage is not caught here."
+        "Decode health decodes a bounded sample of references that EXIST and checks "
+        f"they read as real data: {len(sampled_regions)} of {len(regions)} append-dim "
+        f"regions, the latest present position per region, {SAMPLED_LEADS} leads and "
+        f"{SAMPLED_LEVELS} levels per group variable, all members. References that "
+        "don't exist are reported by the availability check, not here. An unsampled "
+        "reference that decodes to garbage is not caught here."
     )
     ctx.decode_failures = failures
     if failures:

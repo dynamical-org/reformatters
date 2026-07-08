@@ -106,9 +106,15 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
 
 def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lo, hi = _append_dim_range(ctx)
-    sampled = " — sampled (pinned lead/level/member)" if ctx.is_virtual else ""
+    header = f"**Point time series statistics** — {lo} - {hi}"
+    if ctx.is_virtual:
+        header += f", sampled lead = {ctx.value_ts_lead_label}"
+        if ctx.value_ts_member is not None:
+            header += f", member = {ctx.value_ts_member}"
+        if stats.level_dim is not None:
+            header += f", level = {stats.level_dim}={stats.level_value:g}"
     return [
-        f"**Point time series statistics for the full period ({lo} - {hi}){sampled}**",
+        header,
         "",
         "| Point | min | mean | std | max |",
         "|---|---|---|---|---|",
@@ -173,8 +179,7 @@ def _availability_line(stats: VariableStats) -> str:
     else:
         detail = (
             f"{stats.positions_complete} of {stats.positions_total} positions complete "
-            f"(incomplete {stats.first_incomplete} → {stats.last_incomplete}, "
-            f"see [plot]({stats.availability_plot}))"
+            f"(incomplete {stats.first_incomplete} → {stats.last_incomplete})"
         )
     if stats.null_count_p1 is not None:
         detail += (
@@ -279,19 +284,6 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.extend(_run_parameters_table(ctx))
     lines.append("")
 
-    lines.append("## Combined plots")
-    lines.append("")
-    combined_items = [
-        ("Availability heatmap", ctx.combined_availability_plot),
-        ("Value time series (full period)", ctx.combined_value_timeseries_plot),
-        ("Spatial and distributions", ctx.combined_spatial_plot),
-        ("Time series", ctx.combined_temporal_plot),
-    ]
-    for label, filename in combined_items:
-        if filename:
-            lines.append(f"- {label}: [`{filename}`]({filename})")
-    lines.append("")
-
     lines.append("## Availability")
     lines.append("")
     if ctx.availability_method_note:
@@ -326,7 +318,7 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     lines.append("")
     if ctx.unavailable_timestamps_file:
         lines.append(
-            f"- Unavailable timestamps + retry filters: "
+            f"- Unavailable timestamps: "
             f"[`{ctx.unavailable_timestamps_file}`]({ctx.unavailable_timestamps_file})"
         )
         lines.append("")

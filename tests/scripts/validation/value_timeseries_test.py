@@ -112,8 +112,6 @@ def test_run_value_timeseries_writes_plots_and_stats(tmp_path: Path) -> None:
     run_value_timeseries(ctx)
 
     assert (tmp_path / "value_timeseries_temperature_2m.png").exists()
-    assert (tmp_path / "combined_value_timeseries.png").exists()
-    assert ctx.combined_value_timeseries_plot == "combined_value_timeseries.png"
 
     stats = ctx.stats["temperature_2m"]
     assert stats.value_ts_plot == "value_timeseries_temperature_2m.png"
@@ -157,42 +155,42 @@ def test_run_value_timeseries_virtual_samples_one_message_per_position(
     run_value_timeseries(ctx)
 
     stats = ctx.stats["pressure_level/temperature"]
-    # Levels rotate with position rather than pinning one, so no level is recorded.
-    assert stats.level_dim is None
+    # The level is pinned to the middle of [1000, 500, 100] and recorded.
+    assert stats.level_dim == "pressure_level"
+    assert stats.level_value == 500
     # One message per position: a single value per timestep, so std is n/a.
     assert stats.value_std_p1 is None
     assert (tmp_path / "value_timeseries_pressure_level__temperature.png").exists()
 
 
-def test_sample_virtual_points_rotates_dims_and_shares_reads() -> None:
+def test_sample_virtual_points_pins_representative_slice() -> None:
     ds = _grouped_forecast_dataset()
     ctx = _ctx(ds, Path("/unused"), variables=["pressure_level/temperature"])
     ctx.is_virtual = True
+    stats = ctx.stats_for("pressure_level/temperature")
 
-    da = _sample_virtual_points(ctx, "pressure_level/temperature")
+    da = _sample_virtual_points(ctx, "pressure_level/temperature", stats)
 
-    # One value per (position, point): lead/level became rotating per-position coords.
+    # One value per (position, point): lead/level pinned to a single representative slice.
     assert dict(da.sizes) == {"init_time": 4, "point": 2}
-    # Rotation cycles each non-spatial dim with position (3 leads/levels over 4 inits).
-    np.testing.assert_array_equal(
-        da.lead_time.values, ds.lead_time.values[[0, 1, 2, 0]]
-    )
-    np.testing.assert_array_equal(
-        da.pressure_level.values, ds.pressure_level.values[[0, 1, 2, 0]]
-    )
+    # Smallest nonzero lead (index 1) and middle level (index 1 of [1000, 500, 100]).
+    assert da.lead_time.item() == ds.lead_time.values[1]
+    assert da.pressure_level.item() == ds.pressure_level.values[1]
+    assert ctx.value_ts_lead_label == "6h"
+    assert stats.level_dim == "pressure_level"
+    assert stats.level_value == 500
     # Both points come from the same message; values match direct selection.
-    expected_p1 = ds["pressure_level/temperature"].values[
-        np.arange(4), [0, 1, 2, 0], 0, 0, [0, 1, 2, 0]
-    ]
+    expected_p1 = ds["pressure_level/temperature"].values[np.arange(4), 1, 0, 0, 1]
     np.testing.assert_array_equal(da.isel(point=0).values, expected_p1)
 
 
-def test_sample_virtual_points_accum_skips_lead_zero() -> None:
+def test_sample_virtual_points_pins_nonzero_lead_for_accum() -> None:
     ds = _forecast_dataset()
     ds["temperature_2m"].attrs["step_type"] = "accum"
     ctx = _ctx(ds, Path("/unused"))
     ctx.is_virtual = True
+    stats = ctx.stats_for("temperature_2m")
 
-    da = _sample_virtual_points(ctx, "temperature_2m")
+    da = _sample_virtual_points(ctx, "temperature_2m", stats)
 
-    assert (da.lead_time.values > pd.Timedelta(0)).all()
+    assert da.lead_time.item() > pd.Timedelta(0)

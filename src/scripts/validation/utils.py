@@ -199,6 +199,9 @@ class RunContext:
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
+    # Pinned lead/member of the virtual value-timeseries sample, for the summary header.
+    value_ts_lead_label: str | None = None
+    value_ts_member: int | None = None
     unavailable_timestamps_file: str | None = None
     # One-sentence description of how availability was measured, for the report.
     availability_method_note: str | None = None
@@ -207,9 +210,6 @@ class RunContext:
     decode_failures: list[str] | None = None
     availability: dict[str, AvailabilitySeries] = field(default_factory=dict)
     combined_availability_plot: str | None = None
-    combined_value_timeseries_plot: str | None = None
-    combined_spatial_plot: str | None = None
-    combined_temporal_plot: str | None = None
     # Point arrays loaded once by run_value_availability (var -> (point1, point2)) and reused
     # by run_value_timeseries to avoid reading the point data a second time.
     loaded_point_data: dict[str, tuple[xr.DataArray, xr.DataArray]] = field(
