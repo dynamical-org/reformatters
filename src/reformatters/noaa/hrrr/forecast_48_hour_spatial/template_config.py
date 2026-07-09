@@ -969,6 +969,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="cpofp",
             long_name="Percent frozen precipitation",
             units="percent",
+            comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
+            missing_value=-50.0,
             hour_0=False,
         ),
         _root_var(
