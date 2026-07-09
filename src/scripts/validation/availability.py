@@ -112,12 +112,32 @@ def _downsample_columns(grid: np.ndarray, max_columns: int) -> np.ndarray:
         return np.column_stack([np.nanmean(b, axis=1) for b in blocks])
 
 
+def _heatmap_xticks(
+    positions: np.ndarray, n_columns: int
+) -> tuple[list[int], list[str]]:
+    """Ticks on the heatmap's downsampled column axis: one per calendar-year start
+    (labeled with the year) when the archive spans multiple years, else 8 evenly spaced
+    date ticks."""
+    positions_dt = pd.DatetimeIndex(positions)
+    years = positions_dt.year.to_numpy()
+    span = max(1, len(positions) - 1)
+    if years[-1] > years[0]:
+        year_range = range(int(years[0]), int(years[-1]) + 1)
+        position_idx = np.array([np.searchsorted(years, year) for year in year_range])
+        columns = np.round(position_idx / span * (n_columns - 1)).astype(int)
+        return columns.tolist(), [str(year) for year in year_range]
+    columns = np.unique(np.linspace(0, n_columns - 1, 8).astype(int))
+    column_to_position = np.linspace(0, len(positions) - 1, n_columns).astype(int)
+    labels = [str(p)[:10] for p in positions_dt[column_to_position[columns]]]
+    return columns.tolist(), labels
+
+
 def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) -> None:
     positions, grid, var_names = _heatmap_grid(series_by_var)
     display = _downsample_columns(grid, MAX_HEATMAP_COLUMNS)
 
     fig_height = max(3.0, 0.16 * len(var_names) + 1.5)
-    fig, ax = plt.subplots(figsize=(14, fig_height))
+    fig, ax = plt.subplots(figsize=(14 * 2 / 3, fig_height))
     ax.set_facecolor("lightgrey")  # masked (not probed) cells show the axes background
     ax.imshow(
         np.ma.masked_invalid(display),
@@ -129,18 +149,9 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     )
     ax.set_yticks(range(len(var_names)))
     ax.set_yticklabels(var_names, fontsize=max(4, min(8, 900 // len(var_names))))
-    tick_idx = np.unique(np.linspace(0, display.shape[1] - 1, 8).astype(int))
-    column_to_position = np.linspace(0, len(positions) - 1, display.shape[1]).astype(
-        int
-    )
-    ax.set_xticks(tick_idx)
-    ax.set_xticklabels(
-        [
-            str(p)[:10]
-            for p in pd.DatetimeIndex(positions[column_to_position[tick_idx]])
-        ],
-        fontsize=7,
-    )
+    tick_cols, tick_labels = _heatmap_xticks(positions, display.shape[1])
+    ax.set_xticks(tick_cols)
+    ax.set_xticklabels(tick_labels, fontsize=7)
     ax.set_title(
         "Availability by variable over the append dim (green=available, red=missing)",
         fontsize=11,
