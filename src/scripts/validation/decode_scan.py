@@ -89,22 +89,21 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         return checker(cast("VirtualRegionJob[Any, Any]", job), store, ds)
 
     failures = []
+    decoded_refs = 0
     # A job's decodes are network-latency-bound and parallelize only across its own
     # source files, so a few jobs run concurrently to fill the idle time.
     with ThreadPoolExecutor(max_workers=JOB_CONCURRENCY) as pool:
         for i, result in enumerate(pool.map(check, sampled)):
             log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
+            decoded_refs += result.checked_count or 0
             if not result.passed:
                 failures.append(result.message)
 
-    ctx.decode_note = (
-        "Decode health decodes a bounded sample of references that EXIST and checks "
-        f"they read as real data: {len(sampled_regions)} of {len(regions)} append-dim "
-        f"regions, the latest present position per region, {SAMPLED_LEADS} leads and "
-        f"{SAMPLED_LEVELS} levels per group variable, all members. References that "
-        "don't exist are reported by the availability check, not here. An unsampled "
-        "reference that decodes to garbage is not caught here."
+    ctx.decode_sample_desc = (
+        f"{len(sampled_regions)} of {len(regions)} append-dim regions, "
+        f"{SAMPLED_LEADS} leads and {SAMPLED_LEVELS} levels per group variable"
     )
+    ctx.decode_checked_count = decoded_refs
     ctx.decode_failures = failures
     if failures:
         log.error(f"Decode health failed for {len(failures)} sampled jobs")
@@ -113,14 +112,18 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
 
 
 def decode_summary_lines(ctx: RunContext) -> list[str]:
-    assert ctx.decode_note is not None
+    assert ctx.decode_sample_desc is not None
     assert ctx.decode_failures is not None
-    lines = [ctx.decode_note, ""]
     if ctx.decode_failures:
-        lines.extend(f"- FAIL: {message}" for message in ctx.decode_failures)
-    else:
-        lines.append("All sampled references decoded successfully.")
-    return lines
+        return [
+            f"Decode health failures, sampled across {ctx.decode_sample_desc}:",
+            "",
+            *(f"- FAIL: {message}" for message in ctx.decode_failures),
+        ]
+    return [
+        f"{ctx.decode_checked_count} references decoded successfully, "
+        f"sampled across {ctx.decode_sample_desc}."
+    ]
 
 
 def decode_scan(
@@ -141,7 +144,7 @@ def decode_scan(
     )
     run_decode_scan(ctx, max_samples=max_samples)
     (ctx.output_dir / "decode_scan_summary.md").write_text(
-        "\n".join(["# Decode health (sampled)", "", *decode_summary_lines(ctx)])
+        "\n".join(["# Decode health", "", *decode_summary_lines(ctx)])
     )
     if ctx.decode_failures:
         raise typer.Exit(1)

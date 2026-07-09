@@ -48,9 +48,7 @@ def select_time_period_for_comparison(
         reference_subset = reference_ds.sel(
             time=slice(pd.Timestamp(valid_time_start), pd.Timestamp(valid_time_end))
         )
-        title_suffix = (
-            f"Forecast init_time: {selected_init_time.strftime('%Y-%m-%dT%H:%M')}"
-        )
+        title_suffix = f"init={selected_init_time.strftime('%Y-%m-%dT%H:%M')}"
         return validation_subset, reference_subset, title_suffix, "valid_time", "time"
 
     time_start = pd.Timestamp(validation_ds.time.min().item())
@@ -70,7 +68,7 @@ def select_time_period_for_comparison(
     validation_subset = validation_ds.sel(time=slice(selected_start, selected_end))
     reference_subset = reference_ds.sel(time=slice(selected_start, selected_end))
     title_suffix = (
-        f"Analysis period: {selected_start.strftime('%Y-%m-%dT%H:%M')} - "
+        f"{selected_start.strftime('%Y-%m-%dT%H:%M')} - "
         f"{selected_end.strftime('%Y-%m-%dT%H:%M')}"
     )
     return validation_subset, reference_subset, title_suffix, "time", "time"

@@ -46,9 +46,10 @@ log = get_logger(__name__)
 
 _EXISTS_BATCH_SIZE = 20_000
 # A whole-archive scan issues enough object-store reads that a transient outage
-# (e.g. a connect timeout) is near-certain; ride out a ~minute of trouble rather
-# than let one blip kill the whole scan. Backoff grows with attempt in retry().
-_SCAN_MAX_RETRIES = 12
+# (e.g. a connect timeout) is near-certain; ride out a few minutes of trouble rather
+# than let one blip kill the whole scan. Backoff grows with attempt in retry(), so
+# these attempts span several minutes — 12 was observed too short for a ~90s blip.
+_SCAN_MAX_RETRIES = 20
 
 
 @dataclass
