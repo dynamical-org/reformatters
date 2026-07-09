@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import typer
 import xarray as xr
+from matplotlib.colors import LinearSegmentedColormap
 
 from reformatters.common.logging import get_logger
 from scripts.validation.manifest_scan import (
@@ -49,6 +50,13 @@ log = get_logger(__name__)
 
 HEATMAP_FILENAME = "availability_heatmap.png"
 MAX_HEATMAP_COLUMNS = 1200
+
+# Availability heatmap colors: light red (missing, 0.0) -> dark green (present, 1.0). The
+# ramp is monotonically light->dark so colorblind readers can read it by lightness rather
+# than red/green hue. Green endpoint is kept from RdYlGn; the red end is lightened.
+_AVAILABILITY_CMAP = LinearSegmentedColormap.from_list(
+    "availability", ["#f4a582", plt.get_cmap("RdYlGn")(1.0)]
+)
 
 
 @dataclass
@@ -143,7 +151,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
         np.ma.masked_invalid(display),
         aspect="auto",
         interpolation="nearest",
-        cmap="RdYlGn",
+        cmap=_AVAILABILITY_CMAP,
         vmin=0.0,
         vmax=1.0,
     )
@@ -152,10 +160,6 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     tick_cols, tick_labels = _heatmap_xticks(positions, display.shape[1])
     ax.set_xticks(tick_cols)
     ax.set_xticklabels(tick_labels, fontsize=7)
-    ax.set_title(
-        "Availability by variable over the append dim (green=available, red=missing)",
-        fontsize=11,
-    )
     fig.tight_layout()
     fig.savefig(out_path, dpi=110, bbox_inches="tight")
     plt.close(fig)
@@ -349,11 +353,6 @@ def run_value_availability(ctx: RunContext) -> None:
         p2_fmt = _format_unavailable_summary(unavailable_p2)
         log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
 
-    ctx.availability_method_note = (
-        "Availability is value-scanned at the two run points: the fraction of non-null "
-        "values per position, averaged over both points (structural hour-0 NaNs of "
-        "accumulated variables excluded)."
-    )
     ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
         ctx.output_dir, ctx
     )
@@ -382,11 +381,6 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
-    ctx.availability_method_note = (
-        "Availability is manifest-ref-probed across the whole archive, not value-scanned: "
-        "per position, the fraction of expected source-file references present, plus a "
-        "per-variable ref probe at one present source file per position. No chunk is decoded."
-    )
 
     incomplete_files = {
         position: (present, expected)

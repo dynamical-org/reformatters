@@ -208,7 +208,6 @@ class RunContext:
     value_ts_member: int | None = None
     unavailable_timestamps_file: str | None = None
     # One-sentence description of how availability was measured, for the report.
-    availability_method_note: str | None = None
     # Sampled decode health (virtual stores); None until run_decode_scan runs.
     decode_sample_desc: str | None = None
     decode_checked_count: int | None = None

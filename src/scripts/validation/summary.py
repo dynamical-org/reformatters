@@ -286,10 +286,12 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
 
     lines.append("## Availability")
     lines.append("")
-    if ctx.availability_method_note:
-        lines.append(ctx.availability_method_note)
-        lines.append("")
     if ctx.combined_availability_plot:
+        lines.append(
+            "The plot below shows the availability of each variable over time — "
+            "light red marks missing data, dark green marks present data."
+        )
+        lines.append("")
         lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
         lines.append("")
     incomplete = [
