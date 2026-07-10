@@ -41,6 +41,7 @@ def list_files(
     checkers: int,
     rclone_args: Sequence[str] = (),
     env_vars: dict[str, Any] | None = None,
+    timeout_seconds: float = 200,
 ) -> list[PurePosixPath]:
     """List files recursively.
 
@@ -62,6 +63,9 @@ def list_files(
             For more info, see the rclone docs: https://rclone.org/docs/#checkers-int
         rclone_args: Additional args to be passed to `rclone lsf`.
         env_vars: Additional environment variables to give to `rclone`.
+        timeout_seconds: Kill the `rclone` subprocess if it runs longer than this. Scoped to a
+            single init directory, so list operation latency (not total bucket size) sets the
+            duration; the default is generous because the pod deadline is hours.
 
     Returns:
         paths: A sorted list of all the files found in `path`. Returns an empty list if the
@@ -86,7 +90,7 @@ def list_files(
             text=True,
             capture_output=True,
             env=env_vars,
-            timeout=120,
+            timeout=timeout_seconds,
         )
     except subprocess.CalledProcessError as e:
         if (
