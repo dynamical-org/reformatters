@@ -50,11 +50,12 @@ log = get_logger(__name__)
 
 HEATMAP_FILENAME = "availability_heatmap.png"
 MAX_HEATMAP_COLUMNS = 1200
-# The report scales images to the container width, so the heatmap is sized to render at
-# the same pixel width as the per-variable plots (figsize 14in x 80dpi); a higher dpi (so
-# a narrower figure) keeps the ~176 stacked variable labels legible at that width.
+# Heatmap figure width. The variable-name column is a fixed pixel width (its font and dpi
+# don't depend on the figure width), so shrinking the figure narrows the heatmap panel
+# while the labels stay the same size. Sized to 2/3 of the per-variable plots' rendered
+# width (14in x 80dpi). dpi kept high so the ~176 stacked labels stay legible.
 _HEATMAP_DPI = 110
-_HEATMAP_WIDTH_INCHES = 14 * 80 / _HEATMAP_DPI
+_HEATMAP_WIDTH_INCHES = (14 * 80 / _HEATMAP_DPI) * 2 / 3
 
 # Availability heatmap colors: light red (missing, 0.0) -> dark green (present, 1.0). The
 # ramp is monotonically light->dark so colorblind readers can read it by lightness rather
