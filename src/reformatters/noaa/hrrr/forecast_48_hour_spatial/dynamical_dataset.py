@@ -42,17 +42,20 @@ class NoaaHrrrForecast48HourSpatialDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # Sized per group from measured ~16.4 bytes/ref so full manifests land
-            # comfortably under the reader budgets (single-level <= 3 MiB/var, vertical
-            # 5-8 MiB) while keeping the total manifest count low; see "Manifest
-            # splitting" in docs/virtual_datasets.md. Full-window sizes: single-level
-            # 2400 x 49 refs/init ~= 1.8 MiB, pressure 180 x 1911 ~= 5.4 MiB,
-            # model 160 x 2450 ~= 6.1 MiB.
+            # Sized for operational commit latency: each commit read-modify-writes the
+            # active window's manifest for every changed array (~0.1s CPU/MB, measured),
+            # so window bytes bound per-commit flush cost. Full-window sizes at ~16.4
+            # bytes/ref: single-level 240 x 49 refs/init ~= 190 KiB, pressure 45 x 1911
+            # ~= 1.4 MiB, model 40 x 2450 ~= 1.6 MiB. Readers fetch more, smaller
+            # manifests for the same total bytes; see "Manifest splitting" in
+            # docs/virtual_datasets.md. On first commit per array after a split-size
+            # change, icechunk re-windows that array's existing manifests (bounded,
+            # one-time).
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 180,
-                    r"^/model_level/": 160,
-                    None: 2400,
+                    r"^/pressure_level/": 45,
+                    r"^/model_level/": 40,
+                    None: 240,
                 },
                 dim="init_time",
             ),
@@ -70,7 +73,9 @@ class NoaaHrrrForecast48HourSpatialDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="1.5",
+            # Commit flush parallelizes manifest rebuilds across arrays
+            # (ICECHUNK_COMMIT_MAX_CONCURRENT_NODES); cores bound the CPU side.
+            cpu="4",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )

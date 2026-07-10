@@ -549,23 +549,10 @@ wheels = [
 
 [[package]]
 name = "icechunk"
-version = "2.0.5"
-source = { registry = "https://pypi.org/simple" }
+version = "2.1.1"
+source = { git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1#dc06f0582e1316405ee763f49b272a27d57b6d82" }
 dependencies = [
     { name = "zarr" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/97/99/fabc9794c1f82e51b5c7c66301695b8fd920f72dee1726104dbdbd8df3e7/icechunk-2.0.5.tar.gz", hash = "sha256:50a2a44a1b561d3f2d3b5d19725c3759f300dc67225a2360fc793d894abfcab1", size = 3327412, upload-time = "2026-05-18T20:22:05.466Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/47/0e29dd5248dbaddef6351e9807d61c4eacae325f3b1415a2bb0ce5b2e92e/icechunk-2.0.5-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:2d2369db67502118150612ad481468cc0ae1333ba5cf6084179da04591e566b2", size = 16841657, upload-time = "2026-05-18T20:22:45.594Z" },
-    { url = "https://files.pythonhosted.org/packages/2f/c5/9652585ee78a0f242d2c92983a550990b6a39779d6d0a7c24ab82f293d39/icechunk-2.0.5-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:0554ef924b14f7d6369919c22f042a817f8dbc85d0b9efd793398e2d44786fa4", size = 15544742, upload-time = "2026-05-18T20:22:36.879Z" },
-    { url = "https://files.pythonhosted.org/packages/59/2c/076e478b9b45616ef268bdb0473d6d0c8bfc4ad62224477c0c066b74ebe0/icechunk-2.0.5-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:43289b68bc3ca93804a8ffd96e356f509c87bfd35c3d8202382dd97febd9957d", size = 17240728, upload-time = "2026-05-18T20:22:26.306Z" },
-    { url = "https://files.pythonhosted.org/packages/fa/06/8c0f3fb0df245f42d05d4b423a92766a466ad9e36711972da84196263d14/icechunk-2.0.5-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:35812c0c3087688c422470610fa9f77f6edb2d5d7c3345e0610beb32c8028f96", size = 16883484, upload-time = "2026-05-18T20:22:02.374Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/6a/74440741ac30bb09c9d3fb74acb1332f218ae87faba24f6a81c8c575b9d2/icechunk-2.0.5-cp314-cp314-manylinux_2_28_armv7l.whl", hash = "sha256:ba30ea180b056c34fcf094b36fd7fb7cbd2521f778e5d1080ce9ab9b2f28204d", size = 16706325, upload-time = "2026-05-18T20:22:15.083Z" },
-    { url = "https://files.pythonhosted.org/packages/4b/09/fe20275108f44a7ad8bbb904165feaf65f31796a8dad7baa764d86181fa9/icechunk-2.0.5-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:65075bce7674d2292344a661129fa987a579e5ab46c35862ef366b0c167e1066", size = 17099016, upload-time = "2026-05-18T20:22:56.368Z" },
-    { url = "https://files.pythonhosted.org/packages/fb/f6/bd9b9d79b1a10a8382116ac018f3580f6e8021674fe53167829fba70bd7e/icechunk-2.0.5-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:231f8a46de0949da8ffd0e59446342a1051e374276385ca9a529ab593e73c7ce", size = 16878446, upload-time = "2026-05-18T20:23:06.761Z" },
-    { url = "https://files.pythonhosted.org/packages/c6/af/025f9c303dca742c709a8c01f809479c3d22bdf630954f08eadb6eaace5b/icechunk-2.0.5-cp314-cp314-musllinux_1_2_i686.whl", hash = "sha256:65e514a6394b1ed5f3726d7da1cc3cafae8e23c7a6b243dc793b1eb876078813", size = 16955472, upload-time = "2026-05-18T20:23:16.865Z" },
-    { url = "https://files.pythonhosted.org/packages/52/b3/7429c90e9a0512f6e11443ccbc9d4ee392757b53c8604db05578457ffac9/icechunk-2.0.5-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:e1a488e9162d64e05e995aa4015cc8118c68fc54d0ed5af4616627a66a4d1d01", size = 17646740, upload-time = "2026-05-18T20:23:30.02Z" },
-    { url = "https://files.pythonhosted.org/packages/25/3c/8e086299cc1a779837e65e4152d03d02b457f8974bb388082fef20894b5e/icechunk-2.0.5-cp314-cp314-win_amd64.whl", hash = "sha256:95b1beb874ad287fcb99dfea29cd5218c795b5d9bca47b8f43ef78b8e6c5b572", size = 15945027, upload-time = "2026-05-18T20:23:40.81Z" },
 ]
 
 [[package]]
@@ -1365,7 +1352,7 @@ requires-dist = [
     { name = "google-crc32c", specifier = ">=1.8.0" },
     { name = "gribberish", specifier = "==1.5.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "icechunk", specifier = "~=2.0" },
+    { name = "icechunk", git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1" },
     { name = "kubernetes", specifier = ">=36.0.1,<37" },
     { name = "numba", specifier = "~=0.62" },
     { name = "numcodecs", specifier = "~=0.16" },
