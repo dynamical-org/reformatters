@@ -55,10 +55,6 @@ class EcccHrdpsForecastTemporalDynamicalDataset(
             memory="4G",
             ephemeral_storage="1G",  # not used
             secret_names=["source-coop-storage-options-key"],
-            # Suspended until a manual "Create Job from CronJob" run against real
-            # Source Coop credentials is verified (see reformatters#711) - remove
-            # once confirmed.
-            suspend=True,
         )
 
         return [archive_grib_files_job]
