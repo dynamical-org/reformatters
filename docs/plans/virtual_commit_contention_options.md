@@ -1,6 +1,6 @@
 # Parallel icechunk commit contention — options & tradeoffs
 
-Point-in-time evaluation (2026-07-02), following the v0.5.0 HRRR-spatial backfill. The
+Point-in-time evaluation (2026-07-02), following the v0.5.0 HRRR-virtual backfill. The
 run completed (389/389 in 2h33m) but exposed a **straggler gridlock** mode; this doc
 evaluates the three durable fixes for the next, larger virtual dataset. Tracking: #700.
 
@@ -14,7 +14,7 @@ wall-clock requirement parallelism ~10 can't meet).
 
 Uncooperative writers commit via `do_commit_rebasing`: flush → branch-HEAD CAS → on
 loss, rebase (cheap) then **re-run the entire flush**. A flush read-modify-writes every
-manifest window the changeset touches (~190 objects for a 30-init HRRR-spatial block;
+manifest window the changeset touches (~190 objects for a 30-init HRRR-virtual block;
 the near-full shared single-level window alone is 143 × ~1.8 MiB ≈ 250 MB down+up), and
 manifest ids are random per write, so identical logical content is fully re-merged,
 re-compressed, re-uploaded every round (~60s/round near-full, CPU-bound on the

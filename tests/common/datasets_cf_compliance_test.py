@@ -341,7 +341,7 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
-    # HRRR forecast-48-hour-spatial single-level/surface fields with no CF standard name.
+    # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",
     "echo_top",
@@ -532,7 +532,7 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "80v",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
-    # HRRR forecast-48-hour-spatial fields with no ECMWF parameter-database entry.
+    # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
     "aotk",
     "cangle",
     "colmd",
@@ -576,7 +576,7 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "80 metre V wind component",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
-    # HRRR forecast-48-hour-spatial fields with no ECMWF parameter-database entry.
+    # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
     "Aerosol optical thickness",
     "Column-integrated mass density",
     "Critical angle",

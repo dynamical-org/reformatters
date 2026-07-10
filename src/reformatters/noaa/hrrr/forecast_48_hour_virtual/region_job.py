@@ -15,7 +15,7 @@ from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.template_config import (
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
     MODEL_LEVELS,
     PRESSURE_LEVELS,
 )
@@ -40,7 +40,7 @@ _REPRESENTATIVE_LEVEL: dict[str, tuple[Dim, int]] = {
 }
 
 
-class NoaaHrrrForecast48HourSpatialSourceFileCoord(NoaaHrrrSourceFileCoord):
+class NoaaHrrrForecast48HourVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
     """One HRRR product file (init_time, lead_time, file_type) and the vars it packs."""
 
     def get_url(self, source: DownloadSource = "s3") -> str:
@@ -63,16 +63,16 @@ class NoaaHrrrForecast48HourSpatialSourceFileCoord(NoaaHrrrSourceFileCoord):
         return loc
 
 
-class NoaaHrrrForecast48HourSpatialRegionJob(
-    VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourSpatialSourceFileCoord]
+class NoaaHrrrForecast48HourVirtualRegionJob(
+    VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
 ):
-    """RegionJob for the virtual HRRR 48-hour spatial forecast dataset."""
+    """RegionJob for the HRRR 48-hour virtual forecast dataset."""
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaHrrrDataVar],
-    ) -> Sequence[NoaaHrrrForecast48HourSpatialSourceFileCoord]:
+    ) -> Sequence[NoaaHrrrForecast48HourVirtualSourceFileCoord]:
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         file_types = sorted({v.internal_attrs.hrrr_file_type for v in data_var_group})
@@ -92,7 +92,7 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
                     if not vars_in_file:
                         continue
                     coords.append(
-                        NoaaHrrrForecast48HourSpatialSourceFileCoord(
+                        NoaaHrrrForecast48HourVirtualSourceFileCoord(
                             init_time=init_time,
                             lead_time=lead_time,
                             domain="conus",
@@ -103,8 +103,8 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         return coords
 
     def discover_available(
-        self, pending: list[NoaaHrrrForecast48HourSpatialSourceFileCoord]
-    ) -> list[tuple[NoaaHrrrForecast48HourSpatialSourceFileCoord, int]]:
+        self, pending: list[NoaaHrrrForecast48HourVirtualSourceFileCoord]
+    ) -> list[tuple[NoaaHrrrForecast48HourVirtualSourceFileCoord, int]]:
         return discover_available_by_obstore_listing(
             pending,
             store=s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION),
@@ -113,7 +113,7 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         )
 
     def file_refs(
-        self, coord: NoaaHrrrForecast48HourSpatialSourceFileCoord, file_size: int
+        self, coord: NoaaHrrrForecast48HourVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
             coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
@@ -208,7 +208,7 @@ class NoaaHrrrForecast48HourSpatialRegionJob(
         reformat_job_name: str,
     ) -> tuple[
         Sequence[
-            RegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourSpatialSourceFileCoord]
+            RegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
         ],
         xr.DataTree,
     ]:

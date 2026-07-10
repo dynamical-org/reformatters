@@ -89,7 +89,7 @@ def _raw_idx_element(discipline: int, category: int, parameter: int) -> str:
     return f"var discipline={discipline} center=7 local_table=1 parmcat={category} parm={parameter}"
 
 
-class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
+class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
     """Virtual, spatially-chunked (map-optimized) HRRR 48-hour forecast.
 
     Chunks are references to GRIB messages in NOAA's HRRR archive decoded at read
@@ -112,9 +112,9 @@ class NoaaHrrrForecast48HourSpatialTemplateConfig(NoaaHrrrCommonTemplateConfig):
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="noaa-hrrr-forecast-48-hour-spatial",
+            dataset_id="noaa-hrrr-forecast-48-hour-virtual",
             dataset_version="0.5.0",
-            name="NOAA HRRR forecast, 48 hour, spatial",
+            name="NOAA HRRR forecast, 48 hour, virtual",
             description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",

@@ -7,19 +7,19 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.noaa.hrrr.forecast_48_hour_spatial import (
+from reformatters.noaa.hrrr.forecast_48_hour_virtual import (
     region_job as region_job_module,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.region_job import (
-    NoaaHrrrForecast48HourSpatialRegionJob,
-    NoaaHrrrForecast48HourSpatialSourceFileCoord,
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
+    NoaaHrrrForecast48HourVirtualRegionJob,
+    NoaaHrrrForecast48HourVirtualSourceFileCoord,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.template_config import (
-    NoaaHrrrForecast48HourSpatialTemplateConfig,
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
+    NoaaHrrrForecast48HourVirtualTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
-TEMPLATE_CONFIG = NoaaHrrrForecast48HourSpatialTemplateConfig()
+TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 _LEAD_6H = pd.Timedelta("6h")
 
 
@@ -37,8 +37,8 @@ def make_job(
     data_vars: Sequence[NoaaHrrrDataVar] | None = None,
     region: slice = slice(0, 1),
     processing_mode: Literal["backfill", "update"] = "backfill",
-) -> NoaaHrrrForecast48HourSpatialRegionJob:
-    return NoaaHrrrForecast48HourSpatialRegionJob(
+) -> NoaaHrrrForecast48HourVirtualRegionJob:
+    return NoaaHrrrForecast48HourVirtualRegionJob(
         tmp_store=Path("unused-tmp.zarr"),
         template_ds=template_ds,
         data_vars=data_vars or TEMPLATE_CONFIG.data_vars,
@@ -53,8 +53,8 @@ def _coord(
     file_type: Literal["sfc", "prs", "nat"],
     data_vars: Sequence[NoaaHrrrDataVar],
     lead_time: pd.Timedelta = _LEAD_6H,
-) -> NoaaHrrrForecast48HourSpatialSourceFileCoord:
-    return NoaaHrrrForecast48HourSpatialSourceFileCoord(
+) -> NoaaHrrrForecast48HourVirtualSourceFileCoord:
+    return NoaaHrrrForecast48HourVirtualSourceFileCoord(
         init_time=pd.Timestamp("2024-06-01T00:00"),
         lead_time=lead_time,
         domain="conus",
@@ -295,7 +295,7 @@ def test_operational_update_jobs_single_polling_job(
     now = pd.Timestamp("2024-06-02T01:00")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
-    jobs, template_ds = NoaaHrrrForecast48HourSpatialRegionJob.operational_update_jobs(
+    jobs, template_ds = NoaaHrrrForecast48HourVirtualRegionJob.operational_update_jobs(
         primary_store=Mock(),
         tmp_store=Path("unused-tmp.zarr"),
         get_template_fn=TEMPLATE_CONFIG.get_template,
@@ -304,7 +304,7 @@ def test_operational_update_jobs_single_polling_job(
         reformat_job_name="test",
     )
     (job,) = jobs
-    assert isinstance(job, NoaaHrrrForecast48HourSpatialRegionJob)
+    assert isinstance(job, NoaaHrrrForecast48HourVirtualRegionJob)
     assert job.processing_mode == "update"
     init_times = template_ds.to_dataset().get_index("init_time")
     # 14h window at the 6h cadence = the current + 2 prior cycles.

@@ -19,7 +19,7 @@ To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. 
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type. Virtual stores are slower and their runtime scales differently — see [Virtual and multi-level datasets](#virtual-and-multi-level-datasets) below.
 
-Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. If you run these on a managed/remote session (e.g. Claude Code on the web), do it in the background and keep the container alive for the duration — set a periodic heartbeat (a self-scheduled wake-up or a monitor that re-arms, since a single monitor may be capped well under the run length) so the session is not reclaimed and progress lost. Also watch memory: a full virtual run-all holds several GB of decoded fields — budget ~6–8 GB RAM (measured peak ~6.5 GB on the 176-variable HRRR spatial store) and don't run it on an undersized host.
+Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. If you run these on a managed/remote session (e.g. Claude Code on the web), do it in the background and keep the container alive for the duration — set a periodic heartbeat (a self-scheduled wake-up or a monitor that re-arms, since a single monitor may be capped well under the run length) so the session is not reclaimed and progress lost. Also watch memory: a full virtual run-all holds several GB of decoded fields — budget ~6–8 GB RAM (measured peak ~6.5 GB on the 176-variable HRRR virtual store) and don't run it on an undersized host.
 
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
@@ -50,7 +50,7 @@ Note that spatial downsampling (`_downsample_for_plot`) only shrinks the plot, n
 
 Virtual runs decode many full-field messages, so scope a run with `--variable`/`-v` or `--start-date`/`--end-date` when you don't need the whole archive. Each variable's decode count is logged before its read starts.
 
-Runtime scales roughly linearly with variable count: budget **~0.4 minutes per variable end-to-end** for a full virtual run-all (measured: 176 variables in ~71 minutes on the HRRR spatial store, including the concurrent whole-archive manifest scan and the sampled decode scan). So a ~150-variable virtual dataset takes **~1–2 hours**, depending on archive length (the manifest scan cost grows with the number of expected source files) and S3 latency. Scope with `-v`/`--start-date` while iterating to bring this down to well under a minute.
+Runtime scales roughly linearly with variable count: budget **~0.4 minutes per variable end-to-end** for a full virtual run-all (measured: 176 variables in ~71 minutes on the HRRR virtual store, including the concurrent whole-archive manifest scan and the sampled decode scan). So a ~150-variable virtual dataset takes **~1–2 hours**, depending on archive length (the manifest scan cost grows with the number of expected source files) and S3 latency. Scope with `-v`/`--start-date` while iterating to bring this down to well under a minute.
 
 ### Whole-archive scans (manifest completeness, decode health)
 
@@ -175,7 +175,7 @@ When your review is complete, insert a `## Summary` section into `validation_sum
 
 ### 3f. Batched review for many-variable datasets (AI assistants)
 
-A complete-variables dataset (e.g. `noaa-hrrr-forecast-48-hour-spatial`: 177 variables, so ~700 per-variable PNGs) cannot be reviewed in a single agent context: at roughly 300-500 tokens per plot image plus each variable's stats block and reasoning, a full pass is on the order of a million tokens before any follow-up work. At ~25 variables a single context works; well above that, split the review across subagents. The lead (orchestrating) agent must not open plot images itself — every image read happens inside a batch or verification subagent whose context is discarded after it returns.
+A complete-variables dataset (e.g. `noaa-hrrr-forecast-48-hour-virtual`: 177 variables, so ~700 per-variable PNGs) cannot be reviewed in a single agent context: at roughly 300-500 tokens per plot image plus each variable's stats block and reasoning, a full pass is on the order of a million tokens before any follow-up work. At ~25 variables a single context works; well above that, split the review across subagents. The lead (orchestrating) agent must not open plot images itself — every image read happens inside a batch or verification subagent whose context is discarded after it returns.
 
 **Lead agent process:**
 
@@ -202,7 +202,7 @@ BATCH OBSERVATIONS
 
 Verdicts + precise pointers, not narration: the lead acts on `next-verification` lines and never re-reads the images behind an OK.
 
-**Sizing (measured on noaa-hrrr-forecast-48-hour-spatial).** A batch reviewer spends ~6k tokens per variable all-in (plots + stats section + checklist + reasoning), ~2.5 minutes per 6-variable batch. So budget 10-15 variables per batch subagent (~60-90k tokens); 177 variables → 12-18 parallel batches, then a handful of verification subagents (a targeted source-parity check — idx fetch, byte-range GRIB download, gribberish decode — ran in under a minute and ~18k tokens). Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
+**Sizing (measured on noaa-hrrr-forecast-48-hour-virtual).** A batch reviewer spends ~6k tokens per variable all-in (plots + stats section + checklist + reasoning), ~2.5 minutes per 6-variable batch. So budget 10-15 variables per batch subagent (~60-90k tokens); 177 variables → 12-18 parallel batches, then a handful of verification subagents (a targeted source-parity check — idx fetch, byte-range GRIB download, gribberish decode — ran in under a minute and ~18k tokens). Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
 
 ## 4. Data quality checklist
 
