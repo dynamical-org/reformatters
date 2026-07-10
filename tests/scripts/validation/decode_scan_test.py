@@ -29,20 +29,29 @@ def _ctx(tmp_path: Path) -> RunContext:
 
 def test_decode_summary_lines_pass(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
-    ctx.decode_note = "Decode health is sampled: 20 of 100 regions."
+    ctx.decode_sample_desc = (
+        "20 of 100 append-dim regions, 5 leads and 3 levels per group variable"
+    )
+    ctx.decode_checked_count = 1234
     ctx.decode_failures = []
 
     lines = decode_summary_lines(ctx)
 
-    assert lines[0] == ctx.decode_note
-    assert lines[-1] == "All sampled references decoded successfully."
+    assert lines == [
+        "1234 references decoded successfully, sampled across "
+        "20 of 100 append-dim regions, 5 leads and 3 levels per group variable."
+    ]
 
 
 def test_decode_summary_lines_failures(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
-    ctx.decode_note = "Decode health is sampled: 20 of 100 regions."
+    ctx.decode_sample_desc = (
+        "20 of 100 append-dim regions, 5 leads and 3 levels per group variable"
+    )
+    ctx.decode_checked_count = 1234
     ctx.decode_failures = ["temperature_2m all-NaN at 2024-01-01T00"]
 
     lines = decode_summary_lines(ctx)
 
+    assert lines[0].startswith("Decode health failures, sampled across")
     assert lines[-1] == "- FAIL: temperature_2m all-NaN at 2024-01-01T00"

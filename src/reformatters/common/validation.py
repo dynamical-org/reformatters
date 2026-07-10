@@ -57,6 +57,9 @@ class ValidationResult(pydantic.BaseModel):
 
     passed: bool
     message: str
+    checked_count: int | None = (
+        None  # items/references checked, when the validator tracks it
+    )
 
 
 @runtime_checkable
@@ -717,6 +720,7 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         if not candidates:
             return ValidationResult(
                 passed=False,
+                checked_count=0,
                 message=f"No source files in the {append_dim} window to decode-check",
             )
         absent = {id(c) for c in region_job.filter_already_present(candidates, store)}
@@ -724,6 +728,7 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         if not present:
             return ValidationResult(
                 passed=False,
+                checked_count=0,
                 message=f"No present references in the {append_dim} window to decode",
             )
 
@@ -736,9 +741,11 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         min_nan_fraction: dict[str, float] = {}
         first_error: dict[str, str] = {}
         no_reference_vars: set[str] = set()
+        decoded_refs = 0
         decode = partial(self._decode_coord, region_job=region_job, ds=ds)
         with ThreadPoolExecutor(self.max_workers) as pool:
             for results, skipped in pool.map(decode, to_decode):
+                decoded_refs += len(results)
                 for var_path, nan_fraction, error in results:
                     min_nan_fraction[var_path] = min(
                         min_nan_fraction.get(var_path, float("inf")), nan_fraction
@@ -759,6 +766,7 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         if problems:
             return ValidationResult(
                 passed=False,
+                checked_count=decoded_refs,
                 message=f"Decode health failures at {append_dim}={target_label}:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
@@ -773,7 +781,9 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
                 "positions — reference existence is reported by the "
                 "availability/manifest check)"
             )
-        return ValidationResult(passed=True, message=message)
+        return ValidationResult(
+            passed=True, message=message, checked_count=decoded_refs
+        )
 
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
         if self.positions == "latest":

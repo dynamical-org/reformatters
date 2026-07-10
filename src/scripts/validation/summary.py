@@ -80,7 +80,7 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     else:
         ref_clause = "reference not available"
     lines = [
-        f"**Spatial** — snapshot at {stats.spatial_time_label or 'n/a'} ({ref_clause})",
+        f"**Spatial** — {stats.spatial_time_label or 'n/a'} ({ref_clause})",
         "",
         "| Source | min | mean | max |",
         "|---|---|---|---|",
@@ -106,13 +106,13 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
 
 def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lo, hi = _append_dim_range(ctx)
-    header = f"**Point time series statistics** — {lo} - {hi}"
+    header = f"**Point time series** — {lo} - {hi}"
     if ctx.is_virtual:
-        header += f", sampled lead = {ctx.value_ts_lead_label}"
+        header += f", sampled lead={ctx.value_ts_lead_label}"
         if ctx.value_ts_member is not None:
-            header += f", member = {ctx.value_ts_member}"
+            header += f", member={ctx.value_ts_member}"
         if stats.level_dim is not None:
-            header += f", level = {stats.level_dim}={stats.level_value:g}"
+            header += f", {stats.level_dim}={stats.level_value:g}"
     return [
         header,
         "",
@@ -128,7 +128,7 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
 
 def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lines = [
-        f"**Temporal** — period {ctx.temporal_period_label or 'n/a'}",
+        f"**Temporal** — {ctx.temporal_period_label or 'n/a'}",
         "",
         "| Source | min | mean | max |",
         "|---|---|---|---|",
@@ -286,10 +286,12 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
 
     lines.append("## Availability")
     lines.append("")
-    if ctx.availability_method_note:
-        lines.append(ctx.availability_method_note)
-        lines.append("")
     if ctx.combined_availability_plot:
+        lines.append(
+            "The plot below shows the availability of each variable over time — "
+            "light red marks unavailable data, dark green marks present data."
+        )
+        lines.append("")
         lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
         lines.append("")
     incomplete = [
@@ -323,8 +325,8 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         )
         lines.append("")
 
-    if ctx.decode_note is not None:
-        lines.append("## Decode health (sampled)")
+    if ctx.decode_sample_desc is not None:
+        lines.append("## Decode health")
         lines.append("")
         lines.extend(decode_summary_lines(ctx))
         lines.append("")

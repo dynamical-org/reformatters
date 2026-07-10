@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import typer
 import xarray as xr
+from matplotlib.colors import LinearSegmentedColormap
 
 from reformatters.common.logging import get_logger
 from scripts.validation.manifest_scan import (
@@ -49,6 +50,19 @@ log = get_logger(__name__)
 
 HEATMAP_FILENAME = "availability_heatmap.png"
 MAX_HEATMAP_COLUMNS = 1200
+# Heatmap figure width. The variable-name column is a fixed pixel width (its font and dpi
+# don't depend on the figure width), so shrinking the figure narrows the heatmap panel
+# while the labels stay the same size. Sized to 2/3 of the per-variable plots' rendered
+# width (14in x 80dpi). dpi kept high so the ~176 stacked labels stay legible.
+_HEATMAP_DPI = 110
+_HEATMAP_WIDTH_INCHES = (14 * 80 / _HEATMAP_DPI) * 2 / 3
+
+# Availability heatmap colors: light red (missing, 0.0) -> dark green (present, 1.0). The
+# ramp is monotonically light->dark so colorblind readers can read it by lightness rather
+# than red/green hue. Green endpoint is kept from RdYlGn; the red end is lightened.
+_AVAILABILITY_CMAP = LinearSegmentedColormap.from_list(
+    "availability", ["#fa4848", plt.get_cmap("RdYlGn")(1.0)]
+)
 
 
 @dataclass
@@ -112,41 +126,48 @@ def _downsample_columns(grid: np.ndarray, max_columns: int) -> np.ndarray:
         return np.column_stack([np.nanmean(b, axis=1) for b in blocks])
 
 
+def _heatmap_xticks(
+    positions: np.ndarray, n_columns: int
+) -> tuple[list[int], list[str]]:
+    """Ticks on the heatmap's downsampled column axis: one per calendar-year start
+    (labeled with the year) when the archive spans multiple years, else 8 evenly spaced
+    date ticks."""
+    positions_dt = pd.DatetimeIndex(positions)
+    years = positions_dt.year.to_numpy()
+    span = max(1, len(positions) - 1)
+    if years[-1] > years[0]:
+        year_range = range(int(years[0]), int(years[-1]) + 1)
+        position_idx = np.array([np.searchsorted(years, year) for year in year_range])
+        columns = np.round(position_idx / span * (n_columns - 1)).astype(int)
+        return columns.tolist(), [str(year) for year in year_range]
+    columns = np.unique(np.linspace(0, n_columns - 1, 8).astype(int))
+    column_to_position = np.linspace(0, len(positions) - 1, n_columns).astype(int)
+    labels = [str(p)[:10] for p in positions_dt[column_to_position[columns]]]
+    return columns.tolist(), labels
+
+
 def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) -> None:
     positions, grid, var_names = _heatmap_grid(series_by_var)
     display = _downsample_columns(grid, MAX_HEATMAP_COLUMNS)
 
     fig_height = max(3.0, 0.16 * len(var_names) + 1.5)
-    fig, ax = plt.subplots(figsize=(14, fig_height))
+    fig, ax = plt.subplots(figsize=(_HEATMAP_WIDTH_INCHES, fig_height))
     ax.set_facecolor("lightgrey")  # masked (not probed) cells show the axes background
     ax.imshow(
         np.ma.masked_invalid(display),
         aspect="auto",
         interpolation="nearest",
-        cmap="RdYlGn",
+        cmap=_AVAILABILITY_CMAP,
         vmin=0.0,
         vmax=1.0,
     )
     ax.set_yticks(range(len(var_names)))
     ax.set_yticklabels(var_names, fontsize=max(4, min(8, 900 // len(var_names))))
-    tick_idx = np.unique(np.linspace(0, display.shape[1] - 1, 8).astype(int))
-    column_to_position = np.linspace(0, len(positions) - 1, display.shape[1]).astype(
-        int
-    )
-    ax.set_xticks(tick_idx)
-    ax.set_xticklabels(
-        [
-            str(p)[:10]
-            for p in pd.DatetimeIndex(positions[column_to_position[tick_idx]])
-        ],
-        fontsize=7,
-    )
-    ax.set_title(
-        "Availability by variable over the append dim (green=available, red=missing)",
-        fontsize=11,
-    )
+    tick_cols, tick_labels = _heatmap_xticks(positions, display.shape[1])
+    ax.set_xticks(tick_cols)
+    ax.set_xticklabels(tick_labels, fontsize=7)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=110, bbox_inches="tight")
+    fig.savefig(out_path, dpi=_HEATMAP_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -338,11 +359,6 @@ def run_value_availability(ctx: RunContext) -> None:
         p2_fmt = _format_unavailable_summary(unavailable_p2)
         log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
 
-    ctx.availability_method_note = (
-        "Availability is value-scanned at the two run points: the fraction of non-null "
-        "values per position, averaged over both points (structural hour-0 NaNs of "
-        "accumulated variables excluded)."
-    )
     ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
         ctx.output_dir, ctx
     )
@@ -371,11 +387,6 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
-    ctx.availability_method_note = (
-        "Availability is manifest-ref-probed across the whole archive, not value-scanned: "
-        "per position, the fraction of expected source-file references present, plus a "
-        "per-variable ref probe at one present source file per position. No chunk is decoded."
-    )
 
     incomplete_files = {
         position: (present, expected)

@@ -1,3 +1,4 @@
+import hashlib
 import re
 from pathlib import Path
 
@@ -356,13 +357,40 @@ def render_html(
 """
 
 
+def _cache_bust_pngs(html: str, run_dir: Path) -> str:
+    """Append a content-hash query to each local .png reference so a changed image gets a
+    fresh URL. The CDN edge-caches images (not the HTML), so without this a re-uploaded
+    plot serves stale at the same URL until its TTL; unchanged images keep the same hash
+    and stay cached."""
+    versions: dict[str, str] = {}
+
+    def versioned(filename: str) -> str:
+        if filename not in versions:
+            path = run_dir / filename
+            if path.exists():
+                digest = hashlib.md5(
+                    path.read_bytes(), usedforsecurity=False
+                ).hexdigest()[:8]
+                versions[filename] = f"{filename}?v={digest}"
+            else:
+                versions[filename] = filename
+        return versions[filename]
+
+    return re.sub(
+        r'(src|href)="([^"?]+\.png)"',
+        lambda m: f'{m.group(1)}="{versioned(m.group(2))}"',
+        html,
+    )
+
+
 def render_report(run_dir: Path) -> Path:
     md_path = run_dir / "validation_summary.md"
     assert md_path.exists(), f"validation_summary.md not found in {run_dir}"
     dataset_id = run_dir.parent.name
     out_path = run_dir / REPORT_FILENAME
     available_files = {f.name for f in run_dir.iterdir() if f.is_file()}
-    out_path.write_text(render_html(md_path.read_text(), dataset_id, available_files))
+    html = render_html(md_path.read_text(), dataset_id, available_files)
+    out_path.write_text(_cache_bust_pngs(html, run_dir))
     return out_path
 
 

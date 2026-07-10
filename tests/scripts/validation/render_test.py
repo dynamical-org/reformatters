@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from scripts.validation.render import REPORT_FILENAME, render_html, render_report
@@ -114,3 +115,21 @@ def test_render_report_writes_file(tmp_path: Path) -> None:
     body = out.read_text()
     assert "<!doctype html>" in body
     assert "var-temperature_2m" in body
+
+
+def test_render_report_cache_busts_pngs(tmp_path: Path) -> None:
+    run_dir = tmp_path / "noaa-test" / "v9.9.9_2026-01-01T00-00"
+    run_dir.mkdir(parents=True)
+    (run_dir / "validation_summary.md").write_text(FIXTURE_MD)
+    (run_dir / "availability_heatmap.png").write_bytes(b"first-image-bytes")
+
+    body = render_report(run_dir).read_text()
+    match = re.search(r"availability_heatmap\.png\?v=([0-9a-f]{8})", body)
+    assert match, "heatmap image should carry a ?v=<hash> cache-buster"
+
+    # A changed image gets a new hash (busts the CDN cache); the reference must move off
+    # the old hash.
+    (run_dir / "availability_heatmap.png").write_bytes(b"second-different-bytes")
+    body2 = render_report(run_dir).read_text()
+    assert f"availability_heatmap.png?v={match.group(1)}" not in body2
+    assert re.search(r"availability_heatmap\.png\?v=[0-9a-f]{8}", body2)
