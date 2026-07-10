@@ -8,13 +8,13 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import template_utils, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 _VIRTUAL_DATASETS = [
-    d for d in DYNAMICAL_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
+    d for d in IMPLEMENTED_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
 ]
 
 
@@ -86,7 +86,7 @@ def dataset(request: pytest.FixtureRequest) -> DynamicalDataset[Any, Any]:
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_template_config_structure_is_valid(
     dataset: DynamicalDataset[Any, Any],
@@ -97,7 +97,7 @@ def test_template_config_structure_is_valid(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_update_template_matches_existing_template(
     template_setup: TemplateSetup,
@@ -113,7 +113,7 @@ def test_update_template_matches_existing_template(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_update_template_round_trips_correctly(
     template_setup: TemplateSetup,
@@ -129,7 +129,7 @@ def test_update_template_round_trips_correctly(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_update_template_fill_values_are_correct(
     template_setup: TemplateSetup,
@@ -156,7 +156,7 @@ def test_update_template_fill_values_are_correct(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_coordinates_load_without_error(
     dataset: DynamicalDataset[Any, Any],
@@ -185,7 +185,7 @@ def test_coordinates_load_without_error(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_timedelta_coordinates_stored_as_float(
     dataset: DynamicalDataset[Any, Any],
@@ -211,7 +211,7 @@ def test_timedelta_coordinates_stored_as_float(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_coordinates_have_single_chunk(
     dataset: DynamicalDataset[Any, Any],
@@ -259,7 +259,7 @@ def test_virtual_serializers_flip_to_shared_orientation(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_coordinates_not_sharded(
     dataset: DynamicalDataset[Any, Any],

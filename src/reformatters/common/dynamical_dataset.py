@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -10,21 +9,20 @@ from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import numpy as np
 import pandas as pd
-import sentry_sdk
-import sentry_sdk.crons
 import typer
 import xarray as xr
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    monitoring,
     parallel_coordination,
     template_utils,
     validation,
 )
 from reformatters.common.config import Config
 from reformatters.common.config_models import ROOT, DataVar
-from reformatters.common.iterating import digest, get_worker_jobs, item
+from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
     Job,
@@ -672,38 +670,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_jobs = (c for c in cron_jobs if isinstance(c, cron_type))
         cron_job = item(cron_jobs)
 
-        # Use the actual cronjob name from k8s env when available. This ensures
-        # staging cronjobs report to their own Sentry monitor, not production's.
-        monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
-
-        def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
-            sentry_sdk.crons.capture_checkin(
-                monitor_slug=monitor_slug,
-                check_in_id=digest([reformat_job_name], length=32),
-                status=status,
-                monitor_config={
-                    "schedule": {"type": "crontab", "value": cron_job.schedule},
-                    "timezone": "UTC",
-                    "checkin_margin": 10,
-                    "max_runtime": int(
-                        cron_job.pod_active_deadline.total_seconds() / 60
-                    ),
-                    "failure_issue_threshold": 1,
-                    "recovery_threshold": 1,
-                },
-            )
-
-        if send_in_progress:
-            capture_checkin("in_progress")
-        try:
+        with monitoring.monitor_cron(
+            cron_job,
+            reformat_job_name,
+            send_in_progress=send_in_progress,
+            send_result=send_result,
+        ):
             yield
-        except Exception:
-            if send_result:
-                capture_checkin("error")
-            raise
-        else:
-            if send_result:
-                capture_checkin("ok")
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:

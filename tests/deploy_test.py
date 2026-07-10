@@ -91,3 +91,25 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dataset 2
     assert resources["items"][2]["kind"] == "CronJob"
     assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
+
+
+def test_deploy_operational_resources_dataset_id_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    test_datasets: list[DynamicalDataset[Any, Any]] = [
+        ExampleDataset1(),
+        ExampleDataset2(),
+    ]  # ty: ignore[invalid-assignment]
+
+    deploy.deploy_operational_resources(
+        test_datasets,
+        docker_image="test-image-tag",
+        dataset_id_filter="example-dataset-2",
+    )
+
+    resources = json.loads(mock_run.call_args.kwargs["input"])
+    names = [item["metadata"]["name"] for item in resources["items"]]
+    assert names == ["example-dataset-2-update", "example-dataset-2-validate"]

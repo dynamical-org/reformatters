@@ -70,8 +70,11 @@ def register_commands(
     @app.command()
     def deploy(
         docker_image: str | None = None,
+        dataset_id: str | None = None,
     ) -> None:
-        deploy_operational_resources(datasets, docker_image)
+        deploy_operational_resources(
+            datasets, docker_image, dataset_id_filter=dataset_id
+        )
 
     @app.command()
     def deploy_staging(

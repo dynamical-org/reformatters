@@ -8,9 +8,9 @@ import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
 import xarray as xr
 
-from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
 ECMWF_PARAMS_PATH = Path(__file__).parent / "ecmwf_params.json"
@@ -100,7 +100,7 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_latitude_longitude_recognized(
     dataset: DynamicalDataset[Any, Any],
@@ -193,7 +193,7 @@ def test_cf_latitude_longitude_recognized(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_time_coordinates_recognized(
     dataset: DynamicalDataset[Any, Any],
@@ -250,7 +250,7 @@ def test_cf_time_coordinates_recognized(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_ensemble_member_recognized(
     dataset: DynamicalDataset[Any, Any],
@@ -271,7 +271,7 @@ def test_cf_ensemble_member_recognized(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_coordinates_have_long_name(
     dataset: DynamicalDataset[Any, Any],
@@ -297,7 +297,7 @@ def test_cf_coordinates_have_long_name(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_data_variables_have_long_name(
     dataset: DynamicalDataset[Any, Any],
@@ -418,7 +418,7 @@ CF_UNITS_VARIANCES_DATASET_ALLOWLIST: set[tuple[str, str, str]] = {
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_cf_standard_name_and_units(
     dataset: DynamicalDataset[Any, Any],
@@ -633,7 +633,7 @@ def _format_ecmwf_suggestions(
 
 
 @pytest.mark.parametrize(
-    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
 def test_ecmwf_parameter_compliance(
     dataset: DynamicalDataset[Any, Any],
@@ -836,7 +836,7 @@ def test_metadata_consistency_across_datasets() -> None:
     by_short_name: dict[str, dict[str, dict[str, str | None]]] = {}
     by_long_name: dict[str, dict[str, dict[str, str | None]]] = {}
 
-    for dataset in DYNAMICAL_DATASETS:
+    for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for var_config in template_config.data_vars:
             if (dataset.dataset_id, var_config.name) in RAW_GRIB_VALUE_VARS:
@@ -878,7 +878,7 @@ def test_metadata_consistency_across_datasets() -> None:
     # Collect coordinate metadata and check consistency
     by_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
 
-    for dataset in DYNAMICAL_DATASETS:
+    for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for coord_config in template_config.coords:
             by_coord_name.setdefault(coord_config.name, {})[dataset.dataset_id] = {
