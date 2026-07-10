@@ -17,22 +17,22 @@ from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from .region_job import (
     _S3_BUCKET_REGION,
     _S3_LOCATION_PREFIX,
-    NoaaHrrrForecast48HourSpatialRegionJob,
-    NoaaHrrrForecast48HourSpatialSourceFileCoord,
+    NoaaHrrrForecast48HourVirtualRegionJob,
+    NoaaHrrrForecast48HourVirtualSourceFileCoord,
 )
-from .template_config import NoaaHrrrForecast48HourSpatialTemplateConfig
+from .template_config import NoaaHrrrForecast48HourVirtualTemplateConfig
 
 
-class NoaaHrrrForecast48HourSpatialDataset(
-    DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrForecast48HourSpatialSourceFileCoord]
+class NoaaHrrrForecast48HourVirtualDataset(
+    DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
 ):
-    """NOAA HRRR 48-hour spatial (virtual icechunk) forecast dataset."""
+    """NOAA HRRR 48-hour virtual (spatially-chunked, map-optimized icechunk) forecast dataset."""
 
-    template_config: NoaaHrrrForecast48HourSpatialTemplateConfig = (
-        NoaaHrrrForecast48HourSpatialTemplateConfig()
+    template_config: NoaaHrrrForecast48HourVirtualTemplateConfig = (
+        NoaaHrrrForecast48HourVirtualTemplateConfig()
     )
-    region_job_class: type[NoaaHrrrForecast48HourSpatialRegionJob] = (
-        NoaaHrrrForecast48HourSpatialRegionJob
+    region_job_class: type[NoaaHrrrForecast48HourVirtualRegionJob] = (
+        NoaaHrrrForecast48HourVirtualRegionJob
     )
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(

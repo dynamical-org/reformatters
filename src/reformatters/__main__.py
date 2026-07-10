@@ -50,8 +50,8 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.dynamical_dataset import (
-    NoaaHrrrForecast48HourSpatialDataset,
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
+    NoaaHrrrForecast48HourVirtualDataset,
 )
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
@@ -173,7 +173,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
     ),
-    NoaaHrrrForecast48HourSpatialDataset(
+    NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(

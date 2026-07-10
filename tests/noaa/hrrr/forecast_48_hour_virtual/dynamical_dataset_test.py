@@ -13,11 +13,11 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.dynamical_dataset import (
-    NoaaHrrrForecast48HourSpatialDataset,
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
+    NoaaHrrrForecast48HourVirtualDataset,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_spatial.region_job import (
-    NoaaHrrrForecast48HourSpatialRegionJob,
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
+    NoaaHrrrForecast48HourVirtualRegionJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from tests.common.dynamical_dataset_test import (
@@ -39,8 +39,8 @@ _FILTER_VARS = [
 ]
 
 
-def make_dataset(tmp_path: Path) -> NoaaHrrrForecast48HourSpatialDataset:
-    return NoaaHrrrForecast48HourSpatialDataset(
+def make_dataset(tmp_path: Path) -> NoaaHrrrForecast48HourVirtualDataset:
+    return NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
         ),
@@ -48,7 +48,7 @@ def make_dataset(tmp_path: Path) -> NoaaHrrrForecast48HourSpatialDataset:
 
 
 @pytest.fixture
-def dataset(tmp_path: Path) -> NoaaHrrrForecast48HourSpatialDataset:
+def dataset(tmp_path: Path) -> NoaaHrrrForecast48HourVirtualDataset:
     return make_dataset(tmp_path)
 
 
@@ -108,11 +108,11 @@ def test_backfill_local_and_operational_update(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-01T08:00")),
     )
     orig_update_jobs = (
-        NoaaHrrrForecast48HourSpatialRegionJob.operational_update_jobs.__func__  # type: ignore[attr-defined]
+        NoaaHrrrForecast48HourVirtualRegionJob.operational_update_jobs.__func__  # type: ignore[attr-defined]
     )
 
     def filtered_update_jobs(
-        cls: type[NoaaHrrrForecast48HourSpatialRegionJob],
+        cls: type[NoaaHrrrForecast48HourVirtualRegionJob],
         *,
         all_data_vars: Sequence[NoaaHrrrDataVar],
         **kwargs: Any,  # noqa: ANN401 - passthrough to the wrapped classmethod
@@ -124,7 +124,7 @@ def test_backfill_local_and_operational_update(
         )
 
     monkeypatch.setattr(
-        NoaaHrrrForecast48HourSpatialRegionJob,
+        NoaaHrrrForecast48HourVirtualRegionJob,
         "operational_update_jobs",
         classmethod(filtered_update_jobs),
     )
@@ -239,7 +239,7 @@ def test_dropin_matches_materialized(
 
 
 def test_operational_kubernetes_resources(
-    dataset: NoaaHrrrForecast48HourSpatialDataset,
+    dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
     assert len(cron_jobs) == 2
@@ -254,7 +254,7 @@ def test_operational_kubernetes_resources(
     assert len(update_cron_job.secret_names) > 0
 
 
-def test_validators(dataset: NoaaHrrrForecast48HourSpatialDataset) -> None:
+def test_validators(dataset: NoaaHrrrForecast48HourVirtualDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
     assert any(
@@ -264,7 +264,7 @@ def test_validators(dataset: NoaaHrrrForecast48HourSpatialDataset) -> None:
 
 
 def test_virtual_container_matches_ref_prefix(
-    dataset: NoaaHrrrForecast48HourSpatialDataset,
+    dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     (container,) = dataset.icechunk_virtual_config.containers
     assert container.url_prefix == "s3://noaa-hrrr-bdp-pds/"
