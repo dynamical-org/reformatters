@@ -50,6 +50,11 @@ log = get_logger(__name__)
 
 HEATMAP_FILENAME = "availability_heatmap.png"
 MAX_HEATMAP_COLUMNS = 1200
+# The report scales images to the container width, so the heatmap is sized to render at
+# the same pixel width as the per-variable plots (figsize 14in x 80dpi); a higher dpi (so
+# a narrower figure) keeps the ~176 stacked variable labels legible at that width.
+_HEATMAP_DPI = 110
+_HEATMAP_WIDTH_INCHES = 14 * 80 / _HEATMAP_DPI
 
 # Availability heatmap colors: light red (missing, 0.0) -> dark green (present, 1.0). The
 # ramp is monotonically light->dark so colorblind readers can read it by lightness rather
@@ -145,9 +150,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     display = _downsample_columns(grid, MAX_HEATMAP_COLUMNS)
 
     fig_height = max(3.0, 0.16 * len(var_names) + 1.5)
-    fig, ax = plt.subplots(
-        figsize=(14, fig_height)
-    )  # width matches the per-variable plots
+    fig, ax = plt.subplots(figsize=(_HEATMAP_WIDTH_INCHES, fig_height))
     ax.set_facecolor("lightgrey")  # masked (not probed) cells show the axes background
     ax.imshow(
         np.ma.masked_invalid(display),
@@ -163,7 +166,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     ax.set_xticks(tick_cols)
     ax.set_xticklabels(tick_labels, fontsize=7)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=80, bbox_inches="tight")
+    fig.savefig(out_path, dpi=_HEATMAP_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
