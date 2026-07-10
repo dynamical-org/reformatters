@@ -13,6 +13,15 @@ _Requires sentry organization invitation._
 ## Better Stack heartbeats
 Each dataset has four heartbeats — `reformatters {dataset-id} {update|validate} {start|complete}` — pinged at the start and on completion of its update and validate cron jobs (a failed job pings the complete heartbeat's `/fail` URL). They are provisioned automatically by `uv run main deploy` (requires the `BETTERSTACK_API_KEY_RW` env var / GitHub Actions secret), and their URLs are stored in the `betterstack-heartbeats` kubernetes secret that every cron pod mounts.
 
+## Better Stack collector (log shipping)
+Job logs (stdout/stderr from every backfill, update, and validate pod) are shipped to Better Stack by a cluster-wide collector DaemonSet, separate from the heartbeats above. It is **not** managed by `uv run main deploy` — it is a one-time cluster install via `deploy/aws/install_betterstack_collector.sh` (re-runnable to upgrade). Because the collector tails container stdout, no application or per-dataset wiring is needed; new datasets are covered automatically. The collector's source token lives only in Better Stack and the `better-stack` namespace, distinct from `BETTERSTACK_API_KEY_RW`.
+
+```
+COLLECTOR_SECRET=<source-token> deploy/aws/install_betterstack_collector.sh
+```
+
+Verify with `kubectl -n better-stack get daemonset,pods -o wide` — expect one collector pod per node.
+
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._
 - [Get jobs](https://github.com/dynamical-org/reformatters/actions/workflows/manual-get-jobs.yml) - What's running now/recently and its status
