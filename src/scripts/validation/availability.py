@@ -55,7 +55,7 @@ MAX_HEATMAP_COLUMNS = 1200
 # ramp is monotonically light->dark so colorblind readers can read it by lightness rather
 # than red/green hue. Green endpoint is kept from RdYlGn; the red end is lightened.
 _AVAILABILITY_CMAP = LinearSegmentedColormap.from_list(
-    "availability", ["#f4a582", plt.get_cmap("RdYlGn")(1.0)]
+    "availability", ["#fa4848", plt.get_cmap("RdYlGn")(1.0)]
 )
 
 
@@ -145,7 +145,9 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     display = _downsample_columns(grid, MAX_HEATMAP_COLUMNS)
 
     fig_height = max(3.0, 0.16 * len(var_names) + 1.5)
-    fig, ax = plt.subplots(figsize=(14 * 2 / 3, fig_height))
+    fig, ax = plt.subplots(
+        figsize=(14, fig_height)
+    )  # width matches the per-variable plots
     ax.set_facecolor("lightgrey")  # masked (not probed) cells show the axes background
     ax.imshow(
         np.ma.masked_invalid(display),
@@ -161,7 +163,7 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
     ax.set_xticks(tick_cols)
     ax.set_xticklabels(tick_labels, fontsize=7)
     fig.tight_layout()
-    fig.savefig(out_path, dpi=110, bbox_inches="tight")
+    fig.savefig(out_path, dpi=80, bbox_inches="tight")
     plt.close(fig)
 
 
