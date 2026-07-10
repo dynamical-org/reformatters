@@ -23,7 +23,7 @@ from reformatters.common import (
     validation,
 )
 from reformatters.common.config import Config
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.iterating import digest, get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
@@ -174,6 +174,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
             if issubclass(self.region_job_class, VirtualRegionJob):
                 # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                if is_first:
+                    self._assert_no_structural_drift(template_ds)
                 self._run_virtual_operational_update(
                     all_jobs, worker_index, workers_total
                 )
@@ -381,7 +383,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         worker_index: int,
         workers_total: int,
         reformat_job_name: str,
-        template_ds: xr.Dataset,
+        template_ds: xr.DataTree,
         tmp_store: Path,
         *,
         update_template_with_results: bool,
@@ -394,7 +396,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
-        worker_jobs = get_worker_jobs(all_jobs, worker_index, workers_total)
+        worker_jobs = get_worker_jobs(
+            all_jobs,
+            worker_index,
+            workers_total,
+            worker_assignment=self.region_job_class.worker_assignment,
+        )
 
         jobs_summary = ", ".join(repr(j) for j in worker_jobs)
         log.info(
@@ -410,12 +417,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # already-published store. Worker 0 checks before any writes; failing here
         # leaves the live archive untouched.
         if is_first and update_template_with_results:
-            existing_ds = xr.open_zarr(
-                self.store_factory.primary_store(), decode_timedelta=True, chunks=None
-            )
-            template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds, existing_ds, self.template_config.append_dim
-            )
+            self._assert_no_structural_drift(template_ds)
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -427,6 +429,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_ds=template_ds,
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
+            consolidated=self.region_job_class.consolidated_metadata,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -471,6 +474,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 setup_info=setup_info,
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
+                consolidated=self.region_job_class.consolidated_metadata,
             )
 
     def _run_virtual_operational_update(
@@ -491,11 +495,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert len(all_jobs) == 1, (
             f"Virtual operational updates run a single active-window job, got {len(all_jobs)}"
         )
-        for job in all_jobs:
-            assert isinstance(job, VirtualRegionJob)
-            assert job.processing_mode == "update", (
-                "operational_update_jobs must construct jobs with processing_mode='update'"
-            )
+        (job,) = all_jobs
+        assert isinstance(job, VirtualRegionJob)
+        assert job.processing_mode == "update", (
+            "operational_update_jobs must construct jobs with processing_mode='update'"
+        )
+        # Deploy checked-in template metadata fixes (attrs, coordinate values) before
+        # ingesting. No-op commit-wise when the store already matches the template.
+        job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             all_jobs, self.store_factory, "main", worker_index
         )
@@ -505,13 +512,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
-        # Virtual datasets get their own manifest-aware validators. The materialized
-        # ones don't apply: check_for_expected_shards (no shards; missing chunks for
-        # partially-published inits are expected) and compare_replica_and_primary.
+        # validators() lists both validator kinds; validate_dataset dispatches by type.
+        # check_for_expected_shards / compare_replica_and_primary are materialized-only
+        # and appended below.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
+        base_validators = list(self.validators())
         with self._monitor(ValidationCronJob, reformat_job_name):
+            region_job = self._virtual_validation_region_job(
+                base_validators, reformat_job_name
+            )
+
             primary_store = self.store_factory.primary_store()
-            primary_store_validators = list(self.validators())
+            primary_store_validators = list(base_validators)
             if not is_virtual:
                 primary_store_validators.append(
                     partial(validation.check_for_expected_shards, primary_store)
@@ -520,11 +532,12 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             validation.validate_dataset(
                 primary_store,
                 validators=primary_store_validators,
+                region_job=region_job,
             )
             log.info(f"Done validating {primary_store}")
 
             for replica_store in self.store_factory.replica_stores():
-                replica_store_validators = list(self.validators())
+                replica_store_validators = list(base_validators)
                 if not is_virtual:
                     replica_store_validators.append(
                         partial(validation.check_for_expected_shards, replica_store)
@@ -533,9 +546,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                         partial(  # ty: ignore[invalid-argument-type]
                             validation.compare_replica_and_primary,
                             self.template_config.append_dim,
-                            xr.open_zarr(
+                            validation.open_flattened_dataset(
                                 replica_store,
-                                chunks=None,
                                 consolidated=not isinstance(
                                     replica_store, IcechunkStore
                                 ),
@@ -546,8 +558,34 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 validation.validate_dataset(
                     replica_store,
                     validators=replica_store_validators,
+                    region_job=region_job,
                 )
                 log.info(f"Done validating {replica_store}")
+
+    def _virtual_validation_region_job(
+        self,
+        validators: Sequence[validation.DataValidator],
+        reformat_job_name: str,
+    ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
+        """The operational-window job a VirtualDataValidator probes against, or None if
+        none of the validators need it. Built once and shared across primary + replica
+        (the job is store-independent; validate_dataset passes each validator the store)."""
+        if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
+            return None
+        jobs, _template_ds = self.region_job_class.operational_update_jobs(
+            primary_store=self.store_factory.primary_store(),
+            tmp_store=self._tmp_store(),
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
+        )
+        job = item(jobs)
+        assert isinstance(job, VirtualRegionJob), (
+            f"validators() returned a VirtualDataValidator but {self.region_job_class.__name__} "
+            "is not a VirtualRegionJob"
+        )
+        return job
 
     def dataset_urls(
         self,
@@ -594,8 +632,19 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _tmp_store(self) -> Path:
         return get_local_tmp_store()
 
-    def _get_template(self, append_dim_end: DatetimeLike) -> xr.Dataset:
+    def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
+
+    def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
+        existing_ds = xr.open_datatree(
+            self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            decode_timedelta=True,
+            chunks=None,
+        )
+        template_utils.assert_no_structural_drift_from_existing_store(
+            template_ds, existing_ds, self.template_config.append_dim
+        )
 
     def _can_run_in_kubernetes(self) -> bool:
         # This is a method to support testing without changing the Config.env
@@ -695,4 +744,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 assert var.encoding.compressors == (), (
                     f"virtual data var {var.name} must declare compressors=()"
                 )
+        else:
+            # The materialized chunk-write path (zarr.copy_data_var, write_shards) is
+            # not yet group-aware; only virtual datasets support vertical groups today.
+            grouped = [
+                v.path for v in self.template_config.data_vars if v.group is not ROOT
+            ]
+            assert not grouped, (
+                f"materialized datasets do not yet support vertical groups: {grouped}"
+            )
         return self

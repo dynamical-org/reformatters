@@ -159,6 +159,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     short_name="refc",
                     long_name="Maximum/Composite radar reflectivity",
                     units="dBZ",
+                    standard_name="equivalent_reflectivity_factor",
                     step_type="instant",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
@@ -393,6 +394,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CICEP",
@@ -413,6 +416,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CSNOW",
@@ -433,6 +438,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CFRZR",
@@ -453,6 +460,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="1",
                     comment="0=no; 1=yes",
                     step_type="instant",
+                    flag_values=(0, 1),
+                    flag_meanings="no yes",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CRAIN",

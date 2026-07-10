@@ -4,11 +4,51 @@ import pytest
 from pydantic import ValidationError
 
 from reformatters.common.config_models import (
+    ROOT,
+    BaseInternalAttrs,
     DatasetAttributes,
+    DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
     codecs_to_dicts,
+    var_path,
 )
+
+
+class TestGroupAndVarPath:
+    def test_root_var_path_is_bare_name(self) -> None:
+        assert var_path(ROOT, "temperature_2m") == "temperature_2m"
+
+    def test_vertical_group_var_path_is_group_slash_name(self) -> None:
+        assert var_path("pressure_level", "temperature") == "pressure_level/temperature"
+
+    def _data_var(self, group: Group = ROOT) -> DataVar:  # type: ignore[type-arg]
+        attrs = DataVarAttrs(
+            long_name="Temperature", short_name="t", units="K", step_type="instant"
+        )
+        encoding = Encoding(dtype="float32", chunks=(1,), shards=None, fill_value=0.0)
+        internal_attrs = BaseInternalAttrs(keep_mantissa_bits="no-rounding")
+        return DataVar(
+            name="temperature",
+            group=group,
+            encoding=encoding,
+            attrs=attrs,
+            internal_attrs=internal_attrs,
+        )
+
+    def test_datavar_defaults_to_root(self) -> None:
+        var = self._data_var()
+        assert var.group is ROOT
+        assert var.path == "temperature"
+
+    def test_datavar_in_vertical_group(self) -> None:
+        var = self._data_var(group="pressure_level")
+        assert var.path == "pressure_level/temperature"
+
+    def test_datavar_rejects_unknown_group(self) -> None:
+        with pytest.raises(ValidationError):
+            self._data_var(group="height_above_ground")  # ty: ignore[invalid-argument-type]
 
 
 class TestCodecsToDicts:
@@ -153,4 +193,47 @@ class TestDataVarAttrs:
                 short_name="t",
                 units="K",
                 step_type="invalid",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_valid_flag_attrs(self) -> None:
+        attrs = DataVarAttrs(
+            long_name="Categorical rain",
+            short_name="crain",
+            units="1",
+            step_type="instant",
+            flag_values=(0, 1),
+            flag_meanings="no yes",
+        )
+        assert attrs.flag_values == (0, 1)
+        assert attrs.flag_meanings == "no yes"
+
+    def test_flag_values_without_meanings_raises(self) -> None:
+        with pytest.raises(ValidationError, match="set together"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_values=(0, 1),
+            )
+
+    def test_flag_meanings_without_values_raises(self) -> None:
+        with pytest.raises(ValidationError, match="set together"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_meanings="no yes",
+            )
+
+    def test_flag_values_meanings_length_mismatch_raises(self) -> None:
+        with pytest.raises(ValidationError, match="same number"):
+            DataVarAttrs(
+                long_name="Categorical rain",
+                short_name="crain",
+                units="1",
+                step_type="instant",
+                flag_values=(0, 1, 2),
+                flag_meanings="no yes",
             )

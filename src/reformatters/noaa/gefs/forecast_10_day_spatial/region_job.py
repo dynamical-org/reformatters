@@ -1,10 +1,7 @@
-import time
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import ClassVar, Literal
 
-import obstore
 import pandas as pd
 import xarray as xr
 from zarr.abc.store import Store
@@ -12,8 +9,11 @@ from zarr.abc.store import Store
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
-from reformatters.common.types import AppendDim, DatetimeLike, Timedelta
+from reformatters.common.types import AppendDim, DatetimeLike
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_source_listing import (
+    discover_available_by_obstore_listing,
+)
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_B22_TRANSITION_DATE,
     GEFS_CURRENT_ARCHIVE_START,
@@ -31,25 +31,6 @@ log = get_logger(__name__)
 
 _S3_LOCATION_PREFIX = "s3://noaa-gefs-pds/"
 _S3_BUCKET_REGION = "us-east-1"
-
-
-def _vars_in_s_file(
-    data_vars: Sequence[GEFSDataVar], init_time: pd.Timestamp, lead_time: pd.Timedelta
-) -> list[GEFSDataVar]:
-    """The subset of data_vars the s file for (init_time, lead_time) contains.
-
-    "s+b-b22" variables were only added to the s files at GEFS_B22_TRANSITION_DATE,
-    and accumulated/avg variables don't exist in the 0-hour forecast.
-    """
-    return [
-        var
-        for var in data_vars
-        if (
-            var.internal_attrs.gefs_file_type != "s+b-b22"
-            or init_time >= GEFS_B22_TRANSITION_DATE
-        )
-        and (lead_time != pd.Timedelta(0) or has_hour_0_values(var))
-    ]
 
 
 class GefsForecast10DaySpatialSourceFileCoord(GefsEnsembleSourceFileCoord):
@@ -84,11 +65,6 @@ class GefsForecast10DaySpatialRegionJob(
 ):
     """RegionJob for the GEFS 10-day spatial (virtual) forecast dataset."""
 
-    # Reprocess this span of recent init times each operational update. Each fire
-    # re-sweeps the window, catching stragglers earlier fires gave up on.
-    operational_window: ClassVar[Timedelta] = pd.Timedelta("24h")
-    # When polling, pace bucket listings to at most one sweep per tick.
-    tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent index file downloads. The .idx files are ~30KB latency-bound
     # requests; measured throughput vs pool width: 8 -> ~105 files/s,
     # 32 -> ~310, 64 -> ~380, 128 -> ~435 (diminishing).
@@ -116,89 +92,17 @@ class GefsForecast10DaySpatialRegionJob(
                     )
         return coords
 
-    def process_virtual_refs(
-        self, remaining: Sequence[GefsForecast10DaySpatialSourceFileCoord]
-    ) -> Iterator[
-        Sequence[tuple[GefsForecast10DaySpatialSourceFileCoord, Sequence[VirtualRef]]]
-    ]:
-        """Each tick: list the bucket, fetch newly available files' indexes, yield their refs.
+    def discover_available(
+        self, pending: list[GefsForecast10DaySpatialSourceFileCoord]
+    ) -> list[tuple[GefsForecast10DaySpatialSourceFileCoord, int]]:
+        return discover_available_by_obstore_listing(
+            pending,
+            store=s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION),
+            location_prefix=_S3_LOCATION_PREFIX,
+            require_index=True,
+        )
 
-        One yield (= one commit) per tick, containing every file that became
-        available since the last tick.
-        """
-        pending = {
-            coord.get_url().removeprefix(_S3_LOCATION_PREFIX): coord
-            for coord in remaining
-        }
-        with ThreadPoolExecutor(self.download_concurrency) as pool:
-            while pending:
-                tick_start = time.monotonic()
-                available = self._discover_available(pending)
-                if available:
-                    coords = [pending[key] for key in available]
-                    refs_per_file = pool.map(
-                        self._file_refs_or_skip, coords, available.values()
-                    )
-                    # Files with no refs were skipped (unreadable source); drop them
-                    # so a batch never carries a file with no chunks.
-                    batch = [
-                        (coord, refs)
-                        for coord, refs in zip(coords, refs_per_file, strict=True)
-                        if refs
-                    ]
-                    for key in available:
-                        del pending[key]
-                    skipped = len(coords) - len(batch)
-                    log.info(
-                        f"Ingesting {len(batch)} files"
-                        f"{f' ({skipped} skipped)' if skipped else ''}, "
-                        f"{len(pending)} still pending"
-                    )
-                    if batch:
-                        yield batch
-                if self.processing_mode == "backfill":
-                    if pending:
-                        log.info(
-                            f"{len(pending)} source files not present, skipping (first: {next(iter(pending))})"
-                        )
-                    return
-                if pending:
-                    elapsed = time.monotonic() - tick_start
-                    time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
-
-    def _discover_available(
-        self, pending: Mapping[str, GefsForecast10DaySpatialSourceFileCoord]
-    ) -> dict[str, int]:
-        """The pending files retrievable now, mapped to their data file's size in bytes.
-
-        A file is available once the bucket lists both its data and index objects
-        (the .idx lands a few seconds after the .grib2, and refs need both).
-        """
-        listed: dict[str, int] = {}
-        for prefix in sorted({key.rsplit("/", 1)[0] + "/" for key in pending}):
-            listed |= _list_objects(prefix)
-        return {
-            key: listed[key]
-            for key in pending
-            if key in listed and f"{key}.idx" in listed
-        }
-
-    def _file_refs_or_skip(
-        self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
-    ) -> list[VirtualRef]:
-        # Skip a file we can't turn into refs (a decode surprise, a transient read
-        # error) rather than sink the whole job; its chunks stay fill and validation
-        # surfaces the gap. AssertionError is our own invariant, so it propagates.
-        # PR 7 lifts this onto VirtualRegionJob; see docs/plans/virtual_icechunk_datasets.md.
-        try:
-            return self._file_refs(coord, file_size)
-        except AssertionError:
-            raise
-        except Exception:
-            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
-            return []
-
-    def _file_refs(
+    def file_refs(
         self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
@@ -218,10 +122,7 @@ class GefsForecast10DaySpatialRegionJob(
             file_size if end - start >= GRIB_INDEX_UNKNOWN_END_PAD else end
             for start, end in zip(starts, ends, strict=True)
         ]
-        # A matching index never references bytes past the data file. When it does, the
-        # source was re-published without regenerating the index and the offsets are
-        # unusable, so skip the whole file (its chunks stay fill). Returning no refs is
-        # the caller's signal to drop the file from the batch.
+        # Byte ranges past the data file mean a stale/mismatched index; skip the file.
         if any(
             end > file_size or end <= start
             for start, end in zip(starts, ends, strict=True)
@@ -245,43 +146,30 @@ class GefsForecast10DaySpatialRegionJob(
             for var, start, end in zip(coord.data_vars, starts, ends, strict=True)
         ]
 
-    def representative_var(
-        self, coord: GefsForecast10DaySpatialSourceFileCoord
-    ) -> GEFSDataVar:
-        # A coord's file contains only its own vars (lead-0 and pre-b22 coords
-        # carry a subset), so probe one of those rather than the base class's
-        # default drawn from all of self.data_vars.
-        return next(
-            (v for v in coord.data_vars if v.attrs.step_type == "instant"),
-            coord.data_vars[0],
-        )
-
     @classmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,  # noqa: ARG003 - the icechunk manifest, not a coordinate, tracks ingested data
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[GEFSDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[GEFSDataVar, GefsForecast10DaySpatialSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
-        """Return a single polling job spanning the active window of recent init times.
+        """A single polling job over the recent init times (24h window, the last 4 inits).
 
-        The cron fires just before an init's publication window opens; the job
-        polls until all expected files are ingested, with the pod deadline
-        bounding how long it waits on a file that never publishes.
-        filter_already_present derives the remaining work from the icechunk
-        manifest. See "Operational updates" in docs/virtual_datasets.md.
+        Polls until all expected files are ingested; filter_already_present derives
+        the remaining work from the manifest. See "Operational updates" in
+        docs/virtual_datasets.md.
         """
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
-        init_times = template_ds.get_index(append_dim)
+        init_times = template_ds.to_dataset().get_index(append_dim)
         window_start = int(
-            init_times.searchsorted(append_dim_end - cls.operational_window)
+            init_times.searchsorted(append_dim_end - pd.Timedelta("24h"))
         )
         job = cls(
             tmp_store=tmp_store,
@@ -295,11 +183,20 @@ class GefsForecast10DaySpatialRegionJob(
         return [job], template_ds
 
 
-def _list_objects(prefix: str) -> dict[str, int]:
-    """All object keys under `prefix` in the GEFS bucket, mapped to size in bytes."""
-    store = s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION)
-    return {
-        meta["path"]: meta["size"]
-        for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
-        for meta in batch
-    }
+def _vars_in_s_file(
+    data_vars: Sequence[GEFSDataVar], init_time: pd.Timestamp, lead_time: pd.Timedelta
+) -> list[GEFSDataVar]:
+    """The subset of data_vars the s file for (init_time, lead_time) contains.
+
+    "s+b-b22" variables were only added to the s files at GEFS_B22_TRANSITION_DATE,
+    and accumulated/avg variables don't exist in the 0-hour forecast.
+    """
+    return [
+        var
+        for var in data_vars
+        if (
+            var.internal_attrs.gefs_file_type != "s+b-b22"
+            or init_time >= GEFS_B22_TRANSITION_DATE
+        )
+        and (lead_time != pd.Timedelta(0) or has_hour_0_values(var))
+    ]

@@ -344,7 +344,7 @@ def test_download_and_read_all_variables(
         reformat_job_name="test",
     )
 
-    for source_group in NoaaHrrrAnalysisRegionJob.source_groups(all_vars):
+    for source_group in NoaaHrrrAnalysisRegionJob.source_file_var_groups(all_vars):
         is_hour_0 = has_hour_0_values(source_group[0])
         lead_time = pd.Timedelta("0h") if is_hour_0 else pd.Timedelta("1h")
         coord_init_time = init_time if is_hour_0 else init_time - pd.Timedelta("1h")

@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.config_models import DatasetAttributes, Encoding
+from reformatters.common.config_models import ROOT, DatasetAttributes, Encoding
 from reformatters.common.download import http_download_to_disk
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.hrrr.template_config import (
@@ -34,7 +34,7 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrCommonTemplateCo
     )
 
     config = NoaaHrrrCommonTemplateConfig(
-        dims=("time", "y", "x"),
+        dims={ROOT: ("time", "y", "x")},
         append_dim="time",
         append_dim_start=pd.Timestamp("2018-07-13T12:00"),
         append_dim_frequency=pd.Timedelta("1h"),

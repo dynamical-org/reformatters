@@ -157,7 +157,7 @@ def test_get_processing_region(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],  # Single variable
         append_dim="init_time",
         region=slice(1, 2),  # Single init time
@@ -172,7 +172,7 @@ def test_get_processing_region(
 
 def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
     """Test source groups based on GEFS file type and ensemble statistic."""
-    groups = GefsForecast35DayRegionJob.source_groups(example_data_vars)
+    groups = GefsForecast35DayRegionJob.source_file_var_groups(example_data_vars)
 
     # Both variables have the same file type, but we expect two groups due to the zero hour values
     assert len(groups) == 2
@@ -191,7 +191,7 @@ def test_generate_source_file_coords_ensemble(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],  # Single variable
         append_dim="init_time",
         region=slice(0, 1),  # Single init time
@@ -280,7 +280,7 @@ def test_download_file(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="init_time",
         region=slice(0, 1),
@@ -354,7 +354,7 @@ def test_download_file_fallback(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="init_time",
         region=slice(0, 1),
@@ -431,7 +431,7 @@ def test_download_file_no_fallback_for_old_data(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="init_time",
         region=slice(0, 1),
@@ -481,7 +481,7 @@ def test_read_data(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],
         append_dim="init_time",
         region=slice(0, 1),
@@ -550,7 +550,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
     tmp_store = get_local_tmp_store()
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=[var_with_rounding],
         append_dim="init_time",
         region=slice(0, 1),
@@ -603,27 +603,33 @@ def test_operational_update_jobs(
     # Mock get_template_fn
     def mock_get_template_fn(
         end_time: pd.Timestamp | np.datetime64 | datetime | str,
-    ) -> xr.Dataset:
-        return xr.Dataset(
+    ) -> xr.DataTree:
+        return xr.DataTree.from_dict(
             {
-                "temperature_2m": xr.Variable(
-                    data=np.ones((10, 8, 4, 5, 10), dtype=np.float32),
-                    dims=[
-                        "init_time",
-                        "lead_time",
-                        "ensemble_member",
-                        "latitude",
-                        "longitude",
-                    ],
+                "/": xr.Dataset(
+                    {
+                        "temperature_2m": xr.Variable(
+                            data=np.ones((10, 8, 4, 5, 10), dtype=np.float32),
+                            dims=[
+                                "init_time",
+                                "lead_time",
+                                "ensemble_member",
+                                "latitude",
+                                "longitude",
+                            ],
+                        )
+                    },
+                    coords={
+                        "init_time": pd.date_range(
+                            "2000-01-01T00:00", freq="24h", periods=10
+                        ),
+                        "lead_time": pd.timedelta_range("0h", freq="3h", periods=8),
+                        "ensemble_member": np.arange(4),
+                        "latitude": np.linspace(-90, 90, 5),
+                        "longitude": np.linspace(-180, 179, 10),
+                    },
                 )
-            },
-            coords={
-                "init_time": pd.date_range("2000-01-01T00:00", freq="24h", periods=10),
-                "lead_time": pd.timedelta_range("0h", freq="3h", periods=8),
-                "ensemble_member": np.arange(4),
-                "latitude": np.linspace(-90, 90, 5),
-                "longitude": np.linspace(-180, 179, 10),
-            },
+            }
         )
 
     # Mock get_jobs method
@@ -674,7 +680,7 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
 
     job = GefsForecast35DayRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="init_time",
         region=slice(0, 1),
@@ -766,6 +772,8 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
                     err_msg=f"Eastern column not longitude-wrapped for {data_var.name}",
                 )
 
-    groups = list(GefsForecast35DayRegionJob.source_groups(template_config.data_vars))
+    groups = list(
+        GefsForecast35DayRegionJob.source_file_var_groups(template_config.data_vars)
+    )
     with ThreadPoolExecutor() as pool:
         list(pool.map(_download_and_check, groups))

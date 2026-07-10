@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.pydantic import replace
 from reformatters.noaa.mrms.conus_analysis_hourly.region_job import (
     NoaaMrmsRegionJob,
@@ -20,7 +21,7 @@ from reformatters.noaa.mrms.conus_analysis_hourly.template_config import (
 def test_template_config_attrs() -> None:
     config = NoaaMrmsConusAnalysisHourlyTemplateConfig()
 
-    assert config.dims == ("time", "latitude", "longitude")
+    assert config.dims[ROOT] == ("time", "latitude", "longitude")
     assert config.append_dim == "time"
     assert config.append_dim_start == pd.Timestamp("2014-11-01T00:00")
     assert config.append_dim_frequency == pd.Timedelta("1h")

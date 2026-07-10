@@ -103,7 +103,7 @@ class EcmwfAifsEnsForecastRegionJob(
     max_vars_per_job: ClassVar[int] = 4
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[EcmwfDataVar],
     ) -> Sequence[Sequence[EcmwfDataVar]]:
@@ -237,13 +237,13 @@ class EcmwfAifsEnsForecastRegionJob(
         cls,
         primary_store: Store,
         tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.Dataset],
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
     ) -> tuple[
         Sequence[RegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]],
-        xr.Dataset,
+        xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
         append_dim_start = existing_ds[append_dim].max()

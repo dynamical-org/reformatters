@@ -120,7 +120,9 @@ def test_source_file_coord_out_loc(
 
 def test_region_job_source_groups() -> None:
     template_config = DwdIconEuForecast5DayTemplateConfig()
-    groups = DwdIconEuForecast5DayRegionJob.source_groups(template_config.data_vars)
+    groups = DwdIconEuForecast5DayRegionJob.source_file_var_groups(
+        template_config.data_vars
+    )
     # Each variable gets its own group (one var per GRIB file)
     assert len(groups) == len(template_config.data_vars)
     for group in groups:

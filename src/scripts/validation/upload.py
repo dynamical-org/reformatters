@@ -35,6 +35,8 @@ def upload(run_dir: Path, publish: bool) -> str:
         endpoint_url=os.environ["R2_VALIDATION_REPORTS_ENDPOINT_URL"],
         aws_access_key_id=os.environ["R2_VALIDATION_REPORTS_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY"],
+        # R2 only accepts its own region names; don't inherit one from ~/.aws/config.
+        region_name="auto",
     )
     files = [f for f in sorted(run_dir.rglob("*")) if f.is_file()]
     for prefix in prefixes:

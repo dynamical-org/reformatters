@@ -9,8 +9,13 @@ import pytest
 import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import template_utils
+from reformatters.common import template_utils, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.virtual_region_job import VirtualRegionJob
+
+_VIRTUAL_DATASETS = [
+    d for d in DYNAMICAL_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
+]
 
 
 @dataclass
@@ -83,6 +88,17 @@ def dataset(request: pytest.FixtureRequest) -> DynamicalDataset[Any, Any]:
 @pytest.mark.parametrize(
     "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
 )
+def test_template_config_structure_is_valid(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Every config passes the structure validators: group dims, (group, name)
+    uniqueness, no vertical dim unused by any var, uniform append-dim chunking, etc."""
+    dataset.template_config._assert_valid_structure()
+
+
+@pytest.mark.parametrize(
+    "dataset", DYNAMICAL_DATASETS, ids=[d.dataset_id for d in DYNAMICAL_DATASETS]
+)
 def test_update_template_matches_existing_template(
     template_setup: TemplateSetup,
 ) -> None:
@@ -123,11 +139,19 @@ def test_update_template_fill_values_are_correct(
     """
     template_config = template_setup.dataset.template_config
 
-    ds = xr.open_zarr(template_setup.roundtrip_template_path, chunks=None)
+    # Flattened so vertical-group vars (keyed by path) are visible; xr.open_zarr
+    # would expose only the root group.
+    ds = validation.open_flattened_dataset(
+        template_setup.roundtrip_template_path, consolidated=False
+    )
     for var in template_config.data_vars:
-        var_da = ds[var.name]
+        var_da = ds[var.path]
+        # A missing_value sentinel equals the fill value and is masked to NaN on read.
+        expected = (
+            np.nan if var.attrs.missing_value is not None else var.encoding.fill_value
+        )
         np.testing.assert_array_equal(
-            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, var.encoding.fill_value
+            var_da.isel(dict.fromkeys(var_da.dims, 0)).values, expected
         )
 
 
@@ -215,6 +239,23 @@ def test_coordinates_have_single_chunk(
         assert chunk_file_names == ["0"], (
             f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
         )
+
+
+@pytest.mark.parametrize(
+    "dataset", _VIRTUAL_DATASETS, ids=[d.dataset_id for d in _VIRTUAL_DATASETS]
+)
+def test_virtual_serializers_flip_to_shared_orientation(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Every virtual data var's GribberishCodec flips decoded messages into our shared
+    orientation: north_up (first row = largest latitude, matching materialized datasets'
+    GDAL flip) and adjust_longitude_range (monotonic -180..180 longitude)."""
+    for var in dataset.template_config.data_vars:
+        serializer = var.encoding.serializer
+        assert serializer is not None, var.name
+        assert serializer["name"] == "gribberish", var.name
+        assert serializer["configuration"]["north_up"] is True, var.name
+        assert serializer["configuration"]["adjust_longitude_range"] is True, var.name
 
 
 @pytest.mark.parametrize(

@@ -68,7 +68,7 @@ def test_common_region_job_source_groups() -> None:
     template_config = NoaaGfsForecastTemplateConfig()
     data_vars = template_config.data_vars
 
-    groups = NoaaGfsCommonRegionJob.source_groups(data_vars)
+    groups = NoaaGfsCommonRegionJob.source_file_var_groups(data_vars)
 
     # Should have 2 groups: instant variables (hour 0) and non-instant variables (no hour 0)
     assert len(groups) == 2
@@ -378,7 +378,9 @@ def test_download_file_from_nomads_gfs() -> None:
 
     # lead_time=6h: all vars (instant and accumulated) are present in the f006 GRIB file
     lead_time = pd.Timedelta(hours=6)
-    for group in NoaaGfsForecastRegionJob.source_groups(template_config.data_vars):
+    for group in NoaaGfsForecastRegionJob.source_file_var_groups(
+        template_config.data_vars
+    ):
         coord = NoaaGfsForecastSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,

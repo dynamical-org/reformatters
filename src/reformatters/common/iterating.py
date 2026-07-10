@@ -1,10 +1,53 @@
 import hashlib
+import math
 from collections import deque
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import batched, islice, pairwise, product, starmap
 from typing import Any, Literal
 
 import xarray as xr
+
+
+def node_group_name(node: xr.DataTree) -> str | None:
+    """The group name of a DataTree node, or None for the root."""
+    return None if node.path == "/" else node.path.removeprefix("/")
+
+
+def node_path_prefix(node: xr.DataTree) -> str:
+    """A node's prefix for building var/coord paths: "" for root, else "group/"."""
+    group = node_group_name(node)
+    return "" if group is None else f"{group}/"
+
+
+def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
+    """Yield (var_path, DataArray) for every data var across all of a template's groups."""
+    for node in tree.subtree:
+        prefix = node_path_prefix(node)
+        for name, data_array in node.to_dataset().data_vars.items():
+            yield f"{prefix}{name}", data_array
+
+
+def flatten_groups(tree: xr.DataTree) -> xr.Dataset:
+    """Flatten a (possibly multi-group, possibly nested) DataTree into one Dataset whose
+    data vars are keyed by group path — root vars keep their bare name, a group var
+    becomes ``group/name`` (nested: ``a/b/name``), the same path `walk_data_arrays` and
+    the zarr store use. Shared coords (duplicated identically into every group) merge;
+    each group's own dim coords come along. A single-node tree returns its root dataset.
+
+    Recursing over ``tree.subtree`` means arbitrarily nested groups flatten with no
+    special-casing — the node path is the var-name prefix."""
+    # Start from the root dataset so its attrs (dataset_id, ...) survive the merge.
+    flat = tree.to_dataset()
+    for node in tree.subtree:
+        prefix = node_path_prefix(node)
+        if not prefix:
+            continue  # root is already in flat
+        node_ds = node.to_dataset()
+        flat = flat.merge(
+            node_ds.rename({name: f"{prefix}{name}" for name in node_ds.data_vars}),
+            compat="no_conflicts",
+        )
+    return flat
 
 
 def dimension_slices(
@@ -39,23 +82,60 @@ def chunk_slices(size: int, chunk_size: int) -> Sequence[slice]:
 
 
 def get_worker_jobs[T](
-    jobs: Iterable[T], worker_index: int, workers_total: int
+    jobs: Sequence[T],
+    worker_index: int,
+    workers_total: int,
+    *,
+    worker_assignment: Literal["spread", "contiguous"],
 ) -> Sequence[T]:
-    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers."""
+    """Returns the subset of `jobs` that worker_index should process if there are workers_total workers.
+
+    `jobs` is expected in canonical append-dim order (RegionJob.get_jobs order);
+    each mode owns its own ordering + selection. "spread" permutes the list with
+    spread_evenly then assigns round-robin, scattering each worker's jobs across
+    the append dim; "contiguous" keeps list order and assigns each worker one
+    block. See "Append dim region spreading and worker assignment" in
+    docs/parallel_processing.md.
+    """
     assert worker_index >= 0
     assert workers_total >= 1
     assert worker_index < workers_total
-    return tuple(islice(jobs, worker_index, None, workers_total))
+    match worker_assignment:
+        case "spread":
+            return _spread_worker_jobs(jobs, worker_index, workers_total)
+        case "contiguous":
+            return _contiguous_worker_jobs(jobs, worker_index, workers_total)
+
+
+def _spread_worker_jobs[T](
+    jobs: Sequence[T], worker_index: int, workers_total: int
+) -> Sequence[T]:
+    return tuple(islice(spread_evenly(jobs), worker_index, None, workers_total))
+
+
+def _contiguous_worker_jobs[T](
+    jobs: Sequence[T], worker_index: int, workers_total: int
+) -> Sequence[T]:
+    block_size = math.ceil(len(jobs) / workers_total)
+    worker_jobs = tuple(
+        jobs[worker_index * block_size : (worker_index + 1) * block_size]
+    )
+    assert len(worker_jobs) > 0, (
+        f"Worker {worker_index} of {workers_total} has no jobs: "
+        f"{len(jobs)} jobs in blocks of {block_size} run out before this worker index"
+    )
+    return worker_jobs
 
 
 def spread_evenly[T](items: Sequence[T]) -> list[T]:
     """Reorder so any prefix samples the whole input roughly uniformly.
 
-    Bit-reversal permutation. Concurrently-running workers occupy a contiguous
-    worker-index window, so spreading the append-dim regions this way makes them
-    process source files scattered across the range instead of a clustered band,
-    avoiding hot-spotting a few object-store prefixes. See "Append dim region
-    spreading" in docs/parallel_processing.md.
+    Bit-reversal permutation, applied to the job list inside get_worker_jobs'
+    "spread" assignment. Concurrently-running workers occupy a contiguous
+    worker-index window, so spreading the append-dim-ordered jobs this way makes
+    them process source files scattered across the range instead of a clustered
+    band, avoiding hot-spotting a few object-store prefixes. See "Append dim
+    region spreading and worker assignment" in docs/parallel_processing.md.
     """
     n = len(items)
     bits = max(1, (n - 1).bit_length())

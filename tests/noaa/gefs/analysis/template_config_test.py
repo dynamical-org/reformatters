@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.analysis.region_job import (
     GefsAnalysisRegionJob,
     GefsAnalysisSourceFileCoord,
@@ -59,7 +60,7 @@ def test_dataset_attributes(template_config: GefsAnalysisTemplateConfig) -> None
 
 def test_dimensions_and_append_dim(template_config: GefsAnalysisTemplateConfig) -> None:
     """Test dimension configuration."""
-    assert template_config.dims == ("time", "latitude", "longitude")
+    assert template_config.dims[ROOT] == ("time", "latitude", "longitude")
     assert template_config.append_dim == "time"
     assert template_config.append_dim_start == pd.Timestamp("2000-01-01T00:00")
     assert template_config.append_dim_frequency == pd.Timedelta("3h")

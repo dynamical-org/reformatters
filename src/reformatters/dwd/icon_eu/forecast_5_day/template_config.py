@@ -7,6 +7,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
@@ -14,6 +15,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
@@ -62,7 +64,9 @@ class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
 
 
 class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
-    dims: tuple[Dim, ...] = ("init_time", "lead_time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {
+        ROOT: ("init_time", "lead_time", "latitude", "longitude")
+    }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2026-02-10T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
@@ -332,8 +336,8 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 

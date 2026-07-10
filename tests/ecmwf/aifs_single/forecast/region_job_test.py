@@ -109,7 +109,7 @@ def test_source_file_coord_out_loc() -> None:
 
 def test_source_groups() -> None:
     config = EcmwfAifsSingleForecastTemplateConfig()
-    groups = EcmwfAifsSingleForecastRegionJob.source_groups(config.data_vars)
+    groups = EcmwfAifsSingleForecastRegionJob.source_file_var_groups(config.data_vars)
     assert len(groups) == 2
 
     group_without_date = [
@@ -142,7 +142,7 @@ def test_generate_source_file_coords() -> None:
     processing_region_ds, output_region_ds = region_job._get_region_datasets()
     assert processing_region_ds.equals(output_region_ds)
 
-    groups = EcmwfAifsSingleForecastRegionJob.source_groups(config.data_vars)
+    groups = EcmwfAifsSingleForecastRegionJob.source_file_var_groups(config.data_vars)
 
     coords = region_job.generate_source_file_coords(processing_region_ds, groups[0])
     # 4 init_times x 3 lead_times = 12
@@ -552,7 +552,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
     test_ds = full_template.sel(
         init_time=[init_time],
         lead_time=[pd.Timedelta("6h")],
-    )
+    ).to_dataset()
 
     def check_data_var(data_var: EcmwfDataVar) -> None:
         for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
@@ -569,7 +569,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
 
     all_data_vars = [
         data_var
-        for group in EcmwfAifsSingleForecastRegionJob.source_groups(
+        for group in EcmwfAifsSingleForecastRegionJob.source_file_var_groups(
             template_config.data_vars
         )
         for data_var in group

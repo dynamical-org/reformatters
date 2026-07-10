@@ -94,7 +94,7 @@ def test_source_file_coord_out_loc() -> None:
 
 def test_source_groups() -> None:
     config = EcmwfAifsEnsForecastTemplateConfig()
-    groups = EcmwfAifsEnsForecastRegionJob.source_groups(config.data_vars)
+    groups = EcmwfAifsEnsForecastRegionJob.source_file_var_groups(config.data_vars)
     # All vars are available from append_dim_start, so they all share date_available=None.
     assert len(groups) == 1
     assert len(groups[0]) == len(config.data_vars)
@@ -118,7 +118,7 @@ def test_generate_source_file_coords() -> None:
     )
     processing_region_ds, _ = region_job._get_region_datasets()
 
-    groups = EcmwfAifsEnsForecastRegionJob.source_groups(config.data_vars)
+    groups = EcmwfAifsEnsForecastRegionJob.source_file_var_groups(config.data_vars)
     coords = region_job.generate_source_file_coords(processing_region_ds, groups[0])
     # 2 init_times x 3 lead_times x 4 ensemble_members = 24
     assert len(coords) == 2 * 3 * 4
@@ -503,7 +503,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
         init_time=[init_time],
         lead_time=[pd.Timedelta("6h")],
         ensemble_member=[1],  # first pf (perturbed) member
-    )
+    ).to_dataset()
 
     def check_data_var(data_var: EcmwfDataVar) -> None:
         for source_coord in region_job.generate_source_file_coords(test_ds, [data_var]):
@@ -522,7 +522,7 @@ def test_download_file_from_ecmwf_open_data() -> None:
 
     all_data_vars = [
         data_var
-        for group in EcmwfAifsEnsForecastRegionJob.source_groups(
+        for group in EcmwfAifsEnsForecastRegionJob.source_file_var_groups(
             template_config.data_vars
         )
         for data_var in group

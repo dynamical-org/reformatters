@@ -50,7 +50,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "CFRZR"
+              "var": "CFRZR",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -60,6 +62,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -106,7 +113,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "CICEP"
+              "var": "CICEP",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -116,6 +125,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -162,7 +176,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "CRAIN"
+              "var": "CRAIN",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -172,6 +188,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -218,7 +239,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "CSNOW"
+              "var": "CSNOW",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -228,6 +251,11 @@
           "units": "1",
           "comment": "0=no; 1=yes",
           "step_type": "avg",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -274,7 +302,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "DLWRF"
+              "var": "DLWRF",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -331,7 +361,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "DSWRF"
+              "var": "DSWRF",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -494,7 +526,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "HGT"
+              "var": "HGT",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -729,8 +763,8 @@
           "axis": "X",
           "units": "degree_east",
           "statistics_approximate": {
-            "min": 0.0,
-            "max": 359.75
+            "min": -180.0,
+            "max": 179.75
           },
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -773,7 +807,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "TMAX"
+              "var": "TMAX",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -829,7 +865,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "TMIN"
+              "var": "TMIN",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -885,7 +923,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "CPOFP"
+              "var": "CPOFP",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -941,7 +981,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "PWAT"
+              "var": "PWAT",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -997,7 +1039,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "PRMSL"
+              "var": "PRMSL",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1053,7 +1097,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "PRES"
+              "var": "PRES",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1109,7 +1155,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "RH"
+              "var": "RH",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1214,7 +1262,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "TMP"
+              "var": "TMP",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1270,7 +1320,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "TCDC"
+              "var": "TCDC",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1327,7 +1379,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "APCP"
+              "var": "APCP",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1442,7 +1496,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "UGRD"
+              "var": "UGRD",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],
@@ -1498,7 +1554,9 @@
           {
             "name": "gribberish",
             "configuration": {
-              "var": "VGRD"
+              "var": "VGRD",
+              "adjust_longitude_range": true,
+              "north_up": true
             }
           }
         ],

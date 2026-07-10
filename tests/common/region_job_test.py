@@ -66,7 +66,7 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
     max_vars_per_job: ClassVar[int] = 2
 
     @classmethod
-    def source_groups(
+    def source_file_var_groups(
         cls,
         data_vars: Sequence[ExampleDataVar],
     ) -> Sequence[Sequence[ExampleDataVar]]:
@@ -113,7 +113,7 @@ def _create_template_ds(
     var_fill_value: float = np.nan,
     num_vars: int = 4,
     num_time: int = 48,
-) -> xr.Dataset:
+) -> xr.DataTree:
     ds = xr.Dataset(
         {
             f"var{i}": xr.Variable(
@@ -143,11 +143,11 @@ def _create_template_ds(
     ds["time"].encoding["fill_value"] = -1
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
-    return ds
+    return xr.DataTree.from_dict({"/": ds})
 
 
 @pytest.fixture
-def template_ds() -> xr.Dataset:
+def template_ds() -> xr.DataTree:
     return _create_template_ds(var_fill_value=np.nan, num_vars=4, num_time=48)
 
 
@@ -254,7 +254,7 @@ def test_region_job_empty_chunk_writing(
     np.testing.assert_array_equal(second_day, np.full_like(second_day, var_fill_value))
 
 
-def test_update_template_with_results(template_ds: xr.Dataset) -> None:
+def test_update_template_with_results(template_ds: xr.DataTree) -> None:
     tmp_store = get_local_tmp_store()
 
     job = ExampleRegionJob(
@@ -297,7 +297,114 @@ def test_source_file_coord_append_dim_coord() -> None:
     assert coord.append_dim_coord == pd.Timestamp("2025-01-01T00")
 
 
-def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
+def _multi_group_template_and_vars() -> tuple[xr.DataTree, list[ExampleDataVar]]:
+    """Root temperature_2m + pressure_level/temperature + model_level/temperature,
+    one chunk per init_time, so get_jobs produces one region per var group."""
+    num_time = 2
+    init_times = pd.date_range("2025-01-01", freq="6h", periods=num_time)
+
+    def _root_var() -> xr.Variable:
+        return xr.Variable(
+            data=dask.array.full(
+                (num_time, _LAT_SIZE, _LON_SIZE), np.nan, dtype=np.float32, chunks=-1
+            ),
+            dims=["init_time", "latitude", "longitude"],
+            encoding={
+                "dtype": "float32",
+                "chunks": (1, _LAT_SIZE, _LON_SIZE),
+                "shards": None,
+                "fill_value": np.nan,
+            },
+        )
+
+    def _vertical_var(level_dim: str, n_levels: int) -> xr.Variable:
+        return xr.Variable(
+            data=dask.array.full(
+                (num_time, _LAT_SIZE, _LON_SIZE, n_levels),
+                np.nan,
+                dtype=np.float32,
+                chunks=-1,
+            ),
+            dims=["init_time", "latitude", "longitude", level_dim],
+            encoding={
+                "dtype": "float32",
+                "chunks": (1, _LAT_SIZE, _LON_SIZE, 1),
+                "shards": None,
+                "fill_value": np.nan,
+            },
+        )
+
+    shared_coords = {
+        "init_time": init_times,
+        "latitude": np.linspace(0, 90, _LAT_SIZE),
+        "longitude": np.linspace(0, 140, _LON_SIZE),
+    }
+    root = xr.Dataset(
+        {"temperature_2m": _root_var()},
+        coords=shared_coords,
+        attrs={"dataset_id": "test-multi-group"},
+    )
+    pressure = xr.Dataset(
+        {"temperature": _vertical_var("pressure_level", 2)},
+        coords={**shared_coords, "pressure_level": [1000.0, 850.0]},
+    )
+    model = xr.Dataset(
+        {"temperature": _vertical_var("model_level", 3)},
+        coords={**shared_coords, "model_level": [1, 2, 3]},
+    )
+    for ds in (root, pressure, model):
+        ds["init_time"].encoding["fill_value"] = -1
+        ds["latitude"].encoding["fill_value"] = np.nan
+        ds["longitude"].encoding["fill_value"] = np.nan
+    pressure["pressure_level"].encoding["fill_value"] = np.nan
+    model["model_level"].encoding["fill_value"] = -1
+    tree = xr.DataTree.from_dict(
+        {"/": root, "/pressure_level": pressure, "/model_level": model}
+    )
+    data_vars = [
+        ExampleDataVar(name="temperature_2m"),
+        ExampleDataVar(name="temperature", group="pressure_level"),
+        ExampleDataVar(name="temperature", group="model_level"),
+    ]
+    return tree, data_vars
+
+
+def _job_var_paths(jobs: Sequence[ExampleRegionJob]) -> set[str]:
+    return {var.path for job in jobs for var in job.data_vars}
+
+
+def test_get_jobs_bare_name_filter_selects_var_in_every_group() -> None:
+    template_ds, data_vars = _multi_group_template_and_vars()
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_variable_names=["temperature"],
+    )
+    # "temperature" is the leaf name in both vertical groups (and not the root var),
+    # so the bare name keeps both grouped vars and excludes temperature_2m.
+    assert _job_var_paths(jobs) == {
+        "pressure_level/temperature",
+        "model_level/temperature",
+    }
+
+
+def test_get_jobs_path_filter_selects_single_group() -> None:
+    template_ds, data_vars = _multi_group_template_and_vars()
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+        filter_variable_names=["pressure_level/temperature"],
+    )
+    assert _job_var_paths(jobs) == {"pressure_level/temperature"}
+
+
+def test_get_jobs_grouping_no_filters(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
@@ -332,7 +439,7 @@ def test_get_jobs_grouping_no_filters(template_ds: xr.Dataset) -> None:
     ]
 
 
-def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filters(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
@@ -372,7 +479,7 @@ def test_get_jobs_grouping_filters(template_ds: xr.Dataset) -> None:
     )
 
 
-def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     all_jobs = ExampleRegionJob.get_jobs(
@@ -391,7 +498,9 @@ def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> 
     assert len(all_jobs) == 2
 
     # Partitioning is done by the caller
-    jobs = get_worker_jobs(all_jobs, worker_index=0, workers_total=2)
+    jobs = get_worker_jobs(
+        all_jobs, worker_index=0, workers_total=2, worker_assignment="spread"
+    )
 
     # jobs are sorted by region start
     assert all(a.region.start <= b.region.start for a, b in pairwise(jobs))
@@ -405,7 +514,7 @@ def test_get_jobs_grouping_filters_and_worker_index(template_ds: xr.Dataset) -> 
     ]
 
 
-def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filter_contains(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
@@ -432,7 +541,7 @@ def test_get_jobs_grouping_filter_contains(template_ds: xr.Dataset) -> None:
 
 
 def test_get_jobs_grouping_filter_contains_second_shard(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
 ) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
@@ -459,7 +568,7 @@ def test_get_jobs_grouping_filter_contains_second_shard(
     ]
 
 
-def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.Dataset) -> None:
+def test_get_jobs_grouping_filter_contains_all_shards(template_ds: xr.DataTree) -> None:
     data_vars = [ExampleDataVar(name=str(name)) for name in template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     jobs = ExampleRegionJob.get_jobs(
@@ -526,6 +635,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     large_template_ds["latitude"].encoding["fill_value"] = np.nan
     large_template_ds["longitude"].encoding["fill_value"] = np.nan
 
+    large_template_tree = xr.DataTree.from_dict({"/": large_template_ds})
     data_vars = [ExampleDataVar(name=str(name)) for name in large_template_ds.data_vars]
     tmp_store = get_local_tmp_store()
     init_time_coords = large_template_ds.coords["init_time"].values
@@ -540,7 +650,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
 
     jobs = ExampleRegionJob.get_jobs(
         tmp_store=tmp_store,
-        template_ds=large_template_ds,
+        template_ds=large_template_tree,
         append_dim="init_time",
         all_data_vars=data_vars,
         reformat_job_name="test-job",
@@ -557,8 +667,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
     assert all(len(j.data_vars) == 2 for j in jobs)
     assert all(j.data_vars[0].name == "var0" for j in jobs)
     assert all(j.data_vars[1].name == "var1" for j in jobs)
-    # Sorted: get_jobs spreads regions across the append dim (see spread_evenly).
-    assert sorted(j.region.start for j in jobs) == expected_shard_indices
+    assert [j.region.start for j in jobs] == expected_shard_indices
 
 
 # --- Edge case tests for get_jobs filtering ---
@@ -570,7 +679,7 @@ def test_get_jobs_many_shards_combined_filters() -> None:
 
 
 @pytest.fixture
-def small_template_ds() -> xr.Dataset:
+def small_template_ds() -> xr.DataTree:
     """4 shards, 2 hours each, 1 variable for fast tests."""
     num_time = 8
     ds = xr.Dataset(
@@ -600,11 +709,11 @@ def small_template_ds() -> xr.Dataset:
     ds["time"].encoding["fill_value"] = -1
     ds["latitude"].encoding["fill_value"] = np.nan
     ds["longitude"].encoding["fill_value"] = np.nan
-    return ds
+    return xr.DataTree.from_dict({"/": ds})
 
 
 def _get_regions(
-    ds: xr.Dataset,
+    ds: xr.DataTree,
     filter_start: pd.Timestamp | None = None,
     filter_end: pd.Timestamp | None = None,
     filter_contains: list[pd.Timestamp] | None = None,
@@ -621,14 +730,36 @@ def _get_regions(
         filter_end=filter_end,
         filter_contains=filter_contains,
     )
-    # Sort by start: get_jobs spreads regions across the append dim (see
-    # spread_evenly); these tests check which regions survive filtering, not order.
-    return sorted((j.region for j in jobs), key=lambda r: r.start)
+    return [j.region for j in jobs]
+
+
+def test_get_jobs_returns_regions_in_append_dim_order(
+    small_template_ds: xr.DataTree,
+) -> None:
+    assert ExampleRegionJob.worker_assignment == "spread"
+    data_vars = [ExampleDataVar(name=str(name)) for name in small_template_ds.data_vars]
+    jobs = ExampleRegionJob.get_jobs(
+        tmp_store=get_local_tmp_store(),
+        template_ds=small_template_ds,
+        append_dim="time",
+        all_data_vars=data_vars,
+        reformat_job_name="test-job",
+    )
+    in_order = [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
+    assert [j.region for j in jobs] == in_order
+
+    # Spreading happens in worker assignment: concurrent workers' first jobs
+    # sample across the append dim instead of hitting adjacent regions.
+    first_regions = [
+        get_worker_jobs(jobs, worker_index, 2, worker_assignment="spread")[0].region
+        for worker_index in range(2)
+    ]
+    assert first_regions == [slice(0, 2), slice(4, 6)]
 
 
 class TestFilterStartEdgeCases:
     def test_filter_start_equals_first_coord(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_start at first coord keeps all shards."""
         regions = _get_regions(
@@ -637,7 +768,7 @@ class TestFilterStartEdgeCases:
         assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
 
     def test_filter_start_equals_last_coord(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_start at last coord keeps only last shard."""
         regions = _get_regions(
@@ -646,7 +777,7 @@ class TestFilterStartEdgeCases:
         assert regions == [slice(6, 8)]
 
     def test_filter_start_before_all_coords(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_start before data keeps all shards."""
         regions = _get_regions(
@@ -654,7 +785,9 @@ class TestFilterStartEdgeCases:
         )
         assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
 
-    def test_filter_start_after_all_coords(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_start_after_all_coords(
+        self, small_template_ds: xr.DataTree
+    ) -> None:
         """filter_start after data keeps no shards."""
         regions = _get_regions(
             small_template_ds, filter_start=pd.Timestamp("2026-01-01")
@@ -662,7 +795,7 @@ class TestFilterStartEdgeCases:
         assert regions == []
 
     def test_filter_start_on_shard_boundary(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_start exactly at shard 2 boundary (hour 4)."""
         regions = _get_regions(
@@ -670,7 +803,7 @@ class TestFilterStartEdgeCases:
         )
         assert regions == [slice(4, 6), slice(6, 8)]
 
-    def test_filter_start_mid_shard(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_start_mid_shard(self, small_template_ds: xr.DataTree) -> None:
         """filter_start in middle of shard 1 (hour 3) keeps shard 1 onward."""
         regions = _get_regions(
             small_template_ds, filter_start=pd.Timestamp("2025-01-01 03:00")
@@ -679,7 +812,9 @@ class TestFilterStartEdgeCases:
 
 
 class TestFilterEndEdgeCases:
-    def test_filter_end_equals_first_coord(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_end_equals_first_coord(
+        self, small_template_ds: xr.DataTree
+    ) -> None:
         """filter_end at first coord keeps no shards (min must be < end)."""
         regions = _get_regions(
             small_template_ds, filter_end=pd.Timestamp("2025-01-01 00:00")
@@ -687,7 +822,7 @@ class TestFilterEndEdgeCases:
         assert regions == []
 
     def test_filter_end_equals_second_coord(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_end at second coord keeps only first shard."""
         regions = _get_regions(
@@ -695,24 +830,24 @@ class TestFilterEndEdgeCases:
         )
         assert regions == [slice(0, 2)]
 
-    def test_filter_end_after_all_coords(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_end_after_all_coords(self, small_template_ds: xr.DataTree) -> None:
         """filter_end after data keeps all shards."""
         regions = _get_regions(small_template_ds, filter_end=pd.Timestamp("2026-01-01"))
         assert regions == [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)]
 
-    def test_filter_end_before_all_coords(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_end_before_all_coords(self, small_template_ds: xr.DataTree) -> None:
         """filter_end before data keeps no shards."""
         regions = _get_regions(small_template_ds, filter_end=pd.Timestamp("2024-01-01"))
         assert regions == []
 
-    def test_filter_end_on_shard_boundary(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_end_on_shard_boundary(self, small_template_ds: xr.DataTree) -> None:
         """filter_end exactly at shard 2 boundary (hour 4) keeps shards 0,1."""
         regions = _get_regions(
             small_template_ds, filter_end=pd.Timestamp("2025-01-01 04:00")
         )
         assert regions == [slice(0, 2), slice(2, 4)]
 
-    def test_filter_end_mid_shard(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_end_mid_shard(self, small_template_ds: xr.DataTree) -> None:
         """filter_end in middle of shard 1 (hour 3) keeps shards 0,1."""
         regions = _get_regions(
             small_template_ds, filter_end=pd.Timestamp("2025-01-01 03:00")
@@ -721,33 +856,35 @@ class TestFilterEndEdgeCases:
 
 
 class TestFilterContainsEdgeCases:
-    def test_filter_contains_not_in_coords(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_contains_not_in_coords(
+        self, small_template_ds: xr.DataTree
+    ) -> None:
         """filter_contains with non-existent timestamp returns no shards."""
         regions = _get_regions(
             small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 00:30")]
         )
         assert regions == []
 
-    def test_filter_contains_empty_list(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_contains_empty_list(self, small_template_ds: xr.DataTree) -> None:
         """filter_contains with empty list returns no shards."""
         regions = _get_regions(small_template_ds, filter_contains=[])
         assert regions == []
 
-    def test_filter_contains_first_coord(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_contains_first_coord(self, small_template_ds: xr.DataTree) -> None:
         """filter_contains with first coord returns first shard."""
         regions = _get_regions(
             small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 00:00")]
         )
         assert regions == [slice(0, 2)]
 
-    def test_filter_contains_last_coord(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_contains_last_coord(self, small_template_ds: xr.DataTree) -> None:
         """filter_contains with last coord returns last shard."""
         regions = _get_regions(
             small_template_ds, filter_contains=[pd.Timestamp("2025-01-01 07:00")]
         )
         assert regions == [slice(6, 8)]
 
-    def test_filter_contains_duplicates(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_contains_duplicates(self, small_template_ds: xr.DataTree) -> None:
         """filter_contains with duplicate timestamps deduplicates."""
         regions = _get_regions(
             small_template_ds,
@@ -760,7 +897,7 @@ class TestFilterContainsEdgeCases:
         assert regions == [slice(2, 4)]
 
     def test_filter_contains_multiple_shards(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains spanning shards 0 and 2 (skipping 1)."""
         regions = _get_regions(
@@ -774,7 +911,9 @@ class TestFilterContainsEdgeCases:
 
 
 class TestCombinedFilterEdgeCases:
-    def test_filter_start_greater_than_end(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_start_greater_than_end(
+        self, small_template_ds: xr.DataTree
+    ) -> None:
         """filter_start > filter_end returns no shards."""
         regions = _get_regions(
             small_template_ds,
@@ -783,7 +922,7 @@ class TestCombinedFilterEdgeCases:
         )
         assert regions == []
 
-    def test_filter_start_equals_end(self, small_template_ds: xr.Dataset) -> None:
+    def test_filter_start_equals_end(self, small_template_ds: xr.DataTree) -> None:
         """filter_start == filter_end returns no shards (end is exclusive)."""
         regions = _get_regions(
             small_template_ds,
@@ -793,7 +932,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == []
 
     def test_filter_contains_outside_start_end_range(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains timestamps outside start/end range returns no shards."""
         regions = _get_regions(
@@ -805,7 +944,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == []
 
     def test_all_filters_narrow_to_single_shard(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """All filters combine to select single shard."""
         regions = _get_regions(
@@ -819,7 +958,7 @@ class TestCombinedFilterEdgeCases:
     # --- filter_contains + filter_end interactions ---
 
     def test_filter_contains_equals_filter_end(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains at exactly filter_end is excluded (end is exclusive)."""
         # filter_end=04:00 excludes shard 2 (hours 4,5), filter_contains=[04:00] is in shard 2
@@ -831,7 +970,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == []
 
     def test_filter_contains_in_last_included_shard_before_end(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains in last shard before filter_end is included."""
         # filter_end=04:00 keeps shards 0,1. filter_contains=[03:00] is in shard 1
@@ -843,7 +982,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == [slice(2, 4)]
 
     def test_filter_contains_in_first_excluded_shard_after_end(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains in first excluded shard (after filter_end) returns empty."""
         # filter_end=04:00 keeps shards 0,1 (hours 0-3). filter_contains=[05:00] is in shard 2
@@ -857,7 +996,7 @@ class TestCombinedFilterEdgeCases:
     # --- filter_contains + filter_start interactions ---
 
     def test_filter_contains_equals_filter_start(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains at exactly filter_start is included."""
         # filter_start=04:00 keeps shards 2,3. filter_contains=[04:00] is in shard 2
@@ -869,7 +1008,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == [slice(4, 6)]
 
     def test_filter_contains_in_last_excluded_shard_before_start(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains in last excluded shard (before filter_start) returns empty."""
         # filter_start=04:00 keeps shards 2,3. filter_contains=[03:00] is in shard 1 (excluded)
@@ -881,7 +1020,7 @@ class TestCombinedFilterEdgeCases:
         assert regions == []
 
     def test_filter_contains_in_first_included_shard_at_start(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains in first included shard (at filter_start) is included."""
         # filter_start=04:00 keeps shards 2,3. filter_contains=[05:00] is in shard 2
@@ -895,7 +1034,7 @@ class TestCombinedFilterEdgeCases:
     # --- filter_contains with mixed included/excluded timestamps ---
 
     def test_filter_contains_some_in_range_some_out(
-        self, small_template_ds: xr.Dataset
+        self, small_template_ds: xr.DataTree
     ) -> None:
         """filter_contains with some timestamps in range and some out keeps only valid."""
         # filter_start=02:00, filter_end=06:00 keeps shards 1,2 (hours 2-5)
@@ -915,7 +1054,7 @@ class TestCombinedFilterEdgeCases:
 
 class TestSingleShardEdgeCases:
     @pytest.fixture
-    def single_shard_ds(self) -> xr.Dataset:
+    def single_shard_ds(self) -> xr.DataTree:
         """Dataset with only 1 shard (2 hours)."""
         ds = xr.Dataset(
             {
@@ -944,9 +1083,11 @@ class TestSingleShardEdgeCases:
         ds["time"].encoding["fill_value"] = -1
         ds["latitude"].encoding["fill_value"] = np.nan
         ds["longitude"].encoding["fill_value"] = np.nan
-        return ds
+        return xr.DataTree.from_dict({"/": ds})
 
-    def test_single_shard_filter_start_keeps(self, single_shard_ds: xr.Dataset) -> None:
+    def test_single_shard_filter_start_keeps(
+        self, single_shard_ds: xr.DataTree
+    ) -> None:
         """Single shard kept when filter_start matches."""
         regions = _get_regions(
             single_shard_ds, filter_start=pd.Timestamp("2025-01-01 00:00")
@@ -954,13 +1095,13 @@ class TestSingleShardEdgeCases:
         assert regions == [slice(0, 2)]
 
     def test_single_shard_filter_start_excludes(
-        self, single_shard_ds: xr.Dataset
+        self, single_shard_ds: xr.DataTree
     ) -> None:
         """Single shard excluded when filter_start is after."""
         regions = _get_regions(single_shard_ds, filter_start=pd.Timestamp("2025-01-02"))
         assert regions == []
 
-    def test_single_shard_filter_end_keeps(self, single_shard_ds: xr.Dataset) -> None:
+    def test_single_shard_filter_end_keeps(self, single_shard_ds: xr.DataTree) -> None:
         """Single shard kept when filter_end is after."""
         regions = _get_regions(
             single_shard_ds, filter_end=pd.Timestamp("2025-01-01 01:00")
@@ -968,7 +1109,7 @@ class TestSingleShardEdgeCases:
         assert regions == [slice(0, 2)]
 
     def test_single_shard_filter_end_excludes(
-        self, single_shard_ds: xr.Dataset
+        self, single_shard_ds: xr.DataTree
     ) -> None:
         """Single shard excluded when filter_end is at or before first coord."""
         regions = _get_regions(
@@ -977,7 +1118,7 @@ class TestSingleShardEdgeCases:
         assert regions == []
 
     def test_single_shard_filter_contains_keeps(
-        self, single_shard_ds: xr.Dataset
+        self, single_shard_ds: xr.DataTree
     ) -> None:
         """Single shard kept when filter_contains matches."""
         regions = _get_regions(
@@ -986,7 +1127,7 @@ class TestSingleShardEdgeCases:
         assert regions == [slice(0, 2)]
 
     def test_single_shard_filter_contains_excludes(
-        self, single_shard_ds: xr.Dataset
+        self, single_shard_ds: xr.DataTree
     ) -> None:
         """Single shard excluded when filter_contains doesn't match."""
         regions = _get_regions(
@@ -1007,13 +1148,14 @@ class TestDownloadErrorLogging:
     """Test that download errors for recent files use quiet logging for expected errors."""
 
     def _make_job(self, time: pd.Timestamp) -> ExampleRegionJob:
-        template_ds = _create_template_ds(num_vars=1, num_time=48)
-        template_ds = template_ds.assign_coords(
-            time=pd.date_range(time, freq="h", periods=48)
+        ds = (
+            _create_template_ds(num_vars=1, num_time=48)
+            .to_dataset()
+            .assign_coords(time=pd.date_range(time, freq="h", periods=48))
         )
         return ExampleRegionJob(
             tmp_store=get_local_tmp_store(),
-            template_ds=template_ds,
+            template_ds=xr.DataTree.from_dict({"/": ds}),
             data_vars=[ExampleDataVar(name="var0")],
             append_dim="time",
             region=slice(0, 12),

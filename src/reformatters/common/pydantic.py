@@ -13,6 +13,4 @@ def replace(obj: B, **kwargs: Any) -> B:  # noqa: ANN401
 
 
 class FrozenBaseModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        frozen=True, strict=True, revalidate_instances="always"
-    )
+    model_config = pydantic.ConfigDict(frozen=True, strict=True)

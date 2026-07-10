@@ -344,6 +344,8 @@ def get_shared_data_var_configs(
                 units="1",
                 comment="0=no; 1=yes",
                 step_type="avg",
+                flag_values=(0, 1),
+                flag_meanings="no yes",
             ),
             internal_attrs=GEFSInternalAttrs(
                 grib_element="CSNOW",
@@ -364,6 +366,8 @@ def get_shared_data_var_configs(
                 units="1",
                 comment="0=no; 1=yes",
                 step_type="avg",
+                flag_values=(0, 1),
+                flag_meanings="no yes",
             ),
             internal_attrs=GEFSInternalAttrs(
                 grib_element="CICEP",
@@ -384,6 +388,8 @@ def get_shared_data_var_configs(
                 units="1",
                 comment="0=no; 1=yes",
                 step_type="avg",
+                flag_values=(0, 1),
+                flag_meanings="no yes",
             ),
             internal_attrs=GEFSInternalAttrs(
                 grib_element="CFRZR",
@@ -404,6 +410,8 @@ def get_shared_data_var_configs(
                 units="1",
                 comment="0=no; 1=yes",
                 step_type="avg",
+                flag_values=(0, 1),
+                flag_meanings="no yes",
             ),
             internal_attrs=GEFSInternalAttrs(
                 grib_element="CRAIN",

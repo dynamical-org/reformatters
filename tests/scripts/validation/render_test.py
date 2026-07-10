@@ -21,9 +21,9 @@ FIXTURE_MD = """\
 
 - everything else
 
-## Combined plots
+## Availability
 
-- nulls: [`combined_nulls.png`](combined_nulls.png)
+![availability heatmap](availability_heatmap.png)
 
 ## Per-variable details
 
@@ -46,7 +46,7 @@ def test_render_html_structure() -> None:
 
     assert '<h2 id="datasets">Datasets</h2>' in html
     assert '<h2 id="summary">Summary</h2>' in html
-    assert '<h2 id="combined-plots">Combined plots</h2>' in html
+    assert '<h2 id="availability">Availability</h2>' in html
     assert '<h2 id="per-variable-details">Per-variable details</h2>' in html
 
     # Non-variable h3s get ids but are NOT wrapped in <section>.
@@ -63,15 +63,15 @@ def test_render_html_structure() -> None:
         'data-var="precipitation_surface">'
     ) in html
 
-    # Each variable section embeds its three plot images, each wrapped in <a target=_blank>.
-    for plot_type in ("nulls", "value_timeseries", "spatial", "temporal"):
+    # Each variable section embeds its plot images, each wrapped in <a target=_blank>.
+    for plot_type in ("availability", "value_timeseries", "spatial", "temporal"):
         assert (
             f'<a href="{plot_type}_temperature_2m.png" target="_blank">'
             f'<img src="{plot_type}_temperature_2m.png"'
         ) in html
 
-    # PNG links from elsewhere in the doc get target="_blank" too.
-    assert '<a href="combined_nulls.png" target="_blank">' in html
+    # The availability heatmap embedded elsewhere in the doc renders as an image.
+    assert '<img src="availability_heatmap.png"' in html
 
     # TOC contains a checkbox per variable + section links.
     assert 'data-var="temperature_2m"' in html
@@ -81,6 +81,27 @@ def test_render_html_structure() -> None:
 
     assert "<head>" in html
     assert "<title>" in html
+
+
+def test_render_html_slugs_group_pathed_variables() -> None:
+    md = (
+        "## Per-variable details\n\n"
+        "### `pressure_level/temperature`\n\n"
+        "**Metadata**\n\n- units: `degree_Celsius`\n"
+    )
+    html = render_html(md, "noaa-test")
+
+    # Display text keeps the '/'; ids and filenames replace it so they stay path-safe.
+    assert "<code>pressure_level/temperature</code>" in html
+    assert (
+        '<section class="variable" id="var-pressure_level__temperature" '
+        'data-var="pressure_level__temperature">'
+    ) in html
+    for plot_type in ("availability", "value_timeseries", "spatial", "temporal"):
+        assert f'<img src="{plot_type}_pressure_level__temperature.png"' in html
+    assert (
+        "pressure_level/temperature.png" not in html
+    )  # raw '/' never reaches a filename
 
 
 def test_render_report_writes_file(tmp_path: Path) -> None:

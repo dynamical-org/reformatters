@@ -1,5 +1,6 @@
 import math
 from collections.abc import Iterable
+from typing import cast
 
 import xarray as xr
 
@@ -22,12 +23,14 @@ def _shrink_dim(size: int, chunk: int, shard: int) -> tuple[int, int]:
     return new_chunk, new_shard
 
 
-def shrink_chunks_and_shards(
-    ds: xr.Dataset, dims: Iterable[str] | None = None
-) -> xr.Dataset:
+def shrink_chunks_and_shards[T: (xr.Dataset, xr.DataTree)](
+    ds: T, dims: Iterable[str] | None = None
+) -> T:
     """
     Shrink every data var's chunk and shard encoding to the smallest layout that
     still exercises the same structure as production at this dataset's sizes.
+
+    Accepts a template as either a Dataset or a DataTree (per-node shrink).
 
     Integration tests trim the append/lead/ensemble dims then write a small
     region. With production chunk geometry that means allocating, filling, and
@@ -46,6 +49,17 @@ def shrink_chunks_and_shards(
     those dimensions, e.g. shrink the spatial dims while leaving the append dim
     at production size for a shard-boundary test.
     """
+    if isinstance(ds, xr.DataTree):
+        return cast(
+            "T",
+            xr.DataTree.from_dict(
+                {
+                    node.path: shrink_chunks_and_shards(node.to_dataset(), dims)
+                    for node in ds.subtree
+                }
+            ),
+        )
+
     selected = set(dims) if dims is not None else None
     for var in ds.data_vars.values():
         chunks = list(var.encoding["chunks"])

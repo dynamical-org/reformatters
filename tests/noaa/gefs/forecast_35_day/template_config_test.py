@@ -7,6 +7,7 @@ import pytest
 import rasterio
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.forecast_35_day.region_job import (
     GefsForecast35DayRegionJob,
     GefsForecast35DaySourceFileCoord,
@@ -67,7 +68,7 @@ def test_spatial_ref_matches_grib(
     template_config: GefsForecast35DayTemplateConfig,
     gefs_first_message_path: Path,
 ) -> None:
-    ds = template_config.get_template(pd.Timestamp("2024-11-01T00:00"))
+    ds = template_config.get_template(pd.Timestamp("2024-11-01T00:00")).to_dataset()
 
     ds_raster = xr.open_dataset(gefs_first_message_path, engine="rasterio")
 
@@ -111,7 +112,7 @@ def test_dimensions_and_append_dim(
         "latitude",
         "longitude",
     )
-    assert template_config.dims == expected_dims
+    assert template_config.dims[ROOT] == expected_dims
     assert template_config.append_dim == "init_time"
     assert template_config.append_dim_start == pd.Timestamp("2020-10-01T00:00")
     assert template_config.append_dim_frequency == pd.Timedelta("24h")

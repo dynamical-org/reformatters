@@ -7,6 +7,7 @@ import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
+    ROOT,
     BaseInternalAttrs,
     Coordinate,
     CoordinateAttrs,
@@ -14,6 +15,7 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
+    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
@@ -48,7 +50,7 @@ class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
 
 
 class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar]):
-    dims: tuple[Dim, ...] = ("time", "latitude", "longitude")
+    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     # Iowa Mesonet archive for MRMS has significant data availability November 2014 onwards.
     append_dim_start: Timestamp = pd.Timestamp("2014-11-01T00:00")
@@ -202,8 +204,8 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
         encoding_float32_default = Encoding(
             dtype="float32",
             fill_value=np.nan,
-            chunks=tuple(var_chunks[d] for d in self.dims),
-            shards=tuple(var_shards[d] for d in self.dims),
+            chunks=tuple(var_chunks[d] for d in self.dims[ROOT]),
+            shards=tuple(var_shards[d] for d in self.dims[ROOT]),
             compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
         )
 
@@ -309,7 +311,9 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     long_name="Precipitation type",
                     units="1",
                     step_type="instant",
-                    comment="Precipitation type flag. 0=no precipitation, 1=warm stratiform rain, 3=snow, 6=convective, 7=hail, 10=cold stratiform rain, 91=tropical, -3=no data.",
+                    comment="Surface precipitation type flag. -3=no coverage, 0=no precipitation, 1=warm stratiform rain, 3=snow, 6=convective rain, 7=rain mixed with hail, 10=cold stratiform rain, 91=tropical/stratiform rain mix, 96=tropical/convective rain mix.",
+                    flag_values=(-3, 0, 1, 3, 6, 7, 10, 91, 96),
+                    flag_meanings="no_coverage no_precipitation warm_stratiform_rain snow convective_rain rain_mixed_with_hail cold_stratiform_rain tropical_stratiform_rain_mix tropical_convective_rain_mix",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="PrecipFlag",

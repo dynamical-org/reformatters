@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.forecast_10_day_spatial.template_config import (
     GefsForecast10DaySpatialTemplateConfig,
 )
@@ -21,7 +22,7 @@ def test_dataset_attributes() -> None:
 
 
 def test_dims_and_append_dim() -> None:
-    assert TEMPLATE_CONFIG.dims == (
+    assert TEMPLATE_CONFIG.dims[ROOT] == (
         "init_time",
         "ensemble_member",
         "lead_time",
@@ -66,7 +67,7 @@ def test_append_dim_coordinates_range() -> None:
 
 
 def test_derive_coordinates() -> None:
-    ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00"))
+    ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2020-10-02T00:00")).to_dataset()
     assert "spatial_ref" in ds.coords
     np.testing.assert_array_equal(
         ds["valid_time"].values,
@@ -84,8 +85,8 @@ def test_dimension_coordinates_native_quarter_degree_grid() -> None:
 
     longitude = dim_coords["longitude"]
     assert len(longitude) == 1440
-    assert longitude[0] == 0.0
-    assert longitude[-1] == 359.75
+    assert longitude[0] == -180.0
+    assert longitude[-1] == 179.75
 
     lead_time = dim_coords["lead_time"]
     assert len(lead_time) == 81
@@ -120,7 +121,11 @@ def test_data_vars_are_s_file_vars_with_virtual_encoding() -> None:
         assert np.isnan(encoding.fill_value)
         assert encoding.serializer == {
             "name": "gribberish",
-            "configuration": {"var": var.internal_attrs.grib_element},
+            "configuration": {
+                "var": var.internal_attrs.grib_element,
+                "adjust_longitude_range": True,
+                "north_up": True,
+            },
         }
 
 

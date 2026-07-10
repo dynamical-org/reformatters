@@ -9,6 +9,7 @@ import pytest
 import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -336,11 +337,60 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "categorical_rain_surface",
     "categorical_precipitation_type_surface",
     "flash_qpe_ffg_max_surface",
-    "composite_reflectivity",
     "soil_water_runoff",
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # HRRR forecast-48-hour-spatial single-level/surface fields with no CF standard name.
+    "column_integrated_mass_density_atmosphere",
+    "critical_angle_0_500m",
+    "echo_top",
+    "effective_layer_helicity_surface",
+    "enhanced_stretching_potential_0_3000m",
+    "freezing_rain_run_total_surface",
+    "frozen_precipitation_run_total_surface",
+    "frozen_precipitation_surface",
+    "layer_thickness_261k_256k",
+    "lightning_atmosphere",
+    "lightning_threat_1m",
+    "lightning_threat_2m",
+    "mass_density_8m",
+    "maximum_downward_vertical_velocity_100_1000mb",
+    "maximum_hail_diameter_0p1sigma",
+    "maximum_hail_diameter_atmosphere",
+    "maximum_hail_diameter_surface",
+    "maximum_updraft_helicity_2000_0m",
+    "maximum_updraft_helicity_3000_0m",
+    "maximum_updraft_helicity_5000_2000m",
+    "maximum_wind_u_component_10m",
+    "maximum_wind_v_component_10m",
+    "minimum_updraft_helicity_2000_0m",
+    "minimum_updraft_helicity_3000_0m",
+    "minimum_updraft_helicity_5000_2000m",
+    "moisture_availability_0m_underground",
+    "relative_humidity_with_respect_to_precipitable_water_atmosphere",
+    "storm_relative_helicity_1000_0m",
+    "storm_relative_helicity_3000_0m",
+    "u_component_storm_motion_0_6000m",
+    "v_component_storm_motion_0_6000m",
+    "vegetation_type_surface",
+    "vertical_u_component_shear_0_1000m",
+    "vertical_u_component_shear_0_6000m",
+    "vertical_v_component_shear_0_1000m",
+    "vertical_v_component_shear_0_6000m",
+    "vertically_integrated_liquid_atmosphere",
+    "visible_beam_downward_solar_flux_surface",
+    "visible_diffuse_downward_solar_flux_surface",
+    # HRRR model_level (wrfnat) microphysics fields with no CF standard name.
+    "mass_density",
+    "number_concentration_cloud_ice",
+    "number_concentration_cloud_droplets",
+    "number_concentration_rain",
+    "number_concentration_water_friendly_aerosol",
+    "number_concentration_ice_friendly_aerosol",
+    "rain_mixing_ratio",
+    "snow_mixing_ratio",
+    "graupel",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
@@ -349,7 +399,14 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("dew_point_temperature", "degree_Celsius"),
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
+    ("vegetation_area_fraction", "percent"),
     ("relative_humidity", "percent"),
+    # HRRR turbulent kinetic energy carries GRIB's J kg-1; CF canonical is m2 s-2.
+    ("specific_turbulent_kinetic_energy_of_air", "J kg-1"),
+    # HRRR mixing ratios carry GRIB's kg kg-1; CF canonical for these names is the
+    # dimensionless "1" (mass of constituent per mass of dry air).
+    ("cloud_ice_mixing_ratio", "kg kg-1"),
+    ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.
@@ -377,7 +434,9 @@ def test_cf_standard_name_and_units(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    # Flattened so vertical-group vars (keyed by path, e.g. pressure_level/temperature)
+    # are visible; xr.open_zarr would expose only the root group.
+    ds = validation.open_flattened_dataset(template_path, consolidated=False)
     recognized_standard_names = ds.cf.standard_names
 
     errors: list[str] = []
@@ -427,7 +486,7 @@ def test_cf_standard_name_and_units(
                 f"but cf_xarray did not recognize it in the zarr template. "
                 f"Run 'uv run main {dataset.dataset_id} update-template' to regenerate the template."
             )
-        elif var_config.name not in recognized_standard_names[standard_name]:
+        elif var_config.path not in recognized_standard_names[standard_name]:
             errors.append(
                 f"Variable '{var_config.name}' has standard_name='{standard_name}' configured "
                 f"but is not recognized by cf_xarray in the zarr template. "
@@ -473,6 +532,37 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "80v",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
+    # HRRR forecast-48-hour-spatial fields with no ECMWF parameter-database entry.
+    "aotk",
+    "cangle",
+    "colmd",
+    "dzdt",
+    "efhl",
+    "esp",
+    "frozr",
+    "ltngsd",
+    "maxdvv",
+    "maxref",
+    "maxuvv",
+    "maxuw",
+    "maxvw",
+    "mnuphl",
+    "retop",
+    "rhpw",
+    "sbt113",
+    "sbt114",
+    "sbt123",
+    "sbt124",
+    "ulwrf",
+    "uswrf",
+    "vegmax",
+    "vegmin",
+    # HRRR model_level (wrfnat) microphysics short names with no ECMWF entry.
+    "nccice",
+    "ncifa",
+    "nconcd",
+    "ncwfa",
+    "spncr",
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
@@ -486,6 +576,38 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "80 metre V wind component",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
+    # HRRR forecast-48-hour-spatial fields with no ECMWF parameter-database entry.
+    "Aerosol optical thickness",
+    "Column-integrated mass density",
+    "Critical angle",
+    "Echo top",
+    "Effective layer helicity",
+    "Enhanced stretching potential",
+    "Frozen precipitation",
+    "Hourly maximum of simulated reflectivity",
+    "Maximum lightning threat 1 (graupel flux)",
+    "Maximum lightning threat 2 (vertically integrated ice)",
+    "Maximum 10 metre wind speed u component",
+    "Maximum 10 metre wind speed v component",
+    "Maximum downward vertical velocity",
+    "Maximum upward vertical velocity",
+    "Maximum vegetation fraction",
+    "Minimum updraft helicity",
+    "Minimum vegetation fraction",
+    "Relative humidity with respect to precipitable water",
+    "Simulated brightness temperature (channel 113)",
+    "Simulated brightness temperature (channel 114)",
+    "Simulated brightness temperature (channel 123)",
+    "Simulated brightness temperature (channel 124)",
+    "Upward long-wave radiation flux",
+    "Upward short-wave radiation flux",
+    "Vertical velocity (geometric)",
+    # HRRR model_level (wrfnat) microphysics long names with no ECMWF entry.
+    "Number concentration of cloud ice",
+    "Number concentration of water-friendly aerosols",
+    "Number concentration of ice-friendly aerosols",
+    "Number concentration of cloud droplets",
+    "Number concentration of rain",
 }
 
 

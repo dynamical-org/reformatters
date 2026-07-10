@@ -15,6 +15,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
 from reformatters.common.zarr import assert_fill_values_set
@@ -22,11 +23,32 @@ from reformatters.common.zarr import assert_fill_values_set
 log = get_logger(__name__)
 
 
+def _to_zarr_metadata(
+    template: xr.DataTree,
+    store: Store | Path,
+    mode: Literal["w", "w-"],
+    consolidated: bool = True,
+) -> None:
+    # safe_chunks=False avoids a per-chunk dask graph that OOMs large arrays (compute=False
+    # writes no data chunks anyway). write_inherited_coords=True duplicates shared coords
+    # into each group so groups open standalone.
+    template.to_zarr(
+        store,
+        mode=mode,
+        compute=False,
+        write_inherited_coords=True,
+        safe_chunks=False,
+        write_empty_chunks=True,
+        consolidated=consolidated,
+    )
+
+
 def write_metadata(
-    template_ds: xr.Dataset,
+    template_ds: xr.DataTree,
     storage: zarr.storage.StoreLike | StoreFactory,
     mode: Literal["w", "w-"] | None = None,
     skip_icechunk_commit: bool = False,
+    consolidated: bool = True,
 ) -> None:
     store: Store | Path
     replica_stores: list[Store]
@@ -61,31 +83,14 @@ def write_metadata(
             category=UserWarning,
         )
 
-        # safe_chunks=False: with compute=False only metadata and numpy coordinates
-        # are written, no dask chunks, so dask/zarr chunk alignment is irrelevant.
-        # The alternative, aligning dask chunks to the stored chunks (align_chunks=True
-        # or chunking templates at stored sizes), builds a task-per-chunk dask graph
-        # even under compute=False, which is slow/OOM on our largest arrays.
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
-            template_ds.to_zarr(
-                replica_store,
-                mode=mode,
-                compute=False,
-                safe_chunks=False,
-                write_empty_chunks=True,
-            )
+            _to_zarr_metadata(template_ds, replica_store, mode, consolidated)
 
         log.info(f"Writing metadata to store {store} with mode {mode}")
-        template_ds.to_zarr(
-            store,
-            mode=mode,
-            compute=False,
-            safe_chunks=False,
-            write_empty_chunks=True,
-        )
+        _to_zarr_metadata(template_ds, store, mode, consolidated)
 
-    if isinstance(store, Path | str):
+    if isinstance(store, Path | str) and consolidated:
         sort_consolidated_metadata(Path(store) / "zarr.json")
 
     if not skip_icechunk_commit:
@@ -158,8 +163,23 @@ def _structural_signature(
     }
 
 
+def _non_append_dimension_coords(
+    tree: xr.DataTree, append_dim: str
+) -> dict[str, xr.DataArray]:
+    """Dimension coordinates (across all groups) other than the append dim, by name —
+    the 1D axis labels (latitude/longitude, pressure_level, model_level, …). Reordering
+    one relabels existing chunks. Excludes the growing append dim, 2D auxiliary coords
+    (projected lat/lon, valid_time), and scalars (spatial_ref), which need not match."""
+    coords: dict[str, xr.DataArray] = {}
+    for node in tree.subtree:
+        for name, coord in node.to_dataset().coords.items():
+            if coord.dims == (name,) and name != append_dim:
+                coords[str(name)] = coord
+    return coords
+
+
 def assert_no_structural_drift_from_existing_store(
-    template_ds: xr.Dataset, existing_ds: xr.Dataset, append_dim: str
+    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
 ) -> None:
     """Fail an operational update whose template would change the structure of the
     already-published store.
@@ -170,9 +190,11 @@ def assert_no_structural_drift_from_existing_store(
     shards — the update would corrupt the archive or break readers. This guard runs on
     worker 0 before any data is written and raises before damage is done.
 
-    Only variables present in `existing_ds` are checked, so the template may freely add
-    new variables. Backfills are exempt (they rewrite the whole store and may
-    legitimately change structure), so callers only run this for operational updates.
+    Compares every variable across all groups (by var.path) and every non-append
+    dimension coordinate's values (a reordered vertical level or moved lat/lon would
+    relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
+    template may freely add new ones. Backfills are exempt (they rewrite the whole store
+    and may legitimately change structure), so callers only run this for operational updates.
 
     The append dimension's chunk/shard size is compared in dev/prod but skipped under
     Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
@@ -180,27 +202,39 @@ def assert_no_structural_drift_from_existing_store(
     change is caught here as well as at PR time by the template-drift test.
     """
     compare_append_axis = not Config.is_test
+    template_by_path = dict(walk_data_arrays(template_ds))
     mismatches: list[str] = []
-    for var_name in map(str, existing_ds.data_vars):
-        if var_name not in template_ds.data_vars:
+    for path, existing_var in walk_data_arrays(existing_ds):
+        if path not in template_by_path:
             mismatches.append(
-                f"{var_name}: in existing store but missing from update template"
+                f"{path}: in existing store but missing from update template"
             )
             continue
 
         existing_sig = _structural_signature(
-            existing_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+            existing_var, append_dim, compare_append_axis=compare_append_axis
         )
         template_sig = _structural_signature(
-            template_ds[var_name], append_dim, compare_append_axis=compare_append_axis
+            template_by_path[path], append_dim, compare_append_axis=compare_append_axis
         )
         for field, existing_value in existing_sig.items():
             template_value = template_sig[field]
             if existing_value != template_value:
                 mismatches.append(
-                    f"{var_name}.{field}: existing store has {existing_value!r}, "
+                    f"{path}.{field}: existing store has {existing_value!r}, "
                     f"update template has {template_value!r}"
                 )
+
+    template_coords = _non_append_dimension_coords(template_ds, append_dim)
+    for name, existing_coord in _non_append_dimension_coords(
+        existing_ds, append_dim
+    ).items():
+        if name not in template_coords:
+            mismatches.append(
+                f"coord {name}: in existing store but missing from update template"
+            )
+        elif not existing_coord.equals(template_coords[name]):
+            mismatches.append(f"coord {name}: values differ from the existing store")
 
     if mismatches:
         raise ValueError(
@@ -232,6 +266,12 @@ def assign_var_metadata(
     var: xr.DataArray, var_config: DataVar[Any] | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
+
+    # xarray defaults a float variable's _FillValue attribute to NaN on write; a var
+    # with a missing_value sentinel must write _FillValue == missing_value (CF
+    # requires them equal and xarray refuses to encode them unequal).
+    if getattr(var_config.attrs, "missing_value", None) is not None:
+        var.encoding["_FillValue"] = var_config.encoding.fill_value
 
     # Encoding time data requires a `units` key in `encoding`.
     # Ensure the value matches units value in the usual `attributes` location.

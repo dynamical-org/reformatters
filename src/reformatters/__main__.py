@@ -17,6 +17,7 @@ from sentry_sdk.types import Hint, Log
 from reformatters.common import deploy as deploy_module
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.initialize_new_integration import initialize_new_integration
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.nasa.smap.level3_36km_v9 import NasaSmapLevel336KmV9Dataset
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
@@ -33,7 +34,6 @@ from reformatters.ecmwf.aifs_single.forecast import (
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
-from reformatters.example.new_dataset import initialize_new_integration
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
 from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
     GefsForecast10DaySpatialDataset,
@@ -48,6 +48,9 @@ from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
 )
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
+)
+from reformatters.noaa.hrrr.forecast_48_hour_spatial.dynamical_dataset import (
+    NoaaHrrrForecast48HourSpatialDataset,
 )
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
@@ -168,6 +171,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrAnalysisDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
         replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+    ),
+    NoaaHrrrForecast48HourSpatialDataset(
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),

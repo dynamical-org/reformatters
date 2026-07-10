@@ -73,20 +73,39 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     (manifest-aware validators for them are a separate planned phase).
     """
     store = dataset.store_factory.primary_store()
-    ds = xr.open_zarr(
+    ds = validation.open_flattened_dataset(
         store,
-        chunks=None,
         consolidated=not isinstance(store, icechunk.store.IcechunkStore),
     )
-    latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().values)
+    latest = pd.Timestamp(ds[dataset.template_config.append_dim].max().item())
 
     validators = list(dataset.validators())
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
         validators.append(partial(validation.check_for_expected_shards, store))
 
+    # Mirror validate_dataset: VirtualDataValidators get a context (region job + store),
+    # the rest get the opened dataset.
+    region_job = None
+    if any(isinstance(v, validation.VirtualDataValidator) for v in validators):
+        jobs, _ = dataset.region_job_class.operational_update_jobs(
+            primary_store=store,
+            tmp_store=dataset._tmp_store(),
+            get_template_fn=dataset._get_template,
+            append_dim=dataset.template_config.append_dim,
+            all_data_vars=dataset.template_config.data_vars,
+            reformat_job_name="test",
+        )
+        region_job = jobs[0]
+        assert isinstance(region_job, VirtualRegionJob)
+
     with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
         for validator in validators:
-            result = validator(ds)
+            if isinstance(validator, validation.VirtualDataValidator):
+                assert region_job is not None
+                assert isinstance(store, icechunk.store.IcechunkStore)
+                result = validator(region_job, store, ds)
+            else:
+                result = validator(ds)
             assert isinstance(result, validation.ValidationResult), (
                 f"Validator {getattr(validator, 'func', validator)!r} returned "
                 f"{type(result)!r}, expected ValidationResult"
@@ -255,6 +274,32 @@ class TestIcechunkVirtualConfigValidation:
         assert dataset.store_factory.icechunk_virtual_config is None
 
 
+class GroupedVarConfig(ExampleConfig):
+    @computed_field
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [ExampleDataVar(name="temperature", group="pressure_level")]
+
+
+class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: GroupedVarConfig = GroupedVarConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig()
+
+    def operational_kubernetes_resources(
+        self,
+        image_tag: str,  # noqa: ARG002
+    ) -> Sequence[CronJob]:
+        return ()
+
+
+def test_materialized_dataset_rejects_vertical_group_var() -> None:
+    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
+    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
+    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
+        GroupedVarDataset()
+
+
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_update_template = Mock()
     monkeypatch.setattr(ExampleConfig, "update_template", mock_update_template)
@@ -280,7 +325,11 @@ def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
@@ -310,7 +359,9 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
-        lambda self, end: xr.Dataset(attrs={"cool": "weather"}),
+        lambda self, end: xr.DataTree.from_dict(
+            {"/": xr.Dataset(attrs={"cool": "weather"})}
+        ),
     )
     backfill_mock = Mock()
     monkeypatch.setattr(
@@ -386,7 +437,11 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
 
     # Mock template retrieval and metadata writing
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
 
     dataset = ExampleDataset(
@@ -457,9 +512,9 @@ def test_validate_dataset_calls_validators(
 
     mock_replica_store_ds = Mock()
     monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        lambda store, chunks=None, consolidated=None: mock_replica_store_ds,
+        validation,
+        "open_flattened_dataset",
+        lambda store, *, consolidated: mock_replica_store_ds,
     )
 
     dataset.validate_dataset("example-job-name")
@@ -686,7 +741,11 @@ def test_backfill_kubernetes_overwrite_existing_flag(
         Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
     monkeypatch.setattr(
         ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
     )
@@ -727,7 +786,11 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exi
         "open_zarr",
         Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
     )
-    monkeypatch.setattr(ExampleConfig, "get_template", lambda self, end: xr.Dataset())
+    monkeypatch.setattr(
+        ExampleConfig,
+        "get_template",
+        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+    )
 
     monkeypatch.setattr(
         dynamical_dataset,
@@ -787,7 +850,9 @@ def test_backfill_local_fails_in_wrong_environment(
     monkeypatch.setattr(template_utils, "write_metadata", Mock())
     monkeypatch.setattr(DynamicalDataset, "backfill", Mock())
     monkeypatch.setattr(
-        DynamicalDataset, "_get_template", Mock(return_value=xr.Dataset())
+        DynamicalDataset,
+        "_get_template",
+        Mock(return_value=xr.DataTree.from_dict({"/": xr.Dataset()})),
     )
 
     dataset = ExampleDataset(

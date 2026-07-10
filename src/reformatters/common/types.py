@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Annotated, Literal, get_args
+from enum import Enum, auto
+from typing import Annotated, Any, Literal, get_args
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,10 @@ type ArrayND[D: np.generic] = np.ndarray[tuple[int, ...], np.dtype[D]]
 type Array1D[D: np.generic] = np.ndarray[tuple[int], np.dtype[D]]
 type Array2D[D: np.generic] = np.ndarray[tuple[int, int], np.dtype[D]]
 
+# A numcodecs/zarr codec serialized to its config dict (Codec.to_dict()); an
+# Encoding filter, compressor, or serializer.
+type CodecConfig = dict[str, Any]
+
 type TimestampUnits = Literal["seconds"]
 type TimedeltaUnits = Literal["seconds since 1970-01-01 00:00:00"]
 
@@ -34,6 +39,23 @@ type Dim = Literal[
     "x",
     "y",
     "statistic",
+    # Vertical group dimensions (a group's name equals its dimension name, see VerticalGroup).
+    "pressure_level",
+    "model_level",
 ]
 type AppendDim = Literal["init_time", "time"]
-assert set(get_args(AppendDim)) <= set(get_args(Dim))
+assert set(get_args(AppendDim.__value__)) <= set(get_args(Dim.__value__))
+
+
+class RootGroup(Enum):
+    ROOT = auto()  # pure sentinel; the root zarr group has no name
+
+
+ROOT = RootGroup.ROOT
+
+# A variable on a dense, comparable vertical dimension lives in a zarr group named
+# after that dimension (group name == dimension name). Expand as new types are added.
+type VerticalGroup = Literal["pressure_level", "model_level"]
+# A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
+type Group = VerticalGroup | RootGroup
+assert set(get_args(VerticalGroup.__value__)) <= set(get_args(Dim.__value__))

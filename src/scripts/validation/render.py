@@ -5,6 +5,7 @@ import typer
 from markdown_it import MarkdownIt
 
 from reformatters.common.logging import get_logger
+from scripts.validation.utils import var_slug
 
 log = get_logger(__name__)
 
@@ -20,7 +21,15 @@ def _extract_per_var_html(html: str) -> list[str]:
     return re.findall(r"<h3><code>([^<]+)</code></h3>", html)
 
 
-def _wrap_variable_sections(html: str) -> str:
+_PLOT_TYPES = (
+    ("availability", "availability over append dim"),
+    ("value_timeseries", "full-period value time series"),
+    ("spatial", "spatial comparison"),
+    ("temporal", "time series comparison"),
+)
+
+
+def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
     pattern = re.compile(
         r"<h3><code>(?P<var>[^<]+)</code></h3>(?P<body>.*?)(?=<h[23][\s>]|\Z)",
         re.DOTALL,
@@ -29,22 +38,20 @@ def _wrap_variable_sections(html: str) -> str:
     def replace(m: re.Match[str]) -> str:
         var = m.group("var")
         body = m.group("body")
-        plots = (
-            '<div class="plots">'
-            f'<a href="nulls_{var}.png" target="_blank">'
-            f'<img src="nulls_{var}.png" alt="{var} — null fraction"></a>'
-            f'<a href="value_timeseries_{var}.png" target="_blank">'
-            f'<img src="value_timeseries_{var}.png" alt="{var} — full-period value time series"></a>'
-            f'<a href="spatial_{var}.png" target="_blank">'
-            f'<img src="spatial_{var}.png" alt="{var} — spatial comparison"></a>'
-            f'<a href="temporal_{var}.png" target="_blank">'
-            f'<img src="temporal_{var}.png" alt="{var} — time series comparison"></a>'
-            "</div>"
+        slug = var_slug(var)
+        # Skip plots the run didn't produce (e.g. spatial/temporal comparisons a
+        # variables-filtered or reference-less run left out).
+        plots = "".join(
+            f'<a href="{filename}" target="_blank">'
+            f'<img src="{filename}" alt="{var} — {label}"></a>'
+            for prefix, label in _PLOT_TYPES
+            if (filename := f"{prefix}_{slug}.png")
+            and (available_files is None or filename in available_files)
         )
         return (
-            f'<section class="variable" id="var-{var}" data-var="{var}">'
+            f'<section class="variable" id="var-{slug}" data-var="{slug}">'
             f'<h3 class="var-heading"><code>{var}</code></h3>'
-            f"{body}{plots}</section>"
+            f'{body}<div class="plots">{plots}</div></section>'
         )
 
     return pattern.sub(replace, html)
@@ -290,8 +297,8 @@ def _build_toc(
         f'<li><a href="#{slug}">{title}</a></li>' for slug, title in sections
     )
     var_items = "".join(
-        f'<li class="var-row"><input type="checkbox" checked data-var="{v}" '
-        f'id="cb-{v}"><a href="#var-{v}">{v}</a></li>'
+        f'<li class="var-row"><input type="checkbox" checked data-var="{var_slug(v)}" '
+        f'id="cb-{var_slug(v)}"><a href="#var-{var_slug(v)}">{v}</a></li>'
         for v in variables
     )
     return f"""
@@ -313,14 +320,16 @@ def _extract_dataset_name(md_text: str, fallback: str) -> str:
     return m.group(1) if m else fallback
 
 
-def render_html(md_text: str, dataset_id: str) -> str:
+def render_html(
+    md_text: str, dataset_id: str, available_files: set[str] | None = None
+) -> str:
     md = MarkdownIt("commonmark").enable("table")
     html = md.render(md_text)
     html = _png_links_open_in_new_tab(html)
     variables = _extract_per_var_html(html)
     html, sections = _annotate_h2(html)
     html = _annotate_non_var_h3(html)
-    html = _wrap_variable_sections(html)
+    html = _wrap_variable_sections(html, available_files)
     html = _wrap_tables(html)
     dataset_name = _extract_dataset_name(md_text, dataset_id)
     toc = _build_toc(sections, variables, dataset_name)
@@ -352,7 +361,8 @@ def render_report(run_dir: Path) -> Path:
     assert md_path.exists(), f"validation_summary.md not found in {run_dir}"
     dataset_id = run_dir.parent.name
     out_path = run_dir / REPORT_FILENAME
-    out_path.write_text(render_html(md_path.read_text(), dataset_id))
+    available_files = {f.name for f in run_dir.iterdir() if f.is_file()}
+    out_path.write_text(render_html(md_path.read_text(), dataset_id, available_files))
     return out_path
 
 

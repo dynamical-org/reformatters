@@ -130,7 +130,7 @@ def test_get_processing_region(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],  # Single variable
         append_dim="time",
         region=slice(4, 16),  # Middle region
@@ -154,7 +154,7 @@ def test_get_processing_region_at_boundaries(
     # Test at start of dataset
     job_start = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],
         append_dim="time",
         region=slice(0, 8),  # Start region
@@ -167,7 +167,7 @@ def test_get_processing_region_at_boundaries(
     # Test at end of dataset
     job_end = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],
         append_dim="time",
         region=slice(16, 24),  # End region
@@ -228,7 +228,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
         ),
     ]
 
-    groups = GefsAnalysisRegionJob.source_groups(all_vars)
+    groups = GefsAnalysisRegionJob.source_file_var_groups(all_vars)
 
     # We're grouping everything together since max_vars_per_download_group is 1
     assert len(groups) == 1
@@ -267,7 +267,7 @@ def test_generate_source_file_coords_ensemble(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=[var],
         append_dim="time",
         region=slice(0, 8),
@@ -342,7 +342,7 @@ def test_download_file(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="time",
         region=slice(0, 8),
@@ -418,7 +418,7 @@ def test_read_data(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars[:1],
         append_dim="time",
         region=slice(0, 8),
@@ -478,7 +478,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
     tmp_store = get_local_tmp_store()
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=[var_with_rounding],
         append_dim="time",
         region=slice(0, 4),
@@ -527,19 +527,25 @@ def test_operational_update_jobs(
     # Mock get_template_fn
     def mock_get_template_fn(
         end_time: pd.Timestamp | np.datetime64 | datetime | str,
-    ) -> xr.Dataset:
-        return xr.Dataset(
+    ) -> xr.DataTree:
+        return xr.DataTree.from_dict(
             {
-                "temperature_2m": xr.Variable(
-                    data=np.ones((20, 5, 10), dtype=np.float32),
-                    dims=["time", "latitude", "longitude"],
+                "/": xr.Dataset(
+                    {
+                        "temperature_2m": xr.Variable(
+                            data=np.ones((20, 5, 10), dtype=np.float32),
+                            dims=["time", "latitude", "longitude"],
+                        )
+                    },
+                    coords={
+                        "time": pd.date_range(
+                            "2000-01-01T00:00", freq="3h", periods=20
+                        ),
+                        "latitude": np.linspace(-90, 90, 5),
+                        "longitude": np.linspace(-180, 179, 10),
+                    },
                 )
-            },
-            coords={
-                "time": pd.date_range("2000-01-01T00:00", freq="3h", periods=20),
-                "latitude": np.linspace(-90, 90, 5),
-                "longitude": np.linspace(-180, 179, 10),
-            },
+            }
         )
 
     # Mock get_jobs method
@@ -585,7 +591,7 @@ def test_update_template_with_results(
     data_vars = example_data_vars[:1]
     job = GefsAnalysisRegionJob(
         tmp_store=get_local_tmp_store(),
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=example_data_vars,
         append_dim="time",
         region=slice(0, 8),
@@ -620,7 +626,7 @@ def test_download_file_fallback(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="time",
         region=slice(0, 1),
@@ -696,7 +702,7 @@ def test_download_file_no_fallback_for_old_data(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="time",
         region=slice(0, 1),
@@ -742,7 +748,7 @@ def test_download_file_fallback_permission_denied_converts_to_file_not_found(
 
     job = GefsAnalysisRegionJob(
         tmp_store=tmp_store,
-        template_ds=template_ds,
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
         data_vars=data_vars,
         append_dim="time",
         region=slice(0, 1),

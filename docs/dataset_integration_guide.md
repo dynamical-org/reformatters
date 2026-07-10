@@ -19,6 +19,15 @@ There are three core base classes to subclass.
 - **Variant** - the specific subset and structure of data from the model. e.g. forecast, analysis, climatology. Variant may include any other information needed to distinguish datasets from the same model.
 - **Dataset** - a specific provider-model-variant. e.g. noaa-gfs-forecast
 
+### Two kinds of datasets
+
+`reformatters` produces two kinds of datasets; you pick one at step 1 and it selects which `RegionJob` base class you subclass.
+
+- **Materialized** — download the source files, rechunk, and rewrite the bytes into a new Zarr/Icechunk store. Subclass `MaterializedRegionJob`.
+- **Virtual** — an Icechunk store whose chunks are *references* into the provider's source files, decoded at read time, with chunks following the source files' native layout. Subclass `VirtualRegionJob`; see [docs/virtual_datasets.md](virtual_datasets.md).
+
+Most source weather files are laid out for spatial access, so most virtual datasets are spatial-optimized; materialized (rechunked) datasets provide the complementary time-optimized chunking over the same source data.
+
 ## Integration steps
 
 Before getting started, follow the brief setup steps in README.md > Local development > Setup.
@@ -30,15 +39,18 @@ Explore the source dataset to understand the nuances of what's available and how
 ### 1. Initialize a new integration
 
 ```bash
-uv run main initialize-new-integration <provider> <model> <variant>
+uv run main initialize-new-integration <provider> <model> <variant> --kind <materialized|virtual>
 ```
 
-Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analysis-hourly). Capitalization will be normalized for you.
+Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analysis-hourly). Capitalization will be normalized for you. `--kind` selects the teaching template that is scaffolded.
 
-This will add a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
+This adds a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
 
-These files will contain placeholder implementations of the subclasses referenced above. Follow the rest of this doc for guidance
-on how to complete the implementations to integrate your new dataset.
+These files contain placeholder implementations of the subclasses referenced above, commented with guidance specific to the kind you chose. Follow the rest of this doc to complete the implementations and integrate your new dataset.
+
+The scaffolded docstrings and comments are deliberately verbose to guide implementation. As you implement, strip them down to the repo's conventions (see the Code Style notes in [AGENTS.md](../AGENTS.md)) — minimal, one-line comments only where something is non-obvious. The scaffold also carries `# noqa: F401` on imports it only uses in commented-out example code; remove those noqas (and any now-unused imports) once you've filled the code in.
+
+If a dataset for the same provider/model already exists, reuse its shared config models and utilities (e.g. a `<provider>/<model>_config_models.py` defining the shared `DataVar`/attrs types) instead of the scaffolded copies.
 
 ### 2. Register your dataset
 
@@ -77,20 +89,16 @@ Run the tests, making any changes necessary.
 uv run pytest tests/$DATASET_PATH/template_config_test.py
 ```
 
+If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#common-dataset-structures).
+
 ### 4. Implement `RegionJob` subclass
 
-Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the attributes and method definitions based on the unique structure and processing required for your dataset. This guide walks through implementing a `MaterializedRegionJob`, the `RegionJob` subclass used for rechunked Icechunk Zarr data (as opposed to `VirtualRegionJob` for virtual Icechunk datasets).
+Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the methods the scaffolded code describes. Both kinds implement `generate_source_file_coords` (the source files a region needs) and `operational_update_jobs` (the update factory — skippable until you implement updates; a backfill runs without it). The rest differs by kind:
 
-There are four required methods:
+- **Materialized:** `download_file` (fetch a source file to disk) and `read_data` (load one variable into a numpy array). The base runs the download → read → transform → write pipeline; optional transformation hooks are described in the example.
+- **Virtual:** `discover_available` (which pending files are fetchable now) and `file_refs` (the byte-range references one file contributes). The base owns the write loop and atomic commits.
 
-- `generate_source_file_coords` lists all the files of source data that will be processed to complete the `RegionJob`.
-- `download_file` retrieves a specific source file and writes it to local disk.
-- `read_data` loads data from a local path and returns a numpy array.
-- `operational_update_jobs` is a factory method that returns the `RegionJob`s necessary to update the dataset with the latest available data. You can skip this until you're ready to implement dataset updates, a dataset backfill can be run with just the first three methods.
-
-There are a few optional, additional methods which are described in the example code. Implement them if required for your dataset, otherwise remove them to use the base class `RegionJob` implementations.
-
-Write tests for any custom logic you've created.
+Write tests for any custom logic you create.
 
 ```bash
 uv run pytest tests/$DATASET_PATH/region_job_test.py
@@ -108,13 +116,14 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
-Kubernetes resource values:
+Kubernetes resource values, materialized (fan-out across indexed jobs):
   - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
   - memory: 1.5x shared memory.
   - cpu: the number of spatial dimension shards minus 1 to account for kubernetes headroom. e.g. if 2 latitude shards * 4 longitude shards = 8, choose 7 cpu to schedule on an 8 cpu node.
   - ephemeral_storage: 20GB is a good starting point.
+  - Parallelism: set `workers_total` and `parallelism` on the `ReformatCronJob` using `self.num_variable_groups()`. Multiply by 2 if `operational_update_jobs` reprocesses the most recent time slice (see GEFS datasets for examples).
 
-Parallelism: Set `workers_total` and `parallelism` on the `ReformatCronJob` using `self.num_variable_groups()`. Multiply by 2 if `operational_update_jobs` reprocesses the most recent time slice (see GEFS datasets for examples).
+For virtual updates, use `workers_total = 1` and `parallelism = 1` (they are single-writer); `cpu="1.7"` and `memory="7G"` are good starting points. See [Operational updates](virtual_datasets.md#operational-updates-single-writer), and [Manifest splitting](virtual_datasets.md#manifest-splitting) for sizing the manifest split the storage config needs.
 
 The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
 
@@ -122,7 +131,7 @@ The update cron schedule should run shortly after the source data is expected to
 
 In `dynamical_dataset_test.py` create a test that runs `backfill_local` followed by `update` for a couple data variables and a minimal number of time steps, lead times and ensemble members. Include snapshot value assertions for every data variable that the test processes — check specific known values at specific coordinates (e.g. `assert_allclose(point["temperature_2m"].values, [28.75, 29.23])`). Snapshot values catch silent regressions in data reading, unit conversion, or coordinate alignment that other tests miss.
 
-Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in your test's `get_template` monkeypatch (see existing dataset tests for examples). At test scale, production chunk geometry means writing thousands of nearly empty chunks, which dominates test runtime without adding coverage. The helper reads each var's existing chunks/shards and the trimmed sizes and shrinks them automatically, keeping each dimension's production chunk and shard counts (capped at two) so multi-chunk and multi-shard dims stay multi and the corresponding write paths stay exercised. Call it *after* trimming (after any `.sel(...)`) so it sees the sizes the test actually writes; pass `dims=[...]` to shrink only some dimensions (e.g. leave the append dim at production size for a shard-boundary test).
+Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in your test's `get_template` monkeypatch (see existing dataset tests for examples), for materialized datasets only — a virtual dataset's one-message-per-chunk geometry must not be shrunk. At test scale, production chunk geometry means writing thousands of nearly empty chunks, which dominates test runtime without adding coverage. The helper reads each var's existing chunks/shards and the trimmed sizes and shrinks them automatically, keeping each dimension's production chunk and shard counts (capped at two) so multi-chunk and multi-shard dims stay multi and the corresponding write paths stay exercised. Call it *after* trimming (after any `.sel(...)`) so it sees the sizes the test actually writes; pass `dims=[...]` to shrink only some dimensions (e.g. leave the append dim at production size for a shard-boundary test).
 
 ```bash
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
