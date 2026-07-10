@@ -5,7 +5,10 @@ import pandas as pd
 import xarray as xr
 from numba import njit, prange
 
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Array1D, ArrayFloat32
+
+log = get_logger(__name__)
 
 # OK to add units to this list if you believe they are reasonable output units to deaccumulate to.
 # We typically expect these to be per-second rates.
@@ -29,6 +32,16 @@ AccumulationType = Literal["accumulated", "running_mean"]
 _ACCUMULATION_TYPE_ACCUMULATED = 0
 _ACCUMULATION_TYPE_RUNNING_MEAN = 1
 
+# PROTOTYPE (issue #722): how to handle an implausibly-negative step drop rather than
+# leaving it NaN. "none" is the current, default behavior. The other two are candidate
+# repairs for corrupt source accumulation fields; see issue #722.
+#   - "monotonic": repair the accumulated series to be non-decreasing (isotonic) before
+#     deaccumulating. Fixes both the negative step and the paired positive spike, and
+#     conserves the window total. Accumulated inputs only.
+#   - "temporal": deaccumulate, then replace the corrupt step-pair's rates with a linear
+#     interpolation from neighboring valid steps. Accumulated inputs only.
+RepairMode = Literal["none", "monotonic", "temporal"]
+
 
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
@@ -40,6 +53,7 @@ def deaccumulate_to_rates_inplace(
     expected_invalid_fraction: float = 0.0,
     expected_clamp_fraction: float = 0.05,
     accumulation_type: AccumulationType = "accumulated",
+    repair_implausible_drops: RepairMode = "none",
 ) -> xr.DataArray:
     """
     Convert accumulated values to per-second rates in place.
@@ -61,6 +75,11 @@ def deaccumulate_to_rates_inplace(
         accumulation_type: How to interpret the input values. "accumulated" (default) treats
             them as cumulative totals. "running_mean" treats them as running-mean rates whose
             averaging window grows from forecast start and converts them to per-step rates.
+        repair_implausible_drops: PROTOTYPE (issue #722). "none" (default) leaves the current
+            behavior unchanged. "monotonic" and "temporal" repair implausibly-negative step
+            drops from corrupt source fields instead of leaving them NaN; both are only
+            implemented for accumulation_type="accumulated" and for series without interior
+            resets or skipped steps.
     """
     assert data_array.attrs["units"] in VALID_OUTPUT_UNITS_FOR_DEACCUMULATION, (
         "Output units must be a per-second rate"
@@ -102,6 +121,16 @@ def deaccumulate_to_rates_inplace(
         np.prod(data_array.shape[time_dim_index + 1 :] or 1),
     )
 
+    temporal_mask = _prepare_repair(
+        values,
+        seconds,
+        reset_after,
+        skip_step,
+        invalid_below_threshold_rate,
+        accumulation_type,
+        repair_implausible_drops,
+    )
+
     invalid_negative_count, clamped_count = _deaccumulate_to_rates_numba(
         values,
         seconds,
@@ -110,6 +139,14 @@ def deaccumulate_to_rates_inplace(
         invalid_below_threshold_rate,
         accumulation_type_int,
     )
+
+    if temporal_mask is not None:
+        repaired = _temporal_repair(values, seconds, temporal_mask)
+        if repaired:
+            log.info(f"deaccumulation temporal repair: {repaired} step cells repaired")
+
+    if repair_implausible_drops != "none":
+        return data_array
 
     invalid_fraction = invalid_negative_count / values.size
     if invalid_fraction > expected_invalid_fraction:
@@ -211,3 +248,158 @@ def _deaccumulate_to_rates_numba(
                         sequence[t] = np.nan
 
     return invalid_negative_count, clamped_count
+
+
+# --- PROTOTYPE repairs for issue #722 (not numba, opt-in, not performance tuned) ---
+
+BoolArray3D = np.ndarray[tuple[int, ...], np.dtype[np.bool_]]
+
+
+def _prepare_repair(
+    values: ArrayFloat32,
+    seconds: Array1D[np.int64],
+    reset_after: Array1D[np.bool],
+    skip_step: Array1D[np.bool],
+    invalid_below_threshold_rate: float,
+    accumulation_type: AccumulationType,
+    repair_implausible_drops: RepairMode,
+) -> BoolArray3D | None:
+    """Apply the pre-deaccumulation repair step. Returns the temporal-repair mask (to be
+    applied after deaccumulation) for the "temporal" mode, else None."""
+    if repair_implausible_drops == "none":
+        return None
+    if accumulation_type != "accumulated":
+        raise NotImplementedError(
+            f"repair_implausible_drops={repair_implausible_drops!r} is only "
+            "implemented for accumulation_type='accumulated'"
+        )
+    assert not skip_step.any(), "repair modes do not support skipped steps"
+    assert not reset_after[1:].any(), (
+        "repair modes only support a reset at the first step (e.g. precipitation)"
+    )
+
+    if repair_implausible_drops == "monotonic":
+        repaired = _repair_accumulated_monotonic(
+            values, seconds, invalid_below_threshold_rate
+        )
+        if repaired:
+            log.info(
+                f"deaccumulation monotonic repair: {repaired} pixel series repaired"
+            )
+        return None
+
+    return _temporal_affected_mask(values, seconds, invalid_below_threshold_rate)
+
+
+def _pava_nondecreasing(y: Array1D[np.floating]) -> Array1D[np.float64]:
+    """Least-squares non-decreasing fit via pool-adjacent-violators. Input must be finite."""
+    values: list[float] = []
+    counts: list[int] = []
+    for value in y:
+        values.append(float(value))
+        counts.append(1)
+        while len(values) > 1 and values[-2] > values[-1]:
+            v_hi, c_hi = values.pop(), counts.pop()
+            v_lo, c_lo = values.pop(), counts.pop()
+            values.append((v_lo * c_lo + v_hi * c_hi) / (c_lo + c_hi))
+            counts.append(c_lo + c_hi)
+    out = np.empty(y.shape[0], dtype=np.float64)
+    offset = 0
+    for value, count in zip(values, counts, strict=True):
+        out[offset : offset + count] = value
+        offset += count
+    return out
+
+
+def _implausible_drop_mask(
+    values: ArrayFloat32,
+    seconds: Array1D[np.int64],
+    invalid_below_threshold_rate: float,
+) -> BoolArray3D:
+    """Per step t (t>=1), True where the deaccumulated rate would fall below the threshold."""
+    dt = np.diff(seconds).astype(np.float64)
+    rates = (values[:, 1:, :] - values[:, :-1, :]) / dt[None, :, None]
+    drop = np.zeros(values.shape, dtype=np.bool_)
+    drop[:, 1:, :] = rates < invalid_below_threshold_rate  # NaN comparisons are False
+    return drop
+
+
+def _repair_accumulated_monotonic(
+    values: ArrayFloat32,
+    seconds: Array1D[np.int64],
+    invalid_below_threshold_rate: float,
+) -> int:
+    """Repair accumulated series with an implausible drop to be non-decreasing, in place.
+
+    Only touches pixels whose deaccumulated rate would fall below the threshold; other
+    pixels keep their exact current (compression-noise) behavior. Returns pixels repaired.
+    """
+    triggered = _implausible_drop_mask(
+        values, seconds, invalid_below_threshold_rate
+    ).any(axis=1)
+    repaired = 0
+    for i, j in zip(*np.nonzero(triggered), strict=True):
+        sequence = values[i, :, j]
+        finite = np.isfinite(sequence)
+        first = int(np.argmax(finite))
+        segment = sequence[first:]
+        if not np.isfinite(segment).all():
+            continue  # interior gaps: leave to the normal path
+        sequence[first:] = _pava_nondecreasing(segment)
+        repaired += 1
+    return repaired
+
+
+def _temporal_affected_mask(
+    values: ArrayFloat32,
+    seconds: Array1D[np.int64],
+    invalid_below_threshold_rate: float,
+) -> BoolArray3D:
+    """Mark, per pixel, the step-pair corrupted by an implausible drop (the negative step
+    and the paired positive spike/dip), computed from the raw accumulated values."""
+    drop = _implausible_drop_mask(values, seconds, invalid_below_threshold_rate)
+    mask = np.zeros(values.shape, dtype=np.bool_)
+    n_lead = values.shape[1]
+    for t in range(1, n_lead):
+        drop_t = drop[:, t, :]
+        if not drop_t.any():
+            continue
+        a_prev, a_cur = values[:, t - 1, :], values[:, t, :]
+        if t - 1 >= 1:
+            a_prev_prev = values[:, t - 2, :]
+            is_spike = (
+                drop_t
+                & np.isfinite(a_prev_prev)
+                & (a_prev > a_prev_prev)
+                & (a_prev >= a_cur)
+            )
+        else:
+            is_spike = np.zeros_like(drop_t)
+        is_dip = drop_t & ~is_spike
+        mask[:, t - 1, :] |= is_spike  # spike feeds the drop from the step before
+        mask[:, t, :] |= drop_t
+        if t + 1 < n_lead:
+            mask[:, t + 1, :] |= is_dip  # a low dip corrupts the step after it too
+    return mask
+
+
+def _temporal_repair(
+    values: ArrayFloat32,
+    seconds: Array1D[np.int64],
+    affected: BoolArray3D,
+) -> int:
+    """Replace affected step rates with a linear interpolation over lead time from the
+    nearest valid (finite, unaffected) steps, in place. Returns cells repaired."""
+    x = seconds.astype(np.float64)
+    repaired = 0
+    for i, j in zip(*np.nonzero(affected.any(axis=1)), strict=True):
+        pixel_mask = affected[i, :, j]
+        rates = values[i, :, j]
+        donor = np.isfinite(rates) & ~pixel_mask
+        donor[0] = False  # first step is the baseline NaN, never a donor
+        if donor.sum() < 2:
+            continue
+        target = np.flatnonzero(pixel_mask)
+        values[i, target, j] = np.interp(x[target], x[donor], rates[donor])
+        repaired += int(pixel_mask.sum())
+    return repaired

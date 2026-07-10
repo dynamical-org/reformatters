@@ -1148,6 +1148,124 @@ def test_deaccumulate_unknown_accumulation_type_raises() -> None:
         )
 
 
+def _corrupt_spike_series() -> tuple[pd.TimedeltaIndex, np.ndarray]:
+    """Accumulated precip (mm) with a single corrupt spike at 57h (mirrors 2024-09-05 m35).
+
+    54h=43.79, 57h=65.25 (spike), 60h=36.62, 63h=41.63, 66h=46.01. The raw step rates are
+    +7.15 (into the spike, not sign-flagged), -9.54 (out of it, flagged), then normal.
+    """
+    lead_times = pd.to_timedelta([0, 54, 57, 60, 63, 66], unit="h")
+    accum = np.array([np.nan, 43.79, 65.25, 36.62, 41.63, 46.01], dtype=np.float32)
+    return lead_times, accum
+
+
+def test_deaccumulate_repair_none_is_default_and_leaves_nan() -> None:
+    """Default (repair_implausible_drops='none') must NaN the implausible drop unchanged."""
+    lead_times, accum = _corrupt_spike_series()
+    data_array = xr.DataArray(
+        accum,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=pd.Timedelta.max,
+        expected_invalid_fraction=1.0,  # allow the NaN through without raising
+    )
+    # 60h step is the implausible drop -> NaN; the spurious +ve spike at 57h survives.
+    assert np.isnan(result.values[3])
+    assert result.values[2] > 0
+
+
+def test_deaccumulate_repair_monotonic_removes_nan_and_spike() -> None:
+    lead_times, accum = _corrupt_spike_series()
+    raw_final = float(accum[-1])  # deaccumulate mutates accum in place
+    data_array = xr.DataArray(
+        accum,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=pd.Timedelta.max,
+        repair_implausible_drops="monotonic",
+    )
+    rates = result.values
+    assert np.isnan(rates[0])  # first step baseline is still NaN
+    assert np.all(rates[1:] >= 0)  # non-decreasing accumulation -> no negative rates
+    assert not np.isnan(rates[1:]).any()  # no spurious NaN remains
+    # The reconstructed total (baseline 0 + integral of rates) stays close to the raw
+    # final accumulation; isotonic repair adjusts endpoints slightly, so allow a few mm.
+    dt = np.diff(lead_times.total_seconds().to_numpy())
+    integrated = np.nansum(rates[1:] * dt)
+    assert integrated == pytest.approx(raw_final, abs=2.0)
+
+
+def test_deaccumulate_repair_temporal_removes_nan_and_spike() -> None:
+    lead_times, accum = _corrupt_spike_series()
+    data_array = xr.DataArray(
+        accum,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=pd.Timedelta.max,
+        repair_implausible_drops="temporal",
+    )
+    rates = result.values
+    assert np.isnan(rates[0])
+    assert not np.isnan(rates[1:]).any()  # negative step interpolated away
+    assert np.all(rates[1:] >= 0)
+    # Both corrupt steps (the +7.15 spike at 57h and the -9.54 drop at 60h) are replaced.
+    assert rates[2] < 7.0 / 3600  # spike no longer present
+
+
+def test_deaccumulate_repair_dip_series_monotonic() -> None:
+    """A single low (dip) outlier, rather than a spike, is also repaired."""
+    lead_times = pd.to_timedelta([0, 3, 6, 9], unit="h")
+    # 3h=10mm, 6h=2mm (corrupt dip), 9h=12mm accumulated
+    accum = np.array([np.nan, 10.0, 2.0, 12.0], dtype=np.float32)
+    data_array = xr.DataArray(
+        accum,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=pd.Timedelta.max,
+        repair_implausible_drops="monotonic",
+    )
+    assert np.all(result.values[1:] >= 0)
+    assert not np.isnan(result.values[1:]).any()
+
+
+def test_deaccumulate_repair_rejects_running_mean() -> None:
+    lead_times = pd.to_timedelta(["0h", "1h", "2h"], unit=None)
+    data_array = xr.DataArray(
+        np.array([0.0, 1000.0, 400.0], dtype=np.float32),
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+    with pytest.raises(NotImplementedError, match="accumulation_type='accumulated'"):
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim="lead_time",
+            reset_frequency=pd.Timedelta.max,
+            accumulation_type="running_mean",
+            repair_implausible_drops="monotonic",
+        )
+
+
 def test_deaccumulate_non_reset_aligned_first_step_nan() -> None:
     """Test when first step is NOT reset-aligned AND the first value is NaN.
 
