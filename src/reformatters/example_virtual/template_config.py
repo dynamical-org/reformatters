@@ -68,10 +68,12 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
     @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
+        # Virtual datasets carry a `-virtual` id suffix and a ", virtual" name suffix;
+        # a materialized dataset over the same source uses the unsuffixed forms.
         # return DatasetAttributes(
-        #     dataset_id="producer-model-variant",
+        #     dataset_id="producer-model-variant-virtual",
         #     dataset_version="0.1.0",
-        #     name="Producer Model Variant",
+        #     name="Producer Model Variant, virtual",
         #     description="Weather data from the Model operated by Producer.",
         #     attribution="Producer Model Variant data processed by dynamical.org from Producer Model.",
         #     license="CC-BY-4.0",
