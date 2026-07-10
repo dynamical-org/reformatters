@@ -29,9 +29,7 @@ def test_operational_kubernetes_resources(
     assert archive_grib_files_job.workers_total == 1
     assert archive_grib_files_job.parallelism == 1
     assert "source-coop-storage-options-key" in archive_grib_files_job.secret_names
-    # Suspended until a manual run against real Source Coop credentials is verified -
-    # see reformatters#711. Un-suspending is a one-line follow-up PR.
-    assert archive_grib_files_job.suspend is True
+    assert archive_grib_files_job.suspend is False
 
 
 def test_validators(dataset: EcccHrdpsForecastTemporalDynamicalDataset) -> None:
