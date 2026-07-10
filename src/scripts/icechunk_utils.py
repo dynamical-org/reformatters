@@ -11,7 +11,6 @@ import httpx
 import icechunk
 
 from reformatters.common.kubernetes import load_secret
-from scripts.validation.utils import anonymous_virtual_credentials
 
 DEFAULT_STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
 
@@ -44,10 +43,7 @@ def open_repo(s3_uri: str, auth: AuthMode) -> icechunk.Repository:
             storage = icechunk.s3_storage(
                 bucket=bucket, prefix=prefix, **load_storage_options()
             )
-    return icechunk.Repository.open(
-        storage,
-        authorize_virtual_chunk_access=anonymous_virtual_credentials(storage),
-    )
+    return icechunk.Repository.open(storage)
 
 
 def load_icechunk_repos_from_stac(catalog_url: str) -> list[str]:

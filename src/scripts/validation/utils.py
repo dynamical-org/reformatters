@@ -253,7 +253,7 @@ def var_slug(var: str) -> str:
     return var.replace("/", "__")
 
 
-def anonymous_virtual_credentials(
+def _anonymous_virtual_credentials(
     storage: icechunk.Storage,
 ) -> dict[str, Any] | None:
     """Anonymous read credentials for a virtual store's persisted chunk containers.
@@ -290,7 +290,7 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     )
     repo = icechunk.Repository.open(
         storage,
-        authorize_virtual_chunk_access=anonymous_virtual_credentials(storage),
+        authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
     )
     return repo.readonly_session("main").store
 
@@ -496,7 +496,7 @@ def is_virtual_store(url: str) -> bool:
     storage = icechunk.s3_storage(
         bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
     )
-    return anonymous_virtual_credentials(storage) is not None
+    return _anonymous_virtual_credentials(storage) is not None
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

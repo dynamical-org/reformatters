@@ -68,9 +68,17 @@ def initialize_new_integration(
     src_path = Path("src/reformatters") / dataset_path
     test_path = Path("tests") / dataset_path
 
-    # Create directories
-    src_path.mkdir(parents=True, exist_ok=True)
-    test_path.mkdir(parents=True, exist_ok=True)
+    # Create directories, with __init__.py at each new level (provider/, provider/model/)
+    # so they're importable packages, not just the leaf variant/ directory.
+    for base, path in (
+        (Path("src/reformatters"), src_path),
+        (Path("tests"), test_path),
+    ):
+        current = base
+        for part in path.relative_to(base).parts:
+            current = current / part
+            current.mkdir(exist_ok=True)
+            (current / "__init__.py").touch(exist_ok=True)
 
     # Copy from the chosen example template
     example_dirname = _EXAMPLE_DIRS[kind]
@@ -84,10 +92,6 @@ def initialize_new_integration(
     for file in example_test.glob("*"):
         if file.is_file():
             shutil.copy(file, test_path / file.name)
-
-    # Create empty __init__.py
-    (src_path / "__init__.py").touch()
-    (test_path / "__init__.py").touch()
 
     # Perform renames in copied files. The dataset class names carry the kind's infix
     # (Temporal / Spatial); DataVar and InternalAttrs are model-level config models

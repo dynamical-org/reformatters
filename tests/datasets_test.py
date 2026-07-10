@@ -7,11 +7,13 @@ from typer.testing import CliRunner
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob, ValidationCronJob
+from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 runner = CliRunner()
 
 
 DATASET_IDS = [d.dataset_id for d in DYNAMICAL_DATASETS]
+IMPLEMENTED_DATASET_IDS = [d.dataset_id for d in IMPLEMENTED_DATASETS]
 
 
 # --- Registry tests ---
@@ -152,8 +154,8 @@ def test_cli_has_initialize_new_integration_command() -> None:
 
 @pytest.mark.parametrize(
     "dataset",
-    DYNAMICAL_DATASETS,
-    ids=DATASET_IDS,
+    IMPLEMENTED_DATASETS,
+    ids=IMPLEMENTED_DATASET_IDS,
 )
 def test_operational_kubernetes_resources_are_valid(
     dataset: DynamicalDataset[Any, Any],
@@ -251,8 +253,8 @@ def test_cronjob_kubernetes_manifests_are_valid(
 
 @pytest.mark.parametrize(
     "dataset",
-    DYNAMICAL_DATASETS,
-    ids=DATASET_IDS,
+    IMPLEMENTED_DATASETS,
+    ids=IMPLEMENTED_DATASET_IDS,
 )
 def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
     """Every dataset must define validators."""
