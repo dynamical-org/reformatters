@@ -38,6 +38,7 @@
   ],
   "attributes": {
     "long_name": "Hybrid model level number",
+    "standard_name": "model_level_number",
     "axis": "Z",
     "units": "1",
     "statistics_approximate": {

@@ -222,6 +222,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     standard_name="air_pressure",
                     units="hPa",
                     axis="Z",
+                    positive="down",
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["pressure_level"].min()),
                         max=int(dim_coords["pressure_level"].max()),
@@ -239,6 +240,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                 ),
                 attrs=CoordinateAttrs(
                     long_name="Hybrid model level number",
+                    standard_name="model_level_number",
                     units="1",
                     axis="Z",
                     statistics_approximate=StatisticsApproximate(
