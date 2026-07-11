@@ -443,6 +443,7 @@ def _pressure_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
+    missing_value: float | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -457,6 +458,7 @@ def _pressure_var(
         units=units,
         standard_name=standard_name,
         comment=comment,
+        missing_value=missing_value,
         hour_0=None,
     )
 
@@ -1833,6 +1835,12 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Dew point temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
+            # HRRR omits dew point at the highest isobaric levels (always 50 hPa, and
+            # 75 hPa in some cycles); those GRIB cells decode to 0 K, which the
+            # Kelvin->Celsius filter turns into -273.15. Absolute zero is physically
+            # impossible for a dew point, so it is a safe missing sentinel that
+            # CF-aware readers mask to NaN.
+            missing_value=-273.15,
         ),
         _pressure_var(
             "graupel",
