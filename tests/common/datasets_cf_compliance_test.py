@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
@@ -10,6 +10,7 @@ import xarray as xr
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.types import Dim
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -268,6 +269,65 @@ def test_cf_ensemble_member_recognized(
         assert ens_attrs.get("standard_name") == "realization", (
             f"ensemble_member missing standard_name='realization', got: {ens_attrs.get('standard_name')}"
         )
+
+
+# The CF axis attribute every dimension coordinate must carry, keyed by
+# dimension name. None means the dimension is not one of the CF X/Y/Z/T axes
+# (forecast time components, ensemble realization, statistic) and must declare
+# no axis. Coordinates that are not dimensions (e.g. HRRR's 2D latitude/longitude
+# on a projected grid, valid_time, spatial_ref) must likewise declare no axis.
+DIM_EXPECTED_AXIS: dict[str, str | None] = {
+    "time": "T",
+    # init_time/lead_time are identified by standard_name (forecast_reference_time /
+    # forecast_period), not axis; CF reserves axis="T" for the single time axis.
+    "init_time": None,
+    "lead_time": None,
+    "ensemble_member": None,
+    "latitude": "Y",
+    "longitude": "X",
+    "x": "X",
+    "y": "Y",
+    "statistic": None,
+    "pressure_level": "Z",
+    "model_level": "Z",
+}
+# Force a decision here whenever a new dimension is added to the Dim type.
+assert set(DIM_EXPECTED_AXIS) == set(get_args(Dim.__value__))
+
+
+@pytest.mark.parametrize(
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
+)
+def test_cf_dimension_coordinate_axis(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    Every dimension coordinate carries exactly the CF axis its dimension
+    requires (and dimensions that are not CF axes declare none). Coordinates
+    that are not dimensions — e.g. 2D latitude/longitude on a projected grid —
+    must not declare an axis at all.
+    """
+    dataset_dims = {
+        dim for dims in dataset.template_config.dims.values() for dim in dims
+    }
+    errors: list[str] = []
+    for coord in dataset.template_config.coords:
+        axis = coord.attrs.axis
+        if coord.name in dataset_dims:
+            expected = DIM_EXPECTED_AXIS[coord.name]
+            if axis != expected:
+                errors.append(
+                    f"Dimension coordinate '{coord.name}' must have axis={expected!r}, "
+                    f"got {axis!r}."
+                )
+        elif axis is not None:
+            errors.append(
+                f"Non-dimension coordinate '{coord.name}' must not declare an axis, "
+                f"got axis={axis!r}."
+            )
+    assert not errors, (
+        f"CF axis errors in dataset '{dataset.dataset_id}':\n\n" + "\n\n".join(errors)
+    )
 
 
 @pytest.mark.parametrize(
@@ -885,10 +945,13 @@ def test_metadata_consistency_across_datasets() -> None:
                 "long_name": coord_config.attrs.long_name,
                 "standard_name": coord_config.attrs.standard_name,
                 "units": coord_config.attrs.units,
+                "positive": coord_config.attrs.positive,
             }
 
     conflicts.extend(
-        _check_consistency(by_coord_name, ["long_name", "standard_name", "units"])
+        _check_consistency(
+            by_coord_name, ["long_name", "standard_name", "units", "positive"]
+        )
     )
 
     assert not conflicts, (

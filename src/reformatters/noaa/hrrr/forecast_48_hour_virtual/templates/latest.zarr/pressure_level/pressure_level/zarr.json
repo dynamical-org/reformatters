@@ -40,6 +40,7 @@
     "long_name": "Pressure level",
     "standard_name": "air_pressure",
     "axis": "Z",
+    "positive": "down",
     "units": "hPa",
     "statistics_approximate": {
       "min": 50,

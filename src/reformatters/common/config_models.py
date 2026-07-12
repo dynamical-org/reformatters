@@ -103,6 +103,7 @@ class CoordinateAttrs(FrozenBaseModel):
     standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
     # Must follow CF Conventions if CF defines a standard name for this coordinate
     axis: CfAxis | None = None
+    positive: Literal["up", "down"] | None = None
     units: TimestampUnits | TimedeltaUnits | str | None
     statistics_approximate: StatisticsApproximate | None
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
