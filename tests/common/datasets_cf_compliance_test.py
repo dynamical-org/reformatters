@@ -948,9 +948,6 @@ def test_metadata_consistency_across_datasets() -> None:
                 "positive": coord_config.attrs.positive,
             }
 
-    # axis is not checked here — it's dimension-specific (see
-    # test_cf_dimension_coordinate_axis) and latitude/longitude legitimately
-    # carry it on geographic but not projected datasets.
     conflicts.extend(
         _check_consistency(
             by_coord_name, ["long_name", "standard_name", "units", "positive"]

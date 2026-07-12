@@ -103,10 +103,6 @@ class CoordinateAttrs(FrozenBaseModel):
     standard_name: Annotated[str, pydantic.Field(min_length=1)] | None = None
     # Must follow CF Conventions if CF defines a standard name for this coordinate
     axis: CfAxis | None = None
-    # CF Conventions §4.3: for a vertical (Z) coordinate, the direction of
-    # increasing values, "up" or "down". Recommended when the sense can't be
-    # inferred from the units (e.g. pressure, where "down" means toward higher
-    # pressure / lower altitude).
     positive: Literal["up", "down"] | None = None
     units: TimestampUnits | TimedeltaUnits | str | None
     statistics_approximate: StatisticsApproximate | None
