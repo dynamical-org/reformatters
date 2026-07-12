@@ -1212,6 +1212,17 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="vgtyp",
             long_name="Vegetation Type",
             units="1",
+            comment="MODIS-IGBP 20-category land-use classification (WRF MODIFIED_IGBP_MODIS_NOAH), as used by the HRRR land surface model.",
+            flag_values=tuple(range(1, 21)),
+            flag_meanings=(
+                "evergreen_needleleaf_forest evergreen_broadleaf_forest "
+                "deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forest "
+                "closed_shrublands open_shrublands woody_savannas savannas grasslands "
+                "permanent_wetlands croplands urban_and_built_up "
+                "cropland_natural_vegetation_mosaic snow_and_ice "
+                "barren_or_sparsely_vegetated water wooded_tundra mixed_tundra "
+                "barren_tundra"
+            ),
         ),
         _root_var(
             "surface_lifted_index_500_1000mb",
