@@ -5455,6 +5455,7 @@
           "long_name": "Hybrid model level number",
           "standard_name": "model_level_number",
           "axis": "Z",
+          "positive": "up",
           "units": "1",
           "statistics_approximate": {
             "min": 1,

@@ -243,6 +243,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     standard_name="model_level_number",
                     units="1",
                     axis="Z",
+                    positive="up",
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["model_level"].min()),
                         max=int(dim_coords["model_level"].max()),

@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
@@ -10,6 +10,7 @@ import xarray as xr
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.types import Dim
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -270,39 +271,60 @@ def test_cf_ensemble_member_recognized(
         )
 
 
-# Dimension coordinates that carry a vertical level. CF requires axis="Z" on
-# each, axis="Z" is reserved for these names, and (see
-# test_metadata_consistency_across_datasets) each name presents identical
-# attributes across every dataset that defines it.
-VERTICAL_LEVEL_COORD_NAMES = frozenset({"pressure_level", "model_level"})
+# The CF axis attribute every dimension coordinate must carry, keyed by
+# dimension name. None means the dimension is not one of the CF X/Y/Z/T axes
+# (forecast time components, ensemble realization, statistic) and must declare
+# no axis. Coordinates that are not dimensions (e.g. HRRR's 2D latitude/longitude
+# on a projected grid, valid_time, spatial_ref) must likewise declare no axis.
+DIM_EXPECTED_AXIS: dict[str, str | None] = {
+    "time": "T",
+    "init_time": None,
+    "lead_time": None,
+    "ensemble_member": None,
+    "latitude": "Y",
+    "longitude": "X",
+    "x": "X",
+    "y": "Y",
+    "statistic": None,
+    "pressure_level": "Z",
+    "model_level": "Z",
+}
+# Force a decision here whenever a new dimension is added to the Dim type.
+assert set(DIM_EXPECTED_AXIS) == set(get_args(Dim.__value__))
 
 
 @pytest.mark.parametrize(
     "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
-def test_cf_vertical_level_coordinates(
+def test_cf_dimension_coordinate_axis(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
     """
-    A pressure_level / model_level dimension coordinate must carry axis="Z",
-    and axis="Z" must not appear on any other coordinate.
+    Every dimension coordinate carries exactly the CF axis its dimension
+    requires (and dimensions that are not CF axes declare none). Coordinates
+    that are not dimensions — e.g. 2D latitude/longitude on a projected grid —
+    must not declare an axis at all.
     """
+    dataset_dims = {
+        dim for dims in dataset.template_config.dims.values() for dim in dims
+    }
     errors: list[str] = []
     for coord in dataset.template_config.coords:
-        is_vertical = coord.name in VERTICAL_LEVEL_COORD_NAMES
-        has_z_axis = coord.attrs.axis == "Z"
-        if is_vertical and not has_z_axis:
+        axis = coord.attrs.axis
+        if coord.name in dataset_dims:
+            expected = DIM_EXPECTED_AXIS[coord.name]
+            if axis != expected:
+                errors.append(
+                    f"Dimension coordinate '{coord.name}' must have axis={expected!r}, "
+                    f"got {axis!r}."
+                )
+        elif axis is not None:
             errors.append(
-                f"Coordinate '{coord.name}' must have axis='Z', got {coord.attrs.axis!r}."
-            )
-        if has_z_axis and not is_vertical:
-            errors.append(
-                f"Coordinate '{coord.name}' has axis='Z' but only "
-                f"{sorted(VERTICAL_LEVEL_COORD_NAMES)} may use it."
+                f"Non-dimension coordinate '{coord.name}' must not declare an axis, "
+                f"got axis={axis!r}."
             )
     assert not errors, (
-        f"Vertical-level coordinate errors in dataset '{dataset.dataset_id}':\n\n"
-        + "\n\n".join(errors)
+        f"CF axis errors in dataset '{dataset.dataset_id}':\n\n" + "\n\n".join(errors)
     )
 
 
@@ -921,30 +943,17 @@ def test_metadata_consistency_across_datasets() -> None:
                 "long_name": coord_config.attrs.long_name,
                 "standard_name": coord_config.attrs.standard_name,
                 "units": coord_config.attrs.units,
-            }
-
-    conflicts.extend(
-        _check_consistency(by_coord_name, ["long_name", "standard_name", "units"])
-    )
-
-    # Vertical-level dimension coordinates must additionally agree on axis and
-    # positive across datasets. axis isn't checked for coordinates in general
-    # because latitude/longitude legitimately carry axis on geographic datasets
-    # but not as 2D aux coords on projected ones; long_name/standard_name/units
-    # are already covered by the by_coord_name check above.
-    by_vertical_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
-    for dataset in IMPLEMENTED_DATASETS:
-        for coord_config in dataset.template_config.coords:
-            if coord_config.name not in VERTICAL_LEVEL_COORD_NAMES:
-                continue
-            by_vertical_coord_name.setdefault(coord_config.name, {})[
-                dataset.dataset_id
-            ] = {
-                "axis": coord_config.attrs.axis,
                 "positive": coord_config.attrs.positive,
             }
 
-    conflicts.extend(_check_consistency(by_vertical_coord_name, ["axis", "positive"]))
+    # axis is not checked here — it's dimension-specific (see
+    # test_cf_dimension_coordinate_axis) and latitude/longitude legitimately
+    # carry it on geographic but not projected datasets.
+    conflicts.extend(
+        _check_consistency(
+            by_coord_name, ["long_name", "standard_name", "units", "positive"]
+        )
+    )
 
     assert not conflicts, (
         "Metadata inconsistencies found across datasets:\n\n" + "\n\n".join(conflicts)
