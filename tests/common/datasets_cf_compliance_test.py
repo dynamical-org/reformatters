@@ -270,6 +270,42 @@ def test_cf_ensemble_member_recognized(
         )
 
 
+# Dimension coordinates that carry a vertical level. CF requires axis="Z" on
+# each, axis="Z" is reserved for these names, and (see
+# test_metadata_consistency_across_datasets) each name presents identical
+# attributes across every dataset that defines it.
+VERTICAL_LEVEL_COORD_NAMES = frozenset({"pressure_level", "model_level"})
+
+
+@pytest.mark.parametrize(
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
+)
+def test_cf_vertical_level_coordinates(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """
+    A pressure_level / model_level dimension coordinate must carry axis="Z",
+    and axis="Z" must not appear on any other coordinate.
+    """
+    errors: list[str] = []
+    for coord in dataset.template_config.coords:
+        is_vertical = coord.name in VERTICAL_LEVEL_COORD_NAMES
+        has_z_axis = coord.attrs.axis == "Z"
+        if is_vertical and not has_z_axis:
+            errors.append(
+                f"Coordinate '{coord.name}' must have axis='Z', got {coord.attrs.axis!r}."
+            )
+        if has_z_axis and not is_vertical:
+            errors.append(
+                f"Coordinate '{coord.name}' has axis='Z' but only "
+                f"{sorted(VERTICAL_LEVEL_COORD_NAMES)} may use it."
+            )
+    assert not errors, (
+        f"Vertical-level coordinate errors in dataset '{dataset.dataset_id}':\n\n"
+        + "\n\n".join(errors)
+    )
+
+
 @pytest.mark.parametrize(
     "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
@@ -890,6 +926,25 @@ def test_metadata_consistency_across_datasets() -> None:
     conflicts.extend(
         _check_consistency(by_coord_name, ["long_name", "standard_name", "units"])
     )
+
+    # Vertical-level dimension coordinates must additionally agree on axis and
+    # positive across datasets. axis isn't checked for coordinates in general
+    # because latitude/longitude legitimately carry axis on geographic datasets
+    # but not as 2D aux coords on projected ones; long_name/standard_name/units
+    # are already covered by the by_coord_name check above.
+    by_vertical_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
+    for dataset in IMPLEMENTED_DATASETS:
+        for coord_config in dataset.template_config.coords:
+            if coord_config.name not in VERTICAL_LEVEL_COORD_NAMES:
+                continue
+            by_vertical_coord_name.setdefault(coord_config.name, {})[
+                dataset.dataset_id
+            ] = {
+                "axis": coord_config.attrs.axis,
+                "positive": coord_config.attrs.positive,
+            }
+
+    conflicts.extend(_check_consistency(by_vertical_coord_name, ["axis", "positive"]))
 
     assert not conflicts, (
         "Metadata inconsistencies found across datasets:\n\n" + "\n\n".join(conflicts)
