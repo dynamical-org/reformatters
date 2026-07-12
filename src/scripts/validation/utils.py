@@ -137,6 +137,9 @@ class VariableStats:
     short_name: str | None = None
     standard_name: str | None = None
     step_type: str | None = None
+    # Categorical / flag variables (CF flag_values + flag_meanings), formatted for display.
+    flag_values: str | None = None
+    flag_meanings: str | None = None
 
     # Vertical level sampled for this variable (None for single-level variables)
     level_dim: str | None = None
@@ -561,12 +564,17 @@ def is_virtual_store(url: str) -> bool:
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:
     """Pull commonly-referenced attrs (units, long_name, etc.) from a variable."""
     attrs = ds[var].attrs
+    flag_values = attrs.get("flag_values")
+    if flag_values is not None:
+        flag_values = ", ".join(str(int(v)) for v in np.atleast_1d(flag_values))
     return {
         "units": attrs.get("units"),
         "long_name": attrs.get("long_name"),
         "short_name": attrs.get("short_name"),
         "standard_name": attrs.get("standard_name"),
         "step_type": attrs.get("step_type"),
+        "flag_values": flag_values,
+        "flag_meanings": attrs.get("flag_meanings"),
     }
 
 
