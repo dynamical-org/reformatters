@@ -629,13 +629,7 @@ _NO_REGION: Final = _NoRegion()
 def _exists_many(
     store: IcechunkStore, keys: Sequence[str], *, max_attempts: int = 8
 ) -> dict[str, bool]:
-    """Probe many chunk keys concurrently (store.exists is async).
-
-    Transient object-store errors are retried per key: each attempt re-probes only the
-    keys that still failed, so one flaky probe never discards the successful probes or
-    forces the whole batch to be re-issued. A whole-archive scan issues enough probes
-    that a transient failure is near-certain, so retrying the failed subset (rather than
-    the entire batch) is what keeps a single blip from failing the run."""
+    """Probe many chunk keys concurrently."""
     if not keys:
         return {}
 
@@ -662,7 +656,8 @@ def _exists_many(
         pending = failed
         if attempt < max_attempts - 1:
             rng = np.random.default_rng()
-            time.sleep(attempt * rng.uniform(0.8, 1.2) + 0.1)
+            # First retry waits ~0.1s; back off only from the second retry onward.
+            time.sleep(max(0, attempt - 1) * rng.uniform(0.8, 1.2) + 0.1)
 
     assert last_exception is not None
     raise last_exception
