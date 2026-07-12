@@ -7339,7 +7339,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -273.15,
         "codecs": [
           {
             "name": "scale_offset",
@@ -7361,9 +7361,10 @@
           "short_name": "dpt",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
+          "missing_value": -273.15,
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "ZmZmZmYSccA="
         },
         "dimension_names": [
           "init_time",
