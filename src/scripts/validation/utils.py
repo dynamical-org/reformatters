@@ -1,4 +1,5 @@
 import functools
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -90,6 +91,27 @@ level_option = typer.Option(
     "500 mb). Selects the nearest level on each variable's own vertical dim. "
     "Default: the middle level. Single-level variables ignore this.",
 )
+
+point_option = typer.Option(
+    None,
+    "--point",
+    help="Pin a value-scan / time series point as 'lat,lon' (repeatable, up to 2; "
+    "default: two random points). The nearest grid cell is used. Useful on regional / "
+    "projected grids whose corner points fall over ocean.",
+)
+
+
+def parse_point_options(points: list[str] | None) -> list[tuple[float, float]]:
+    """Parse repeatable '--point lat,lon' options into (lat, lon) tuples."""
+    if not points:
+        return []
+    if len(points) > 2:
+        raise ValueError(f"At most two --point values are supported, got {len(points)}")
+    parsed = []
+    for spec in points:
+        lat_str, lon_str = spec.split(",")
+        parsed.append((float(lat_str), float(lon_str)))
+    return parsed
 
 
 @dataclass
@@ -344,10 +366,25 @@ def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
     return "y", "x"
 
 
+def _two_spread_indices(rng: np.random.Generator, lo: int, hi: int) -> tuple[int, int]:
+    """Two indices within the middle 50% of [lo, hi), one in each half of that band.
+
+    Staying inside the middle 50% avoids the outer-25% margins, whose corners are ocean /
+    domain edge on regional projected grids; splitting the band keeps the pair spread.
+    """
+    span = hi - lo
+    q1 = lo + span // 4  # 25%
+    mid = lo + span // 2  # 50%
+    q3 = lo + 3 * span // 4  # 75%
+    idx1 = int(rng.integers(q1, max(mid, q1 + 1)))
+    idx2 = int(rng.integers(mid, max(q3, mid + 1)))
+    return idx1, idx2
+
+
 def get_random_spatial_indices(
     ds: xr.Dataset, lat_dim: str, lon_dim: str
 ) -> tuple[dict[str, int], dict[str, int]]:
-    """Get two random spatial indices for plotting."""
+    """Get two random spatial indices for plotting, both within the middle 50% of each dim."""
     rng = np.random.default_rng()
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
@@ -361,22 +398,44 @@ def get_random_spatial_indices(
             valid = np.where((lats >= -70) & (lats <= 70))[0]
             lat_lo, lat_hi = int(valid.min()), int(valid.max()) + 1
 
-    lat_range = lat_hi - lat_lo
-    lat1_idx = int(rng.integers(lat_lo, lat_lo + lat_range // 4))
-    lat2_idx = int(rng.integers(lat_lo + 3 * lat_range // 4, lat_hi))
-    lon1_idx = int(rng.integers(0, lon_size // 4))
-    lon2_idx = int(rng.integers(3 * lon_size // 4, lon_size))
+    lat1_idx, lat2_idx = _two_spread_indices(rng, lat_lo, lat_hi)
+    lon1_idx, lon2_idx = _two_spread_indices(rng, 0, lon_size)
     point1_sel = {lat_dim: lat1_idx, lon_dim: lon1_idx}
     point2_sel = {lat_dim: lat2_idx, lon_dim: lon2_idx}
     return point1_sel, point2_sel
 
 
+def nearest_point_index(ds: xr.Dataset, lat: float, lon: float) -> dict[str, int]:
+    """Grid-cell index dict nearest a target lat/lon, for 1D geographic or 2D projected grids."""
+    lat_dim, lon_dim = get_spatial_dimensions(ds)
+    if lat_dim == "latitude" and lon_dim == "longitude":
+        lat_idx = int(np.abs(ds.latitude.values - lat).argmin())
+        lon_idx = int(np.abs(ds.longitude.values - lon).argmin())
+        return {lat_dim: lat_idx, lon_dim: lon_idx}
+    lat2d = ds.latitude.values
+    lon2d = ds.longitude.values
+    # Equirectangular approximation; exact enough to pick a grid cell at CONUS scale.
+    dist = (lat2d - lat) ** 2 + ((lon2d - lon) * np.cos(np.deg2rad(lat))) ** 2
+    y_idx, x_idx = (int(i) for i in np.unravel_index(int(np.argmin(dist)), dist.shape))
+    return {"y": y_idx, "x": x_idx}
+
+
 def get_two_random_points(
     ds: xr.Dataset,
+    pinned: Sequence[tuple[float, float]] | None = None,
 ) -> tuple[dict[str, int], dict[str, int], tuple[float, float], tuple[float, float]]:
-    """Get two random spatial points (indices and coordinates)."""
+    """Two spatial points (indices and coordinates), random unless pinned lat/lon are given.
+
+    Each pinned (lat, lon) overrides the corresponding random point with its nearest grid
+    cell; the returned coordinates are that cell's actual lat/lon.
+    """
     lat_dim, lon_dim = get_spatial_dimensions(ds)
     point1_sel, point2_sel = get_random_spatial_indices(ds, lat_dim, lon_dim)
+    if pinned:
+        if len(pinned) >= 1:
+            point1_sel = nearest_point_index(ds, *pinned[0])
+        if len(pinned) >= 2:
+            point2_sel = nearest_point_index(ds, *pinned[1])
     if lat_dim == "latitude" and lon_dim == "longitude":
         lat1 = float(ds.latitude[point1_sel["latitude"]])
         lon1 = float(ds.longitude[point1_sel["longitude"]])

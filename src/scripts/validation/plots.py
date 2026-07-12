@@ -33,6 +33,8 @@ from scripts.validation.utils import (
     level_option,
     load_zarr_dataset,
     output_dir_option,
+    parse_point_options,
+    point_option,
     reference_url_option,
     resolve_reference_url,
     scope_time_period,
@@ -103,6 +105,7 @@ def run_all(
         None, "--time", help="Analysis time for spatial plots (default: random)"
     ),
     level: float | None = level_option,
+    point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
@@ -132,7 +135,7 @@ def run_all(
     log.info(f"Variables ({len(selected_vars)}): {', '.join(selected_vars)}")
 
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
-        validation_ds
+        validation_ds, parse_point_options(point)
     )
 
     out = (

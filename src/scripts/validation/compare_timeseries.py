@@ -19,6 +19,8 @@ from scripts.validation.utils import (
     load_retried,
     load_zarr_dataset,
     output_dir_option,
+    parse_point_options,
+    point_option,
     reference_url_option,
     resolve_output_dir,
     resolve_reference_url,
@@ -290,6 +292,7 @@ def compare_timeseries(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Create per-variable timeseries comparison plots."""
@@ -301,7 +304,7 @@ def compare_timeseries(
 
     selected_vars = select_variables_for_plotting(validation_ds, variables)
     point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
-        validation_ds
+        validation_ds, parse_point_options(point)
     )
 
     out = resolve_output_dir(validation_url, output_dir)

@@ -21,6 +21,8 @@ from scripts.validation.utils import (
     load_retried,
     load_zarr_dataset,
     output_dir_option,
+    parse_point_options,
+    point_option,
     resolve_output_dir,
     scope_time_period,
     select_var_level,
@@ -251,6 +253,7 @@ def value_timeseries(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Plot per-timestep mean ± std of each variable at two spatial points over all time."""
@@ -259,7 +262,9 @@ def value_timeseries(
         ds = scope_time_period(ds, start_date, end_date)
 
     selected_vars = select_variables_for_plotting(ds, variables)
-    point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(ds)
+    point1_sel, point2_sel, (lat1, lon1), (lat2, lon2) = get_two_random_points(
+        ds, parse_point_options(point)
+    )
 
     out = resolve_output_dir(dataset_url, output_dir)
     log.info(f"output dir: {out}")
