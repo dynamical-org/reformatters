@@ -626,12 +626,38 @@ class _NoRegion:
 _NO_REGION: Final = _NoRegion()
 
 
-def _exists_many(store: IcechunkStore, keys: Sequence[str]) -> dict[str, bool]:
-    """Probe many chunk keys concurrently (store.exists is async)."""
+def _exists_many(
+    store: IcechunkStore, keys: Sequence[str], *, max_attempts: int = 8
+) -> dict[str, bool]:
+    """Probe many chunk keys concurrently."""
     if not keys:
         return {}
 
-    async def _check() -> list[bool]:
-        return list(await asyncio.gather(*(store.exists(key) for key in keys)))
+    async def _check(probe_keys: Sequence[str]) -> list[bool | BaseException]:
+        return list(
+            await asyncio.gather(
+                *(store.exists(key) for key in probe_keys), return_exceptions=True
+            )
+        )
 
-    return dict(zip(keys, asyncio.run(_check()), strict=True))
+    result: dict[str, bool] = {}
+    pending: Sequence[str] = keys
+    last_exception: BaseException | None = None
+    for attempt in range(max_attempts):
+        failed: list[str] = []
+        for key, outcome in zip(pending, asyncio.run(_check(pending)), strict=True):
+            if isinstance(outcome, BaseException):
+                last_exception = outcome
+                failed.append(key)
+            else:
+                result[key] = outcome
+        if not failed:
+            return result
+        pending = failed
+        if attempt < max_attempts - 1:
+            rng = np.random.default_rng()
+            # First retry waits ~0.1s; back off only from the second retry onward.
+            time.sleep(max(0, attempt - 1) * rng.uniform(0.8, 1.2) + 0.1)
+
+    assert last_exception is not None
+    raise last_exception
