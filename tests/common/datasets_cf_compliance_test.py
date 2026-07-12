@@ -278,6 +278,8 @@ def test_cf_ensemble_member_recognized(
 # on a projected grid, valid_time, spatial_ref) must likewise declare no axis.
 DIM_EXPECTED_AXIS: dict[str, str | None] = {
     "time": "T",
+    # init_time/lead_time are identified by standard_name (forecast_reference_time /
+    # forecast_period), not axis; CF reserves axis="T" for the single time axis.
     "init_time": None,
     "lead_time": None,
     "ensemble_member": None,
