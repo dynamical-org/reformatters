@@ -308,7 +308,9 @@ def _flush_var_probes(
     out: dict[str, dict[pd.Timestamp, bool]],
 ) -> None:
     keys = [key for _, _, key in probes]
-    present = retry(lambda: _exists_many(store, keys), max_attempts=_SCAN_MAX_RETRIES)
+    # _exists_many retries the failed subset internally, so a transient blip on one of
+    # these (up to _EXISTS_BATCH_SIZE) keys no longer re-probes the whole batch.
+    present = _exists_many(store, keys, max_attempts=_SCAN_MAX_RETRIES)
     for var_path, position, key in probes:
         out.setdefault(var_path, {})[position] = present[key]
     probes.clear()

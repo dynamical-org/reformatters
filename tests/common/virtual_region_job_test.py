@@ -15,7 +15,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import dask.array
 import icechunk
@@ -58,6 +58,7 @@ from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
     VirtualRef,
     VirtualRegionJob,
+    _exists_many,
 )
 
 pytestmark = pytest.mark.slow
@@ -1683,3 +1684,29 @@ def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -
     ]
     assert {"name": "gribberish", "configuration": {"var": "TMP"}} in codec_dicts
     assert asyncio.run(readonly.exists("temperature_2m/c/1/0/0/0")) is True
+
+
+def test_exists_many_retries_only_failed_keys() -> None:
+    """A transient error on one key re-probes only that key, not the whole batch."""
+    calls: dict[str, int] = {}
+
+    class FlakyStore:
+        async def exists(self, key: str) -> bool:
+            calls[key] = calls.get(key, 0) + 1
+            if key == "b" and calls[key] == 1:
+                raise RuntimeError("transient")
+            return key != "c"  # "c" is genuinely absent
+
+    result = _exists_many(cast("icechunk.IcechunkStore", FlakyStore()), ["a", "b", "c"])
+    assert result == {"a": True, "b": True, "c": False}
+    # "a"/"c" succeeded on the first attempt and are not re-probed; only "b" retries.
+    assert calls == {"a": 1, "b": 2, "c": 1}
+
+
+def test_exists_many_raises_after_exhausting_attempts() -> None:
+    class DeadStore:
+        async def exists(self, _key: str) -> bool:
+            raise RuntimeError("object store down")
+
+    with pytest.raises(RuntimeError, match="object store down"):
+        _exists_many(cast("icechunk.IcechunkStore", DeadStore()), ["a"], max_attempts=2)
