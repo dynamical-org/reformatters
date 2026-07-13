@@ -185,7 +185,7 @@ A docstring, when one is warranted, states the contract: what any caller may rel
 
 Mechanics, when a comment does earn its place:
 * Default is none. Comment only for a gotcha, out-of-the-ordinary behavior, or clarity lost to a necessary optimization. Don't remove existing comments.
-* In non-test code, most comments are one line stating the non-obvious fact the reader needs — not reasoning, not defense of correctness, not operational instructions. For a genuinely complex topic, point to a doc instead (e.g. "..., see docs/parallel_processing.md.").
+* In non-test code, most comments are one line stating the non-obvious fact the reader needs — not reasoning, not defense of correctness, not operational instructions. For a genuinely complex topic, point to a doc instead (e.g. "..., see docs/parallel_processing.md.") — use sparingly; a doc pointer is still a comment and carries the same liability.
 * An assert or validator with a clear message documents itself; don't add a comment restating it.
 
 The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is the accumulation, where individually-reasonable "helpful" notes compound across many changes into a codebase readers must wade through and learn to distrust. An agent's instinct to be helpful in the moment is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited and apply the bolded test above to each sentence; delete what fails, and expect that to be most of it.
