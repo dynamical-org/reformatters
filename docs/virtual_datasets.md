@@ -74,7 +74,7 @@ Virtual stores carry no consolidated metadata in the root zarr.json — nothing 
 
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
 
-Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). `commit_if_icechunk` writes those manifests with `max_concurrent_nodes` (default 16, `ICECHUNK_COMMIT_MAX_CONCURRENT_NODES`) so the per-array round trips overlap; the CPU side is bounded by the active split size and the pod's cores.
+Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). `commit_if_icechunk` writes those manifests with `max_concurrent_nodes=16` so the per-array round trips overlap; the CPU side is bounded by the active split size and the pod's cores.
 
 ## Backfill: parallel on a pre-sized temp branch
 

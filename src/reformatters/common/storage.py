@@ -1,6 +1,5 @@
 import contextlib
 import functools
-import os
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
@@ -38,9 +37,7 @@ _NO_SECRET_NAME = "no-secret"  # noqa: S105
 # max_concurrent_nodes=1), so commit latency grows with array count. Raising this
 # parallelizes those read-modify-writes across arrays (network and CPU). Needs the
 # patched icechunk that exposes the parameter (see the icechunk pin in pyproject.toml).
-_COMMIT_MAX_CONCURRENT_NODES = int(
-    os.environ.get("ICECHUNK_COMMIT_MAX_CONCURRENT_NODES", "16")
-)
+_COMMIT_MAX_CONCURRENT_NODES = 16
 
 
 class DatasetFormat(StrEnum):

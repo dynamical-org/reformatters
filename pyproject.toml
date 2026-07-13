@@ -41,7 +41,8 @@ exclude-newer-package = { gribberish = "2026-07-07T23:59:59Z" }
 
 # TEST PIN: icechunk 2.1.1 + Session.commit(max_concurrent_nodes=...) (parallel
 # per-array manifest writes during commit) — the minimum fork surface for the ops
-# latency fix. Revert to the published "icechunk~=2.0" once released upstream.
+# latency fix. Once released upstream, revert to the published "icechunk~=2.0" and
+# remove the Rust build toolchain stage from deploy/Dockerfile.
 [tool.uv.sources]
 icechunk = { git = "https://github.com/aldenks/icechunk", branch = "expose-commit-max-concurrent-nodes-2.1.1", subdirectory = "icechunk-python" }
 

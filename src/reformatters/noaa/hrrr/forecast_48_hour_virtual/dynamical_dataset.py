@@ -74,8 +74,6 @@ class NoaaHrrrForecast48HourVirtualDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            # Commit flush parallelizes manifest rebuilds across arrays
-            # (ICECHUNK_COMMIT_MAX_CONCURRENT_NODES); cores bound the CPU side.
             cpu="4",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
