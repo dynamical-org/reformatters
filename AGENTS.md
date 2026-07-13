@@ -155,13 +155,11 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * Use `uv run ...` to run python commands in the environment, e.g. `uv run python -c "..."`, `uv run src/scripts/foo.py`. Do not call `python3` when working in this repo.
 
 ## Code Style
-* Write code that explains itself rather than needs comments.
-* Simplicity is paramount. Always look for ways to simplify, use existing utilities and approaches in the code base rather than creating new code, and identify and suggest architectural improvements.
+
+For every kind of change — code, architectural design, comments/docstrings, documentation — the goal is the simplest, most maintainable, easiest to understand **total codebase at the end of the change**. That means: use an existing utility or approach rather than adding one more way to do things; when a new approach is simpler and more general, migrate the existing pattern into it rather than leaving both; the smallest diff is sometimes not the best change; and don't pile documentation onto individual topics — over many changes that compounds into a bloated codebase of stale narratives. Always look for ways to simplify, and identify and suggest architectural improvements.
+
+* Write code that explains itself rather than needs comments. See [Comments and docstrings](#comments-and-docstrings) below.
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
-* Add only extremely minimal code comments and no docstrings unless I ask for them, but don't remove existing comments.
-  * Add comments only when doing things out of the ordinary, to highlight gotchas, or if less clear code is required due to an optimization.
-  * In non-test code, the vast majority of comments should be one line. State the non-obvious fact the next reader needs, not the reasoning behind the change: no failure-mode stories, no defending why the code is correct, no operational instructions. Point to docs (e.g. "..., see docs/parallel_processing.md.") to add richer context only for complex topics.
-  * In non-test code, an assert or validator with a clear message is its own documentation — don't add a comment restating what it enforces or what would break without it.
 * Use Python 3.13+ features
 * Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format
@@ -169,3 +167,17 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`
 * Keep documentation up to date. After making a change that would update any .md file in the repo (CLAUDE.md, docs/*, etc.), always update relevant docs, regardless of if you have been explicitly asked.
 * CLAUDE.md is an alias for AGENTS.md
+
+### Comments and docstrings
+
+Why these rules: we must maintain a clear, cruft-free, up-to-date codebase, and the best way is for the code to be the sole source of truth — code cannot get out of date with itself, but every comment and docstring can and eventually will. A new reader should find exactly the minimum they need to know in the current code and nothing else. Do not be "extra helpful" in the short term in ways that leave scattered droppings that rot or are irrelevant to a later reader. The intent and spirit of these rules matter most; there may be _rare_ exceptions — use judgement after weighing all of these guidelines.
+
+* Default to no docstrings and extremely minimal comments; don't remove existing comments. Comment only when doing something out of the ordinary, to highlight a gotcha, or when a necessary optimization makes code less clear.
+* A docstring states only the function's contract — what callers may rely on. Notable internal behavior goes in a comment inside the function, never the docstring.
+* A docstring never references the function's callers. Functions are written to be reusable, not tied to today's call sites.
+* Comments and docstrings describe the current code only, never past repo state ("previously", "used to", "no longer", "instead of X").
+* No references to anything that existed only during development: other datasets or code studied as reference, the debugging examples that motivated a change, PRs, or issues. Code and its comments/docstrings must stand alone. If a fix can't be made self-evident in code, state the specific failure mode it prevents — not the story of how it was found.
+* If context is important enough to outlive the change and doesn't fit the rules above, it belongs in an evergreen doc or comment — but it probably is not; prefer dropping it.
+* In non-test code, the vast majority of comments should be one line. State the non-obvious fact the next reader needs, not the reasoning behind the change: no failure-mode stories, no defending why the code is correct, no operational instructions. Point to docs (e.g. "..., see docs/parallel_processing.md.") to add richer context only for complex topics.
+* In non-test code, an assert or validator with a clear message is its own documentation — don't add a comment restating what it enforces or what would break without it.
+* AI agents' default behavior runs counter to these guidelines. Agents MUST self-review every comment and docstring they added or edited — before the end of each turn and before each commit — for conformance to the word and spirit of all comment/docstring guidelines in this file, and delete or rewrite anything that fails.
