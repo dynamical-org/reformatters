@@ -98,19 +98,19 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
 - Implement `validators()` - return validation functions for the dataset
 
-## Common dataset structures
+## Dataset structures
 
 1. **Forecast dataset** Dimensions init_time, lead_time, latitude/y, longitude/x [, ensemble_member].
 
 2. **Analysis dataset** Dimensions time, latitude/y, longitude/x [, ensemble_member]. When creating an analysis dataset from a forecast archive we take the shortest available lead time, flattening the init_time and lead_time dims into a single time dim.
 
-Vertical levels: Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted. A variable's group is a per-variable property (it sets the variable's zarr path and dims), not a job boundary. The materialized write path is not yet group-aware, so multi-group datasets are currently virtual only (a `DynamicalDataset` guard rejects a materialized dataset with any non-root variable); materialized multi-group support is planned.
+**Vertical levels:** Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted. A variable's group is a per-variable property (it sets the variable's zarr path and dims), not a job boundary. The materialized write path is not yet group-aware, so multi-group datasets are currently virtual only (a `DynamicalDataset` guard rejects a materialized dataset with any non-root variable); materialized multi-group support is planned.
 
-Variable naming: A single-level or surface variable encodes its level in the name as `<var>_<level>` (e.g. `temperature_2m`); a variable carried on a vertical dimension is just `<var>` (the level lives in the dimension). Names also encode any aggregation; match an existing equivalent variable's name across datasets exactly (see Metadata conventions). Spell aggregation prefixes out in full — `maximum_`/`minimum_` (e.g. `maximum_wind_speed_10m`), not `max_`/`min_`. When a name spans a layer between two levels, order the two numbers to match the source GRIB level string (a `100-1000 mb` layer is `..._100_1000mb`; a `5000-2000 m` layer is `..._5000_2000m`).
+**Variable naming:** A single-level or surface variable encodes its level in the name as `<var>_<level>` (e.g. `temperature_2m`); a variable carried on a vertical dimension is just `<var>` (the level lives in the dimension). Names also encode any aggregation; match an existing equivalent variable's name across datasets exactly (see Metadata conventions). Spell aggregation prefixes out in full — `maximum_`/`minimum_` (e.g. `maximum_wind_speed_10m`), not `max_`/`min_`. When a name spans a layer between two levels, order the two numbers to match the source GRIB level string (a `100-1000 mb` layer is `..._100_1000mb`; a `5000-2000 m` layer is `..._5000_2000m`).
 
-Dataset id and name: A materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`. A virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix: `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`.
+**Dataset id and name:** A materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`. A virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix: `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`.
 
-Spatial dimensions: If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
+**Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
 
 ## CLI commands
 
@@ -131,7 +131,7 @@ Both backfills and operational updates distribute work across Kubernetes indexed
 
 3. **Coordination**: Workers coordinate via files in `_internal/{job_name}/` in object store. Worker 0 does setup, all workers process, the last worker (by index) finalizes.
 
-4. **Reader safety**: Zarr v3 stores defer metadata writes until finalization. Icechunk stores use a temporary branch so readers on `main` never see partial data.
+4. **Reader safety**: Zarr v3 stores defer metadata writes until finalization. Icechunk commits are atomic.
 
 See [docs/parallel_processing.md](docs/parallel_processing.md) for details on coordination protocol, failure modes, and retry behavior.
 
@@ -162,7 +162,7 @@ Optimize the codebase you leave behind, not the size of your diff. Every change 
 
 * Write code that explains itself rather than needs comments. See [Comments and docstrings](#comments-and-docstrings) below.
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
-* Use Python 3.13+ features
+* Use Python 3.14+ features
 * Follow ty type checking. If you need to add an ignore, ignore a specific check like `# ty: ignore[specific]`. Always annotate types on all function arguments and return types.
 * Follow ruff format
 * Test each module with pytest
