@@ -34,10 +34,12 @@ name: 'Manual: Create Job from CronJob'
         - noaa-gfs-forecast-validate
         - noaa-hrrr-analysis-update
         - noaa-hrrr-analysis-validate
-        - noaa-hrrr-forecast-48-hour-virtual-update
-        - noaa-hrrr-forecast-48-hour-virtual-validate
+        - noaa-hrrr-forecast-18-hour-virtual-update
+        - noaa-hrrr-forecast-18-hour-virtual-validate
         - noaa-hrrr-forecast-48-hour-update
         - noaa-hrrr-forecast-48-hour-validate
+        - noaa-hrrr-forecast-48-hour-virtual-update
+        - noaa-hrrr-forecast-48-hour-virtual-validate
         - noaa-mrms-conus-analysis-hourly-update
         - noaa-mrms-conus-analysis-hourly-validate
         - noaa-ndvi-cdr-analysis-update

@@ -1,0 +1,65 @@
+{
+  "shape": [
+    1,
+    19,
+    1059,
+    1799,
+    39
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799,
+        1
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": -273.15,
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "offset": -273.15
+      }
+    },
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "DPT",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Dew point temperature",
+    "short_name": "dpt",
+    "standard_name": "dew_point_temperature",
+    "units": "degree_Celsius",
+    "missing_value": -273.15,
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "ZmZmZmYSccA="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x",
+    "pressure_level"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
