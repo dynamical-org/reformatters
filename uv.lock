@@ -550,7 +550,7 @@ wheels = [
 [[package]]
 name = "icechunk"
 version = "2.1.1"
-source = { git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1#dc06f0582e1316405ee763f49b272a27d57b6d82" }
+source = { git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1#9b99d960f0aa8dcc673ece960bad96b3bb8cabba" }
 dependencies = [
     { name = "zarr" },
 ]
