@@ -33,6 +33,12 @@ _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
 
+# A commit writes one manifest per changed array, serialized by default (icechunk's
+# max_concurrent_nodes=1), so commit latency grows with array count. Raising this
+# parallelizes those read-modify-writes across arrays (network and CPU). Needs the
+# patched icechunk that exposes the parameter (see the icechunk pin in pyproject.toml).
+_COMMIT_MAX_CONCURRENT_NODES = 16
+
 
 class DatasetFormat(StrEnum):
     ZARR3 = "zarr3"
@@ -493,7 +499,9 @@ def commit_if_icechunk(
 
     def _commit(icechunk_store: IcechunkStore) -> None:
         icechunk_store.session.commit(
-            message=message, rebase_with=icechunk.ConflictDetector()
+            message=message,
+            rebase_with=icechunk.ConflictDetector(),
+            max_concurrent_nodes=_COMMIT_MAX_CONCURRENT_NODES,
         )
 
     for store in replica_stores:
