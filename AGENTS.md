@@ -108,7 +108,7 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 **Variable naming:** A single-level or surface variable encodes its level in the name as `<var>_<level>` (e.g. `temperature_2m`); a variable carried on a vertical dimension is just `<var>` (the level lives in the dimension). Names also encode any aggregation; match an existing equivalent variable's name across datasets exactly (see Metadata conventions). Spell aggregation prefixes out in full — `maximum_`/`minimum_` (e.g. `maximum_wind_speed_10m`), not `max_`/`min_`. When a name spans a layer between two levels, order the two numbers to match the source GRIB level string (a `100-1000 mb` layer is `..._100_1000mb`; a `5000-2000 m` layer is `..._5000_2000m`).
 
-**Dataset id and name:** A materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`. A virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix: `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`.
+**Dataset id and name:** A materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`. A virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix: `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`. A virtual dataset trimmed to its materialized counterpart's variable set appends `-fast`: `dataset_id="<provider>-<model>-<variant>-virtual-fast"` and `name="Provider Model variant, virtual, fast"`.
 
 **Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
 
