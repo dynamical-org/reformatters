@@ -550,7 +550,7 @@ wheels = [
 [[package]]
 name = "icechunk"
 version = "2.1.1"
-source = { git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1#9b99d960f0aa8dcc673ece960bad96b3bb8cabba" }
+source = { git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=expose-commit-max-concurrent-nodes-2.1.1#188615b19eb1feb5b18656f45b5c208877d5fc55" }
 dependencies = [
     { name = "zarr" },
 ]
@@ -1352,7 +1352,7 @@ requires-dist = [
     { name = "google-crc32c", specifier = ">=1.8.0" },
     { name = "gribberish", specifier = "==1.5.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "icechunk", git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=ops-latency-bundle-2.1.1" },
+    { name = "icechunk", git = "https://github.com/aldenks/icechunk?subdirectory=icechunk-python&branch=expose-commit-max-concurrent-nodes-2.1.1" },
     { name = "kubernetes", specifier = ">=36.0.1,<37" },
     { name = "numba", specifier = "~=0.62" },
     { name = "numcodecs", specifier = "~=0.16" },
