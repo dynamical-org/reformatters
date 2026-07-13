@@ -156,7 +156,7 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 
 ## Code Style
 
-For every kind of change — code, architectural design, comments/docstrings, documentation — the goal is the simplest, most maintainable, easiest to understand **total codebase at the end of the change**. That means: use an existing utility or approach rather than adding one more way to do things; when a new approach is simpler and more general, migrate the existing pattern into it rather than leaving both; the smallest diff is sometimes not the best change; and don't pile documentation onto individual topics — over many changes that compounds into a bloated codebase of stale narratives. Always look for ways to simplify, and identify and suggest architectural improvements.
+Optimize the codebase you leave behind, not the size of your diff. Every change — code, architectural design, comments/docstrings, documentation — is judged by one outcome: is the **total codebase** afterward simpler, more maintainable, and easier to understand? Concretely: extend an existing utility or approach rather than introducing a parallel one; when a new approach is genuinely simpler and more general, migrate the old pattern into it rather than leaving both; a larger change that leaves one way of doing things beats a minimal change that leaves two. Documentation follows the same rule — each addition compounds, over many changes, toward either a codebase that explains itself or one buried in stale narratives. Always look for ways to simplify, and identify and suggest architectural improvements.
 
 * Write code that explains itself rather than needs comments. See [Comments and docstrings](#comments-and-docstrings) below.
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
@@ -170,14 +170,20 @@ For every kind of change — code, architectural design, comments/docstrings, do
 
 ### Comments and docstrings
 
-Why these rules: we must maintain a clear, cruft-free, up-to-date codebase, and the best way is for the code to be the sole source of truth — code cannot get out of date with itself, but every comment and docstring can and eventually will. A new reader should find exactly the minimum they need to know in the current code and nothing else. Do not be "extra helpful" in the short term in ways that leave scattered droppings that rot or are irrelevant to a later reader. The intent and spirit of these rules matter most; there may be _rare_ exceptions — use judgement after weighing all of these guidelines.
+The code is the sole source of truth: it cannot get out of date with itself, but every comment and docstring can — and with no test to catch the rot, most eventually do. Each one is a standing liability accepted on behalf of every future maintainer. So the bar for writing one is not "is this true and helpful right now?" It is: **will this still be true, and still be needed, by someone reading only the current code, long after this change is forgotten?**
 
-* Default to no docstrings and extremely minimal comments; don't remove existing comments. Comment only when doing something out of the ordinary, to highlight a gotcha, or when a necessary optimization makes code less clear.
-* A docstring states only the function's contract — what callers may rely on. Notable internal behavior goes in a comment inside the function, never the docstring.
-* A docstring never references the function's callers. Functions are written to be reusable, not tied to today's call sites.
-* Comments and docstrings describe the current code only, never past repo state ("previously", "used to", "no longer", "instead of X").
-* No references to anything that existed only during development: other datasets or code studied as reference, the debugging examples that motivated a change, PRs, or issues. Code and its comments/docstrings must stand alone. If a fix can't be made self-evident in code, state the specific failure mode it prevents — not the story of how it was found.
-* If context is important enough to outlive the change and doesn't fit the rules above, it belongs in an evergreen doc or comment — but it probably is not; prefer dropping it.
-* In non-test code, the vast majority of comments should be one line. State the non-obvious fact the next reader needs, not the reasoning behind the change: no failure-mode stories, no defending why the code is correct, no operational instructions. Point to docs (e.g. "..., see docs/parallel_processing.md.") to add richer context only for complex topics.
-* In non-test code, an assert or validator with a clear message is its own documentation — don't add a comment restating what it enforces or what would break without it.
-* AI agents' default behavior runs counter to these guidelines. Agents MUST self-review every comment and docstring they added or edited — before the end of each turn and before each commit — for conformance to the word and spirit of all comment/docstring guidelines in this file, and delete or rewrite anything that fails.
+Write for that reader. They have the current code in front of them and nothing else — no diff, no PR, no session transcript, no memory that anything was ever different. Whole categories of comment are addressed to someone watching the change happen, and are noise to everyone after:
+
+* How the code used to be, or that it changed ("now", "previously", "no longer").
+* The debugging that led here. If the code can't be made self-evident, state the failure mode it prevents as a timeless fact — not the story of finding it.
+* Code, datasets, or examples consulted as reference during development.
+* PRs and issues. Context that genuinely must outlive the change goes in an evergreen doc (docs/*.md); it almost never qualifies — when in doubt, drop it.
+
+A docstring, when one is warranted, states the contract: what any caller may rely on without reading the body. Not internals — those change while the contract holds, and the body is right below (a genuinely non-obvious internal fact gets a comment at the line where it matters). Not callers — a function that names its callers has its dependencies pointing backwards and has quietly narrowed itself to today's usage.
+
+Mechanics, when a comment does earn its place:
+* Default is none. Comment only for a gotcha, out-of-the-ordinary behavior, or clarity lost to a necessary optimization. Don't remove existing comments.
+* In non-test code, most comments are one line stating the non-obvious fact the reader needs — not reasoning, not defense of correctness, not operational instructions. For a genuinely complex topic, point to a doc instead (e.g. "..., see docs/parallel_processing.md.").
+* An assert or validator with a clear message documents itself; don't add a comment restating it.
+
+The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is the accumulation, where individually-reasonable "helpful" notes compound across many changes into a codebase readers must wade through and learn to distrust. An agent's instinct to be helpful in the moment is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited and apply the bolded test above to each sentence; delete what fails, and expect that to be most of it.
