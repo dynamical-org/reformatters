@@ -175,7 +175,7 @@ The code is the sole source of truth: it cannot get out of date with itself, but
 Write for that reader. They have the current code in front of them and nothing else — no diff, no PR, no session transcript, no memory that anything was ever different. Whole categories of comment are addressed to someone watching the change happen, and are noise to everyone after:
 
 * How the code used to be, or that it changed ("now", "previously", "no longer").
-* The debugging that led here. If the code can't be made self-evident, state the failure mode it prevents as a timeless fact — not the story of finding it.
+* The debugging that led here. If the code can't be made self-evident, state the failure mode it prevents as a timeless fact — not the story of finding it. (Test code is the exception: a test exists to pin down a specific failure case, so describing that case there is documenting the test's contract.)
 * Code, datasets, or examples consulted as reference during development.
 * PRs and issues. Context that genuinely must outlive the change goes in an evergreen doc (docs/*.md); it almost never qualifies — when in doubt, drop it.
 
