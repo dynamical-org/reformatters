@@ -196,6 +196,7 @@ class VirtualTestRegionJob(
     messages_url: ClassVar[str] = ""
     # Whole files per yielded batch during backfill (operational yields 1 at a time).
     backfill_batch_files: ClassVar[int] = 2
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
 
     def generate_source_file_coords(
         self,

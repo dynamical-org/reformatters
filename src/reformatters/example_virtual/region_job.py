@@ -1,9 +1,8 @@
-from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from collections.abc import Mapping, Sequence
+from typing import ClassVar
 
-import pandas as pd  # noqa: F401
+import pandas as pd
 import xarray as xr
-from zarr.abc.store import Store
 
 from reformatters.common.download import (  # noqa: F401
     s3_download_to_disk,
@@ -12,13 +11,11 @@ from reformatters.common.download import (  # noqa: F401
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
-    RegionJob,
     SourceFileCoord,
 )
 from reformatters.common.types import (
-    AppendDim,
-    DatetimeLike,
     Dim,
+    Timedelta,
 )
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
@@ -183,53 +180,14 @@ class ExampleSpatialRegionJob(
     # def representative_var(self, coord: ExampleSpatialSourceFileCoord) -> ExampleDataVar:
     #     return next(v for v in self.data_vars if v.name == "temperature_2m")
 
-    @classmethod
-    def operational_update_jobs(
-        cls,
-        # Unused: the icechunk manifest, not a coordinate, tracks ingested data.
-        primary_store: Store,
-        tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
-        append_dim: AppendDim,
-        all_data_vars: Sequence[ExampleDataVar],
-        reformat_job_name: str,
-    ) -> tuple[
-        Sequence[RegionJob[ExampleDataVar, ExampleSpatialSourceFileCoord]],
-        xr.DataTree,
-    ]:
-        """Build the operational update job(s).
-
-        Virtual updates differ from materialized ones in two ways:
-
-        - There is no separate "what's already processed" read from coordinates: the
-          icechunk manifest records exactly which references exist, and
-          filter_already_present derives the remaining work from it. So we don't read
-          existing coordinate values here (primary_store is unused).
-        - The job runs with processing_mode="update", which makes the write loop POLL:
-          it keeps sweeping discover_available until every expected file is ingested,
-          committing each batch as files publish. Backfills use the default
-          processing_mode="backfill", which sweeps once and exits.
-
-        The usual shape is a single job over a recent append-dim window (wide enough to
-        catch late-publishing files and re-check recent inits). See "Operational
-        updates" in docs/virtual_datasets.md.
-        """
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
-        # append_dim_index = template_ds.to_dataset().get_index(append_dim)
-        # window_start = int(
-        #     append_dim_index.searchsorted(append_dim_end - pd.Timedelta("24h"))
-        # )
-        # job = cls(
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     data_vars=all_data_vars,
-        #     append_dim=append_dim,
-        #     region=slice(window_start, len(append_dim_index)),
-        #     reformat_job_name=reformat_job_name,
-        #     processing_mode="update",
-        # )
-        # return [job], template_ds
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
-        )
+    # The recent append-dim window each operational update fire re-sweeps. The base
+    # VirtualRegionJob.operational_update_jobs builds a single job over this window
+    # with processing_mode="update", which makes the write loop POLL: it keeps
+    # sweeping discover_available until every expected file is ingested, committing
+    # each batch as files publish (backfills sweep once and exit). What is already
+    # ingested is derived from the icechunk manifest by filter_already_present, so
+    # size the window for late-publishing files and re-checking recent steps, and
+    # override operational_update_jobs itself only for an update shape a single
+    # windowed job can't express. See "Operational updates" in
+    # docs/virtual_datasets.md.
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")

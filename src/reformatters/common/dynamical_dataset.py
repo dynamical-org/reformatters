@@ -690,6 +690,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 f"{self.region_job_class.__name__} is a VirtualRegionJob but no "
                 "icechunk_virtual_config was provided; virtual datasets require it."
             )
+        # The default virtual operational_update_jobs reads this classvar; catch a
+        # missing declaration at dataset construction, not at the first cron fire.
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and self.region_job_class.operational_update_jobs.__func__
+            is VirtualRegionJob.operational_update_jobs.__func__
+            and not hasattr(self.region_job_class, "operational_update_window")
+        ):
+            raise ValueError(
+                f"{self.region_job_class.__name__} uses the default virtual "
+                "operational_update_jobs but does not set operational_update_window."
+            )
         # Virtual datasets store icechunk metadata + virtual chunk refs, so every store must be icechunk.
         if self.icechunk_virtual_config is not None:
             non_icechunk = [

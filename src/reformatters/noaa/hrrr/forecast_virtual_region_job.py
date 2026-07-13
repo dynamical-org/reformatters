@@ -1,21 +1,20 @@
-from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from collections.abc import Mapping, Sequence
 
+import icechunk
 import pandas as pd
 import xarray as xr
-from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import CoordinateValue, RegionJob
+from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import AppendDim, DatetimeLike, Dim
+from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
-from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
+from reformatters.noaa.hrrr.forecast_virtual_template_config import (
     MODEL_LEVELS,
     PRESSURE_LEVELS,
 )
@@ -26,9 +25,9 @@ from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
-_S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
+S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
+S3_BUCKET_REGION = "us-east-1"
 _S3_HTTPS_PREFIX = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
-_S3_BUCKET_REGION = "us-east-1"
 
 # A representative vertical level per group-sourced product file. A prs/nat file
 # carries only vertical-group variables (no root chunk), so the per-file manifest
@@ -40,14 +39,24 @@ _REPRESENTATIVE_LEVEL: dict[str, tuple[Dim, int]] = {
 }
 
 
-class NoaaHrrrForecast48HourVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
+def hrrr_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
+    """Fresh container objects per call; icechunk containers can't be shared
+    pydantic defaults."""
+    return (
+        icechunk.VirtualChunkContainer(
+            S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_BUCKET_REGION)
+        ),
+    )
+
+
+class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
     """One HRRR product file (init_time, lead_time, file_type) and the vars it packs."""
 
     def get_url(self, source: DownloadSource = "s3") -> str:
         """The s3:// source location refs point at, matching the virtual chunk container."""
         url = super().get_url(source=source)
         assert url.startswith(_S3_HTTPS_PREFIX), url
-        return _S3_LOCATION_PREFIX + url.removeprefix(_S3_HTTPS_PREFIX)
+        return S3_LOCATION_PREFIX + url.removeprefix(_S3_HTTPS_PREFIX)
 
     def get_index_url(self) -> str:
         return self.get_url() + ".idx"
@@ -63,16 +72,17 @@ class NoaaHrrrForecast48HourVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
         return loc
 
 
-class NoaaHrrrForecast48HourVirtualRegionJob(
-    VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
+class NoaaHrrrForecastVirtualRegionJob(
+    VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord]
 ):
-    """RegionJob for the HRRR 48-hour virtual forecast dataset."""
+    """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
+    subclass declares operational_update_window."""
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaHrrrDataVar],
-    ) -> Sequence[NoaaHrrrForecast48HourVirtualSourceFileCoord]:
+    ) -> Sequence[NoaaHrrrForecastVirtualSourceFileCoord]:
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         file_types = sorted({v.internal_attrs.hrrr_file_type for v in data_var_group})
@@ -92,7 +102,7 @@ class NoaaHrrrForecast48HourVirtualRegionJob(
                     if not vars_in_file:
                         continue
                     coords.append(
-                        NoaaHrrrForecast48HourVirtualSourceFileCoord(
+                        NoaaHrrrForecastVirtualSourceFileCoord(
                             init_time=init_time,
                             lead_time=lead_time,
                             domain="conus",
@@ -103,20 +113,20 @@ class NoaaHrrrForecast48HourVirtualRegionJob(
         return coords
 
     def discover_available(
-        self, pending: list[NoaaHrrrForecast48HourVirtualSourceFileCoord]
-    ) -> list[tuple[NoaaHrrrForecast48HourVirtualSourceFileCoord, int]]:
+        self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
+    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
         return discover_available_by_obstore_listing(
             pending,
-            store=s3_store(_S3_LOCATION_PREFIX, region=_S3_BUCKET_REGION),
-            location_prefix=_S3_LOCATION_PREFIX,
+            store=s3_store(S3_LOCATION_PREFIX, region=S3_BUCKET_REGION),
+            location_prefix=S3_LOCATION_PREFIX,
             require_index=True,
         )
 
     def file_refs(
-        self, coord: NoaaHrrrForecast48HourVirtualSourceFileCoord, file_size: int
+        self, coord: NoaaHrrrForecastVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=_S3_BUCKET_REGION
+            coord.get_index_url(), self.dataset_id, region=S3_BUCKET_REGION
         )
         try:
             index_lines = parse_grib_index_lines(index_path)
@@ -196,42 +206,3 @@ class NoaaHrrrForecast48HourVirtualRegionJob(
                         key = (element, level_format.format(level=level), window)
                         lookup.setdefault(key, []).append((var, {dim: int(level)}))
         return lookup
-
-    @classmethod
-    def operational_update_jobs(
-        cls,
-        primary_store: Store,  # noqa: ARG003 - the icechunk manifest, not a coordinate, tracks ingested data
-        tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
-        append_dim: AppendDim,
-        all_data_vars: Sequence[NoaaHrrrDataVar],
-        reformat_job_name: str,
-    ) -> tuple[
-        Sequence[
-            RegionJob[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
-        ],
-        xr.DataTree,
-    ]:
-        """A single polling job over the recent inits (14h window = current + 2 prior).
-
-        14h = two 6h cycles back + ~2h publication slack, so a couple of missed runs
-        still self-heal. Polls until every expected file is ingested;
-        filter_already_present derives the remaining work from the manifest. See
-        "Operational updates" in docs/virtual_datasets.md.
-        """
-        append_dim_end = pd.Timestamp.now()
-        template_ds = get_template_fn(append_dim_end)
-        init_times = template_ds.to_dataset().get_index(append_dim)
-        window_start = int(
-            init_times.searchsorted(append_dim_end - pd.Timedelta("14h"))
-        )
-        job = cls(
-            tmp_store=tmp_store,
-            template_ds=template_ds,
-            data_vars=all_data_vars,
-            append_dim=append_dim,
-            region=slice(window_start, len(init_times)),
-            reformat_job_name=reformat_job_name,
-            processing_mode="update",
-        )
-        return [job], template_ds

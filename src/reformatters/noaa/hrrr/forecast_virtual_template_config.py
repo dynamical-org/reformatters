@@ -19,6 +19,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     CodecConfig,
@@ -33,12 +34,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrInternalAttrs,
 )
 from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
-
-EXPECTED_FORECAST_LENGTH = pd.Timedelta(hours=48)
-# HRRR v3 ran the 00/06/12/18Z cycles to 36h; v4 extended them to 48h starting with the
-# 2020-12-02T12Z init (the first init with f37-f48 files on NODD).
-HRRR_V4_FIRST_INIT = pd.Timestamp("2020-12-02T12:00")
-EXPECTED_FORECAST_LENGTH_V3 = pd.Timedelta(hours=36)
 
 # HRRR CONUS Lambert Conformal grid, from NoaaHrrrCommonTemplateConfig._spatial_info.
 # Asserted against _spatial_info in data_vars so the two cannot drift.
@@ -89,15 +84,18 @@ def _raw_idx_element(discipline: int, category: int, parameter: int) -> str:
     return f"var discipline={discipline} center=7 local_table=1 parmcat={category} parm={parameter}"
 
 
-class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
-    """Virtual, spatially-chunked (map-optimized) HRRR 48-hour forecast.
+class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
+    """Virtual, spatially-chunked (map-optimized) HRRR forecast template.
 
     Chunks are references to GRIB messages in NOAA's HRRR archive decoded at read
     time, so the grid is the native Lambert Conformal y/x grid with one chunk per
-    message. Mirrors the materialized noaa-hrrr-forecast-48-hour temporal structure
-    (00/06/12/18 UTC inits to f48) but covers every wrfsfc/wrfprs/wrfnat variable
-    plus pressure_level and model_level vertical groups. See docs/virtual_datasets.md.
+    message. Covers every wrfsfc/wrfprs/wrfnat variable plus pressure_level and
+    model_level vertical groups. A forecast-length subclass declares
+    forecast_length, append_dim_frequency, and dataset_attributes. See
+    docs/virtual_datasets.md.
     """
+
+    forecast_length: Timedelta
 
     dims: dict[Group, tuple[Dim, ...]] = {
         ROOT: ("init_time", "lead_time", "y", "x"),
@@ -106,38 +104,58 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
     }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
-    append_dim_frequency: Timedelta = pd.Timedelta("6h")  # only 00/06/12/18 reach f48
 
-    @computed_field
-    @property
-    def dataset_attributes(self) -> DatasetAttributes:
+    def _dataset_attributes(
+        self, *, dataset_id: str, dataset_version: str, name: str
+    ) -> DatasetAttributes:
+        frequency_hours = whole_hours(self.append_dim_frequency)
         return DatasetAttributes(
-            dataset_id="noaa-hrrr-forecast-48-hour-virtual",
-            dataset_version="0.5.0",
-            name="NOAA HRRR forecast, 48 hour, virtual",
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            name=name,
             description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
             attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
             spatial_domain="Continental United States",
             spatial_resolution="3 km",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution="Forecasts initialized every 6 hours",
-            forecast_domain="Forecast lead time 0-48 hours ahead",
+            time_resolution=(
+                "Forecasts initialized every hour"
+                if frequency_hours == 1
+                else f"Forecasts initialized every {frequency_hours} hours"
+            ),
+            forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
             forecast_resolution="Hourly",
+        )
+
+    def _expected_forecast_length_values(self, ds: xr.Dataset) -> np.ndarray[Any, Any]:
+        """Per-init expected forecast length; a constant forecast_length unless overridden."""
+        return np.full(ds[self.append_dim].size, self.forecast_length.to_timedelta64())
+
+    def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
+        return StatisticsApproximate(
+            min=str(self.forecast_length), max=str(self.forecast_length)
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
         y_coords, x_coords = self._y_x_coordinates()
-        return {
+        dim_coords: dict[str, Any] = {
             "init_time": self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "lead_time": pd.timedelta_range("0h", "48h", freq=pd.Timedelta("1h")),
+            "lead_time": pd.timedelta_range(
+                "0h", self.forecast_length, freq=pd.Timedelta("1h")
+            ),
             "y": y_coords,
             "x": x_coords,
-            "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.int64),
-            "model_level": np.array(MODEL_LEVELS, dtype=np.int64),
         }
+        # A variant may declare only a subset of the vertical groups (dimension
+        # coordinates must cover exactly the declared dims).
+        if "pressure_level" in self.all_dims:
+            dim_coords["pressure_level"] = np.array(PRESSURE_LEVELS, dtype=np.int64)
+        if "model_level" in self.all_dims:
+            dim_coords["model_level"] = np.array(MODEL_LEVELS, dtype=np.int64)
+        return dim_coords
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -149,11 +167,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
             "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (
                 ("init_time",),
-                np.where(
-                    ds["init_time"].values < HRRR_V4_FIRST_INIT.to_datetime64(),
-                    EXPECTED_FORECAST_LENGTH_V3.to_timedelta64(),
-                    EXPECTED_FORECAST_LENGTH.to_timedelta64(),
-                ),
+                self._expected_forecast_length_values(ds),
             ),
             "latitude": (("y", "x"), latitudes),
             "longitude": (("y", "x"), longitudes),
@@ -165,6 +179,56 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
     def coords(self) -> Sequence[Coordinate]:
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+
+        vertical_coords: list[Coordinate] = []
+        if "pressure_level" in dim_coords:
+            vertical_coords.append(
+                Coordinate(
+                    name="pressure_level",
+                    encoding=Encoding(
+                        dtype="int64",
+                        fill_value=-1,
+                        compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                        chunks=len(dim_coords["pressure_level"]),
+                        shards=None,
+                    ),
+                    attrs=CoordinateAttrs(
+                        long_name="Pressure level",
+                        standard_name="air_pressure",
+                        units="hPa",
+                        axis="Z",
+                        positive="down",
+                        statistics_approximate=StatisticsApproximate(
+                            min=int(dim_coords["pressure_level"].min()),
+                            max=int(dim_coords["pressure_level"].max()),
+                        ),
+                    ),
+                )
+            )
+        if "model_level" in dim_coords:
+            vertical_coords.append(
+                Coordinate(
+                    name="model_level",
+                    encoding=Encoding(
+                        dtype="int64",
+                        fill_value=-1,
+                        compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                        chunks=len(dim_coords["model_level"]),
+                        shards=None,
+                    ),
+                    attrs=CoordinateAttrs(
+                        long_name="Hybrid model level number",
+                        standard_name="model_level_number",
+                        units="1",
+                        axis="Z",
+                        positive="up",
+                        statistics_approximate=StatisticsApproximate(
+                            min=int(dim_coords["model_level"].min()),
+                            max=int(dim_coords["model_level"].max()),
+                        ),
+                    ),
+                )
+            )
 
         return [
             *super().coords,
@@ -208,48 +272,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     ),
                 ),
             ),
-            Coordinate(
-                name="pressure_level",
-                encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["pressure_level"]),
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    long_name="Pressure level",
-                    standard_name="air_pressure",
-                    units="hPa",
-                    axis="Z",
-                    positive="down",
-                    statistics_approximate=StatisticsApproximate(
-                        min=int(dim_coords["pressure_level"].min()),
-                        max=int(dim_coords["pressure_level"].max()),
-                    ),
-                ),
-            ),
-            Coordinate(
-                name="model_level",
-                encoding=Encoding(
-                    dtype="int64",
-                    fill_value=-1,
-                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["model_level"]),
-                    shards=None,
-                ),
-                attrs=CoordinateAttrs(
-                    long_name="Hybrid model level number",
-                    standard_name="model_level_number",
-                    units="1",
-                    axis="Z",
-                    positive="up",
-                    statistics_approximate=StatisticsApproximate(
-                        min=int(dim_coords["model_level"].min()),
-                        max=int(dim_coords["model_level"].max()),
-                    ),
-                ),
-            ),
+            *vertical_coords,
             Coordinate(
                 name="valid_time",
                 encoding=Encoding(
@@ -270,7 +293,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
-                        max="Present + 48 hours",
+                        max=f"Present + {whole_hours(self.forecast_length)} hours",
                     ),
                 ),
             ),
@@ -287,10 +310,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                 attrs=CoordinateAttrs(
                     long_name="Expected forecast length",
                     units="seconds",
-                    statistics_approximate=StatisticsApproximate(
-                        min=str(EXPECTED_FORECAST_LENGTH_V3),
-                        max=str(EXPECTED_FORECAST_LENGTH),
-                    ),
+                    statistics_approximate=self._expected_forecast_length_statistics(),
                 ),
             ),
         ]
@@ -301,6 +321,10 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
         assert self._spatial_info()[0] == (_GRID_NY, _GRID_NX), (
             "grid shape drifted from _GRID_NY/_GRID_NX used in the virtual encoding"
         )
+        return self._catalog_data_vars()
+
+    def _catalog_data_vars(self) -> list[NoaaHrrrDataVar]:
+        """The variable catalog; a subclass may filter it to serve a subset."""
         return [*_root_data_vars(), *_pressure_data_vars(), *_model_data_vars()]
 
 

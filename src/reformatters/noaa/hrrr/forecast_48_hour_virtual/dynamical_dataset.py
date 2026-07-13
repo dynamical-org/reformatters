@@ -2,7 +2,6 @@ from collections.abc import Sequence
 from datetime import timedelta
 from functools import partial
 
-import icechunk
 from pydantic import Field
 
 from reformatters.common import validation
@@ -12,19 +11,18 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
 )
+from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+    NoaaHrrrForecastVirtualSourceFileCoord,
+    hrrr_virtual_chunk_containers,
+)
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
-from .region_job import (
-    _S3_BUCKET_REGION,
-    _S3_LOCATION_PREFIX,
-    NoaaHrrrForecast48HourVirtualRegionJob,
-    NoaaHrrrForecast48HourVirtualSourceFileCoord,
-)
+from .region_job import NoaaHrrrForecast48HourVirtualRegionJob
 from .template_config import NoaaHrrrForecast48HourVirtualTemplateConfig
 
 
 class NoaaHrrrForecast48HourVirtualDataset(
-    DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrForecast48HourVirtualSourceFileCoord]
+    DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord]
 ):
     """NOAA HRRR 48-hour virtual (spatially-chunked, map-optimized icechunk) forecast dataset."""
 
@@ -37,11 +35,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
-            containers=(
-                icechunk.VirtualChunkContainer(
-                    _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
-                ),
-            ),
+            containers=hrrr_virtual_chunk_containers(),
             # Sized per group from measured ~16.4 bytes/ref so full manifests land
             # comfortably under the reader budgets (single-level <= 3 MiB/var, vertical
             # 5-8 MiB) while keeping the total manifest count low; see "Manifest

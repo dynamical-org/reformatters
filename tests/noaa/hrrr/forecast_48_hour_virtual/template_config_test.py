@@ -2,9 +2,11 @@ import numpy as np
 
 from reformatters.common.config_models import ROOT
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
+    NoaaHrrrForecast48HourVirtualTemplateConfig,
+)
+from reformatters.noaa.hrrr.forecast_virtual_template_config import (
     MODEL_LEVELS,
     PRESSURE_LEVELS,
-    NoaaHrrrForecast48HourVirtualTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 

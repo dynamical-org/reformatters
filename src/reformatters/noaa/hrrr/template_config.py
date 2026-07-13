@@ -1,3 +1,4 @@
+import functools
 from collections.abc import Sequence
 
 import numpy as np
@@ -707,14 +708,23 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
     def _latitude_longitude_coordinates(
         self, x_coords: Array1D[np.float64], y_coords: Array1D[np.float64]
     ) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
-        # Create 2D latitude and longitude grids
-        # x, y are the spatial dimensions of this dataset
-        # latitude and longitude there
         _, _, _, crs = self._spatial_info()
-        xs, ys = np.meshgrid(x_coords, y_coords)
-        lons, lats = pyproj.Proj(crs)(xs, ys, inverse=True)
-        # Dropping to 32 bit precision still gets us < 1 meter precision and
-        # makes each array about 6MB vs 15MB for float64.
-        lats = lats.astype(np.float32)
-        lons = lons.astype(np.float32)
-        return lats, lons
+        return _latitude_longitude_grids(crs, x_coords.tobytes(), y_coords.tobytes())
+
+
+# The inverse transform costs ~250ms on the full HRRR grid and every HRRR dataset
+# shares one grid, while a template build requests it once per zarr group. Callers
+# must not mutate the returned (cached) arrays.
+@functools.cache
+def _latitude_longitude_grids(
+    crs: str, x_bytes: bytes, y_bytes: bytes
+) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
+    x_coords = np.frombuffer(x_bytes, dtype=np.float64)
+    y_coords = np.frombuffer(y_bytes, dtype=np.float64)
+    xs, ys = np.meshgrid(x_coords, y_coords)
+    lons, lats = pyproj.Proj(crs)(xs, ys, inverse=True)
+    # Dropping to 32 bit precision still gets us < 1 meter precision and
+    # makes each array about 6MB vs 15MB for float64.
+    lats = lats.astype(np.float32)
+    lons = lons.astype(np.float32)
+    return lats, lons
