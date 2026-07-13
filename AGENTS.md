@@ -5,7 +5,7 @@ This project contains code to reformat weather data into the Zarr v3 / Icechunk 
 Datasets are created in 3 phases:
 1. A template of the dataset, in the form of zarr metadata that is checked into the repo, is created with `uv run main <dataset_id> update-template`. This template (not in-code config) is loaded by steps 2 and 3 and drives processing and output in those steps. This approach of checking in the metadata allow us to review diffs if the structure or metadata of the dataset changes.
 2. A zarr backfill is run. The backfill uses kubernetes indexed jobs to run work in parallel. When the user runs a `uv run main <dataset-id> backfill-kubernetes ...` command the metadata for the zarr is first written by the local process to the final zarr store, then a kubernetes index job is kicked off with each job index responsible for writing a portion of the zarr chunk data into the zarr archive.
-3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk stores use a temporary branch that is atomically merged to main.
+3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk backfills and materialized updates use a temporary branch that is atomically merged to main; virtual updates commit directly to main.
 
 ## Repository structure
 
@@ -172,20 +172,20 @@ Optimize the codebase you leave behind, not the size of your diff. Every change 
 
 ### Comments and docstrings
 
-The code is the sole source of truth: it cannot get out of date with itself, but every comment and docstring can — and with no test to catch the rot, most eventually do. Each one is a standing liability accepted on behalf of every future maintainer. So the bar for writing one is not "is this true and helpful right now?" It is: **will this still be true, and still be needed, by someone reading only the current code, long after this change is forgotten?**
+The code is the sole source of truth: it cannot get out of date with itself; every comment and docstring can, and with no test to catch the rot, most eventually do. Each one is a standing liability charged to every future maintainer. The bar for writing one is not "is this true and helpful right now?" but: **will this still be true, and still be needed, by someone reading only the current code, long after this change is forgotten?**
 
-Write for that reader. They have the current code in front of them and nothing else — no diff, no PR, no session transcript, no memory that anything was ever different. Whole categories of comment are addressed to someone watching the change happen, and are noise to everyone after:
+Write for that reader: they have the current code and nothing else — no diff, no PR, no session transcript, no memory that anything was ever different. Whole categories of comment address someone watching the change happen and are noise to everyone after:
 
 * How the code used to be, or that it changed ("now", "previously", "no longer").
-* The debugging that led here. If the code can't be made self-evident, state the failure mode it prevents as a timeless fact — not the story of finding it. (Test code is the exception: a test exists to pin down a specific failure case, so describing that case there is documenting the test's contract.)
+* The debugging that led here. If code can't be made self-evident, state the failure mode it prevents as a timeless fact, not the story of finding it. (Exception: a test exists to pin a specific failure case, so describing that case is the test's contract.)
 * Code, datasets, or examples consulted as reference during development.
-* PRs and issues. Context that genuinely must outlive the change goes in an evergreen doc (docs/*.md); it almost never qualifies — when in doubt, drop it.
+* PRs and issues. Context that must outlive the change goes in an evergreen doc (docs/*.md); it almost never qualifies — when in doubt, drop it.
 
-A docstring, when one is warranted, states the contract: what any caller may rely on without reading the body. Not internals — those change while the contract holds, and the body is right below (a genuinely non-obvious internal fact gets a comment at the line where it matters). Not callers — a function that names its callers has its dependencies pointing backwards and has quietly narrowed itself to today's usage.
+A docstring, when warranted, states the contract: what any caller may rely on without reading the body. Not internals — they change while the contract holds, and the body is right below (a non-obvious internal fact gets a comment at the line where it matters). Not callers — a function that names its callers points its dependencies backwards and narrows itself to today's usage.
 
 Mechanics, when a comment does earn its place:
 * Default is none. Comment only for a gotcha, out-of-the-ordinary behavior, or clarity lost to a necessary optimization. Don't remove existing comments.
 * In non-test code, most comments are one line stating the non-obvious fact the reader needs — not reasoning, not defense of correctness, not operational instructions. For a genuinely complex topic, point to a doc instead (e.g. "..., see docs/parallel_processing.md.") — use sparingly; a doc pointer is still a comment and carries the same liability.
 * An assert or validator with a clear message documents itself; don't add a comment restating it.
 
-The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is the accumulation, where individually-reasonable "helpful" notes compound across many changes into a codebase readers must wade through and learn to distrust. An agent's instinct to be helpful in the moment is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited and apply the bolded test above to each sentence; delete what fails, and expect that to be most of it.
+The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is accumulation: individually-reasonable "helpful" notes compounding across changes into a codebase readers must wade through and learn to distrust. An agent's in-the-moment helpfulness is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited, apply the bolded test to each sentence, and delete what fails — expect that to be most of it.
