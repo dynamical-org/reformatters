@@ -16,6 +16,8 @@ src/reformatters/
 │   ├── dynamical_dataset.py # DynamicalDataset base class
 │   ├── template_config.py   # TemplateConfig base class
 │   ├── region_job.py        # RegionJob base class
+│   ├── materialized_region_job.py # MaterializedRegionJob base class
+│   ├── virtual_region_job.py # VirtualRegionJob base class
 │   ├── config_models.py     # DataVar, Coordinate, etc.
 │   ├── iterating.py         # Parallelization helpers (get_worker_jobs)
 │   ├── kubernetes.py        # Job/CronJob definitions
