@@ -82,14 +82,7 @@ Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sent
 
 #### Encoding conventions
 
-`keep_mantissa_bits` (on a data variable's `internal_attrs`) sets how many of a float32's 23 mantissa bits survive before compression — lower rounds harder and compresses better but coarsens the data; `"no-rounding"` keeps all 23 (used by virtual datasets, whose bytes are never rewritten, and any variable that must stay exact). Pick it per the physical precision the variable needs, not the source's stored precision. Defaults by variable kind:
-
-- **7** — general default for most variables.
-- **6** — wind components / speeds.
-- **8** — precipitation flux and rates.
-- **11** — pressure variables with `units="Pa"`.
-
-Match an existing equivalent variable's value across datasets rather than re-deriving. Existing datasets predate this table and are not all consistent with it (e.g. some carry pressure at 10); leave them as-is unless separately asked to reconcile.
+A data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) defaults to 7, with 6 for wind, 8 for precipitation flux/rates, and 11 for pressure variables with `units="Pa"`; match an existing equivalent variable rather than re-deriving.
 
 
 ### RegionJob
