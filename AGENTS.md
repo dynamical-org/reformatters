@@ -80,6 +80,17 @@ Categorical / flag variables set `flag_values` (the coded values) and `flag_mean
 
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
 
+#### Encoding conventions
+
+`keep_mantissa_bits` (on a data variable's `internal_attrs`) sets how many of a float32's 23 mantissa bits survive before compression — lower rounds harder and compresses better but coarsens the data; `"no-rounding"` keeps all 23 (used by virtual datasets, whose bytes are never rewritten, and any variable that must stay exact). Pick it per the physical precision the variable needs, not the source's stored precision. Defaults by variable kind:
+
+- **7** — general default for most variables.
+- **6** — wind components / speeds.
+- **8** — precipitation flux and rates.
+- **11** — pressure variables with `units="Pa"`.
+
+Match an existing equivalent variable's value across datasets rather than re-deriving. Existing datasets predate this table and are not all consistent with it (e.g. some carry pressure at 10); leave them as-is unless separately asked to reconcile.
+
 
 ### RegionJob
 Base class: `src/reformatters/common/region_job.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/region_job.py`.
