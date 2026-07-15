@@ -590,6 +590,9 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # HRRR 80m wind (no ECMWF equivalent)
     "80u",
     "80v",
+    # GEFS 80m temperature and pressure (no ECMWF equivalent)
+    "80t",
+    "80sp",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
@@ -634,6 +637,9 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     # HRRR 80m wind (no ECMWF equivalent)
     "80 metre U wind component",
     "80 metre V wind component",
+    # GEFS 80m temperature and pressure (no ECMWF equivalent)
+    "80 metre temperature",
+    "80 metre pressure",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
