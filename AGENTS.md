@@ -80,8 +80,6 @@ Categorical / flag variables set `flag_values` (the coded values) and `flag_mean
 
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
 
-#### Encoding conventions
-
 A data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) defaults to 7, with 6 for wind, 8 for precipitation flux/rates, and 11 for pressure variables with `units="Pa"`; match an existing equivalent variable rather than re-deriving.
 
 
