@@ -9,7 +9,7 @@ How to add a new data variable to an existing dataset.
 1b. Add a new `DataVar` to your dataset’s `TemplateConfig.data_vars` (usually in `src/reformatters/<provider>/<model>/<variant>/template_config.py`).
    - **Name + externally visible attrs**: match existing naming/attrs used in this repo where possible; otherwise follow CF Conventions. Variable names generally follow the format `<long name>_<level>`.
    - **Internal attrs**: derive from `gdalinfo` output on a representative source file (and GRIB index if relevant)
-   - **Encoding**: match existing variables, setting `keep_mantissa_bits` to 7 by default, 6 for wind variables, 8 for precipitation and 10 for pressure variables with units `pa`.
+   - **Encoding**: match existing variables, and follow the `keep_mantissa_bits` guidance in AGENTS.md.
 
 1c. Regenerate the checked-in Zarr template metadata:
 

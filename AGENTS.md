@@ -80,6 +80,8 @@ Categorical / flag variables set `flag_values` (the coded values) and `flag_mean
 
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
 
+Set each data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) by convention: use 7 unless the variable is wind (6), a precipitation flux/rate (8), or a pressure variable with `units="Pa"` (11); match an existing equivalent variable rather than re-deriving.
+
 
 ### RegionJob
 Base class: `src/reformatters/common/region_job.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/region_job.py`.
