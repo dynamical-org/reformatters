@@ -129,13 +129,11 @@ class MaterializedRegionJob(
         branch_name: str,
         worker_index: int,
     ) -> dict[str, list[SourceFileResult]]:
-        """Write all of this worker's jobs to ``branch_name`` in a single commit."""
-        # One commit per worker; an empty job set would make an empty icechunk
-        # commit (which raises), so the caller must filter empty workers out.
+        """Write this worker's jobs to ``branch_name``: all jobs in a single commit
+        on a temp branch, or one commit per job on "main"."""
+        # An empty job set would make an empty icechunk commit (which raises),
+        # so the caller must filter empty workers out.
         assert worker_jobs, "process_worker_jobs requires at least one job"
-        primary_store = store_factory.primary_store(writable=True, branch=branch_name)
-        replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
-
         assert all(isinstance(job, MaterializedRegionJob) for job in worker_jobs)
         jobs = cast(
             "Sequence[MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", worker_jobs
@@ -143,38 +141,54 @@ class MaterializedRegionJob(
         del worker_jobs
 
         worker_results: dict[str, list[SourceFileResult]] = {}
+        if branch_name == "main":
+            # Overwrite backfill: an operational update publishing to main conflicts
+            # with any open session whose chunk writes touch an array the update
+            # resized (icechunk ChunksUpdatedInUpdatedArray, which no solver
+            # auto-resolves), so commit per job to keep sessions short and
+            # reprocess only the conflicted job.
+            for job in jobs:
+                results = _retry_reprocessing_on_conflict(
+                    lambda job=job: cls._process_and_commit(
+                        [job], store_factory, branch_name, worker_index
+                    )
+                )
+                _merge_results(worker_results, results)
+        else:
+            results = cls._process_and_commit(
+                jobs, store_factory, branch_name, worker_index
+            )
+            _merge_results(worker_results, results)
+        return worker_results
+
+    @classmethod
+    def _process_and_commit(
+        cls,
+        jobs: Sequence[MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        worker_index: int,
+    ) -> dict[str, Sequence[SOURCE_FILE_COORD]]:
+        primary_store = store_factory.primary_store(writable=True, branch=branch_name)
+        replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
+        results: dict[str, Sequence[SOURCE_FILE_COORD]] = {}
         for job in jobs:
             template_utils.write_metadata(job.template_ds, job.tmp_store)
-            results = job.process(
-                primary_store=primary_store, replica_stores=replica_stores
+            results.update(
+                job.process(primary_store=primary_store, replica_stores=replica_stores)
             )
-            for var_name, coords in results.items():
-                worker_results.setdefault(var_name, []).extend(
-                    SourceFileResult(
-                        status=c.status,
-                        out_loc={**c.out_loc()},
-                        url=c.get_url(),
-                    )
-                    for c in coords
-                )
-
         now = pd.Timestamp.now(tz="UTC")
         storage.commit_if_icechunk(
             f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
             primary_store,
             replica_stores,
-            # Materialized workers write to main only during overwrite backfills;
-            # icechunk rebases their chunk-only commits over concurrent operational
-            # updates, and on a genuine chunk conflict the update wins.
             rebase_with=(
-                icechunk.BasicConflictSolver(
-                    on_chunk_conflict=icechunk.VersionSelection.UseTheirs
-                )
+                storage.OVERWRITE_BACKFILL_COMMIT_SOLVER
                 if branch_name == "main"
                 else None
             ),
         )
-        return worker_results
+        return results
 
     def process(
         self,

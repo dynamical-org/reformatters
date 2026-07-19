@@ -8,12 +8,15 @@ def retry[T](
     func: Callable[[], T],
     max_attempts: int = 6,
     retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
+    non_retryable_exceptions: tuple[type[Exception], ...] = (),
 ) -> T:
     """Simple retry utility that sleeps for a short time between attempts."""
     last_exception = None
     for attempt in range(max_attempts):
         try:
             return func()
+        except non_retryable_exceptions:
+            raise
         except retryable_exceptions as e:
             last_exception = e
             if attempt < max_attempts - 1:  # sleep unless we're out of attempts

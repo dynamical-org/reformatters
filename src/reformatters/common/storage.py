@@ -45,6 +45,18 @@ class DatasetFormat(StrEnum):
     ICECHUNK = "icechunk"
 
 
+# On a genuine chunk conflict between an overwrite backfill and an operational
+# update, the operational update wins (see docs/parallel_processing.md): a
+# backfill session yields the conflicting chunk to commits already on main,
+# an update session overrides them.
+OVERWRITE_BACKFILL_COMMIT_SOLVER = icechunk.BasicConflictSolver(
+    on_chunk_conflict=icechunk.VersionSelection.UseTheirs
+)
+OPERATIONAL_UPDATE_COMMIT_SOLVER = icechunk.BasicConflictSolver(
+    on_chunk_conflict=icechunk.VersionSelection.UseOurs
+)
+
+
 class StorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
@@ -510,17 +522,21 @@ def commit_if_icechunk(
             max_concurrent_nodes=_COMMIT_MAX_CONCURRENT_NODES,
         )
 
+    # A RebaseFailedError is a genuine conflict that every retry on the same
+    # session would rehit; commit() already retries clean rebases internally.
     for store in replica_stores:
         if isinstance(store, IcechunkStore):
             retry(
                 functools.partial(_commit, store),
                 max_attempts=10,
+                non_retryable_exceptions=(icechunk.RebaseFailedError,),
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_commit, primary_store),
             max_attempts=10,
+            non_retryable_exceptions=(icechunk.RebaseFailedError,),
         )
 
 
