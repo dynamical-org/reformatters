@@ -9,6 +9,25 @@ def grib_decimal_scale_factors(path: Path) -> list[int]:
     an integer reference value R, which together guarantee its values are exact
     multiples of 10^-D.
     """
+    # A GRIB2 file is a sequence of messages. Byte layout behind the offsets below
+    # (0-based from the message or section start; multi-byte integers big-endian):
+    #
+    #   Section 0 (indicator, fixed 16 bytes):
+    #     [0:4]    b"GRIB"
+    #     [8:16]   total message length
+    #   Sections 1-7 (sections 4-7 repeat per field within a message):
+    #     [0:4]    section length
+    #     [4]      section number
+    #   Section 5 (data representation), following that 5-byte section header:
+    #     [5:9]    number of data points
+    #     [9:11]   data representation template number
+    #     [11:15]  reference value R (IEEE float32)
+    #     [15:17]  binary scale factor E (sign-and-magnitude int16)
+    #     [17:19]  decimal scale factor D (sign-and-magnitude int16)
+    #   End section: the literal bytes b"7777" terminate each message.
+    #
+    # R/E/D sit at the same octets in all common templates (5.0 simple, 5.2/5.3
+    # complex, 5.40 JPEG2000, 5.41 PNG), so no branching on template is needed.
     data = path.read_bytes()
     scale_factors: list[int] = []
     pos = 0
