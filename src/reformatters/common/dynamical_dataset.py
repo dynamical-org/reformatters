@@ -29,6 +29,7 @@ from reformatters.common.kubernetes import (
     ReformatCronJob,
     ValidationCronJob,
     get_deployed_cronjob_image,
+    set_cronjob_suspend,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -194,20 +195,54 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def backfill_kubernetes(
         self,
-        append_dim_end: datetime,
-        jobs_per_pod: int,
-        max_parallelism: int,
+        append_dim_end: datetime | None = None,
+        jobs_per_pod: int = 1,
+        max_parallelism: int = 100,
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
         docker_image: str | None = None,
-        overwrite_existing: bool = False,
+        overwrite_chunks: bool = False,
+        overwrite_metadata: bool = False,
+        suspend_operational_cronjobs: bool = True,
     ) -> None:
-        """Run dataset reformatting using Kubernetes index jobs."""
+        """Run dataset reformatting using Kubernetes index jobs.
+
+        Without overwrite flags this creates a new store and fails if one already
+        exists. --overwrite-chunks rewrites chunk data in an existing store (use the
+        filter options to scope it); --overwrite-metadata refreshes metadata from the
+        checked-in template, including creating newly added variables, without
+        launching workers. Combine both to backfill a new variable's data or, with an
+        explicit --append-dim-end past the store's current end, to extend the store.
+        Trimming an existing store is never supported.
+
+        --append-dim-end defaults to now for a new store and to the store's current
+        end for an existing store (leaving its extent unchanged).
+        """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
         )
+
+        overwrite = overwrite_chunks or overwrite_metadata
+        existing_ds = self._open_existing_store()
+        template_ds, resolved_end = self._resolve_backfill_template(
+            existing_ds,
+            append_dim_end,
+            overwrite_chunks=overwrite_chunks,
+            overwrite_metadata=overwrite_metadata,
+        )
+
+        if overwrite_metadata and not overwrite_chunks:
+            template_utils.refresh_store_metadata(
+                self.store_factory,
+                template_ds,
+                self.template_config.append_dim,
+                self._tmp_store(),
+                consolidated=self.region_job_class.consolidated_metadata,
+            )
+            log.info("Metadata refresh complete, no chunk data written.")
+            return
 
         # In an attempt to keep the subclassing API simpler, we are keeping
         # all resource needs defined right in `operational_kubernetes_resources`.
@@ -226,13 +261,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         image_tag = docker_image or get_deployed_cronjob_image(reformat_job.name)
         log.info(f"Using image {image_tag}")
 
-        template_ds = self._get_template(append_dim_end)
-
-        if overwrite_existing:
+        if overwrite:
             assert self.store_factory.all_stores_exist(), (
-                "Not all stores exist, cannot run with overwrite_existing=True"
+                "Not all stores exist, cannot run an overwrite backfill"
             )
-            log.info("Writing to existing stores, skipping metadata write.")
+            log.info("Writing into existing stores.")
         elif not self.store_factory.all_stores_icechunk():
             # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
@@ -261,7 +294,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         command = [
             "backfill",
-            pd.Timestamp(append_dim_end).isoformat(),
+            resolved_end.isoformat(),
         ]
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
@@ -276,6 +309,26 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             command.extend(
                 f"--filter-variable-names={variable_name}"
                 for variable_name in filter_variable_names
+            )
+        if overwrite_chunks:
+            command.append("--overwrite-chunks")
+        if overwrite_metadata:
+            command.append("--overwrite-metadata")
+
+        if overwrite and suspend_operational_cronjobs:
+            # An operational update that commits to an icechunk main while the
+            # backfill runs would make the backfill's finalize branch reset fail
+            # (see docs/parallel_processing.md), so pause updates for the duration.
+            for resource in self.operational_kubernetes_resources("placeholder"):
+                if isinstance(resource, ReformatCronJob | ValidationCronJob):
+                    set_cronjob_suspend(resource.name, True)
+                    log.info(f"Suspended cronjob {resource.name}")
+            log.warning(
+                "Operational update and validation cronjobs are suspended. After the "
+                "backfill job completes, resume them with the 'Manual: Suspend/Resume "
+                "Dataset CronJobs' GitHub action or "
+                '`kubectl patch cronjob <name> -p \'{"spec":{"suspend":false}}\'`. '
+                "A deploy to main also resumes them."
             )
 
         kubernetes_job = Job(
@@ -346,6 +399,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
+        overwrite_chunks: bool = False,
+        overwrite_metadata: bool = False,
     ) -> None:
         """Orchestrate running RegionJob instances."""
         template_ds = self._get_template(append_dim_end)
@@ -373,6 +428,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             template_ds=template_ds,
             tmp_store=tmp_store,
             update_template_with_results=False,
+            overwrite_chunks=overwrite_chunks,
+            overwrite_metadata=overwrite_metadata,
         )
 
     def _process_region_jobs(
@@ -385,6 +442,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         tmp_store: Path,
         *,
         update_template_with_results: bool,
+        overwrite_chunks: bool = False,
+        overwrite_metadata: bool = False,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
@@ -411,11 +470,28 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
-        # 0. Guard: an operational update must not change the structure of the
-        # already-published store. Worker 0 checks before any writes; failing here
-        # leaves the live archive untouched.
+        # 0. Guards run on worker 0 before any writes; failing here leaves the live
+        # archive untouched. An operational update must not change the structure of
+        # the already-published store; an overwrite backfill must not corrupt it
+        # (structural drift, trimming, or unrequested new arrays / expansion).
+        overwrite = overwrite_chunks or overwrite_metadata
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
+        if is_first and overwrite:
+            template_utils.assert_safe_overwrite(
+                template_ds,
+                self._open_primary_datatree(),
+                self.template_config.append_dim,
+                allow_new_arrays=overwrite_metadata,
+                allow_expansion=overwrite_chunks and overwrite_metadata,
+            )
+
+        # Overwrite backfills write template metadata into a store that has live,
+        # job-written coordinate values (e.g. ingested_forecast_length); never
+        # overwrite those with the template's nulls.
+        exclude_coord_value_chunks = (
+            template_utils.store_written_coords(template_ds) if overwrite else set()
+        )
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -428,6 +504,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
+            exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -473,6 +550,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
                 consolidated=self.region_job_class.consolidated_metadata,
+                publish_zarr3_metadata=update_template_with_results or overwrite,
+                exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
 
     def _run_virtual_operational_update(
@@ -633,15 +712,76 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
-    def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
-        existing_ds = xr.open_datatree(
+    def _open_primary_datatree(self) -> xr.DataTree:
+        return xr.open_datatree(
             self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
             engine="zarr",
             decode_timedelta=True,
             chunks=None,
         )
+
+    def _open_existing_store(self) -> xr.DataTree | None:
+        """The primary store's current contents, or None if no dataset exists there yet."""
+        try:
+            return self._open_primary_datatree()
+        except Exception:  # noqa: BLE001  store-missing error type varies by store format
+            return None
+
+    def _resolve_backfill_template(
+        self,
+        existing_ds: xr.DataTree | None,
+        append_dim_end: datetime | None,
+        *,
+        overwrite_chunks: bool,
+        overwrite_metadata: bool,
+    ) -> tuple[xr.DataTree, pd.Timestamp]:
+        """Resolve a backfill's template and append_dim_end and validate it is safe
+        to write. The end defaults to now for a new store and to the store's current
+        end for an existing store. A store is only created when no overwrite flag is
+        passed, only written into with one, never trimmed, and only extended by an
+        explicit append_dim_end with both overwrite flags."""
+        overwrite = overwrite_chunks or overwrite_metadata
+        append_dim = self.template_config.append_dim
+
+        if existing_ds is None:
+            assert not overwrite, (
+                f"No existing store found for {self.dataset_id}. Remove "
+                "--overwrite-chunks/--overwrite-metadata to create a new store."
+            )
+            resolved_end = (
+                pd.Timestamp(append_dim_end)
+                if append_dim_end is not None
+                else pd.Timestamp.now(tz="UTC").tz_localize(None)
+            )
+            return self._get_template(resolved_end), resolved_end
+
+        assert overwrite, (
+            f"A store already exists for {self.dataset_id}. Pass --overwrite-chunks "
+            "to rewrite chunk data and/or --overwrite-metadata to update metadata "
+            "from the template. Creating a store from scratch requires deleting the "
+            "existing store first."
+        )
+        if append_dim_end is not None:
+            resolved_end = pd.Timestamp(append_dim_end)
+        else:
+            resolved_end = self.template_config.append_dim_frequency + max(
+                pd.Timestamp(node[append_dim].max().item())
+                for node in existing_ds.subtree
+                if append_dim in node.dims
+            )
+        template_ds = self._get_template(resolved_end)
+        template_utils.assert_safe_overwrite(
+            template_ds,
+            existing_ds,
+            append_dim,
+            allow_new_arrays=overwrite_metadata,
+            allow_expansion=overwrite_chunks and overwrite_metadata,
+        )
+        return template_ds, resolved_end
+
+    def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
         template_utils.assert_no_structural_drift_from_existing_store(
-            template_ds, existing_ds, self.template_config.append_dim
+            template_ds, self._open_primary_datatree(), self.template_config.append_dim
         )
 
     def _can_run_in_kubernetes(self) -> bool:

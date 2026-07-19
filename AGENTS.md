@@ -4,7 +4,7 @@ This project contains code to reformat weather data into the Zarr v3 / Icechunk 
 
 Datasets are created in 3 phases:
 1. A template of the dataset, in the form of zarr metadata that is checked into the repo, is created with `uv run main <dataset_id> update-template`. This template (not in-code config) is loaded by steps 2 and 3 and drives processing and output in those steps. This approach of checking in the metadata allow us to review diffs if the structure or metadata of the dataset changes.
-2. A zarr backfill is run. The backfill uses kubernetes indexed jobs to run work in parallel. When the user runs a `uv run main <dataset-id> backfill-kubernetes ...` command the metadata for the zarr is first written by the local process to the final zarr store, then a kubernetes index job is kicked off with each job index responsible for writing a portion of the zarr chunk data into the zarr archive.
+2. A zarr backfill is run. The backfill uses kubernetes indexed jobs to run work in parallel. A `uv run main <dataset-id> backfill-kubernetes ...` command (or the "Manual: Backfill" GitHub action) validates the request against the existing store, then kicks off a kubernetes indexed job with each job index responsible for writing a portion of the zarr chunk data into the zarr archive. With no flags it creates a new store (ending at "now" by default); `--overwrite-chunks` / `--overwrite-metadata` write into an existing store with guards that never trim it and only extend it on an explicit `--append-dim-end`.
 3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk backfills and materialized updates use a temporary branch that is atomically merged to main; virtual updates commit directly to main.
 
 ## Repository structure
@@ -122,6 +122,13 @@ Run via `uv run main`.
 - `uv run main --help` - Show all commands and registered datasets
 - `uv run main initialize-new-integration <provider> <model> <variant>` - Scaffold new dataset
 - `uv run main <dataset-id> update-template` - Regenerate `templates/latest.zarr`. Run this after any change to a `TemplateConfig` subclass's metadata.
+
+### Backfills
+- `uv run main <dataset-id> backfill-kubernetes` - Create a new store and backfill it (fails if the store exists; `--append-dim-end` defaults to now).
+- `uv run main <dataset-id> backfill-kubernetes --overwrite-chunks [--filter-...]` - Rewrite chunk data in an existing store.
+- `uv run main <dataset-id> backfill-kubernetes --overwrite-metadata` - Refresh metadata from the template (creates newly added variables; never trims). Add `--overwrite-chunks --filter-variable-names <name>` to also backfill a new variable's data.
+- Overwrite backfills suspend the dataset's update/validate cronjobs so an update can't collide with the backfill's final icechunk branch publish; resume them when the job finishes ("Manual: Suspend/Resume Dataset CronJobs" GitHub action).
+- Prefer the "Manual: Backfill" GitHub action (workflow_dispatch) which runs these commands with the deployed image and only exposes the safe operations.
 
 ## Parallelization model
 

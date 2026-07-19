@@ -306,6 +306,15 @@ def _load_secret_from_kubernetes_api(
     return contents
 
 
+def set_cronjob_suspend(cronjob_name: str, suspend: bool) -> None:
+    """Suspend or resume a deployed CronJob."""
+    config.load_kube_config()
+    batch_v1 = client.BatchV1Api()
+    batch_v1.patch_namespaced_cron_job(
+        cronjob_name, "default", {"spec": {"suspend": suspend}}
+    )
+
+
 def get_deployed_cronjob_image(cronjob_name: str) -> str:
     """Read the container image of a deployed CronJob from the cluster."""
     config.load_kube_config()

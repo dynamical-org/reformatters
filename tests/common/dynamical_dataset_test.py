@@ -14,8 +14,6 @@ import pytest
 import sentry_sdk
 import sentry_sdk.crons
 import xarray as xr
-import zarr
-import zarr.errors
 from pydantic import ValidationError, computed_field
 
 from reformatters.common import dynamical_dataset, storage, template_utils, validation
@@ -705,123 +703,155 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
         pass
 
 
-def test_backfill_kubernetes_overwrite_existing_flag(
+def _existing_store_tree(n_time: int = 3) -> xr.DataTree:
+    var = xr.DataArray(
+        np.zeros(n_time, dtype=np.float32),
+        dims=("time",),
+        coords={"time": pd.date_range("2000-01-01", periods=n_time, freq="D")},
+    )
+    var.encoding = {"dtype": "float32", "chunks": (1,), "shards": (1,)}
+    return xr.DataTree.from_dict({"/": xr.Dataset({"var": var})})
+
+
+def _template_tree_for_end(end: pd.Timestamp) -> xr.DataTree:
+    times = pd.date_range("2000-01-01", end, freq="D", inclusive="left")
+    var = xr.DataArray(
+        np.zeros(len(times), dtype=np.float32), dims=("time",), coords={"time": times}
+    )
+    var.encoding = {"dtype": "float32", "chunks": (1,), "shards": (1,)}
+    return xr.DataTree.from_dict({"/": xr.Dataset({"var": var})})
+
+
+@pytest.fixture
+def kubernetes_backfill_dataset(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
+) -> ExampleDataset:
+    # Generally monkeypatching _can_run_in_kubernetes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
         DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
     )
-
-    dataset = ExampleDataset(
-        template_config=ExampleConfig(),
-        region_job_class=ExampleRegionJob,
-        primary_storage_config=ExampleDatasetStorageConfig(
-            base_path="s3://bucket/data",
-            format=DatasetFormat.ZARR3,
-        ),
-        replica_storage_configs=[
-            ExampleDatasetStorageConfig(
-                base_path="s3://bucket/data",
-                format=DatasetFormat.ICECHUNK,
-            ),
-        ],
-    )
-    # Open stores as writable so that they are created
-    # (this is only necessary for icechunk stores)
-    dataset.store_factory.primary_store(writable=True)
-    dataset.store_factory.replica_stores(writable=True)
-
-    monkeypatch.setattr(xr, "open_zarr", Mock())
-
     monkeypatch.setattr(
         dynamical_dataset,
         "get_deployed_cronjob_image",
         Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", Mock())
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
-        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+        lambda self, end: _template_tree_for_end(pd.Timestamp(end)),
     )
     monkeypatch.setattr(
         ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
     )
-    monkeypatch.setattr(
-        ExampleDataset,
-        "backfill",
-        Mock(),
-    )
-    mock_write_metadata = Mock()
-    monkeypatch.setattr(template_utils, "write_metadata", mock_write_metadata)
-
-    dataset.backfill_kubernetes(
-        append_dim_end=pd.Timestamp("2000-01-02"),
-        jobs_per_pod=1,
-        max_parallelism=1,
-        overwrite_existing=True,
-    )
-    mock_write_metadata.assert_not_called()
-    mock_write_metadata.reset_mock()
-
-    dataset.backfill_kubernetes(
-        append_dim_end=pd.Timestamp("2000-01-02"),
-        jobs_per_pod=1,
-        max_parallelism=1,
-        overwrite_existing=False,
-    )
-    mock_write_metadata.assert_called_once()
-
-
-def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exist(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
-    )
-    monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
-    )
-    monkeypatch.setattr(
-        ExampleConfig,
-        "get_template",
-        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
-    )
-
-    monkeypatch.setattr(
-        dynamical_dataset,
-        "get_deployed_cronjob_image",
-        Mock(return_value="test-image-tag"),
-    )
-    monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
-        primary_storage_config=ExampleDatasetStorageConfig(
-            base_path="s3://bucket/data",
-            format=DatasetFormat.ZARR3,
-        ),
     )
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "all_stores_exist", lambda: True)
+    monkeypatch.setattr(store_factory, "k8s_secret_names", lambda: [_NO_SECRET_NAME])
+    return dataset
 
-    with pytest.raises(
-        AssertionError,
-        match="Not all stores exist, cannot run with overwrite_existing=True",
-    ):
-        dataset.backfill_kubernetes(
+
+def test_backfill_kubernetes_rejects_create_over_existing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree()
+    )
+    with pytest.raises(AssertionError, match="store already exists"):
+        kubernetes_backfill_dataset.backfill_kubernetes()
+
+
+def test_backfill_kubernetes_rejects_overwrite_of_missing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(ExampleDataset, "_open_existing_store", lambda self: None)
+    with pytest.raises(AssertionError, match="No existing store found"):
+        kubernetes_backfill_dataset.backfill_kubernetes(overwrite_chunks=True)
+
+
+def test_backfill_kubernetes_never_trims_existing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    with pytest.raises(ValueError, match="trimming an existing store is never"):
+        kubernetes_backfill_dataset.backfill_kubernetes(
             append_dim_end=pd.Timestamp("2000-01-02"),
-            jobs_per_pod=1,
-            max_parallelism=1,
-            overwrite_existing=True,
+            overwrite_chunks=True,
+            overwrite_metadata=True,
         )
 
 
+def test_backfill_kubernetes_extension_requires_both_overwrite_flags(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    with pytest.raises(ValueError, match="extending requires"):
+        kubernetes_backfill_dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-10"), overwrite_chunks=True
+        )
+
+
+def test_backfill_kubernetes_overwrite_defaults_to_existing_store_end(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    mock_suspend = Mock()
+    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", mock_suspend)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(
+        overwrite_chunks=True, filter_variable_names=["var"]
+    )
+
+    input_str = mock_run.call_args.kwargs["input"]
+    # Store has 2000-01-01..2000-01-03 daily, so the resolved exclusive end is 2000-01-04.
+    assert '"backfill", "2000-01-04T00:00:00"' in input_str
+    assert "--overwrite-chunks" in input_str
+    assert "--overwrite-metadata" not in input_str
+    # The update and validate cronjobs are suspended for the duration of the backfill.
+    assert {call.args for call in mock_suspend.call_args_list} == {
+        ("example-dataset-update", True),
+        ("example-dataset-validate", True),
+    }
+
+
+def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    mock_suspend = Mock()
+    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", mock_suspend)
+    mock_refresh = Mock()
+    monkeypatch.setattr(template_utils, "refresh_store_metadata", mock_refresh)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(overwrite_metadata=True)
+
+    mock_refresh.assert_called_once()
+    mock_run.assert_not_called()
+    mock_suspend.assert_not_called()
+
+
 @pytest.mark.parametrize("env", [Env.dev, Env.test])
-def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
+def test_backfill_kubernetes_fails_in_wrong_environment(
     monkeypatch: pytest.MonkeyPatch,
     env: Env,
 ) -> None:
@@ -836,9 +866,7 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
     ):
         dataset.backfill_kubernetes(
             append_dim_end=pd.Timestamp("2000-01-02"),
-            jobs_per_pod=1,
-            max_parallelism=1,
-            overwrite_existing=True,
+            overwrite_chunks=True,
         )
 
 

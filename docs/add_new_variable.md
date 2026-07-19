@@ -21,34 +21,24 @@ uv run main <DATASET_ID> update-template
 
 1e. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
 
-## 2. Write data for the new variable
+## 2. Backfill data for the new variable
 
-#### 2a. Run an operational update
+After the PR is merged and deployed (deploys run automatically on merge to main), run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access):
 
-After the PR is merged, run an operational update once (or wait for the next scheduled run) so the dataset’s Zarr metadata includes the new variable before you backfill history.
+- **operation** = `overwrite-chunks-and-metadata` — refreshes the store's metadata from the template (creating the new variable) and writes its chunk data. The guards never trim the store, and its extent is unchanged unless you explicitly set an append_dim_end past the current end.
+- **filter_variable_names** = your new variable's name.
+- **jobs_per_pod** = 1 or 2 in most cases. Set to 3-4 if the jobs run very fast to amortize container startup time.
+- **max_parallelism** = 100 if the data source can support highly parallel reads, else lower.
 
-To run it immediately, use the GitHub Action [Manual: Create Job from CronJob](https://github.com/dynamical-org/reformatters/actions/workflows/manual-create-job-from-cronjob.yml) (requires reformatters repo write access) setting "CronJob to create job from" to `{dataset-id}-update`.
-
-#### 2b. Backfill history for the variable
-
-> Prerequisite: You can build and push Docker images (see `README.md` > Deploying to the cloud > Setup).
-> - `DOCKER_REPOSITORY` is set in your shell.
-> - Your local Docker is authenticated to that repo.
-
-Run a backfill filtered to just the new variable:
+Or the equivalent CLI (requires kubectl access to the cluster):
 
 ```bash
 DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
-  <APPEND_DIM_END> <JOBS_PER_POD> <MAX_PARALLELISM> \
-  --overwrite-existing \
+  --overwrite-chunks --overwrite-metadata \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-- `APPEND_DIM_END` = the current approximate UTC timestamp. The operational update in 2a will have already filled the latest data, so the exact value just needs to be somewhere around the present time.
-- `JOBS_PER_POD` = 1 or 2 in most cases. Set to 3-4 if the jobs run very fast to amortize container startup time.
-- `MAX_PARALLELISM` = 100 if the data source can support highly parallel reads, else lower.
-- `--overwrite-existing` writes into the existing store rather than attempting (and failing) to create a new one.
-- `--filter-variable-names` = your new variable's name.
+Starting the backfill suspends the dataset's update and validate cronjobs so an operational update can't collide with the backfill's final publish. When the backfill job completes, resume them with the GitHub Action [Manual: Suspend/Resume Dataset CronJobs](https://github.com/dynamical-org/reformatters/actions/workflows/manual-suspend-resume-cronjobs.yml) (action = `resume`). The first update after resuming fills any data that arrived while the backfill ran.
 
 ## 3. Validate
 
