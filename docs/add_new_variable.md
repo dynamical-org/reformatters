@@ -38,7 +38,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-Starting the backfill suspends the dataset's update and validate cronjobs so an operational update can't collide with the backfill's final publish. When the backfill job completes, resume them with the GitHub Action [Manual: Suspend/Resume Dataset CronJobs](https://github.com/dynamical-org/reformatters/actions/workflows/manual-suspend-resume-cronjobs.yml) (action = `resume`). The first update after resuming fills any data that arrived while the backfill ran.
+The backfill runs safely alongside the dataset's operational updates: the new variable appears in the store immediately (all-NaN) and fills in progressively as workers write, while updates keep filling its newest steps (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
 
 ## 3. Validate
 

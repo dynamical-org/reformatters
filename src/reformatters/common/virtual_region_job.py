@@ -321,6 +321,15 @@ class VirtualRegionJob(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+                # An overwrite backfill commits to main alongside operational
+                # updates; on a genuine chunk conflict the update wins.
+                rebase_with=(
+                    icechunk.BasicConflictSolver(
+                        on_chunk_conflict=icechunk.VersionSelection.UseTheirs
+                    )
+                    if branch == "main" and self.processing_mode == "backfill"
+                    else None
+                ),
             )
             log.info(
                 f"Committed {len(refs)} refs "

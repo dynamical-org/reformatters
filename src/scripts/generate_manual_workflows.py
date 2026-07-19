@@ -11,11 +11,7 @@ from typing import Any
 import yaml
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common.kubernetes import (
-    CronJob,
-    ReformatCronJob,
-    ValidationCronJob,
-)
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -57,10 +53,10 @@ def get_all_cronjob_names() -> list[str]:
     return sorted(cronjob_names)
 
 
-def get_operational_cronjobs_by_dataset() -> dict[str, list[str]]:
-    """Map each dataset_id to its update/validate CronJob names, for datasets that
-    have an update CronJob (the ones backfill-kubernetes can run for)."""
-    mapping: dict[str, list[str]] = {}
+def get_backfill_dataset_ids() -> list[str]:
+    """Dataset ids backfill-kubernetes can run for: those with an update CronJob
+    (it provides the worker resource shapes and deployed image)."""
+    dataset_ids = []
     for dataset in DYNAMICAL_DATASETS:
         try:
             resources = dataset.operational_kubernetes_resources(
@@ -68,14 +64,9 @@ def get_operational_cronjobs_by_dataset() -> dict[str, list[str]]:
             )
         except NotImplementedError:
             continue
-        names = [
-            resource.name
-            for resource in resources
-            if isinstance(resource, ReformatCronJob | ValidationCronJob)
-        ]
         if any(isinstance(r, ReformatCronJob) for r in resources):
-            mapping[dataset.dataset_id] = sorted(names)
-    return dict(sorted(mapping.items()))
+            dataset_ids.append(dataset.dataset_id)
+    return sorted(dataset_ids)
 
 
 def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
@@ -352,114 +343,12 @@ uv run main "${DATASET_ID}" backfill-kubernetes "${ARGS[@]}"
   echo ""
   echo "**Operation:** \`${OPERATION}\`"
   echo ""
-  if [ "${OPERATION}" != "create-new-store" ] && [ "${OPERATION}" != "overwrite-metadata" ]; then
-    echo "> Update and validation cronjobs were suspended so the backfill can finalize safely."
-    echo "> After the backfill job completes, resume them with [Manual: Suspend/Resume Dataset CronJobs](https://github.com/${{ github.repository }}/actions/workflows/manual-suspend-resume-cronjobs.yml)."
-    echo "> Note: a deploy to main also resumes them."
-    echo ""
-  fi
   echo "### Monitoring"
   echo ""
   echo "- [Manual: Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
   echo "- [Manual: Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
   echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)"
 } >> $GITHUB_STEP_SUMMARY
-"""
-                        ),
-                    },
-                ],
-            }
-        },
-    }
-
-
-def generate_suspend_resume_workflow(
-    cronjobs_by_dataset: dict[str, list[str]],
-) -> dict[str, Any]:
-    """Generate the workflow that suspends or resumes a dataset's operational cronjobs
-    (e.g. to resume updates after a backfill that suspended them)."""
-    case_lines = "\n".join(
-        f'  {dataset_id}) CRONJOBS="{" ".join(cronjob_names)}" ;;'
-        for dataset_id, cronjob_names in cronjobs_by_dataset.items()
-    )
-    return {
-        "name": "Manual: Suspend/Resume Dataset CronJobs",
-        "on": {
-            "workflow_dispatch": {
-                "inputs": {
-                    "dataset_id": {
-                        "description": "Dataset whose update/validate cronjobs to suspend or resume",
-                        "required": True,
-                        "type": "choice",
-                        "options": list(cronjobs_by_dataset),
-                    },
-                    "action": {
-                        "description": "suspend or resume",
-                        "required": True,
-                        "type": "choice",
-                        "options": ["suspend", "resume"],
-                    },
-                }
-            }
-        },
-        "concurrency": {
-            "group": "k8s-manual-${{ github.actor }}-${{ github.run_id }}",
-            "cancel-in-progress": False,
-        },
-        "permissions": {"id-token": "write", "contents": "read"},
-        "jobs": {
-            "suspend-resume": {
-                "name": "Suspend/Resume CronJobs",
-                "runs-on": "ubuntu-24.04",
-                "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
-                "steps": [
-                    {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
-                        "with": {"sparse-checkout": "."},
-                    },
-                    {
-                        "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
-                        "with": {
-                            "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
-                            "aws-region": "${{ secrets.AWS_REGION }}",
-                        },
-                    },
-                    {
-                        "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
-                        "with": {"version": "latest"},
-                    },
-                    {
-                        "name": "Update kubeconfig",
-                        "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
-                    },
-                    {
-                        "name": "Patch cronjobs (SEE LOGS)",
-                        "run": LiteralString(
-                            f"""#!/bin/bash
-set -euo pipefail
-
-DATASET_ID="${{{{ github.event.inputs.dataset_id }}}}"
-ACTION="${{{{ github.event.inputs.action }}}}"
-
-if [ "${{ACTION}}" = "suspend" ]; then
-  SUSPEND=true
-else
-  SUSPEND=false
-fi
-
-case "${{DATASET_ID}}" in
-{case_lines}
-  *) echo "Unknown dataset ${{DATASET_ID}}"; exit 1 ;;
-esac
-
-for CRONJOB in ${{CRONJOBS}}; do
-  echo "Setting suspend=${{SUSPEND}} on ${{CRONJOB}}"
-  kubectl patch cronjob "${{CRONJOB}}" -p "{{\\"spec\\":{{\\"suspend\\":${{SUSPEND}}}}}}"
-done
-
-kubectl get cronjobs
 """
                         ),
                     },
@@ -656,8 +545,6 @@ def main() -> None:
     for name in cronjob_names:
         log.info(f"  - {name}")
 
-    cronjobs_by_dataset = get_operational_cronjobs_by_dataset()
-
     # Generate workflow files
     workflows = [
         (
@@ -665,12 +552,8 @@ def main() -> None:
             "manual-create-job-from-cronjob.yml",
         ),
         (
-            generate_backfill_workflow(list(cronjobs_by_dataset)),
+            generate_backfill_workflow(get_backfill_dataset_ids()),
             "manual-backfill.yml",
-        ),
-        (
-            generate_suspend_resume_workflow(cronjobs_by_dataset),
-            "manual-suspend-resume-cronjobs.yml",
         ),
         (generate_get_jobs_workflow(), "manual-get-jobs.yml"),
         (generate_get_pods_workflow(), "manual-get-pods.yml"),

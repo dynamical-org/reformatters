@@ -478,11 +478,13 @@ def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
+    rebase_with: icechunk.ConflictSolver | None = None,
 ) -> None:
     """Conveience function to handle committing to icechunk stores.
 
     By separating out the primary store from the replica stores, we are able
     to ensure that the replicas are updated before the primary.
+    Sessions with no uncommitted changes are skipped (icechunk rejects empty commits).
 
     Concurrency handling:
 
@@ -493,14 +495,18 @@ def commit_if_icechunk(
     https://icechunk.io/en/latest/parallel/#cooperative-distributed-writes.
 
 
-    Each job however may need to rebase before it is able to commit. We use the rebase_with
-    argument which will handle automatic retries until the commit succeeds.
+    Each job however may need to rebase before it is able to commit. The rebase_with
+    solver (default ConflictDetector: rebase cleanly or raise) handles automatic
+    retries until the commit succeeds.
     """
+    solver = rebase_with if rebase_with is not None else icechunk.ConflictDetector()
 
     def _commit(icechunk_store: IcechunkStore) -> None:
+        if not icechunk_store.session.has_uncommitted_changes:
+            return
         icechunk_store.session.commit(
             message=message,
-            rebase_with=icechunk.ConflictDetector(),
+            rebase_with=solver,
             max_concurrent_nodes=_COMMIT_MAX_CONCURRENT_NODES,
         )
 

@@ -145,12 +145,6 @@ jobs:
           echo ""
           echo "**Operation:** \`${OPERATION}\`"
           echo ""
-          if [ "${OPERATION}" != "create-new-store" ] && [ "${OPERATION}" != "overwrite-metadata" ]; then
-            echo "> Update and validation cronjobs were suspended so the backfill can finalize safely."
-            echo "> After the backfill job completes, resume them with [Manual: Suspend/Resume Dataset CronJobs](https://github.com/${{ github.repository }}/actions/workflows/manual-suspend-resume-cronjobs.yml)."
-            echo "> Note: a deploy to main also resumes them."
-            echo ""
-          fi
           echo "### Monitoring"
           echo ""
           echo "- [Manual: Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"

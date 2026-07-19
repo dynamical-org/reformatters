@@ -737,7 +737,6 @@ def kubernetes_backfill_dataset(
         Mock(return_value="test-image-tag"),
     )
     monkeypatch.setattr(subprocess, "run", Mock())
-    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", Mock())
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
@@ -811,8 +810,6 @@ def test_backfill_kubernetes_overwrite_defaults_to_existing_store_end(
     )
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
-    mock_suspend = Mock()
-    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", mock_suspend)
 
     kubernetes_backfill_dataset.backfill_kubernetes(
         overwrite_chunks=True, filter_variable_names=["var"]
@@ -823,11 +820,6 @@ def test_backfill_kubernetes_overwrite_defaults_to_existing_store_end(
     assert '"backfill", "2000-01-04T00:00:00"' in input_str
     assert "--overwrite-chunks" in input_str
     assert "--overwrite-metadata" not in input_str
-    # The update and validate cronjobs are suspended for the duration of the backfill.
-    assert {call.args for call in mock_suspend.call_args_list} == {
-        ("example-dataset-update", True),
-        ("example-dataset-validate", True),
-    }
 
 
 def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
@@ -838,8 +830,6 @@ def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
     )
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
-    mock_suspend = Mock()
-    monkeypatch.setattr(dynamical_dataset, "set_cronjob_suspend", mock_suspend)
     mock_refresh = Mock()
     monkeypatch.setattr(template_utils, "refresh_store_metadata", mock_refresh)
 
@@ -847,7 +837,6 @@ def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
 
     mock_refresh.assert_called_once()
     mock_run.assert_not_called()
-    mock_suspend.assert_not_called()
 
 
 @pytest.mark.parametrize("env", [Env.dev, Env.test])

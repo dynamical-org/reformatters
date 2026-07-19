@@ -29,7 +29,6 @@ from reformatters.common.kubernetes import (
     ReformatCronJob,
     ValidationCronJob,
     get_deployed_cronjob_image,
-    set_cronjob_suspend,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
@@ -205,7 +204,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         docker_image: str | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
-        suspend_operational_cronjobs: bool = True,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -219,6 +217,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         --append-dim-end defaults to now for a new store and to the store's current
         end for an existing store (leaving its extent unchanged).
+
+        Overwrite backfills run safely alongside operational updates: workers commit
+        chunk data straight to icechunk main, rebasing over concurrent update
+        commits, and the update wins any genuine conflict
+        (see docs/parallel_processing.md).
         """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
@@ -314,22 +317,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             command.append("--overwrite-chunks")
         if overwrite_metadata:
             command.append("--overwrite-metadata")
-
-        if overwrite and suspend_operational_cronjobs:
-            # An operational update that commits to an icechunk main while the
-            # backfill runs would make the backfill's finalize branch reset fail
-            # (see docs/parallel_processing.md), so pause updates for the duration.
-            for resource in self.operational_kubernetes_resources("placeholder"):
-                if isinstance(resource, ReformatCronJob | ValidationCronJob):
-                    set_cronjob_suspend(resource.name, True)
-                    log.info(f"Suspended cronjob {resource.name}")
-            log.warning(
-                "Operational update and validation cronjobs are suspended. After the "
-                "backfill job completes, resume them with the 'Manual: Suspend/Resume "
-                "Dataset CronJobs' GitHub action or "
-                '`kubectl patch cronjob <name> -p \'{"spec":{"suspend":false}}\'`. '
-                "A deploy to main also resumes them."
-            )
 
         kubernetes_job = Job(
             command=command,
@@ -468,13 +455,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
-        branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
+        # Overwrite backfills commit straight to main: icechunk's native rebase
+        # interleaves their chunk-only worker commits with operational updates,
+        # which a committed temp branch could not (see docs/parallel_processing.md).
+        overwrite = overwrite_chunks or overwrite_metadata
+        branch_name = (
+            f"_job_{reformat_job_name}" if has_icechunk and not overwrite else "main"
+        )
 
         # 0. Guards run on worker 0 before any writes; failing here leaves the live
         # archive untouched. An operational update must not change the structure of
         # the already-published store; an overwrite backfill must not corrupt it
         # (structural drift, trimming, or unrequested new arrays / expansion).
-        overwrite = overwrite_chunks or overwrite_metadata
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
@@ -485,13 +477,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 allow_new_arrays=overwrite_metadata,
                 allow_expansion=overwrite_chunks and overwrite_metadata,
             )
-
-        # Overwrite backfills write template metadata into a store that has live,
-        # job-written coordinate values (e.g. ingested_forecast_length); never
-        # overwrite those with the template's nulls.
-        exclude_coord_value_chunks = (
-            template_utils.store_written_coords(template_ds) if overwrite else set()
-        )
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -504,7 +489,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
-            exclude_coord_value_chunks=exclude_coord_value_chunks,
+            overwrite=overwrite,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -550,8 +535,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
                 consolidated=self.region_job_class.consolidated_metadata,
-                publish_zarr3_metadata=update_template_with_results or overwrite,
-                exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
 
     def _run_virtual_operational_update(
