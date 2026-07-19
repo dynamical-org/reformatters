@@ -8,7 +8,6 @@ import zarr.core.sync
 from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 from zarr.codecs import BloscCodec
-from zarr.core.buffer import Buffer
 
 from reformatters.common.iterating import node_path_prefix
 from reformatters.common.logging import get_logger
@@ -212,15 +211,13 @@ def _store_bytes_equal(store: Store, key: str, data: bytes) -> bool:
     return existing is not None and existing.to_bytes() == data
 
 
-def sync_to_store(store: Store, key: str, data: bytes | Buffer) -> None:
-    buffer = (
-        data
-        if isinstance(data, Buffer)
-        else zarr.buffer.default_buffer_prototype().buffer.from_bytes(data)
-    )
+def sync_to_store(store: Store, key: str, data: bytes) -> None:
     retry(
         lambda: zarr.core.sync.sync(
-            store.set(key, buffer),
+            store.set(
+                key,
+                zarr.buffer.default_buffer_prototype().buffer.from_bytes(data),
+            ),
             timeout=90,  # In seconds. Timeout needs to be long enough to upload a large shard.
         ),
         max_attempts=6,

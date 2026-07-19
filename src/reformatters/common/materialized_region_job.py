@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
 
 import httpx
-import icechunk
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -163,16 +162,6 @@ class MaterializedRegionJob(
             f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
             primary_store,
             replica_stores,
-            # Materialized workers write to main only during overwrite backfills;
-            # icechunk rebases their chunk-only commits over concurrent operational
-            # updates, and on a genuine chunk conflict the update wins.
-            rebase_with=(
-                icechunk.BasicConflictSolver(
-                    on_chunk_conflict=icechunk.VersionSelection.UseTheirs
-                )
-                if branch_name == "main"
-                else None
-            ),
         )
         return worker_results
 

@@ -549,9 +549,12 @@ class TestFinalize:
         # copy_zarr_metadata called once per repo with icechunk_only=True.
         assert stub_io["copy_zarr_metadata"].call_count == 2
         for call in stub_io["copy_zarr_metadata"].call_args_list:
-            assert call.kwargs == {"icechunk_only": True}
+            assert call.kwargs == {
+                "icechunk_only": True,
+                "exclude_coord_value_chunks": (),
+            }
 
-    def test_backfill_raises_when_main_diverged(
+    def test_raises_when_main_diverged(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
         factory = FakeStoreFactory()
@@ -561,7 +564,7 @@ class TestFinalize:
         factory.set_icechunk_repos([("primary", repo)])
         setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
 
-        with pytest.raises(RuntimeError, match="main moved during this backfill"):
+        with pytest.raises(RuntimeError, match="main moved during this job"):
             pc.finalize(
                 factory,  # ty: ignore[invalid-argument-type]
                 all_jobs=[],
@@ -582,45 +585,6 @@ class TestFinalize:
         assert repo.reset_calls == []
         stub_io["copy_zarr_metadata"].assert_not_called()
         assert repo.delete_branch_calls == []
-
-    def test_update_replays_when_main_diverged(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        factory = FakeStoreFactory()
-        repo = FakeRepo(initial_main="snap-moved-by-backfill")
-        repo._branches["temp-branch"] = "snap-temp"
-        repo.ancestry_by_branch["temp-branch"] = ["snap-temp", "snap-original"]
-        factory.set_icechunk_repos([("primary", repo)])
-        setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
-        replay = MagicMock(name="_replay_branch_onto_main")
-        monkeypatch.setattr(pc, "_replay_branch_onto_main", replay)
-
-        job = MagicMock()
-        job.update_template_with_results.return_value = _template()
-        pc.finalize(
-            factory,  # ty: ignore[invalid-argument-type]
-            all_jobs=[job],
-            merged_results={},
-            reformat_job_name="job",
-            branch_name="temp-branch",
-            template_ds=_template(),
-            tmp_store=tmp_path,
-            setup_info=setup_info,
-            workers_total=1,
-            update_template_with_results=True,
-            consolidated=True,
-        )
-
-        replay.assert_called_once()
-        assert replay.call_args.args[:4] == (
-            repo,
-            "primary",
-            "temp-branch",
-            "snap-original",
-        )
-        # No reset (replay published instead), and the temp branch is cleaned up.
-        assert repo.reset_calls == []
-        assert repo.delete_branch_calls == ["temp-branch"]
 
     def test_skips_repo_already_reset_by_previous_attempt(self, tmp_path: Path) -> None:
         factory = FakeStoreFactory()
@@ -655,43 +619,32 @@ class TestFinalize:
         assert repo.reset_calls == []
         assert repo.delete_branch_calls == ["temp-branch"]
 
-    def test_overwrite_setup_writes_metadata_to_main_without_branch(
-        self,
-        tmp_path: Path,
-        stub_io: dict[str, MagicMock],
-        monkeypatch: pytest.MonkeyPatch,
+    def test_overwrite_backfill_publishes_zarr3_metadata(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
         factory = FakeStoreFactory()
-        repo = FakeRepo(initial_main="snap-live")
-        factory.set_icechunk_repos([("primary", repo)])
-        write_to_stores = MagicMock(name="write_template_metadata_to_stores")
-        monkeypatch.setattr(
-            pc.template_utils, "write_template_metadata_to_stores", write_to_stores
-        )
-        ds = _template()
 
-        result = pc.parallel_setup(
+        pc.finalize(
             factory,  # ty: ignore[invalid-argument-type]
-            is_first=True,
-            workers_total=2,
+            all_jobs=[],
+            merged_results={},
             reformat_job_name="job",
             branch_name="main",
-            template_ds=ds,
+            template_ds=_template(),
             tmp_store=tmp_path,
-            icechunk_repos=factory.icechunk_repos(sort="primary-first"),  # ty: ignore[invalid-argument-type]
+            setup_info={},
+            workers_total=1,
+            update_template_with_results=False,
             consolidated=True,
-            overwrite=True,
+            publish_zarr3_metadata=True,
+            exclude_coord_value_chunks={"ingested_forecast_length"},
         )
 
-        # Template metadata goes straight into the live stores; no temp branch,
-        # no snapshot bookkeeping (there is no reset CAS to protect).
-        write_to_stores.assert_called_once()
-        assert write_to_stores.call_args.args[0] is ds
-        assert repo.create_branch_calls == []
-        assert repo.sessions == []
-        assert result == {}
-        assert factory.persist_virtual_config_calls == 1
-        stub_io["commit_if_icechunk"].assert_not_called()
+        assert stub_io["copy_zarr_metadata"].call_count == 1
+        copy_kwargs = stub_io["copy_zarr_metadata"].call_args.kwargs
+        assert copy_kwargs["zarr3_only"] is True
+        assert copy_kwargs["skip_unchanged"] is True
+        assert copy_kwargs["exclude_coord_value_chunks"] == {"ingested_forecast_length"}
 
     def test_zarr3_metadata_copy_only_when_update_template_with_results(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]

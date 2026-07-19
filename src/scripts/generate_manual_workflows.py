@@ -191,8 +191,8 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
     append_dim_end plus both overwrite flags — the CLI enforces all guards).
 
     Runs only from main, waits for main's tip to finish its operational deploy,
-    and submits the kubernetes job with that deploy's image — no one-off docker
-    build, and driver code and worker image are the same commit."""
+    and submits the kubernetes job with that deploy's image so driver code and
+    worker image are the same commit."""
     return {
         "name": "Manual: Backfill",
         "on": {
@@ -239,13 +239,13 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                         "description": "Region jobs per worker pod. Materialized: 1 or 2 in most cases; virtual: 30. For both, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.",
                         "required": False,
                         "type": "string",
-                        "default": "1",
+                        "default": "2",
                     },
                     "max_parallelism": {
                         "description": "Maximum concurrent worker pods. Materialized: 100-300 if the source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.",
                         "required": False,
                         "type": "string",
-                        "default": "100",
+                        "default": "10",
                     },
                 }
             }
@@ -356,22 +356,23 @@ exit 1
                     },
                     {
                         "name": "Start backfill (SEE LOGS)",
+                        # Inputs are passed via env, never interpolated into the
+                        # script, so free-form input text cannot inject shell.
                         "env": {
                             "DYNAMICAL_ENV": "prod",
                             "DOCKER_IMAGE": "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}",
+                            "DATASET_ID": "${{ github.event.inputs.dataset_id }}",
+                            "OPERATION": "${{ github.event.inputs.operation }}",
+                            "APPEND_DIM_END": "${{ github.event.inputs.append_dim_end }}",
+                            "FILTER_START": "${{ github.event.inputs.filter_start }}",
+                            "FILTER_END": "${{ github.event.inputs.filter_end }}",
+                            "FILTER_VARIABLE_NAMES": "${{ github.event.inputs.filter_variable_names }}",
+                            "JOBS_PER_POD": "${{ github.event.inputs.jobs_per_pod }}",
+                            "MAX_PARALLELISM": "${{ github.event.inputs.max_parallelism }}",
                         },
                         "run": LiteralString(
                             r"""#!/bin/bash
 set -euo pipefail
-
-DATASET_ID="${{ github.event.inputs.dataset_id }}"
-OPERATION="${{ github.event.inputs.operation }}"
-APPEND_DIM_END="${{ github.event.inputs.append_dim_end }}"
-FILTER_START="${{ github.event.inputs.filter_start }}"
-FILTER_END="${{ github.event.inputs.filter_end }}"
-FILTER_VARIABLE_NAMES="${{ github.event.inputs.filter_variable_names }}"
-JOBS_PER_POD="${{ github.event.inputs.jobs_per_pod }}"
-MAX_PARALLELISM="${{ github.event.inputs.max_parallelism }}"
 
 # The image this exact commit's deploy built (waited for above), so the
 # workers run the same code the driver just validated with.

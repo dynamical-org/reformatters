@@ -7,10 +7,12 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
+import icechunk
 import numpy as np
 import pandas as pd
 import typer
 import xarray as xr
+import zarr.errors
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
@@ -195,8 +197,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def backfill_kubernetes(
         self,
         append_dim_end: datetime | None = None,
-        jobs_per_pod: int = 1,
-        max_parallelism: int = 100,
+        jobs_per_pod: int = 2,
+        max_parallelism: int = 10,
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
@@ -218,10 +220,10 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         --append-dim-end defaults to now for a new store and to the store's current
         end for an existing store (leaving its extent unchanged).
 
-        Overwrite backfills run safely alongside operational updates: workers commit
-        chunk data straight to icechunk main, rebasing over concurrent update
-        commits, and the update wins any genuine conflict
-        (see docs/parallel_processing.md).
+        An operational update that publishes to an icechunk main while an overwrite
+        backfill runs makes the backfill's finalize fail loudly and the backfill must
+        be re-run, so time overwrite backfills to avoid update publishes (see
+        "Concurrent jobs writing to the same dataset" in docs/parallel_processing.md).
         """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
@@ -237,6 +239,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         if overwrite_metadata and not overwrite_chunks:
+            no_effect_options = [
+                filter_start,
+                filter_end,
+                filter_contains,
+                filter_variable_names,
+                docker_image,
+            ]
+            assert not any(no_effect_options), (
+                "--overwrite-metadata without --overwrite-chunks refreshes metadata "
+                "in place without launching workers; the filter and --docker-image "
+                "options would have no effect"
+            )
             template_utils.refresh_store_metadata(
                 self.store_factory,
                 template_ds,
@@ -455,18 +469,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
-        # Overwrite backfills commit straight to main: icechunk's native rebase
-        # interleaves their chunk-only worker commits with operational updates,
-        # which a committed temp branch could not (see docs/parallel_processing.md).
-        overwrite = overwrite_chunks or overwrite_metadata
-        branch_name = (
-            f"_job_{reformat_job_name}" if has_icechunk and not overwrite else "main"
-        )
+        branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
 
         # 0. Guards run on worker 0 before any writes; failing here leaves the live
         # archive untouched. An operational update must not change the structure of
         # the already-published store; an overwrite backfill must not corrupt it
         # (structural drift, trimming, or unrequested new arrays / expansion).
+        overwrite = overwrite_chunks or overwrite_metadata
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
@@ -477,6 +486,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 allow_new_arrays=overwrite_metadata,
                 allow_expansion=overwrite_chunks and overwrite_metadata,
             )
+
+        # Overwrite backfills write template metadata into a store that has live,
+        # job-written coordinate values (e.g. ingested_forecast_length); never
+        # overwrite those with the template's nulls.
+        exclude_coord_value_chunks = (
+            template_utils.store_written_coords(template_ds) if overwrite else set()
+        )
 
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
@@ -489,7 +505,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
-            overwrite=overwrite,
+            exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -535,6 +551,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 workers_total=workers_total,
                 update_template_with_results=update_template_with_results,
                 consolidated=self.region_job_class.consolidated_metadata,
+                publish_zarr3_metadata=update_template_with_results or overwrite,
+                exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
 
     def _run_virtual_operational_update(
@@ -704,10 +722,18 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
     def _open_existing_store(self) -> xr.DataTree | None:
-        """The primary store's current contents, or None if no dataset exists there yet."""
+        """The primary store's current contents, or None if no dataset exists there yet.
+
+        Only store-missing errors mean None; anything else (auth, network) raises —
+        misclassifying an existing store as absent would route a backfill past the
+        overwrite guards."""
         try:
             return self._open_primary_datatree()
-        except Exception:  # noqa: BLE001  store-missing error type varies by store format
+        except (
+            FileNotFoundError,  # zarr3 store path absent
+            zarr.errors.GroupNotFoundError,  # store path exists but holds no dataset
+            icechunk.IcechunkError,  # icechunk repository not created yet
+        ):
             return None
 
     def _resolve_backfill_template(
@@ -734,7 +760,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             resolved_end = (
                 pd.Timestamp(append_dim_end)
                 if append_dim_end is not None
-                else pd.Timestamp.now(tz="UTC").tz_localize(None)
+                # Floored so the isoformat in the worker command parses as a CLI datetime
+                else pd.Timestamp.now(tz="UTC").tz_localize(None).floor("s")
             )
             return self._get_template(resolved_end), resolved_end
 

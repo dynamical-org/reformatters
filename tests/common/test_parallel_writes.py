@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-import zarr
 from pydantic import computed_field
 
 from reformatters.common import (
@@ -41,7 +40,6 @@ from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timedelta, Timestamp
-from reformatters.common.zarr import copy_zarr_metadata
 
 pytestmark = pytest.mark.slow
 
@@ -1230,7 +1228,7 @@ class TestConcurrentJobs:
 
         # Job B last worker finalizes: current main (S_A) != job-b's
         # original_snapshot (initial), so it cannot publish and raises.
-        with pytest.raises(RuntimeError, match="main moved during this backfill"):
+        with pytest.raises(RuntimeError, match="main moved during this job"):
             _run_workers(
                 dataset,
                 jobs_b,
@@ -1246,151 +1244,3 @@ class TestConcurrentJobs:
         assert set(primary_repo.list_branches()) == {"_job_job-b", "main"}
         assert dataset.store_factory.read_all_coordination_files("job-a", "setup") == []
         assert dataset.store_factory.read_all_coordination_files("job-b", "setup") != []
-
-
-class TestOverwriteBackfillConcurrency:
-    """Overwrite backfills commit straight to main and coexist with operational
-    updates; an update whose finalize finds main moved replays onto it.
-    See "Concurrent jobs writing to the same dataset" in docs/parallel_processing.md.
-    """
-
-    def _make_dataset(self, tmp_path: Path) -> ParallelDataset:
-        return ParallelDataset(
-            primary_storage_config=StorageConfig(
-                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-            ),
-        )
-
-    def _repo(self, dataset: ParallelDataset) -> icechunk.Repository:
-        return dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
-
-    @staticmethod
-    def _array(store: object, name: str) -> zarr.Array:
-        array = zarr.open_group(store=store)[name]  # ty: ignore[invalid-argument-type]
-        assert isinstance(array, zarr.Array)
-        return array
-
-    def test_overwrite_backfill_commits_to_main_and_preserves_concurrent_update(
-        self, tmp_path: Path
-    ) -> None:
-        dataset = self._make_dataset(tmp_path)
-        template_ds = _create_template_ds()
-        template_utils.write_metadata(template_ds, dataset.store_factory)
-        repo = self._repo(dataset)
-
-        # Backfill only var0/var1 so a concurrent write to var2 can't be
-        # legitimately rewritten by the backfill itself.
-        all_jobs = ParallelRegionJob.get_jobs(
-            tmp_store=dataset._tmp_store(),
-            template_ds=template_ds,
-            append_dim="time",
-            all_data_vars=ParallelTemplateConfig().data_vars,
-            reformat_job_name="test",
-            filter_variable_names=["var0", "var1"],
-        )
-
-        dataset._process_region_jobs(
-            all_jobs=all_jobs,
-            worker_index=0,
-            workers_total=2,
-            reformat_job_name="test",
-            template_ds=template_ds,
-            tmp_store=dataset._tmp_store(),
-            update_template_with_results=False,
-            overwrite_chunks=True,
-        )
-
-        # An operational update commits to main between the backfill's workers.
-        update_session = repo.writable_session("main")
-        self._array(update_session.store, "var2")[0:2] = np.float32(7.0)
-        update_session.commit("simulated operational update")
-
-        dataset._process_region_jobs(
-            all_jobs=all_jobs,
-            worker_index=1,
-            workers_total=2,
-            reformat_job_name="test",
-            template_ds=template_ds,
-            tmp_store=dataset._tmp_store(),
-            update_template_with_results=False,
-            overwrite_chunks=True,
-        )
-
-        # No temp branch was ever created, the backfilled vars are written, and
-        # the update's concurrent commit survived the backfill's rebases.
-        assert list(repo.list_branches()) == ["main"]
-        result = xr.open_zarr(dataset.store_factory.primary_store())
-        assert np.all(result["var0"].values == 1.0)
-        assert np.all(result["var1"].values == 1.0)
-        assert np.all(result["var2"].values[0:2] == 7.0)
-
-    def test_replay_publishes_update_onto_moved_main(self, tmp_path: Path) -> None:
-        dataset = self._make_dataset(tmp_path)
-        template_ds = _create_template_ds()
-        template_utils.write_metadata(template_ds, dataset.store_factory)
-        repo = self._repo(dataset)
-        original_snapshot = repo.lookup_branch("main")
-
-        # An update's template may add a new array (a template merged mid-flight);
-        # replay must carry the new array's chunks too.
-        updated_ds = template_ds["/"].to_dataset()
-        updated_ds["var_new"] = updated_ds["var0"].copy()
-        updated_ds["var_new"].encoding = dict(updated_ds["var0"].encoding)
-        updated_template = xr.DataTree.from_dict({"/": updated_ds})
-        tmp_store = tmp_path / "replay-tmp.zarr"
-        template_utils.write_metadata(updated_template, tmp_store)
-
-        # The update runs on a temp branch: expand metadata (creates var_new),
-        # then write var0 and var_new data, mirroring setup + worker commits.
-        repo.create_branch("_job_update", original_snapshot)
-        setup_session = repo.writable_session("_job_update")
-        copy_zarr_metadata(
-            updated_template, tmp_store, setup_session.store, icechunk_only=True
-        )
-        setup_session.commit("Expand dataset")
-        worker_session = repo.writable_session("_job_update")
-        self._array(worker_session.store, "var0")[:] = np.float32(2.0)
-        self._array(worker_session.store, "var_new")[:] = np.float32(3.0)
-        worker_session.commit("update worker")
-
-        # Meanwhile an overwrite backfill commits var1 data straight to main.
-        backfill_session = repo.writable_session("main")
-        self._array(backfill_session.store, "var1")[:] = np.float32(9.0)
-        backfill_session.commit("backfill chunks")
-
-        pc_module._replay_branch_onto_main(
-            repo,
-            "primary",
-            "_job_update",
-            original_snapshot,
-            updated_template,
-            tmp_store,
-            "Update at 2025-01-01T00:00:00Z",
-        )
-
-        result = xr.open_zarr(dataset.store_factory.primary_store())
-        assert np.all(result["var0"].values == 2.0)
-        assert np.all(result["var_new"].values == 3.0)
-        assert np.all(result["var1"].values == 9.0), (
-            "the backfill's concurrent commit must survive the replay"
-        )
-
-        # The replay commit reads as a normal update to consumers; the machinery
-        # marker lives in snapshot metadata, where the idempotence check finds it.
-        tip = next(iter(repo.ancestry(branch="main")))
-        assert tip.message == "Update at 2025-01-01T00:00:00Z"
-        assert tip.metadata["replayed_branch"] == "_job_update"
-
-        # A crash-retry of finalize replays again; the metadata marker makes it a
-        # no-op instead of stacking duplicate commits.
-        commits_after_replay = len(list(repo.ancestry(branch="main")))
-        pc_module._replay_branch_onto_main(
-            repo,
-            "primary",
-            "_job_update",
-            original_snapshot,
-            updated_template,
-            tmp_store,
-            "Update at 2025-01-01T00:05:00Z",
-        )
-        assert len(list(repo.ancestry(branch="main"))) == commits_after_replay

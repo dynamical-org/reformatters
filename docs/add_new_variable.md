@@ -38,7 +38,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-The backfill runs safely alongside the dataset's operational updates: the new variable appears in the store immediately (all-NaN) and fills in progressively as workers write, while updates keep filling its newest steps (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
+An operational update that publishes while the backfill runs makes the backfill's finalize fail loudly and the backfill must be re-run, so time the backfill to avoid update publishes or manually suspend the update cronjob for the duration (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
 
 ## 3. Validate
 

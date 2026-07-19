@@ -5,24 +5,20 @@ See docs/parallel_processing.md for the overall design.
 
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
 import icechunk
 import pandas as pd
 import xarray as xr
-import zarr
-import zarr.buffer
-import zarr.core.sync
 from pydantic import TypeAdapter
-from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
-from reformatters.common.zarr import copy_zarr_metadata, sync_to_store
+from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
 
@@ -54,7 +50,7 @@ def parallel_setup(
     tmp_store: Path,
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
-    overwrite: bool = False,
+    exclude_coord_value_chunks: Collection[str] = (),
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
@@ -68,24 +64,10 @@ def parallel_setup(
         )
         setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
 
-        if overwrite:
-            # Overwrite backfill: workers commit straight to main (no temp branch),
-            # so write template metadata — refreshed attrs, new arrays, an explicit
-            # extension — directly into the live stores now. skip_unchanged makes a
-            # chunks-only backfill a metadata no-op, and store-written coordinate
-            # values are preserved.
-            template_utils.write_template_metadata_to_stores(
-                template_ds,
-                store_factory,
-                tmp_store,
-                commit_message="Write template metadata",
-            )
-            if icechunk_repos:
-                store_factory.persist_virtual_config()
-        elif icechunk_repos:
-            # Icechunk: create temp branch, write full metadata, commit on branch.
-            # This expands the dataset on the temp branch while readers on "main" are unaffected.
-            # Branch name is deterministic so worker 0 retries reuse the same branch.
+        # Icechunk: create temp branch, write full metadata, commit on branch.
+        # This expands the dataset on the temp branch while readers on "main" are unaffected.
+        # Branch name is deterministic so worker 0 retries reuse the same branch.
+        if icechunk_repos:
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
                 snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
@@ -101,7 +83,12 @@ def parallel_setup(
                 for _role, repo in icechunk_repos
             ]
             for ic_store in ic_stores:
-                copy_zarr_metadata(template_ds, tmp_store, ic_store)
+                copy_zarr_metadata(
+                    template_ds,
+                    tmp_store,
+                    ic_store,
+                    exclude_coord_value_chunks=exclude_coord_value_chunks,
+                )
             storage.commit_if_icechunk(
                 "Expand dataset",
                 ic_stores[0],
@@ -109,7 +96,7 @@ def parallel_setup(
             )
             # Persist virtual chunk containers so repo stays in sync with in-code config
             store_factory.persist_virtual_config()
-        # Zarr v3 non-overwrite: do NOT expand (readers would see empty holes)
+        # Zarr v3: do NOT expand (readers would see empty holes)
 
         if workers_total > 1:
             store_factory.write_coordination_file(
@@ -179,7 +166,11 @@ def finalize(
     workers_total: int,
     update_template_with_results: bool,
     consolidated: bool,
+    publish_zarr3_metadata: bool | None = None,
+    exclude_coord_value_chunks: Collection[str] = (),
 ) -> None:
+    if publish_zarr3_metadata is None:
+        publish_zarr3_metadata = update_template_with_results
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
@@ -200,8 +191,7 @@ def finalize(
     # Process replicas before primary so primary (which drives future work) is last to update.
     if branch_name != "main":
         replicas_first = store_factory.icechunk_repos(sort="primary-last")
-        # First pass: commit final metadata and publish each repo — a fast branch
-        # reset when main hasn't moved, else replay onto the moved main.
+        # First pass: commit final metadata and reset main on each repo.
         diverged_roles: list[str] = []
         for role, repo in replicas_first:
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
@@ -212,20 +202,10 @@ def finalize(
                 ):
                     log.info(f"{role}: main already reset by a previous attempt")
                     continue
-                if update_template_with_results and original_snapshot is not None:
-                    # Another job (an overwrite backfill) committed to main while
-                    # this update ran. The committed branch can't be rebased, so
-                    # replay its writes onto the moved main instead.
-                    _replay_branch_onto_main(
-                        repo,
-                        role,
-                        branch_name,
-                        original_snapshot,
-                        updated_template,
-                        tmp_store,
-                        commit_message,
-                    )
-                    continue
+                # Another job (e.g. an operational update) moved main while this job
+                # was running. Icechunk can't merge a committed branch onto the moved
+                # main, so this job's writes cannot be published without discarding
+                # the other job's; the other job wins and this one fails.
                 log.error(
                     f"{role}: main moved past this job's starting snapshot; "
                     f"branch {branch_name} will not be published"
@@ -234,7 +214,11 @@ def finalize(
                 continue
             session = repo.writable_session(branch_name)
             copy_zarr_metadata(
-                updated_template, tmp_store, session.store, icechunk_only=True
+                updated_template,
+                tmp_store,
+                session.store,
+                icechunk_only=True,
+                exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
             new_snapshot = session.commit(
                 commit_message, rebase_with=icechunk.ConflictDetector()
@@ -243,19 +227,21 @@ def finalize(
         if diverged_roles:
             # Leave the temp branches and coordination files in place for inspection.
             raise RuntimeError(
-                f"main moved during this backfill on {diverged_roles}; its writes "
-                f"remain unpublished on branch {branch_name}. Re-run the backfill "
-                "to reprocess and publish."
+                f"main moved during this job on {diverged_roles}; its writes remain "
+                f"unpublished on branch {branch_name}. Another job (e.g. an "
+                "operational update) published concurrently and wins; re-run this "
+                "job to reprocess and publish."
             )
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
             if branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
 
-    # Zarr v3: copy metadata now (makes data visible to readers).
-    # Only needed for updates where metadata was deferred during setup.
-    # For backfills, metadata is written before workers start.
-    if update_template_with_results:
+    # Zarr v3: copy metadata now (makes data visible to readers). Updates defer the
+    # metadata write to here; overwrite backfills publish here so a metadata change
+    # (new variable, extension) appears only after all chunk data is written. Fresh-store
+    # backfills wrote metadata before workers started and skip this.
+    if publish_zarr3_metadata:
         zarr3_primary = store_factory.primary_store(writable=True)
         zarr3_replicas = store_factory.replica_stores(writable=True)
         copy_zarr_metadata(
@@ -264,6 +250,8 @@ def finalize(
             zarr3_primary,
             replica_stores=zarr3_replicas,
             zarr3_only=True,
+            skip_unchanged=not update_template_with_results,
+            exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 
     if workers_total > 1:
@@ -284,85 +272,3 @@ def _snapshot_is_on_branch(
         if snap.id == stop_snapshot_id:
             return False
     return False
-
-
-def _replay_branch_onto_main(
-    repo: icechunk.Repository,
-    role: str,
-    branch_name: str,
-    original_snapshot: str,
-    updated_template: xr.DataTree,
-    tmp_store: Path,
-    commit_message: str,
-) -> None:
-    """Publish an update's temp branch onto a main that moved while the update ran.
-
-    Copies the branch's data-variable chunk bytes (from repo.diff) and the final
-    template metadata onto a fresh main session, then commits with a rebase that
-    keeps this update's version of any conflicting chunk — the update wins, the
-    concurrent writer (an overwrite backfill) loses only the overlapping chunks.
-    Bounded by one update's writes, and idempotent: a crashed replay left nothing
-    visible, and a completed one is detected by its snapshot metadata marker.
-    """
-    for snap in repo.ancestry(branch="main"):
-        if snap.metadata.get("replayed_branch") == branch_name:
-            log.info(f"{role}: {branch_name} already replayed onto main")
-            return
-        if snap.id == original_snapshot:
-            break
-
-    branch_tip = repo.lookup_branch(branch_name)
-    diff = repo.diff(from_snapshot_id=original_snapshot, to_snapshot_id=branch_tip)
-    assert not diff.deleted_arrays, f"cannot replay deletions: {diff.deleted_arrays}"
-    assert not diff.deleted_groups, f"cannot replay deletions: {diff.deleted_groups}"
-    branch_store = repo.readonly_session(snapshot_id=branch_tip).store
-    branch_group = zarr.open_group(store=branch_store, mode="r")
-    session = repo.writable_session("main")
-
-    # Metadata and coordinate values come from the final updated template (branch
-    # coord chunks predate update_template_with_results). Coordinate values the
-    # template leaves entirely null are store-written state main already has.
-    copy_zarr_metadata(
-        updated_template,
-        tmp_store,
-        session.store,
-        icechunk_only=True,
-        exclude_coord_value_chunks=template_utils.store_written_coords(
-            updated_template
-        ),
-    )
-    coordinate_paths = {
-        f"{node.path.rstrip('/')}/{name}"
-        for node in updated_template.subtree
-        for name in node.to_dataset(inherit=False).coords
-    }
-    prototype = zarr.buffer.default_buffer_prototype()
-    replayed_chunks = 0
-    for path, chunk_indices in diff.updated_chunks.items():
-        if path in coordinate_paths:
-            continue
-        array = branch_group[path.lstrip("/")]
-        assert isinstance(array, zarr.Array)
-        metadata = array.metadata
-        assert isinstance(metadata, ArrayV3Metadata)
-        encode_chunk_key = metadata.chunk_key_encoding.encode_chunk_key
-        for chunk_index in chunk_indices:
-            key = f"{path.lstrip('/')}/{encode_chunk_key(tuple(chunk_index))}"
-            chunk_bytes = zarr.core.sync.sync(
-                branch_store.get(key, prototype=prototype)
-            )
-            assert chunk_bytes is not None, f"missing chunk {key} on {branch_name}"
-            sync_to_store(session.store, key, chunk_bytes)
-            replayed_chunks += 1
-
-    session.commit(
-        commit_message,
-        metadata={"replayed_branch": branch_name},
-        rebase_with=icechunk.BasicConflictSolver(
-            on_chunk_conflict=icechunk.VersionSelection.UseOurs
-        ),
-    )
-    log.info(
-        f"{role}: main moved during this update; replayed {replayed_chunks} chunks "
-        f"from {branch_name} onto main"
-    )

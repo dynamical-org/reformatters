@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dask.array
+import icechunk
 import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
 import zarr.abc.store
 import zarr.storage
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common.config import Config
@@ -193,8 +195,8 @@ def assert_no_structural_drift_from_existing_store(
     Compares every variable across all groups (by var.path) and every non-append
     dimension coordinate's values (a reordered vertical level or moved lat/lon would
     relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
-    template may freely add new ones. Backfills are exempt (they rewrite the whole store
-    and may legitimately change structure), so callers only run this for operational updates.
+    template may freely add new ones. Callers run this for operational updates;
+    overwrite backfills run assert_safe_overwrite instead.
 
     The append dimension's chunk/shard size is compared in dev/prod but skipped under
     Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
@@ -377,37 +379,25 @@ def refresh_store_metadata(
     )
 
     write_metadata(trimmed, tmp_store, consolidated=consolidated)
-    write_template_metadata_to_stores(
-        trimmed,
-        store_factory,
-        tmp_store,
-        commit_message="Refresh metadata from template",
-    )
-
-
-def write_template_metadata_to_stores(
-    template_ds: xr.DataTree,
-    store_factory: StoreFactory,
-    tmp_store: Path,
-    *,
-    commit_message: str,
-) -> None:
-    """Write already-rendered template metadata (in tmp_store) into every store,
-    replicas before primary, skipping byte-identical documents and preserving
-    store-written coordinate values (see store_written_coords). Icechunk stores
-    commit (with rebase) only when something actually changed."""
-    exclude_coords = store_written_coords(template_ds)
-    primary_store = store_factory.primary_store(writable=True)
-    replica_stores = store_factory.replica_stores(writable=True)
-    for store in [*replica_stores, primary_store]:
+    exclude_coords = store_written_coords(trimmed)
+    ordered_stores = [
+        *store_factory.replica_stores(writable=True),
+        store_factory.primary_store(writable=True),
+    ]
+    for store in ordered_stores:
         copy_zarr_metadata(
-            template_ds,
+            trimmed,
             tmp_store,
             store,
             skip_unchanged=True,
             exclude_coord_value_chunks=exclude_coords,
         )
-    commit_if_icechunk(commit_message, primary_store, replica_stores)
+        if isinstance(store, IcechunkStore) and store.session.has_uncommitted_changes:
+            store.session.commit(
+                "Refresh metadata from template",
+                rebase_with=icechunk.ConflictDetector(),
+            )
+            log.info(f"Refreshed metadata from template on {store}")
 
 
 def make_empty_variable(
