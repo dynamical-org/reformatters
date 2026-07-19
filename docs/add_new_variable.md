@@ -23,12 +23,12 @@ uv run main <DATASET_ID> update-template
 
 ## 2. Backfill data for the new variable
 
-After the PR is merged to main, run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access; it waits for main's deploy to finish and runs that image):
+After the PR is merged to main, run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access):
 
 - **operation** = `overwrite-chunks-and-metadata` — refreshes the store's metadata from the template (creating the new variable) and writes its chunk data. The guards never trim the store, and its extent is unchanged unless you explicitly set an append_dim_end past the current end.
 - **filter_variable_names** = your new variable's name.
-- **jobs_per_pod** = 1 or 2 in most cases. Set to 3-4 if the jobs run very fast to amortize container startup time.
-- **max_parallelism** = 100 if the data source can support highly parallel reads, else lower.
+- **jobs_per_pod** = 1 or 2 in most cases for materialized datasets; 30 for virtual. For both, the goal is jobs that take 3-15 minutes, to amortize startup time and reduce icechunk commit compare-and-set contention.
+- **max_parallelism** = materialized: 100-300 if the data source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.
 
 Or the equivalent CLI (requires kubectl access to the cluster):
 

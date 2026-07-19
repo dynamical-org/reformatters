@@ -52,12 +52,12 @@ name: 'Manual: Backfill'
         required: false
         type: string
       jobs_per_pod:
-        description: Region jobs per worker pod
+        description: 'Region jobs per worker pod. Materialized: 1 or 2 in most cases; virtual: 30. For both, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.'
         required: false
         type: string
         default: '1'
       max_parallelism:
-        description: Maximum concurrent worker pods
+        description: 'Maximum concurrent worker pods. Materialized: 100-300 if the source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.'
         required: false
         type: string
         default: '100'
