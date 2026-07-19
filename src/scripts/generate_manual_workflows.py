@@ -266,6 +266,43 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
+                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                    },
+                    {
+                        "name": "Install uv",
+                        "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+                        "with": {
+                            "enable-cache": True,
+                            "cache-dependency-glob": "uv.lock",
+                        },
+                    },
+                    {
+                        "name": "Set up Python",
+                        "uses": "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+                        "with": {"python-version-file": ".python-version"},
+                    },
+                    {
+                        "name": "Install the project",
+                        "run": "uv sync --all-extras --dev --locked",
+                    },
+                    {
+                        "name": "Configure AWS Credentials",
+                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "with": {
+                            "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
+                            "aws-region": "${{ secrets.AWS_REGION }}",
+                        },
+                    },
+                    {
+                        "name": "Install kubectl",
+                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "with": {"version": "latest"},
+                    },
+                    {
+                        "name": "Update kubeconfig",
+                        "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
+                    },
+                    {
                         "name": "Require main and wait for its deploy",
                         "env": {
                             "GH_TOKEN": "${{ github.token }}",
@@ -316,43 +353,6 @@ echo "::error::Timed out waiting for the deploy of ${GITHUB_SHA}."
 exit 1
 """
                         ),
-                    },
-                    {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
-                    },
-                    {
-                        "name": "Install uv",
-                        "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
-                        "with": {
-                            "enable-cache": True,
-                            "cache-dependency-glob": "uv.lock",
-                        },
-                    },
-                    {
-                        "name": "Set up Python",
-                        "uses": "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
-                        "with": {"python-version-file": ".python-version"},
-                    },
-                    {
-                        "name": "Install the project",
-                        "run": "uv sync --all-extras --dev --locked",
-                    },
-                    {
-                        "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
-                        "with": {
-                            "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
-                            "aws-region": "${{ secrets.AWS_REGION }}",
-                        },
-                    },
-                    {
-                        "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
-                        "with": {"version": "latest"},
-                    },
-                    {
-                        "name": "Update kubeconfig",
-                        "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
                     },
                     {
                         "name": "Start backfill (SEE LOGS)",
