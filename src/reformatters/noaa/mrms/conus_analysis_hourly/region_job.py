@@ -212,9 +212,8 @@ class NoaaMrmsRegionJob(
         # These fields' values are exact multiples of 10^-D (enforced by
         # grib_decimal_scale_factors), so rounding to D decimals restores them exactly.
         # Also matches gribberish's float64 decode used by virtual datasets.
-        decimal_scale = grib_decimal_scale_factors(coord.downloaded_path)[
-            rasterio_band - 1
-        ]
+        decimal_scales = grib_decimal_scale_factors(coord.downloaded_path)
+        decimal_scale = decimal_scales[rasterio_band - 1]
         np.round(raw, decimal_scale, out=raw)
         result: ArrayFloat32 = raw.astype(np.float32)
 
