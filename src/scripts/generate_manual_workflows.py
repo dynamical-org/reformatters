@@ -188,7 +188,11 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
 
     Exposes only safe operations: creating a new store, overwriting chunk data,
     and overwriting metadata (which never trims and only expands with an explicit
-    append_dim_end plus both overwrite flags — the CLI enforces all guards)."""
+    append_dim_end plus both overwrite flags — the CLI enforces all guards).
+
+    Runs only from main, waits for main's tip to finish its operational deploy,
+    and submits the kubernetes job with that deploy's image — no one-off docker
+    build, and driver code and worker image are the same commit."""
     return {
         "name": "Manual: Backfill",
         "on": {
@@ -250,13 +254,69 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
             "group": "k8s-manual-${{ github.actor }}-${{ github.run_id }}",
             "cancel-in-progress": False,
         },
-        "permissions": {"id-token": "write", "contents": "read"},
+        "permissions": {
+            "id-token": "write",
+            "contents": "read",
+            "actions": "read",
+        },
         "jobs": {
             "backfill": {
                 "name": "Backfill",
                 "runs-on": "ubuntu-24.04",
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
+                    {
+                        "name": "Require main and wait for its deploy",
+                        "env": {
+                            "GH_TOKEN": "${{ github.token }}",
+                            "GH_REPO": "${{ github.repository }}",
+                        },
+                        "run": LiteralString(
+                            r"""#!/bin/bash
+set -euo pipefail
+
+if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+  echo "::error::Backfills must run from main (got ${GITHUB_REF}); the worker image is built by main's deploy."
+  exit 1
+fi
+
+# The kubernetes workers run the image the deploy of this exact commit built,
+# so wait for that deploy (Code Quality gates it) before submitting anything.
+echo "Waiting for the deploy of ${GITHUB_SHA} so the backfill runs exactly that code..."
+for _ in $(seq 1 90); do
+  DEPLOY=$(gh run list --workflow deploy-operational-updates.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
+  if [ -n "${DEPLOY}" ]; then
+    read -r STATUS CONCLUSION <<< "${DEPLOY}"
+    if [ "${STATUS}" = "completed" ]; then
+      if [ "${CONCLUSION}" = "success" ]; then
+        echo "Deploy of ${GITHUB_SHA} succeeded."
+        exit 0
+      fi
+      echo "::error::The deploy of ${GITHUB_SHA} concluded '${CONCLUSION}'. Fix the deploy, then re-run this backfill."
+      exit 1
+    fi
+    echo "Deploy is ${STATUS}..."
+  else
+    QUALITY=$(gh run list --workflow code-quality.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
+    if [ -n "${QUALITY}" ]; then
+      read -r STATUS CONCLUSION <<< "${QUALITY}"
+      if [ "${STATUS}" = "completed" ] && [ "${CONCLUSION}" != "success" ]; then
+        echo "::error::Code Quality concluded '${CONCLUSION}' for ${GITHUB_SHA}, so it will never deploy."
+        exit 1
+      fi
+      echo "Deploy not started yet (Code Quality is ${STATUS})..."
+    else
+      echo "Waiting for Code Quality and deploy runs to appear for ${GITHUB_SHA}..."
+    fi
+  fi
+  sleep 30
+done
+
+echo "::error::Timed out waiting for the deploy of ${GITHUB_SHA}."
+exit 1
+"""
+                        ),
+                    },
                     {
                         "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
                     },
@@ -296,7 +356,10 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Start backfill (SEE LOGS)",
-                        "env": {"DYNAMICAL_ENV": "prod"},
+                        "env": {
+                            "DYNAMICAL_ENV": "prod",
+                            "DOCKER_IMAGE": "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}",
+                        },
                         "run": LiteralString(
                             r"""#!/bin/bash
 set -euo pipefail
@@ -310,7 +373,10 @@ FILTER_VARIABLE_NAMES="${{ github.event.inputs.filter_variable_names }}"
 JOBS_PER_POD="${{ github.event.inputs.jobs_per_pod }}"
 MAX_PARALLELISM="${{ github.event.inputs.max_parallelism }}"
 
-ARGS=(--jobs-per-pod "${JOBS_PER_POD}" --max-parallelism "${MAX_PARALLELISM}")
+# The image this exact commit's deploy built (waited for above), so the
+# workers run the same code the driver just validated with.
+ARGS=(--docker-image "${DOCKER_IMAGE}")
+ARGS+=(--jobs-per-pod "${JOBS_PER_POD}" --max-parallelism "${MAX_PARALLELISM}")
 case "${OPERATION}" in
   create-new-store) ;;
   overwrite-chunks) ARGS+=(--overwrite-chunks) ;;

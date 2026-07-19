@@ -149,7 +149,7 @@ The details here depend on the computing resources and the Zarr storage location
 1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
 1. Run a backfill on a kubernetes cluster:
    - This supports parallelism across servers to process much larger datasets.
-   - Once your dataset is merged and deployed, the simplest path is the [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) GitHub action with operation `create-new-store` (leave append_dim_end empty to backfill through now).
+   - Once your dataset is merged to main, the simplest path is the [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) GitHub action with operation `create-new-store` (leave append_dim_end empty to backfill through now). It waits for main's deploy to finish and runs that image.
    - Or from your machine (complete the steps in README.md > Deploying to the cloud > Setup): `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes`, then track the job with `kubectl get jobs`. It creates a new store and fails if one exists; see `--help` for the `--overwrite-*` flags that write into an existing store.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.

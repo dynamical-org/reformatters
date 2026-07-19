@@ -128,7 +128,7 @@ Run via `uv run main`.
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-chunks [--filter-...]` - Rewrite chunk data in an existing store.
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-metadata` - Refresh metadata from the template (creates newly added variables; never trims). Add `--overwrite-chunks --filter-variable-names <name>` to also backfill a new variable's data.
 - Overwrite backfills run safely alongside operational updates: workers commit chunk data straight to icechunk main with rebase, and on a genuine conflict the operational update wins (see docs/parallel_processing.md).
-- Prefer the "Manual: Backfill" GitHub action (workflow_dispatch) which runs these commands with the deployed image and only exposes the safe operations.
+- Prefer the "Manual: Backfill" GitHub action (workflow_dispatch): it runs only from main, waits for main's tip to finish deploying, submits the job with that deploy's image (driver and workers run the same commit), and only exposes the safe operations.
 
 ## Parallelization model
 

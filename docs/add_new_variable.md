@@ -23,7 +23,7 @@ uv run main <DATASET_ID> update-template
 
 ## 2. Backfill data for the new variable
 
-After the PR is merged and deployed (deploys run automatically on merge to main), run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access):
+After the PR is merged to main, run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access; it waits for main's deploy to finish and runs that image):
 
 - **operation** = `overwrite-chunks-and-metadata` — refreshes the store's metadata from the template (creating the new variable) and writes its chunk data. The guards never trim the store, and its extent is unchanged unless you explicitly set an append_dim_end past the current end.
 - **filter_variable_names** = your new variable's name.
