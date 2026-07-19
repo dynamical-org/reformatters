@@ -282,8 +282,8 @@ fi
 
 # The kubernetes workers run the image the deploy of this exact commit built,
 # so wait for that deploy (Code Quality gates it) before submitting anything.
-echo "Waiting for the deploy of ${GITHUB_SHA} so the backfill runs exactly that code..."
-for _ in $(seq 1 90); do
+echo "Waiting up to 30 minutes for the deploy of ${GITHUB_SHA} so the backfill runs exactly that code..."
+for _ in $(seq 1 60); do
   DEPLOY=$(gh run list --workflow deploy-operational-updates.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
   if [ -n "${DEPLOY}" ]; then
     read -r STATUS CONCLUSION <<< "${DEPLOY}"
