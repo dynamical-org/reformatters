@@ -86,7 +86,7 @@ Backfill parallelism has a low ceiling: measured on HRRR-virtual, throughput pea
 
 Two operational rules when backfilling a live virtual dataset:
 
-- **Suspend the dataset's `-update` CronJob for the duration of the backfill** (`kubectl patch`; a deploy to main resumes it). Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill makes finalize fail loudly and the backfill must be re-run.
+- **Run the backfill in between operational fires.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill makes finalize fail loudly and the backfill must be re-run.
 - **`append_dim_end` defaults to the store's current end** — the last published position, which is what you want. Setting it past that (requires both overwrite flags) pre-sizes the branch further, so on finalize the extra positions appear as NaN-filled slots to readers until refs land.
 
 ## Manifest splitting

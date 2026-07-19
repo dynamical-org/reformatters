@@ -222,7 +222,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         An operational update that publishes to an icechunk main while an overwrite
         backfill runs makes the backfill's finalize fail loudly and the backfill must
-        be re-run, so time overwrite backfills to avoid update publishes (see
+        be re-run, so run overwrite backfills in between update runs (see
         "Concurrent jobs writing to the same dataset" in docs/parallel_processing.md).
         """
         assert self._can_run_in_kubernetes(), (

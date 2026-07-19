@@ -127,7 +127,7 @@ Run via `uv run main`.
 - `uv run main <dataset-id> backfill-kubernetes` - Create a new store and backfill it (fails if the store exists; `--append-dim-end` defaults to now).
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-chunks [--filter-...]` - Rewrite chunk data in an existing store.
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-metadata` - Refresh metadata from the template (creates newly added variables; never trims). Add `--overwrite-chunks --filter-variable-names <name>` to also backfill a new variable's data.
-- An operational update that publishes mid-backfill makes an overwrite backfill's final icechunk branch publish fail loudly (the update wins; re-run the backfill), so time overwrite backfills to avoid update publishes (see docs/parallel_processing.md).
+- An operational update that publishes mid-backfill makes an overwrite backfill's final icechunk branch publish fail loudly (the update wins; re-run the backfill), so run overwrite backfills in between update runs (see docs/parallel_processing.md).
 - Prefer the "Manual: Backfill" GitHub action (workflow_dispatch): it runs only from main, waits for main's tip to finish deploying, submits the job with that deploy's image (driver and workers run the same commit), and only exposes the safe operations.
 
 ## Parallelization model

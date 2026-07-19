@@ -115,7 +115,7 @@ The entire Kubernetes job fails. The team is notified and can run a fresh job. S
 
 The `from_snapshot_id` check in `reset_branch` prevents two concurrent jobs from both resetting main. Icechunk can rebase only uncommitted sessions, not a committed temp branch, so a job that finds main moved past its starting snapshot cannot merge — finalize raises, leaving its temp branch and coordination files in place for inspection, and the job that moved main wins. (A finalize retry after a crash is distinguished by checking whether main's snapshot is already on the temp branch.) The losing job's work must be re-run.
 
-Because any operational update that publishes during an overwrite backfill makes the backfill lose this way, time overwrite backfills to avoid update publishes — for a long backfill on a frequently-updating dataset, manually suspend the update cronjob for the duration (`kubectl patch cronjob <name> -p '{"spec":{"suspend":true}}'`; a deploy to main re-applies cronjobs and resumes it).
+Because any operational update that publishes during an overwrite backfill makes the backfill lose this way, run overwrite backfills so they complete in between update runs (a long backfill can be run as several smaller, filtered backfills).
 
 ## Replica ordering
 

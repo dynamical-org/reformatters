@@ -38,7 +38,7 @@ DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-An operational update that publishes while the backfill runs makes the backfill's finalize fail loudly and the backfill must be re-run, so time the backfill to avoid update publishes or manually suspend the update cronjob for the duration (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
+An operational update that publishes while the backfill runs makes the backfill's finalize fail loudly and the backfill must be re-run, so run the backfill in between update runs — for a long history, as several smaller `filter_start`/`filter_end` backfills (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
 
 ## 3. Validate
 
