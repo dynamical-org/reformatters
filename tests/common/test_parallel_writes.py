@@ -1365,6 +1365,7 @@ class TestOverwriteBackfillConcurrency:
             original_snapshot,
             updated_template,
             tmp_store,
+            "Update at 2025-01-01T00:00:00Z",
         )
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
@@ -1374,8 +1375,14 @@ class TestOverwriteBackfillConcurrency:
             "the backfill's concurrent commit must survive the replay"
         )
 
-        # A crash-retry of finalize replays again; the commit-message check makes
-        # it a no-op instead of stacking duplicate commits.
+        # The replay commit reads as a normal update to consumers; the machinery
+        # marker lives in snapshot metadata, where the idempotence check finds it.
+        tip = next(iter(repo.ancestry(branch="main")))
+        assert tip.message == "Update at 2025-01-01T00:00:00Z"
+        assert tip.metadata["replayed_branch"] == "_job_update"
+
+        # A crash-retry of finalize replays again; the metadata marker makes it a
+        # no-op instead of stacking duplicate commits.
         commits_after_replay = len(list(repo.ancestry(branch="main")))
         pc_module._replay_branch_onto_main(
             repo,
@@ -1384,5 +1391,6 @@ class TestOverwriteBackfillConcurrency:
             original_snapshot,
             updated_template,
             tmp_store,
+            "Update at 2025-01-01T00:05:00Z",
         )
         assert len(list(repo.ancestry(branch="main"))) == commits_after_replay

@@ -223,6 +223,7 @@ def finalize(
                         original_snapshot,
                         updated_template,
                         tmp_store,
+                        commit_message,
                     )
                     continue
                 log.error(
@@ -292,6 +293,7 @@ def _replay_branch_onto_main(
     original_snapshot: str,
     updated_template: xr.DataTree,
     tmp_store: Path,
+    commit_message: str,
 ) -> None:
     """Publish an update's temp branch onto a main that moved while the update ran.
 
@@ -300,11 +302,10 @@ def _replay_branch_onto_main(
     keeps this update's version of any conflicting chunk — the update wins, the
     concurrent writer (an overwrite backfill) loses only the overlapping chunks.
     Bounded by one update's writes, and idempotent: a crashed replay left nothing
-    visible, and a completed one is detected by its commit message.
+    visible, and a completed one is detected by its snapshot metadata marker.
     """
-    replay_message = f"Replay {branch_name}"
     for snap in repo.ancestry(branch="main"):
-        if snap.message == replay_message:
+        if snap.metadata.get("replayed_branch") == branch_name:
             log.info(f"{role}: {branch_name} already replayed onto main")
             return
         if snap.id == original_snapshot:
@@ -351,11 +352,12 @@ def _replay_branch_onto_main(
                 branch_store.get(key, prototype=prototype)
             )
             assert chunk_bytes is not None, f"missing chunk {key} on {branch_name}"
-            sync_to_store(session.store, key, chunk_bytes.to_bytes())
+            sync_to_store(session.store, key, chunk_bytes)
             replayed_chunks += 1
 
     session.commit(
-        replay_message,
+        commit_message,
+        metadata={"replayed_branch": branch_name},
         rebase_with=icechunk.BasicConflictSolver(
             on_chunk_conflict=icechunk.VersionSelection.UseOurs
         ),
