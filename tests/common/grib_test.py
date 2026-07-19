@@ -10,7 +10,9 @@ def _sign_and_magnitude_bytes(value: int) -> bytes:
     return ((0x8000 | -value) if value < 0 else value).to_bytes(2)
 
 
-def _grib2_message(fields: list[tuple[int, int]]) -> bytes:
+def _grib2_message(
+    fields: list[tuple[int, int]], reference_value: float = -30.0
+) -> bytes:
     """Minimal GRIB2 message with a (binary_scale, decimal_scale) section 5 per field."""
     body = (21).to_bytes(4) + bytes([1]) + bytes(16)  # section 1
     for binary_scale, decimal_scale in fields:
@@ -18,7 +20,7 @@ def _grib2_message(fields: list[tuple[int, int]]) -> bytes:
         section5_payload = (
             (4).to_bytes(4)  # number of data points
             + (41).to_bytes(2)  # data representation template (PNG packing)
-            + struct.pack(">f", -30.0)  # reference value R
+            + struct.pack(">f", reference_value)
             + _sign_and_magnitude_bytes(binary_scale)
             + _sign_and_magnitude_bytes(decimal_scale)
             + bytes([16, 0])  # bits per value, original field type
@@ -49,6 +51,15 @@ def test_grib_decimal_scale_factors_rejects_nonzero_binary_scale(
     path = tmp_path / "binary_scaled.grib2"
     path.write_bytes(_grib2_message([(-2, 1)]))
     with pytest.raises(AssertionError, match="Binary scale factor"):
+        grib_decimal_scale_factors(path)
+
+
+def test_grib_decimal_scale_factors_rejects_non_integer_reference_value(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "fractional_r.grib2"
+    path.write_bytes(_grib2_message([(0, 1)], reference_value=-30.5))
+    with pytest.raises(AssertionError, match="Non-integer reference value"):
         grib_decimal_scale_factors(path)
 
 

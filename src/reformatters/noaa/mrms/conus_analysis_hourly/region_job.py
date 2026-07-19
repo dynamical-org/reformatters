@@ -207,10 +207,11 @@ class NoaaMrmsRegionJob(
                 rasterio_band = 1
             raw = reader.read(rasterio_band)
 
-        # GDAL unpacks GRIB values in float32 arithmetic whose rounding error varies by
-        # architecture (FMA contraction on arm64 decodes packed zeros to ~4.5e-8 instead
-        # of 0). Field values are exact multiples of 10^-D, so rounding to D decimals
-        # restores them and matches gribberish's float64 decode used by virtual datasets.
+        # GDAL unpacks GRIB values internally in float32 arithmetic (regardless of the
+        # dtype read into) whose rounding error varies by architecture (amd64 vs arm64).
+        # These fields' values are exact multiples of 10^-D (enforced by
+        # grib_decimal_scale_factors), so rounding to D decimals restores them exactly.
+        # Also matches gribberish's float64 decode used by virtual datasets.
         decimal_scale = grib_decimal_scale_factors(coord.downloaded_path)[
             rasterio_band - 1
         ]

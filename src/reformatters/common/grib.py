@@ -1,11 +1,13 @@
+import struct
 from pathlib import Path
 
 
 def grib_decimal_scale_factors(path: Path) -> list[int]:
     """Decimal scale factor D from each GRIB2 data representation section (section 5)
     in the file, in field order (GDAL/rasterio band order). A GRIB2 field's values are
-    (R + X * 2^E) / 10^D; each field's binary scale factor E is asserted to be 0, so
-    its values are exact multiples of 10^-D.
+    (R + X * 2^E) / 10^D; each field is asserted to have binary scale factor E == 0 and
+    an integer reference value R, which together guarantee its values are exact
+    multiples of 10^-D.
     """
     data = path.read_bytes()
     scale_factors: list[int] = []
@@ -19,6 +21,11 @@ def grib_decimal_scale_factors(path: Path) -> list[int]:
         while pos < message_end and data[pos : pos + 4] != b"7777":
             section_length = int.from_bytes(data[pos : pos + 4])
             if data[pos + 4] == 5:
+                (reference_value,) = struct.unpack(">f", data[pos + 11 : pos + 15])
+                assert reference_value == round(reference_value), (
+                    f"Non-integer reference value {reference_value} in {path}; "
+                    "values are not multiples of 10^-D"
+                )
                 binary_scale = _sign_and_magnitude_int(data[pos + 15 : pos + 17])
                 assert binary_scale == 0, (
                     f"Binary scale factor {binary_scale} != 0 in {path}; "
