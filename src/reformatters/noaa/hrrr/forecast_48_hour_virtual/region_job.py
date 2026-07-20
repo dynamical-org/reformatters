@@ -136,9 +136,6 @@ class NoaaHrrrForecast48HourVirtualRegionJob(
         location = coord.get_url()
         refs = []
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
-            # One message can fill several variables: at lead 1h the run-total and
-            # per-hour accumulation windows render the same idx string (0->1), so a
-            # single APCP/WEASD/FROZR message feeds both variants.
             matches = lookup.get((element, level, window))
             if not matches:
                 continue

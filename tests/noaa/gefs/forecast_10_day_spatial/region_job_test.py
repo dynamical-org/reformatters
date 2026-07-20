@@ -292,8 +292,10 @@ def test_process_virtual_refs_update_polls_until_all_ingested(
         [(1, ["temperature_2m"])],
         [(2, ["temperature_2m"])],
     ]
-    # Slept between ticks (after ticks 1 and 2, not after the final tick).
+    # Slept between ticks (after ticks 1 and 2, not after the final tick), never
+    # longer than the tick interval and never a negative duration.
     assert len(sleeps) == 2
+    assert all(0 <= s <= job.tick_interval.total_seconds() for s in sleeps)
 
 
 def test_file_refs_skips_file_whose_index_points_past_eof(
@@ -324,6 +326,47 @@ def test_process_virtual_refs_drops_files_with_stale_index(
     (batch,) = batches
     ((coord, _refs),) = batch
     assert coord.ensemble_member == 2  # member1 dropped, only member2 ingested
+
+
+def test_process_virtual_refs_update_all_skipped_tick_yields_nothing_and_drops(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # In update mode, a tick where every discovered file is skipped (file_refs
+    # returns no refs) yields no batch, and the skipped files are permanently
+    # dropped from pending for the rest of the run — later discovery sweeps are
+    # not asked about them again. They self-heal on the next cron fire, when
+    # filter_already_present re-derives them from the manifest.
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
+    _fake_index_download(monkeypatch, tmp_path)
+    monkeypatch.setattr(virtual_region_job.time, "sleep", lambda _s: None)
+
+    coord1, coord2 = _coord(1, data_vars), _coord(2, data_vars)
+    pending_per_sweep: list[list[GefsForecast10DaySpatialSourceFileCoord]] = []
+    # Tick 1: member 1 with a stale index (size 2000 < the index's max offset 2500),
+    # so file_refs skips it; tick 2: member 2, ingestible.
+    ticks = iter([[(coord1, 2000)], [(coord2, 9000)]])
+
+    def fake(
+        pending: list[GefsForecast10DaySpatialSourceFileCoord], **kwargs: object
+    ) -> list[tuple[GefsForecast10DaySpatialSourceFileCoord, int]]:
+        pending_per_sweep.append(list(pending))
+        return next(ticks)
+
+    monkeypatch.setattr(
+        region_job_module, "discover_available_by_obstore_listing", fake
+    )
+
+    batches = list(job.process_virtual_refs([coord1, coord2]))
+
+    # No batch for the all-skipped tick; only member 2 is ever yielded.
+    (batch,) = batches
+    ((coord, _refs),) = batch
+    assert coord is coord2
+    assert [[id(c) for c in pending] for pending in pending_per_sweep] == [
+        [id(coord1), id(coord2)],
+        [id(coord2)],
+    ]
 
 
 def test_file_refs_or_skip_swallows_unexpected_errors(

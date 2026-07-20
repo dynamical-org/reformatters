@@ -262,9 +262,8 @@ class VirtualRegionJob(
         # would raise, so skip the write loop entirely.
         if remaining:
             # A worker's jobs share template_ds/processing_mode/tick_interval, so any
-            # one drives the write loop over the union of their coords. Poison the
-            # driver's region: the loop spans every job's region, so reading a single
-            # job's region would be a bug (see _NoRegion).
+            # one drives the write loop over the union of their coords; its region is
+            # poisoned because the loop spans every job's region (see _NoRegion).
             driver = jobs[0].model_copy(update={"region": _NO_REGION})
             driver.process_virtual(
                 primary_repo, list(replica_repos), branch_name, remaining
@@ -290,12 +289,7 @@ class VirtualRegionJob(
         # session becomes read-only after commit. sync_dims_to grows the store
         # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
-        # The smallest group, so the sync_dims_to shortcut below can never skip a group
-        # that lags root (e.g. after a partially-applied prior grow).
-        current_size = min(
-            self._append_dim_size(readonly_store, node_group_name(node))
-            for node in self.template_ds.subtree
-        )
+        current_size = self._committed_append_dim_size(readonly_store)
 
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
@@ -379,24 +373,18 @@ class VirtualRegionJob(
     def chunk_key(
         self, out_loc: Mapping[Dim, CoordinateValue], var: DataVar[Any]
     ) -> tuple[int, ...] | None:
-        """Map a source message's coordinate labels to its zarr chunk index.
-
-        Returns None if a label is not in the template's coords (the filter treats
-        that as "remaining"). A batch of one through _resolve_chunk_keys, which
-        holds the actual chunk-index math -- see there.
-        """
+        """Map a source message's coordinate labels to its zarr chunk index, or None
+        if a label is not yet in the template's coords."""
         return self._resolve_chunk_keys([(out_loc, var)])[0]
 
     def _resolve_chunk_keys(
         self, items: Sequence[tuple[Mapping[Dim, CoordinateValue], DataVar[Any]]]
     ) -> list[tuple[int, ...] | None]:
         """Map each (out_loc, var) pair to its zarr chunk index, or None if a label
-        isn't in the template's coords yet (the filter treats that as "remaining").
+        is not yet in the template's coords.
 
-        Groups items by var.path and, per group, resolves every labeled dim's
-        position with one vectorized pandas.Index.get_indexer call over the whole
-        group, rather than one call per item. chunk_key is a batch-of-one wrapper
-        around this.
+        Items are grouped by var.path and each group's labels resolve with one
+        vectorized pandas.Index.get_indexer call per dim.
         """
         order = sorted(range(len(items)), key=lambda i: items[i][1].path)
         results: list[tuple[int, ...] | None] = [None] * len(items)
@@ -448,15 +436,15 @@ class VirtualRegionJob(
                 results[item_i] = (
                     tuple(int(v) for v in chunk_indices[local_i])
                     if present[local_i]
-                    else None  # label not in coords -> not yet a position in this dataset
+                    else None
                 )
         return results
 
     def refresh_metadata(
         self, store_factory: storage.StoreFactory, tmp_store: Path
     ) -> None:
-        """Rewrite attrs + coordinate values from the current template, trimmed to each
-        group's committed extent, so checked-in template metadata fixes deploy on the
+        """Rewrite attrs + coordinate values from the current template, trimmed to the
+        store's committed extent, so checked-in template metadata fixes deploy on the
         next operational update. Trimming preserves lazy growth: the
         append dim is never sized past ingested data. Commits only when something
         actually changed, so an in-sync store adds no history noise.
@@ -518,6 +506,18 @@ class VirtualRegionJob(
             "a ref's append-dim label is not present in the template"
         )
         return int(positions.max()) + 1
+
+    def _committed_append_dim_size(self, store: IcechunkStore) -> int:
+        """The store's append dim size, asserting every group agrees."""
+        sizes = {
+            node_group_name(node): self._append_dim_size(store, node_group_name(node))
+            for node in self.template_ds.subtree
+        }
+        assert len(set(sizes.values())) == 1, (
+            f"append dim size differs across groups: {sizes}; every group grows in "
+            "one atomic commit, so this store requires manual repair"
+        )
+        return next(iter(sizes.values()))
 
     def _append_dim_size(self, store: IcechunkStore, group: str | None = None) -> int:
         node = zarr.open_group(store, mode="r")
