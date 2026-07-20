@@ -587,9 +587,11 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "aswdifd_s",
     "aswdir_s",
-    # HRRR 80m wind (no ECMWF equivalent)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA HRRR)
     "80u",
     "80v",
+    "80t",
+    "80sp",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
@@ -631,9 +633,11 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "quality_assurance",
     "Soil Moisture (AM)",
     "Soil Moisture (PM)",
-    # HRRR 80m wind (no ECMWF equivalent)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA HRRR)
     "80 metre U wind component",
     "80 metre V wind component",
+    "80 metre temperature",
+    "80 metre pressure",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
