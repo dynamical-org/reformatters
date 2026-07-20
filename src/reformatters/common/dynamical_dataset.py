@@ -209,21 +209,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
-        Without overwrite flags this creates a new store and fails if one already
-        exists. --overwrite-chunks rewrites chunk data in an existing store (use the
-        filter options to scope it); --overwrite-metadata refreshes metadata from the
-        checked-in template, including creating newly added variables, without
-        launching workers. Combine both to backfill a new variable's data or, with an
-        explicit --append-dim-end past the store's current end, to extend the store.
-        Trimming an existing store is never supported.
-
-        --append-dim-end defaults to now for a new store and to the store's current
-        end for an existing store (leaving its extent unchanged).
-
-        An operational update that publishes to an icechunk main while an overwrite
-        backfill runs makes the backfill's finalize fail loudly and the backfill must
-        be re-run, so run overwrite backfills in between update runs (see
-        "Concurrent jobs writing to the same dataset" in docs/parallel_processing.md).
+        See the Backfills section in AGENTS.md for usage.
         """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
