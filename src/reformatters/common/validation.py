@@ -217,6 +217,7 @@ def check_forecast_recent_nans(
     ds: xr.Dataset,
     *,
     init_time_offset: int = -1,
+    num_recent_init_times: int = 1,
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
@@ -225,10 +226,18 @@ def check_forecast_recent_nans(
     max_workers: int | None = None,
 ) -> ValidationResult:
     """
-    Check the NaN fraction of a recent init_time in a forecast dataset.
+    Check the NaN fraction of recent init_times in a forecast dataset.
 
-    `init_time_offset` selects which init_time to check from the end
-    (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
+    Checks `num_recent_init_times` init_times ending at `init_time_offset`
+    (inclusive), newest first, and fails if any of them exceeds
+    `max_nan_fraction`. Each init_time is checked independently, so a per-init
+    threshold is not diluted by a wider window. A window > 1 catches a gap that
+    lands in a recent-but-no-longer-newest init_time (a late source file, a
+    catch-up or re-backfill run): with a window of 1 each init_time is validated
+    only while it is the newest, then never looked at again.
+
+    `init_time_offset` selects the newest init_time to check, counted from the
+    end (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
     latest init is still being filled in (e.g. long-horizon ensembles).
 
     Default `spatial_sampling="random_points"` reads all lead_times (and any
@@ -240,16 +249,44 @@ def check_forecast_recent_nans(
     hour 0 data). `additional_skip_lead_time_0_vars` adds extra names on top
     (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
     """
-    sample_ds = ds.isel(init_time=[init_time_offset])
-    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
+    assert num_recent_init_times >= 1, "num_recent_init_times must be >= 1"
 
-    return _check_nan_fractions(
-        sample_ds,
-        max_nan_fraction=max_nan_fraction,
-        include_vars=include_vars,
-        exclude_vars=exclude_vars,
-        additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
-        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+    newest = init_time_offset % ds.sizes["init_time"]  # positive index
+    oldest = max(0, newest - num_recent_init_times + 1)
+
+    results = [
+        (
+            index,
+            _check_nan_fractions(
+                _apply_spatial_sampling(ds.isel(init_time=[index]), spatial_sampling),
+                max_nan_fraction=max_nan_fraction,
+                include_vars=include_vars,
+                exclude_vars=exclude_vars,
+                additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
+                max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+            ),
+        )
+        for index in range(newest, oldest - 1, -1)
+    ]
+
+    if len(results) == 1:
+        return results[0][1]
+
+    failures = [
+        f"init_time={_format_coord_value(ds['init_time'].values[index])}: {result.message}"
+        for index, result in results
+        if not result.passed
+    ]
+    if failures:
+        return ValidationResult(
+            passed=False,
+            message=f"Excessive NaN fraction in {len(failures)} of {len(results)} "
+            "recent init_times:\n" + "\n".join(failures),
+        )
+    return ValidationResult(
+        passed=True,
+        message=f"All {len(results)} recent init_times have NaN fraction "
+        f"<= {max_nan_fraction}",
     )
 
 
