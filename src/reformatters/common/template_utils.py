@@ -339,10 +339,10 @@ def refresh_store_metadata(
     consolidated: bool,
 ) -> None:
     """Rewrite attrs, encodings, and template-derived coordinate values on every
-    existing store from the current template, trimmed per group to each group's
-    committed extent so arrays are never resized. Arrays the template adds are created
-    (all-NaN until backfilled); store-written coordinate values are preserved. Icechunk
-    stores commit only when something actually changed.
+    existing store from the current template, trimmed to the store's committed extent
+    so arrays are never resized. Arrays the template adds are created (all-NaN until
+    backfilled); store-written coordinate values are preserved. Icechunk stores commit
+    only when something actually changed.
     """
     existing = xr.open_datatree(
         store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
@@ -355,21 +355,17 @@ def refresh_store_metadata(
         for node in existing.subtree
         if append_dim in node.sizes
     }
-    if existing_sizes.get("/", 0) == 0:
+    # Group sizes are always equal: every group grows in one atomic commit, and
+    # open_datatree above raises on a store where they differ.
+    committed_size = existing_sizes.get("/", 0)
+    if committed_size == 0:
         log.info("Primary store is empty, initial sizing is the backfill's job")
         return
 
-    # Trim per group: group sizes can differ (a crash between group appends), and
-    # writing a template larger (or smaller) than a group's committed extent would
-    # NaN-pad (or truncate) it for readers.
     trimmed = xr.DataTree.from_dict(
         {
             node.path: node.to_dataset(inherit=False).isel(
-                {
-                    append_dim: slice(
-                        0, existing_sizes.get(node.path, existing_sizes["/"])
-                    )
-                }
+                {append_dim: slice(0, committed_size)}
             )
             for node in template_ds.subtree
         }

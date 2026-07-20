@@ -63,6 +63,7 @@ DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
         primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
 ]
 ```
 
@@ -93,7 +94,7 @@ Run the tests, making any changes necessary.
 uv run pytest tests/$DATASET_PATH/template_config_test.py
 ```
 
-If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#common-dataset-structures).
+If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#dataset-structures).
 
 ### 4. Implement `RegionJob` subclass
 
@@ -154,10 +155,10 @@ The details here depend on the computing resources and the Zarr storage location
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
 
-## 7. Validate
+### 7. Validate
 
 Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
 
-## 8. Update dataset catalog documentation
+### 8. Update dataset catalog documentation
 
 Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.

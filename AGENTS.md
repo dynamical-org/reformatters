@@ -120,7 +120,7 @@ Run via `uv run main`.
 
 ### Global commands
 - `uv run main --help` - Show all commands and registered datasets
-- `uv run main initialize-new-integration <provider> <model> <variant>` - Scaffold new dataset
+- `uv run main initialize-new-integration <provider> <model> <variant> --kind <materialized|virtual>` - Scaffold new dataset
 - `uv run main <dataset-id> update-template` - Regenerate `templates/latest.zarr`. Run this after any change to a `TemplateConfig` subclass's metadata.
 
 ### Backfills

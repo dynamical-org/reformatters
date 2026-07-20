@@ -215,6 +215,51 @@ def test_file_refs_model_group_routes_hybrid_levels(
     assert {ref.out_loc["model_level"] for ref in refs} == {1, 50}
 
 
+def test_file_refs_matches_element_alternative_spellings(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Some eras' indexes render alternative element spellings (deprecated GRIB
+    # parameters like TCOLWold, NCEP-local params as raw "var discipline=..."
+    # strings); grib_element_alternatives must participate in lookup matching.
+    index = (
+        "1:0:d=2024060100:TCOLWold:entire atmosphere:6 hour fcst:\n"
+        "2:1000:d=2024060100:var discipline=0 center=7 local_table=1 parmcat=7 parm=200"
+        ":5000-2000 m above ground:5-6 hour min fcst:\n"
+    )
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [
+        get_var("total_column_cloud_water_atmosphere"),  # TCOLW, alt TCOLWold
+        get_var("minimum_updraft_helicity_5000_2000m"),  # MNUPHL, alt raw var string
+    ]
+    job = make_job(template_ds, data_vars=data_vars)
+    refs = job.file_refs(_coord("sfc", data_vars), file_size=2500)
+
+    by_name = {r.data_var.name: r for r in refs}
+    assert set(by_name) == {
+        "total_column_cloud_water_atmosphere",
+        "minimum_updraft_helicity_5000_2000m",
+    }
+    tcolw = by_name["total_column_cloud_water_atmosphere"]
+    mnuphl = by_name["minimum_updraft_helicity_5000_2000m"]
+    assert (tcolw.offset, tcolw.length) == (0, 1000)
+    assert (mnuphl.offset, mnuphl.length) == (1000, 2500 - 1000)
+
+
+def test_file_refs_skips_stale_index_non_increasing_offsets(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A matched message whose end byte (the next line's start) is <= its own start
+    # means a corrupt/stale index -> skip the whole file.
+    index = (
+        "1:500:d=2024060100:TMP:2 m above ground:6 hour fcst:\n"
+        "2:500:d=2024060100:REFC:entire atmosphere:6 hour fcst:\n"
+    )
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+    assert job.file_refs(_coord("sfc", data_vars), file_size=9000) == []
+
+
 def test_file_refs_skips_stale_index_past_eof(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -250,6 +295,36 @@ def test_file_refs_lead_0_instant_uses_anl_window(
         _coord("sfc", data_vars, lead_time=pd.Timedelta("0h")), file_size=1000
     )
     assert [r.data_var.name for r in refs] == ["temperature_2m"]
+
+
+# --- discover_available ---
+
+
+def test_discover_available_lists_source_bucket_requiring_index(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    coord = _coord("sfc", data_vars)
+    captured: dict[str, object] = {}
+
+    def fake(
+        pending: list[NoaaHrrrForecast48HourVirtualSourceFileCoord], **kwargs: object
+    ) -> list[tuple[NoaaHrrrForecast48HourVirtualSourceFileCoord, int]]:
+        captured.update(kwargs)
+        return [(pending[0], 9000)]
+
+    monkeypatch.setattr(
+        region_job_module, "discover_available_by_obstore_listing", fake
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    result = job.discover_available([coord])
+
+    assert len(result) == 1
+    assert result[0][0] is coord
+    # HRRR data files always land with a .idx sidecar; a file isn't ready until both exist.
+    assert captured["require_index"] is True
+    assert captured["location_prefix"] == "s3://noaa-hrrr-bdp-pds/"
 
 
 # --- generate_source_file_coords ---
@@ -307,5 +382,8 @@ def test_operational_update_jobs_single_polling_job(
     assert isinstance(job, NoaaHrrrForecast48HourVirtualRegionJob)
     assert job.processing_mode == "update"
     init_times = template_ds.to_dataset().get_index("init_time")
+    # The template extends to "now": the last init is within one cycle of it.
+    assert init_times[-1] <= now
+    assert now - init_times[-1] < TEMPLATE_CONFIG.append_dim_frequency
     # 14h window at the 6h cadence = the current + 2 prior cycles.
     assert job.region == slice(len(init_times) - 3, len(init_times))

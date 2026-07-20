@@ -1,8 +1,11 @@
+import re
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pytest
@@ -261,6 +264,40 @@ def test_validators(dataset: NoaaHrrrForecast48HourVirtualDataset) -> None:
         isinstance(v, validation.CheckVirtualManifestCompleteness) for v in validators
     )
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
+
+
+def test_current_data_validator_allows_8_hours(
+    dataset: NoaaHrrrForecast48HourVirtualDataset,
+) -> None:
+    (current_data,) = [
+        v
+        for v in dataset.validators()
+        if isinstance(v, partial) and v.func is validation.check_forecast_current_data
+    ]
+    # 6h cycle + ~2h publication slack.
+    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=8)}
+
+
+def _resolved_split_size(
+    split: icechunk.ManifestSplittingConfig, array_path: str
+) -> int:
+    # Mirror icechunk's first-to-last rule matching: a path_matches condition
+    # matches by regex search; the AnyArray catch-all matches every array.
+    for condition, dim_splits in split.split_sizes:
+        regex = getattr(condition, "regex", None)
+        if regex is None or re.search(regex, array_path):
+            [(_dim_condition, size)] = dim_splits
+            return size
+    raise AssertionError(f"no split rule matched {array_path}")
+
+
+def test_manifest_split_size_resolves_per_group(
+    dataset: NoaaHrrrForecast48HourVirtualDataset,
+) -> None:
+    split = dataset.icechunk_virtual_config.manifest_split
+    assert _resolved_split_size(split, "/pressure_level/temperature") == 90
+    assert _resolved_split_size(split, "/model_level/temperature") == 80
+    assert _resolved_split_size(split, "/temperature_2m") == 600
 
 
 def test_virtual_container_matches_ref_prefix(

@@ -71,7 +71,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Return the kubernetes cron job definitions to operationally
         update and validate this dataset.
 
-        Implementions should look similar this:
+        Implementations should look similar to this:
         ```
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
@@ -107,7 +107,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
         Return a sequence of DataValidators to run on this dataset.
 
-        Implementions should look similar this:
+        Implementations should look similar to this:
         ```
         return (
             validation.check_analysis_current_data,
@@ -191,7 +191,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
 
         log.info(
-            f"Operational update complete. Wrote to primary store: {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()} replicas"
+            f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
 
     def backfill_kubernetes(
@@ -247,10 +247,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             log.info("Metadata refresh complete, no chunk data written.")
             return
 
-        # In an attempt to keep the subclassing API simpler, we are keeping
-        # all resource needs defined right in `operational_kubernetes_resources`.
-        # If for some reason there are _multiple_ ReformatCronJobs returned from
-        # that we'll need to revisit the logic below or this approach.
         reformat_jobs = [
             r
             for r in self.operational_kubernetes_resources(image_tag="placeholder")
@@ -280,7 +276,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 append_dim=self.template_config.append_dim,
                 all_data_vars=self.template_config.data_vars,
                 # The jobs returned from this call are only counted,
-                # the real job named will be filled in by kubernetes
+                # the real job name will be filled in by kubernetes
                 reformat_job_name="placeholder",
                 filter_start=pd.Timestamp(filter_start) if filter_start else None,
                 filter_end=pd.Timestamp(filter_end) if filter_end else None,

@@ -42,16 +42,11 @@ class NoaaHrrrForecast48HourVirtualDataset(
                     _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
                 ),
             ),
-            # Sized for operational commit latency: each commit read-modify-writes the
-            # active window's manifest for every changed array (~0.1s CPU/MB, measured),
-            # so window bytes bound per-commit flush cost. Full-window sizes at ~16.4
-            # bytes/ref: single-level 600 x 49 refs/init ~= 0.55 MiB, pressure 90 x 1911
-            # ~= 2.8 MiB, model 80 x 2450 ~= 3.2 MiB — balancing commit latency
-            # (sfc/prs/nat ~2.6/2.1/4.5s measured at c=16, 4 cpu, 10ms simulated S3)
-            # against manifest count (M ~7.6k) and whole-archive read amplification;
-            # see "Manifest splitting" in docs/virtual_datasets.md. On first commit per
-            # array after a split-size change, icechunk re-windows that array's existing
-            # manifests (one-time, ~1 min measured).
+            # Sized for operational commit latency: active-window manifest bytes bound
+            # per-commit flush cost. Full-window sizes at ~16.4 bytes/ref: single-level
+            # 600 x 49 refs/init ~= 0.55 MiB, pressure 90 x 1911 ~= 2.8 MiB, model
+            # 80 x 2450 ~= 3.2 MiB; see "Manifest splitting" in docs/virtual_datasets.md
+            # for the cost model.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 90,

@@ -14,7 +14,7 @@ import pytest
 import sentry_sdk
 import sentry_sdk.crons
 import xarray as xr
-from pydantic import ValidationError, computed_field
+from pydantic import Field, ValidationError, computed_field
 
 from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
@@ -38,6 +38,13 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from tests.common.virtual_region_job_test import (
+    VirtualTestRegionJob,
+    _create_template_ds,
+    _make_dataset,
+    _make_region_job,
+    _primary_repo,
+)
 
 NOOP_STORAGE_CONFIG = StorageConfig(
     base_path="noop",
@@ -226,22 +233,22 @@ def test_dynamical_dataset_init() -> None:
     )
 
 
-class TestIcechunkVirtualConfigValidation:
-    @staticmethod
-    def _virtual_config() -> IcechunkVirtualConfig:
-        container = icechunk.VirtualChunkContainer(
-            "s3://noaa-gfs-bdp-pds/",
-            icechunk.s3_store(region="us-east-1", anonymous=True),
-        )
-        return IcechunkVirtualConfig(
-            containers=(container,),
-            manifest_split=manifest_append_dim_split(split_size=1000, dim="time"),
-        )
+def _example_icechunk_virtual_config() -> IcechunkVirtualConfig:
+    container = icechunk.VirtualChunkContainer(
+        "s3://noaa-gfs-bdp-pds/",
+        icechunk.s3_store(region="us-east-1", anonymous=True),
+    )
+    return IcechunkVirtualConfig(
+        containers=(container,),
+        manifest_split=manifest_append_dim_split(split_size=1000, dim="time"),
+    )
 
+
+class TestIcechunkVirtualConfigValidation:
     def test_rejects_non_icechunk_primary(self) -> None:
         # ExampleDataset's default primary_storage_config uses the ZARR3 format.
         with pytest.raises(ValidationError, match="ICECHUNK"):
-            ExampleDataset(icechunk_virtual_config=self._virtual_config())
+            ExampleDataset(icechunk_virtual_config=_example_icechunk_virtual_config())
 
     def test_rejects_non_icechunk_replica(self) -> None:
         with pytest.raises(ValidationError, match="ICECHUNK"):
@@ -254,7 +261,7 @@ class TestIcechunkVirtualConfigValidation:
                         base_path="s3://bucket/replica", format=DatasetFormat.ZARR3
                     )
                 ],
-                icechunk_virtual_config=self._virtual_config(),
+                icechunk_virtual_config=_example_icechunk_virtual_config(),
             )
 
     def test_accepts_all_icechunk_stores(self) -> None:
@@ -262,7 +269,7 @@ class TestIcechunkVirtualConfigValidation:
             primary_storage_config=ExampleDatasetStorageConfig(
                 format=DatasetFormat.ICECHUNK
             ),
-            icechunk_virtual_config=self._virtual_config(),
+            icechunk_virtual_config=_example_icechunk_virtual_config(),
         )
         assert dataset.store_factory.icechunk_virtual_config is not None
 
@@ -296,6 +303,46 @@ def test_materialized_dataset_rejects_vertical_group_var() -> None:
     # _validate_virtual_storage rejects a materialized dataset with any non-root var.
     with pytest.raises(ValidationError, match="do not yet support vertical groups"):
         GroupedVarDataset()
+
+
+class ExampleVirtualConfig(ExampleConfig):
+    @computed_field
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [
+            ExampleDataVar(
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    chunks=(1,),
+                    shards=None,
+                    compressors=(),
+                )
+            )
+        ]
+
+
+class ExampleVirtualRegionJob(VirtualRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
+    pass
+
+
+class ExampleVirtualDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: ExampleVirtualConfig = ExampleVirtualConfig()
+    region_job_class: type[ExampleVirtualRegionJob] = ExampleVirtualRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig(
+        format=DatasetFormat.ICECHUNK
+    )
+    # default_factory: pydantic deep-copies plain defaults per instance, and
+    # VirtualChunkContainer is not copyable.
+    icechunk_virtual_config: IcechunkVirtualConfig | None = Field(
+        default_factory=_example_icechunk_virtual_config
+    )
+
+    def operational_kubernetes_resources(
+        self,
+        image_tag: str,  # noqa: ARG002
+    ) -> Sequence[CronJob]:
+        return ()
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -547,6 +594,97 @@ def test_validate_dataset_calls_validators(
         dataset.template_config.append_dim,
         mock_replica_store_ds,
     )
+
+
+def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # check_for_expected_shards and compare_replica_and_primary are
+    # materialized-only; a virtual dataset's replica gets the base validators.
+    configured_validators = [Mock(), Mock()]
+    monkeypatch.setattr(
+        ExampleVirtualDataset, "validators", lambda self: configured_validators
+    )
+    mock_validate = Mock()
+    monkeypatch.setattr(validation, "validate_dataset", mock_validate)
+    mock_open = Mock()
+    monkeypatch.setattr(validation, "open_flattened_dataset", mock_open)
+
+    dataset = ExampleVirtualDataset(
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ICECHUNK,
+            ),
+        ],
+    )
+
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleVirtualDataset, "store_factory", store_factory)
+    mock_store = Mock()
+    monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
+    mock_replica_store = Mock()
+    monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
+
+    dataset.validate_dataset("example-job-name")
+
+    assert mock_validate.call_count == 2
+    primary_call, replica_call = mock_validate.call_args_list
+    assert primary_call.args == (mock_store,)
+    assert primary_call.kwargs["validators"] == configured_validators
+    assert replica_call.args == (mock_replica_store,)
+    assert replica_call.kwargs["validators"] == configured_validators
+    # No VirtualDataValidator configured, so no operational-window job is built.
+    assert primary_call.kwargs["region_job"] is None
+    assert replica_call.kwargs["region_job"] is None
+    # compare_replica_and_primary's replica dataset is never opened.
+    mock_open.assert_not_called()
+
+
+def test_run_virtual_operational_update_asserts_single_writer() -> None:
+    dataset = ExampleVirtualDataset()
+    with pytest.raises(AssertionError, match="single-writer"):
+        dataset._run_virtual_operational_update(
+            [Mock()], worker_index=0, workers_total=2
+        )
+    with pytest.raises(AssertionError, match="single-writer"):
+        dataset._run_virtual_operational_update(
+            [Mock()], worker_index=1, workers_total=1
+        )
+
+
+@pytest.mark.slow
+def test_virtual_update_rejects_structural_drift_before_any_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    main_before = repo.lookup_branch("main")
+
+    # Update template whose structure drifted from the published store: the
+    # existing variable was renamed.
+    drifted = xr.DataTree.from_dict(
+        {
+            "/": _create_template_ds(2)
+            .to_dataset()
+            .rename({"temperature_2m": "temperature_renamed"})
+        }
+    )
+    job = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], drifted)),
+    )
+
+    with pytest.raises(ValueError, match="does not match the existing store"):
+        dataset.update("test")
+
+    # Worker 0's guard raised before any commit landed on main.
+    assert repo.lookup_branch("main") == main_before
 
 
 class ExampleDatasetWithThreeCronJobs(
