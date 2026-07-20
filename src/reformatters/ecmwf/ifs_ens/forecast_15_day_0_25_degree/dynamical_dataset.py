@@ -64,9 +64,5 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         """Return a sequence of DataValidators to run on this dataset."""
         return (
             validation.check_forecast_current_data,
-            # Check the last few init_times, not just the newest. A transient
-            # source read failure leaves a whole forecast step NaN for every
-            # affected member, and an init_time is otherwise validated only on
-            # the single cycle it is the newest.
             partial(validation.check_forecast_recent_nans, num_recent_init_times=3),
         )
