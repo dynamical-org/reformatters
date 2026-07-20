@@ -86,8 +86,8 @@ Backfill parallelism has a low ceiling: measured on HRRR-virtual, throughput pea
 
 Two operational rules when backfilling a live virtual dataset:
 
-- **Suspend the dataset's `-update` CronJob for the duration of the backfill.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill would make finalize skip the reset (with a warning), discarding the backfill's work.
-- **Choose `append_dim_end` as the last *fully published* position, not "now".** Finalize resets `main` to the pre-sized branch, so positions past the published data would appear as NaN-filled slots to readers.
+- **Run the backfill in between operational fires.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill makes finalize fail loudly and the backfill must be re-run.
+- **`append_dim_end` defaults to the store's current end** — the last published position, which is what you want. Setting it past that (requires both overwrite flags) pre-sizes the branch further, so on finalize the extra positions appear as NaN-filled slots to readers until refs land.
 
 ## Manifest splitting
 
