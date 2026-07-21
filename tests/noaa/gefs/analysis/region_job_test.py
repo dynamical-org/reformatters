@@ -805,6 +805,10 @@ _REFORECAST_MISSING_VARS = frozenset(
         "categorical_freezing_rain_surface",
         "categorical_rain_surface",
         "percent_frozen_precipitation_surface",
+        "temperature_80m",
+        "pressure_80m",
+        "wind_u_80m",
+        "wind_v_80m",
     }
 )
 

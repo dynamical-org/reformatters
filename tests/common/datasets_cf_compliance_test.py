@@ -587,7 +587,7 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "aswdifd_s",
     "aswdir_s",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
     "80u",
     "80v",
     "80t",
@@ -633,7 +633,7 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "quality_assurance",
     "Soil Moisture (AM)",
     "Soil Moisture (PM)",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
     "80 metre U wind component",
     "80 metre V wind component",
     "80 metre temperature",
