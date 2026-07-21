@@ -187,12 +187,26 @@ NetCDF variable metadata (from `chirps-v3.0.rnl.2025.days_p05.nc`, via `/vsicurl
   analog is `contrib/uarizona/swann/analysis` — same per-day-file, revised early→final
   pattern; reuse its `SourceFileCoord` data-status approach (final → prelim fallback) and
   `read_data` (`rasterio.open`, map `-9999` → fill).
-- **Suggested id/name** (per naming conventions): `dataset_id="chc-chirps-daily"`,
-  `name="CHC CHIRPS Daily"` — confirm the provider prefix (`chc` for Climate Hazards
-  Center) against any existing convention before scaffolding.
+- **Two datasets, split on the final/prelim boundary** (they differ in source flavor,
+  coverage, latency, and revision behavior, so they are cleaner as siblings than as one
+  store): `chc-chirps-final` (final/rnl, ERA5, 1981-present) and
+  `chc-chirps-preliminary` (prelim/sat, IMERG, 2025-present). This maps onto the
+  `<provider>-<model>-<variant>` convention with variant = `final` / `preliminary`.
+- **No temporal token in the id.** Daily is CHIRPS's finest global resolution — there is
+  no hourly or other sub-daily global product (v2.0 had an Africa-only `6-hourly`; v3.0
+  has none). The coarser products (pentad, dekad, monthly, annual) are aggregations we'd
+  derive or add later, so "daily" would not disambiguate anything today.
+- **Provider prefix `chc`**: `CHC` is ambiguous in the wider world — the Canadian
+  Hurricane Centre also goes by CHC. But that is Environment and Climate Change Canada,
+  which this repo already namespaces as `eccc`, so there is no in-repo collision, and
+  CHIRPS is itself an unambiguous product name. `chc` (Climate Hazards Center) is fine;
+  `ucsb` is the alternative that most closely matches the existing `uarizona`
+  university-based precedent if we prefer maximal external clarity.
 - **Variable**: `precipitation_surface`, units `mm`, matching whatever an existing
   precipitation variable in the repo already uses; ignore the source's
   `convective precipitation rate` standard_name.
-- **Attribution / license**: cite USGS Data Series 832 (Funk et al., 2014) and the CHC
-  CHIRPS reference; CHIRPS is open data. Confirm exact license text with CHC before
-  publishing.
+- **License**: **CC BY 4.0** (public domain, registered with Creative Commons), confirmed
+  at https://www.chc.ucsb.edu/data/chirps3. Cite the v3 data repository
+  (https://doi.org/10.15780/G2JQ0P) and the v3 paper: Funk, C., Peterson, P., Harrison,
+  L. et al. "The Climate Hazards Center Infrared Precipitation with Stations, Version 3."
+  Sci Data 13, 718 (2026).
