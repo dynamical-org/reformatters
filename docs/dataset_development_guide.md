@@ -1,0 +1,77 @@
+# Dataset Development Guide
+
+Take a data product from nothing (or an existing dataset that needs a new variable) all the way to published, by running each stage of the pipeline in its own sub-agent. This doc is written for the agent that coordinates that work.
+
+Invoke it as: "follow the dataset development guide for `<product>`".
+
+You, the reader, are the **coordinator**. You do not do the stage work yourself — you sequence it, spawn a sub-agent per stage, and drive to completion.
+
+## Two modes
+
+- **New dataset** — full integration. The Implement stage follows [implementation_guide.md](implementation_guide.md).
+- **Add a variable** to an existing dataset — the Implement and Backfill stages follow [add_new_variable.md](add_new_variable.md) and are smaller. Explore collapses to inspecting one recent source file for the variable, and Checkpoint A collapses to confirming the variable's name, level, and attrs.
+
+The stages are otherwise the same; Validate and Publish are shared.
+
+## Coordinator rules
+
+- **Hold only thread state**: the mode, the current stage, the human's scope decisions, and the artifact locations (report path, PR, store URL, report URL). Push every heavy step into a per-stage sub-agent (the Agent tool) and act on its compact return — keep the sub-agent's raw output (plot images, file dumps, long logs) out of your own context. This is the same reason the many-variable validation review fans out to sub-agents ([validation.md](validation.md) §3f).
+- **One stage at a time, gated.** Advance only when the stage's done-check passes. On failure, loop within the stage (bounded) — do not skip ahead or escalate on the first miss.
+- **Two human checkpoints are hard gates.** Stop, surface what's needed, and wait for an answer. Never cross a checkpoint on your own.
+- **Long-running work** (a Kubernetes backfill, a ~1–2 h virtual `run-all`) — launch it detached with a monitor and don't block; see the long-runs note in [validation.md](validation.md) §1.
+- **Multiple products** (virtual + materialized, or a `-late` / `-final` split): run the pipeline once per product; stages that don't depend on each other can run in parallel sub-agents.
+- **Drive to completion.** After each sub-agent returns and each checkpoint is answered, proceed to the next stage automatically until Publish is done or you are blocked on a human.
+
+## Stages
+
+### 1. Explore
+
+- **Goal**: know exactly what source data exists, how it's structured, and how to access it.
+- **Sub-agent**: follow [source_data_exploration_guide.md](source_data_exploration_guide.md) and produce its filled-in template. New-dataset mode does the full archive search; add-variable mode only inspects a recent source file for the variable ([add_new_variable.md](add_new_variable.md) §1a).
+- **Output**: an exploration report (a markdown file — keep the path).
+- **Done**: every claim in the report is verified against real source files, with gaps noted rather than guessed.
+
+### ⛔ Checkpoint A — human scopes the dataset(s)
+
+Present the exploration findings and ask (via AskUserQuestion): exact **Provider / Model / Variant(s)**; **virtual, materialized, or both**; **one product or several** (e.g. a `-late` and a `-final`); **which variables**; **which vertical groups**. In add-variable mode this collapses to confirming the variable's name, level, and attrs. Record the answers — they drive every later stage.
+
+### 2. Implement
+
+- **Goal**: reviewed code that reads the source data and writes the dataset, with tests.
+- **Sub-agent(s)**:
+  - New dataset: follow [implementation_guide.md](implementation_guide.md) (init → register → `TemplateConfig` → `RegionJob` → `DynamicalDataset` → integration test with snapshot values).
+  - Add variable: follow [add_new_variable.md](add_new_variable.md) §1.
+  - Then a **code-review** sub-agent focused on correctness, simplicity, and the future maintainer — drive to the simplest maintainable end state (the `/code-review` skill, or a general-purpose agent).
+- **Output**: a PR (code + regenerated `templates/latest.zarr` + tests). A human reviews and merges it — the backfill runs from `main`.
+- **Done**: `ruff format`, `ruff check`, `ty check`, and the dataset's tests are green, and the PR is merged to `main`.
+
+### 3. Backfill
+
+- **Goal**: a populated store.
+- **Sub-agent**:
+  - New dataset: create the bucket (`./deploy/aws/create_new_aws_open_data_bucket.sh`), then a `create-new-store` backfill via the Manual: Backfill GitHub action (or `backfill-kubernetes`). See [implementation_guide.md](implementation_guide.md) §6.
+  - Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable ([add_new_variable.md](add_new_variable.md) §2).
+- If the dataset already has an operational update cronjob, coordinate the backfill around it so an update publish doesn't fail the backfill's finalize (see [parallel_processing.md](parallel_processing.md)); for a virtual store, suspend the update cronjob first.
+- **Output**: the store URL, with data written.
+- **Done**: the backfill job succeeded and the expected data is present.
+
+### 4. Validate
+
+- **Goal**: a reviewed, ready-to-publish dataset and a draft validation report.
+- **Sub-agent**: follow [validation.md](validation.md) — run `run-all`, review every plot (a many-variable dataset uses the §3f batched sub-agent process), and investigate-and-verify every anomaly. Fix issues found, run a **targeted re-backfill** of only the affected variables/positions, and re-validate. Iterate until `### For further review` is empty, then rewrite the summary for an external audience and upload a draft (`upload`, no `--publish`).
+- **Output**: the draft report URL.
+- **Done**: draft uploaded, `### For further review` empty, summary reworded for external readers.
+
+### ⛔ Checkpoint B — human approves the draft report
+
+Share the draft report URL (including after your own fix-and-re-validate passes). The human reviews it. Publish only after explicit approval — never run `upload --publish` while `### For further review` is non-empty or unapproved.
+
+### 5. Publish to dynamical-stac
+
+- Regenerate the STAC catalog in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac) and merge it; the dynamical.org site rebuilds on its next deploy ([add_new_variable.md](add_new_variable.md) §4). A **new dataset** first needs an entry added to `src/catalog.py` there; **adding a variable** needs only `./scripts/generate` (the generator reads variables from the store).
+- Publish the approved validation report to the stable path (`upload --publish`).
+- **Done**: the STAC change is merged and the report is published.
+
+### 6. Publish to external catalogs
+
+Placeholder — this process is in flux (source.coop, Earthmover, data.gov, and others). Leave it to a human for now.

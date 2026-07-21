@@ -1,6 +1,6 @@
 # Add new variable
 
-How to add a new data variable to an existing dataset.
+How to add a new data variable to an existing dataset. This is the add-a-variable branch of the [dataset development guide](dataset_development_guide.md): its steps below are the Implement and Backfill stages, and Validate and Publish are shared with that guide.
 
 ## 1. Add the variable to the template
 
