@@ -205,7 +205,7 @@ class NoaaMrmsRegionJob(
                     f"Expected exactly 1 band, found {reader.count} in {coord.downloaded_path}"
                 )
                 rasterio_band = 1
-            raw = reader.read(rasterio_band)
+            raw = reader.read(rasterio_band, out_dtype=np.float32)
 
         # GDAL unpacks GRIB values internally in float32 arithmetic (regardless of the
         # dtype read into) whose rounding error varies by architecture (amd64 vs arm64).
@@ -215,7 +215,7 @@ class NoaaMrmsRegionJob(
         decimal_scales = grib_decimal_scale_factors(coord.downloaded_path)
         decimal_scale = decimal_scales[rasterio_band - 1]
         np.round(raw, decimal_scale, out=raw)
-        result: ArrayFloat32 = raw.astype(np.float32)
+        result: ArrayFloat32 = raw
 
         nodata_sentinel = data_var.internal_attrs.nodata_sentinel
         if nodata_sentinel is not None:
