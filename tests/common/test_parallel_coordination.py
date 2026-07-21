@@ -7,7 +7,9 @@ lives in tests/common/test_parallel_writes.py.
 """
 
 import json
+import logging
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -87,9 +89,15 @@ class FakeRepo:
         self.reset_calls: list[tuple[str, str, str]] = []
         self.create_branch_calls: list[tuple[str, str]] = []
         self.delete_branch_calls: list[str] = []
+        # Newest-first commit history per branch, for finalize's retry detection.
+        self.ancestry_by_branch: dict[str, list[str]] = {}
 
     def lookup_branch(self, name: str) -> str:
         return self._branches[name]
+
+    def ancestry(self, *, branch: str) -> list[SimpleNamespace]:
+        snapshots = self.ancestry_by_branch.get(branch, [self._branches[branch]])
+        return [SimpleNamespace(id=snapshot) for snapshot in snapshots]
 
     def list_branches(self) -> list[str]:
         return list(self._branches)
@@ -542,14 +550,54 @@ class TestFinalize:
         # copy_zarr_metadata called once per repo with icechunk_only=True.
         assert stub_io["copy_zarr_metadata"].call_count == 2
         for call in stub_io["copy_zarr_metadata"].call_args_list:
-            assert call.kwargs == {"icechunk_only": True}
+            assert call.kwargs == {
+                "icechunk_only": True,
+                "exclude_coord_value_chunks": (),
+            }
 
-    def test_skips_reset_when_main_already_moved(
+    def test_raises_when_main_diverged(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]
     ) -> None:
         factory = FakeStoreFactory()
         repo = FakeRepo(initial_main="snap-moved-externally")
         repo._branches["temp-branch"] = "snap-temp"
+        repo.ancestry_by_branch["temp-branch"] = ["snap-temp", "snap-original"]
+        factory.set_icechunk_repos([("primary", repo)])
+        setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
+
+        with pytest.raises(RuntimeError, match="main moved during this job"):
+            pc.finalize(
+                factory,  # ty: ignore[invalid-argument-type]
+                all_jobs=[],
+                merged_results={},
+                reformat_job_name="job",
+                branch_name="temp-branch",
+                template_ds=_template(),
+                tmp_store=tmp_path,
+                setup_info=setup_info,
+                workers_total=1,
+                update_template_with_results=False,
+                consolidated=True,
+            )
+
+        # No session, no reset, no icechunk_only copy, and the temp branch is left
+        # in place for inspection.
+        assert repo.sessions == []
+        assert repo.reset_calls == []
+        stub_io["copy_zarr_metadata"].assert_not_called()
+        assert repo.delete_branch_calls == []
+
+    def test_skips_repo_already_reset_by_previous_attempt(self, tmp_path: Path) -> None:
+        factory = FakeStoreFactory()
+        # A previous finalize attempt committed on the branch and reset main to it,
+        # then died before branch cleanup.
+        repo = FakeRepo(initial_main="snap-finalized")
+        repo._branches["temp-branch"] = "snap-finalized"
+        repo.ancestry_by_branch["temp-branch"] = [
+            "snap-finalized",
+            "snap-worker-commit",
+            "snap-original",
+        ]
         factory.set_icechunk_repos([("primary", repo)])
         setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
 
@@ -567,12 +615,240 @@ class TestFinalize:
             consolidated=True,
         )
 
-        # First pass was skipped — no session, no reset, no icechunk_only copy.
+        # Publication already happened; this attempt only cleans up.
         assert repo.sessions == []
         assert repo.reset_calls == []
-        stub_io["copy_zarr_metadata"].assert_not_called()
-        # Second pass still cleans up the abandoned temp branch.
         assert repo.delete_branch_calls == ["temp-branch"]
+
+    def test_concurrent_movement_on_replica_still_publishes_primary(
+        self,
+        tmp_path: Path,
+        stub_io: dict[str, MagicMock],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # Only the replica's main moved to a foreign snapshot (a concurrent,
+        # uncoordinated write); the primary must still be published before
+        # finalize raises for the diverged replica.
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-init"
+        replica_repo = FakeRepo(initial_main="snap-replica-foreign")
+        replica_repo._branches["temp-branch"] = "snap-replica-branch-tip"
+        factory.set_icechunk_repos(
+            [("primary", primary_repo), ("replica-0", replica_repo)]
+        )
+        setup_info: pc.SetupInfo = {
+            "repo_snapshots": {
+                "primary": "snap-primary-init",
+                "replica-0": "snap-replica-init",
+            }
+        }
+
+        with (
+            caplog.at_level(logging.INFO),
+            pytest.raises(
+                RuntimeError, match=r"main moved during this job on \['replica-0'\]"
+            ),
+        ):
+            pc.finalize(
+                factory,  # ty: ignore[invalid-argument-type]
+                all_jobs=[],
+                merged_results={},
+                reformat_job_name="job",
+                branch_name="temp-branch",
+                template_ds=_template(),
+                tmp_store=tmp_path,
+                setup_info=setup_info,
+                workers_total=1,
+                update_template_with_results=False,
+                consolidated=True,
+            )
+
+        # Replica took the error path: no commit, no reset.
+        assert replica_repo.sessions == []
+        assert replica_repo.reset_calls == []
+        error_messages = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.ERROR
+        ]
+        assert error_messages == [
+            "replica-0: main moved past this job's starting snapshot; "
+            "branch temp-branch will not be published"
+        ]
+
+        # The continue did not abort the loop: primary still committed and reset main.
+        assert len(primary_repo.sessions) == 1
+        assert len(primary_repo.sessions[0].commit_calls) == 1
+        assert [(c[0], c[2]) for c in primary_repo.reset_calls] == [
+            ("main", "snap-primary-init")
+        ]
+        assert stub_io["copy_zarr_metadata"].call_count == 1
+
+        # The raise leaves both temp branches in place for inspection.
+        assert primary_repo.delete_branch_calls == []
+        assert replica_repo.delete_branch_calls == []
+
+    def test_retry_after_partial_publish_is_benign_and_finishes_remaining(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # A previous attempt reset the replica's main to this job's branch tip,
+        # then died before the primary. The retry must treat the replica as
+        # already published (info, not error) and still publish the primary.
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-init"
+        replica_repo = FakeRepo(initial_main="snap-replica-published")
+        replica_repo._branches["temp-branch"] = "snap-replica-published"
+        factory.set_icechunk_repos(
+            [("primary", primary_repo), ("replica-0", replica_repo)]
+        )
+        setup_info: pc.SetupInfo = {
+            "repo_snapshots": {
+                "primary": "snap-primary-init",
+                "replica-0": "snap-replica-init",
+            }
+        }
+
+        with caplog.at_level(logging.INFO):
+            pc.finalize(
+                factory,  # ty: ignore[invalid-argument-type]
+                all_jobs=[],
+                merged_results={},
+                reformat_job_name="job",
+                branch_name="temp-branch",
+                template_ds=_template(),
+                tmp_store=tmp_path,
+                setup_info=setup_info,
+                workers_total=1,
+                update_template_with_results=False,
+                consolidated=True,
+            )
+
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+        assert any(
+            "main already reset by a previous attempt" in r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        )
+        # Already-published replica is left as-is.
+        assert replica_repo.sessions == []
+        assert replica_repo.reset_calls == []
+        assert replica_repo.lookup_branch("main") == "snap-replica-published"
+        # The not-yet-reset primary still publishes.
+        assert len(primary_repo.sessions[0].commit_calls) == 1
+        assert [(c[0], c[2]) for c in primary_repo.reset_calls] == [
+            ("main", "snap-primary-init")
+        ]
+        # Both temp branches cleaned up.
+        assert primary_repo.delete_branch_calls == ["temp-branch"]
+        assert replica_repo.delete_branch_calls == ["temp-branch"]
+
+    def test_branch_already_deleted_is_benign(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # A previous attempt fully finished for this repo: main reset to the
+        # branch tip and the temp branch deleted. FakeRepo.ancestry raises
+        # KeyError on a missing branch, so this also pins that finalize never
+        # walks the deleted branch's history.
+        factory = FakeStoreFactory()
+        repo = FakeRepo(initial_main="snap-published")
+        factory.set_icechunk_repos([("primary", repo)])
+        setup_info: pc.SetupInfo = {"repo_snapshots": {"primary": "snap-original"}}
+
+        with caplog.at_level(logging.INFO):
+            pc.finalize(
+                factory,  # ty: ignore[invalid-argument-type]
+                all_jobs=[],
+                merged_results={},
+                reformat_job_name="job",
+                branch_name="temp-branch",
+                template_ds=_template(),
+                tmp_store=tmp_path,
+                setup_info=setup_info,
+                workers_total=1,
+                update_template_with_results=False,
+                consolidated=True,
+            )
+
+        assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+        assert any(
+            "main already reset by a previous attempt" in r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        )
+        assert repo.sessions == []
+        assert repo.reset_calls == []
+        assert repo.delete_branch_calls == []
+
+    def test_cleanup_skips_repo_whose_branch_is_already_deleted(
+        self, tmp_path: Path
+    ) -> None:
+        # Replica finished fully on a previous attempt (branch already deleted);
+        # FakeRepo.delete_branch raises KeyError on a missing branch, so pass 2
+        # must guard on branch existence per repo.
+        factory = FakeStoreFactory()
+        primary_repo = FakeRepo(initial_main="snap-primary-init")
+        primary_repo._branches["temp-branch"] = "snap-primary-init"
+        replica_repo = FakeRepo(initial_main="snap-replica-published")
+        factory.set_icechunk_repos(
+            [("primary", primary_repo), ("replica-0", replica_repo)]
+        )
+        setup_info: pc.SetupInfo = {
+            "repo_snapshots": {
+                "primary": "snap-primary-init",
+                "replica-0": "snap-replica-init",
+            }
+        }
+
+        pc.finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            all_jobs=[],
+            merged_results={},
+            reformat_job_name="job",
+            branch_name="temp-branch",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            setup_info=setup_info,
+            workers_total=1,
+            update_template_with_results=False,
+            consolidated=True,
+        )
+
+        assert replica_repo.delete_branch_calls == []
+        assert primary_repo.delete_branch_calls == ["temp-branch"]
+        assert [(c[0], c[2]) for c in primary_repo.reset_calls] == [
+            ("main", "snap-primary-init")
+        ]
+
+    def test_overwrite_backfill_publishes_zarr3_metadata(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        factory = FakeStoreFactory()
+
+        pc.finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            all_jobs=[],
+            merged_results={},
+            reformat_job_name="job",
+            branch_name="main",
+            template_ds=_template(),
+            tmp_store=tmp_path,
+            setup_info={},
+            workers_total=1,
+            update_template_with_results=False,
+            consolidated=True,
+            publish_zarr3_metadata=True,
+            exclude_coord_value_chunks={"ingested_forecast_length"},
+        )
+
+        assert stub_io["copy_zarr_metadata"].call_count == 1
+        copy_kwargs = stub_io["copy_zarr_metadata"].call_args.kwargs
+        assert copy_kwargs["zarr3_only"] is True
+        assert copy_kwargs["skip_unchanged"] is True
+        assert copy_kwargs["exclude_coord_value_chunks"] == {"ingested_forecast_length"}
 
     def test_zarr3_metadata_copy_only_when_update_template_with_results(
         self, tmp_path: Path, stub_io: dict[str, MagicMock]

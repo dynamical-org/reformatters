@@ -73,5 +73,8 @@ class NoaaHrrrForecast48HourDataset(
             partial(
                 validation.check_forecast_recent_nans,
                 additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
+                # CF-masks its -50 "no precipitation" sentinel to NaN, so the field
+                # is legitimately all/mostly NaN wherever no precipitation is falling.
+                exclude_vars=("percent_frozen_precipitation_surface",),
             ),
         )

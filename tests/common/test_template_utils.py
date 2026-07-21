@@ -17,10 +17,12 @@ from reformatters.common.config_models import (
 from reformatters.common.template_utils import (
     _get_mode_from_path_store,
     assert_no_structural_drift_from_existing_store,
+    assert_safe_overwrite,
     assign_var_metadata,
     empty_copy_with_reindex,
     make_empty_variable,
     sort_consolidated_metadata,
+    store_written_coords,
 )
 
 # --- _get_mode_from_path_store tests ---
@@ -286,8 +288,9 @@ def _structured_var(
     chunks: tuple[int, ...] = (1, 3, 4),
     shards: tuple[int, ...] | None = (2, 3, 4),
     dims: tuple[str, ...] = ("time", "latitude", "longitude"),
+    time_size: int = 4,
 ) -> xr.DataArray:
-    sizes = {"time": 4, "latitude": 3, "longitude": 4}
+    sizes = {"time": time_size, "latitude": 3, "longitude": 4}
     da = xr.DataArray(
         np.zeros(tuple(sizes[d] for d in dims), dtype=np.float32), dims=dims
     )
@@ -441,3 +444,75 @@ def test_structural_drift_detects_group_coord_value_change() -> None:
     template = _two_node_ds(pressure=_pressure_var(pressure_levels=(850.0, 1000.0)))
     with pytest.raises(ValueError, match=r"coord pressure_level"):
         assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+# --- assert_safe_overwrite tests ---
+
+
+def test_assert_safe_overwrite_passes_for_identical_structure() -> None:
+    existing = _structured_ds(var0=_structured_var())
+    template = _structured_ds(var0=_structured_var())
+    assert_safe_overwrite(
+        template, existing, "time", allow_new_arrays=False, allow_expansion=False
+    )
+
+
+def test_assert_safe_overwrite_gates_new_arrays() -> None:
+    existing = _structured_ds(var0=_structured_var())
+    template = _structured_ds(var0=_structured_var(), var_new=_structured_var())
+    with pytest.raises(ValueError, match="adds arrays not in the store"):
+        assert_safe_overwrite(
+            template, existing, "time", allow_new_arrays=False, allow_expansion=False
+        )
+    assert_safe_overwrite(
+        template, existing, "time", allow_new_arrays=True, allow_expansion=False
+    )
+
+
+def test_assert_safe_overwrite_never_allows_trimming() -> None:
+    existing = _structured_ds(var0=_structured_var(time_size=4))
+    template = _structured_ds(var0=_structured_var(time_size=3))
+    with pytest.raises(ValueError, match="trimming an existing store is never"):
+        assert_safe_overwrite(
+            template, existing, "time", allow_new_arrays=True, allow_expansion=True
+        )
+
+
+def test_assert_safe_overwrite_gates_expansion() -> None:
+    existing = _structured_ds(var0=_structured_var(time_size=4))
+    template = _structured_ds(var0=_structured_var(time_size=6))
+    with pytest.raises(ValueError, match="extending requires"):
+        assert_safe_overwrite(
+            template, existing, "time", allow_new_arrays=True, allow_expansion=False
+        )
+    assert_safe_overwrite(
+        template, existing, "time", allow_new_arrays=True, allow_expansion=True
+    )
+
+
+def test_assert_safe_overwrite_rejects_structural_drift() -> None:
+    existing = _structured_ds(var0=_structured_var(dtype="float32"))
+    template = _structured_ds(var0=_structured_var(dtype="float64"))
+    with pytest.raises(ValueError, match=r"var0\.dtype"):
+        assert_safe_overwrite(
+            template, existing, "time", allow_new_arrays=True, allow_expansion=True
+        )
+
+
+# --- store_written_coords tests ---
+
+
+def test_store_written_coords_finds_all_null_coords() -> None:
+    times = np.array(["2000-01-01", "2000-01-02"], dtype="datetime64[ns]")
+    ds = xr.Dataset(
+        coords={
+            "time": ("time", times),
+            "ingested_forecast_length": (
+                "time",
+                np.array(["NaT", "NaT"], dtype="datetime64[ns]"),
+            ),
+            "spatial_ref": ((), np.array(0)),
+        }
+    )
+    tree = xr.DataTree.from_dict({"/": ds})
+    assert store_written_coords(tree) == {"ingested_forecast_length"}

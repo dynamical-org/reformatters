@@ -14,6 +14,7 @@ from zarr.abc.store import Store
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
+from reformatters.common.grib import grib_decimal_scale_factors
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.pydantic import replace
@@ -204,7 +205,21 @@ class NoaaMrmsRegionJob(
                     f"Expected exactly 1 band, found {reader.count} in {coord.downloaded_path}"
                 )
                 rasterio_band = 1
-            result: ArrayFloat32 = reader.read(rasterio_band, out_dtype=np.float32)
+            raw = reader.read(rasterio_band, out_dtype=np.float32)
+
+        # GDAL unpacks GRIB values internally in float32 arithmetic (regardless of the
+        # dtype read into) whose rounding error varies by architecture (amd64 vs arm64).
+        # These fields' values are exact multiples of 10^-D (enforced by
+        # grib_decimal_scale_factors), so rounding to D decimals restores them exactly.
+        # Also matches gribberish's float64 decode used by virtual datasets.
+        decimal_scales = grib_decimal_scale_factors(coord.downloaded_path)
+        decimal_scale = decimal_scales[rasterio_band - 1]
+        # Rounding in float32 is exact only while value * 10^D stays below 2^24.
+        assert decimal_scale <= 3, (
+            f"Decimal scale factor {decimal_scale} too large to round in float32"
+        )
+        np.round(raw, decimal_scale, out=raw)
+        result: ArrayFloat32 = raw
 
         nodata_sentinel = data_var.internal_attrs.nodata_sentinel
         if nodata_sentinel is not None:

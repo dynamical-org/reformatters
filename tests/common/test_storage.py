@@ -914,9 +914,9 @@ class TestCoordinationFsStorageOptions:
 
 
 class TestAllStoresExistWithIcechunk:
-    """`all_stores_exist` is used as a precondition for backfills with
-    `overwrite_existing=True`. It should return True for a populated icechunk
-    primary and False for one that doesn't yet exist on disk."""
+    """`all_stores_exist` is used as a precondition for overwrite backfills.
+    It should return True for a populated icechunk primary and False for one
+    that doesn't yet exist on disk."""
 
     def test_returns_true_for_initialized_icechunk_primary(self) -> None:
         factory = StoreFactory(

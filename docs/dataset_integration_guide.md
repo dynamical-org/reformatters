@@ -63,6 +63,7 @@ DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
         primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
 ]
 ```
 
@@ -93,7 +94,7 @@ Run the tests, making any changes necessary.
 uv run pytest tests/$DATASET_PATH/template_config_test.py
 ```
 
-If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#common-dataset-structures).
+If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#dataset-structures).
 
 ### 4. Implement `RegionJob` subclass
 
@@ -149,15 +150,15 @@ The details here depend on the computing resources and the Zarr storage location
 1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
 1. Run a backfill on a kubernetes cluster:
    - This supports parallelism across servers to process much larger datasets.
-   - Complete the steps in README.md > Deploying to the cloud > Setup.
-   - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
+   - Once your dataset is merged to main, the simplest path is the [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) GitHub action with operation `create-new-store` (leave append_dim_end empty to backfill through now).
+   - Or from your machine (complete the steps in README.md > Deploying to the cloud > Setup): `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes`, then track the job with `kubectl get jobs`. It creates a new store and fails if one exists; see `--help` for the `--overwrite-*` flags that write into an existing store.
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
 
-## 7. Validate
+### 7. Validate
 
 Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
 
-## 8. Update dataset catalog documentation
+### 8. Update dataset catalog documentation
 
 Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.

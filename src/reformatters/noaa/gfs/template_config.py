@@ -271,6 +271,78 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                 ),
             ),
             NoaaDataVar(
+                name="temperature_80m",
+                encoding=encoding,
+                attrs=DataVarAttrs(
+                    short_name="80t",
+                    long_name="80 metre temperature",
+                    units="degree_Celsius",
+                    step_type="instant",
+                    standard_name="air_temperature",
+                ),
+                internal_attrs=NoaaInternalAttrs(
+                    grib_element="TMP",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
+                    grib_index_level="80 m above ground",
+                    index_position=682,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                ),
+            ),
+            NoaaDataVar(
+                name="pressure_80m",
+                encoding=encoding,
+                attrs=DataVarAttrs(
+                    short_name="80sp",
+                    long_name="80 metre pressure",
+                    units="Pa",
+                    step_type="instant",
+                    standard_name="air_pressure",
+                ),
+                internal_attrs=NoaaInternalAttrs(
+                    grib_element="PRES",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
+                    grib_index_level="80 m above ground",
+                    index_position=684,
+                    keep_mantissa_bits=10,
+                ),
+            ),
+            NoaaDataVar(
+                name="wind_u_80m",
+                encoding=encoding,
+                attrs=DataVarAttrs(
+                    short_name="80u",
+                    long_name="80 metre U wind component",
+                    standard_name="eastward_wind",
+                    units="m s-1",
+                    step_type="instant",
+                ),
+                internal_attrs=NoaaInternalAttrs(
+                    grib_element="UGRD",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
+                    grib_index_level="80 m above ground",
+                    index_position=685,
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            NoaaDataVar(
+                name="wind_v_80m",
+                encoding=encoding,
+                attrs=DataVarAttrs(
+                    short_name="80v",
+                    long_name="80 metre V wind component",
+                    units="m s-1",
+                    step_type="instant",
+                    standard_name="northward_wind",
+                ),
+                internal_attrs=NoaaInternalAttrs(
+                    grib_element="VGRD",
+                    grib_index_level="80 m above ground",
+                    grib_description='80[m] HTGL="Specified height level above ground"',
+                    index_position=686,
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            NoaaDataVar(
                 name="percent_frozen_precipitation_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(

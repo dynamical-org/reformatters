@@ -302,6 +302,10 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
             return data
 
     monkeypatch.setattr("rasterio.open", lambda *_args, **_kwargs: FakeReader())
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job.grib_decimal_scale_factors",
+        lambda _path: [1, 1],
+    )
 
     result = region_job.read_data(
         NoaaMrmsSourceFileCoord(
@@ -316,6 +320,61 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
     )
 
     np.testing.assert_array_equal(result, data)
+
+
+def test_read_data_quantizes_to_grib_decimal_precision(
+    monkeypatch: pytest.MonkeyPatch,
+    template_config: NoaaMrmsConusAnalysisHourlyTemplateConfig,
+) -> None:
+    region_job = NoaaMrmsRegionJob.model_construct(
+        template_ds=Mock(),
+        data_vars=[],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    # Values as GDAL's float32 unpacking produces them on arm64 (FMA contraction):
+    # a packed zero decodes to 4.4703484e-8 and 0.2 mm to 0.2 + ~5e-8.
+    data = np.array(
+        [[4.4703484e-08, 0.20000004768371582], [-3.0, 12.3]], dtype=np.float32
+    )
+
+    class FakeReader:
+        count = 1
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self, band: int, out_dtype: np.dtype[np.float32]) -> np.ndarray:
+            assert out_dtype == np.float32
+            assert band == 1
+            return data
+
+    monkeypatch.setattr("rasterio.open", lambda *_args, **_kwargs: FakeReader())
+    monkeypatch.setattr(
+        "reformatters.noaa.mrms.conus_analysis_hourly.region_job.grib_decimal_scale_factors",
+        lambda _path: [1],
+    )
+
+    result = region_job.read_data(
+        NoaaMrmsSourceFileCoord(
+            time=pd.Timestamp("2024-01-15T12:00"),
+            product="MultiSensor_QPE_01H_Pass2",
+            level="00.00",
+            fallback_products=(),
+            data_var_name="precipitation_surface",
+            downloaded_path=Path("fake.grib2"),
+        ),
+        next(v for v in template_config.data_vars if v.name == "precipitation_surface"),
+    )
+
+    assert result.dtype == np.float32
+    expected = np.array([[0.0, 0.2], [-3.0, 12.3]], dtype=np.float32)
+    np.testing.assert_array_equal(result, expected)
 
 
 @pytest.mark.parametrize(

@@ -21,39 +21,36 @@ uv run main <DATASET_ID> update-template
 
 1e. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
 
-## 2. Write data for the new variable
+## 2. Backfill data for the new variable
 
-#### 2a. Run an operational update
+After the PR is merged to main, run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access):
 
-After the PR is merged, run an operational update once (or wait for the next scheduled run) so the dataset’s Zarr metadata includes the new variable before you backfill history.
+- **operation** = `overwrite-chunks-and-metadata` — refreshes the store's metadata from the template (creating the new variable) and writes its chunk data. The guards never trim the store, and its extent is unchanged unless you explicitly set an append_dim_end past the current end.
+- **filter_variable_names** = your new variable's name.
+- **jobs_per_pod** = 1 or 2 in most cases for materialized datasets; 30 for virtual. For both, the goal is jobs that take 3-15 minutes, to amortize startup time and reduce icechunk commit compare-and-set contention.
+- **max_parallelism** = materialized: 100-300 if the data source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.
 
-To run it immediately, use the GitHub Action [Manual: Create Job from CronJob](https://github.com/dynamical-org/reformatters/actions/workflows/manual-create-job-from-cronjob.yml) (requires reformatters repo write access) setting "CronJob to create job from" to `{dataset-id}-update`.
-
-#### 2b. Backfill history for the variable
-
-> Prerequisite: You can build and push Docker images (see `README.md` > Deploying to the cloud > Setup).
-> - `DOCKER_REPOSITORY` is set in your shell.
-> - Your local Docker is authenticated to that repo.
-
-Run a backfill filtered to just the new variable:
+Or the equivalent CLI (requires kubectl access to the cluster):
 
 ```bash
 DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
-  <APPEND_DIM_END> <JOBS_PER_POD> <MAX_PARALLELISM> \
-  --overwrite-existing \
+  --overwrite-chunks --overwrite-metadata \
   --filter-variable-names <VARIABLE_NAME>
 ```
 
-- `APPEND_DIM_END` = the current approximate UTC timestamp. The operational update in 2a will have already filled the latest data, so the exact value just needs to be somewhere around the present time.
-- `JOBS_PER_POD` = 1 or 2 in most cases. Set to 3-4 if the jobs run very fast to amortize container startup time.
-- `MAX_PARALLELISM` = 100 if the data source can support highly parallel reads, else lower.
-- `--overwrite-existing` writes into the existing store rather than attempting (and failing) to create a new one.
-- `--filter-variable-names` = your new variable's name.
+An operational update that publishes while the backfill runs makes the backfill's finalize fail loudly and the backfill must be re-run, so run the backfill in between update runs — for a long history, as several smaller `filter_start`/`filter_end` backfills (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
 
 ## 3. Validate
 
 Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist. When validating a new variable it is often useful to restrict with `--variable <name>` to iterate faster.
 
-## 4. Update dataset catalog documentation
+## 4. Refresh the STAC catalog
 
-Update the dataset catalog docs on `dynamical.org` by rebuilding (`npm run build`) and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.
+The dataset catalog on dynamical.org is built from the STAC catalog at `https://stac.dynamical.org/catalog.json`, maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). That STAC is the source of truth — you don't edit the website; you update the STAC and the site reflects the change on its next deploy.
+
+The STAC generator derives each collection's variables by opening the dataset's Icechunk store, so once the backfill (step 2) has written the new variable no `src/catalog.py` edit is needed (that's only for adding a whole new dataset). Just regenerate the committed output in `dynamical-stac` and merge:
+
+```bash
+./scripts/generate   # opens each store on S3; picks up the new variable
+git add stac/        # commit the regenerated collection.json
+```

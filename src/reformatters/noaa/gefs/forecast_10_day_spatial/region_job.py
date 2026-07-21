@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Literal
 
 import pandas as pd
 import xarray as xr
@@ -64,11 +64,6 @@ class GefsForecast10DaySpatialRegionJob(
     VirtualRegionJob[GEFSDataVar, GefsForecast10DaySpatialSourceFileCoord]
 ):
     """RegionJob for the GEFS 10-day spatial (virtual) forecast dataset."""
-
-    # Concurrent index file downloads. The .idx files are ~30KB latency-bound
-    # requests; measured throughput vs pool width: 8 -> ~105 files/s,
-    # 32 -> ~310, 64 -> ~380, 128 -> ~435 (diminishing).
-    download_concurrency: ClassVar[int] = 64
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
