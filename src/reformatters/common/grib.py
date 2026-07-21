@@ -31,10 +31,10 @@ def grib_decimal_scale_factors(path: Path) -> list[int]:
     data = path.read_bytes()
     scale_factors: list[int] = []
     pos = 0
-    while pos < len(data):
-        assert data[pos : pos + 4] == b"GRIB", (
-            f"Expected GRIB message start at byte {pos} in {path}"
-        )
+    # Some archived source files pad after a message with junk bytes (e.g. Iowa Mesonet
+    # MRMS files from 2014-2015 append zero padding), so locate each message by its
+    # magic bytes rather than assuming messages are contiguous; GDAL scans the same way.
+    while (pos := data.find(b"GRIB", pos)) != -1:
         message_end = pos + int.from_bytes(data[pos + 8 : pos + 16])
         pos += 16
         while pos < message_end and data[pos : pos + 4] != b"7777":

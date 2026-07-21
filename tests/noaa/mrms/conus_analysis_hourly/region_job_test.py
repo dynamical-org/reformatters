@@ -279,7 +279,7 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
         reformat_job_name="test",
     )
 
-    data = np.ones((2, 2), dtype=np.float64)
+    data = np.ones((2, 2), dtype=np.float32)
 
     class FakeReader:
         count = 2
@@ -296,7 +296,8 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
                 2: {"GRIB_DISCIPLINE": "209(Local)"},
             }[band]
 
-        def read(self, band: int) -> np.ndarray:
+        def read(self, band: int, out_dtype: np.dtype[np.float32]) -> np.ndarray:
+            assert out_dtype == np.float32
             assert band == 2
             return data
 
@@ -336,7 +337,7 @@ def test_read_data_quantizes_to_grib_decimal_precision(
     # Values as GDAL's float32 unpacking produces them on arm64 (FMA contraction):
     # a packed zero decodes to 4.4703484e-8 and 0.2 mm to 0.2 + ~5e-8.
     data = np.array(
-        [[4.4703484e-08, 0.20000004768371582], [-3.0, 12.3]], dtype=np.float64
+        [[4.4703484e-08, 0.20000004768371582], [-3.0, 12.3]], dtype=np.float32
     )
 
     class FakeReader:
@@ -348,7 +349,8 @@ def test_read_data_quantizes_to_grib_decimal_precision(
         def __exit__(self, *args: object) -> None:
             return None
 
-        def read(self, band: int) -> np.ndarray:
+        def read(self, band: int, out_dtype: np.dtype[np.float32]) -> np.ndarray:
+            assert out_dtype == np.float32
             assert band == 1
             return data
 

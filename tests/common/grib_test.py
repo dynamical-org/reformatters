@@ -66,8 +66,24 @@ def test_grib_decimal_scale_factors_rejects_non_integer_reference_value(
 def test_grib_decimal_scale_factors_rejects_non_grib(tmp_path: Path) -> None:
     path = tmp_path / "not_a.grib2"
     path.write_bytes(b"NOPE" + bytes(20))
-    with pytest.raises(AssertionError, match="Expected GRIB message start"):
+    with pytest.raises(AssertionError, match="No data representation sections"):
         grib_decimal_scale_factors(path)
+
+
+def test_grib_decimal_scale_factors_skips_trailing_padding(tmp_path: Path) -> None:
+    path = tmp_path / "padded.grib2"
+    path.write_bytes(_grib2_message([(0, 1)]) + bytes(500))
+    assert grib_decimal_scale_factors(path) == [1]
+
+
+def test_grib_decimal_scale_factors_skips_padding_between_messages(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "interleaved.grib2"
+    path.write_bytes(
+        _grib2_message([(0, 1)]) + bytes(500) + _grib2_message([(0, 2)]) + bytes(100)
+    )
+    assert grib_decimal_scale_factors(path) == [1, 2]
 
 
 def test_grib_decimal_scale_factors_real_negative_decimal_scale(
