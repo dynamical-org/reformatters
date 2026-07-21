@@ -99,6 +99,32 @@ def test_run_value_availability_flags_missing_position(tmp_path: Path) -> None:
     assert "temperature_2m" in ctx.loaded_point_data
 
 
+def test_run_value_availability_analysis_dataset_fraction_is_float(
+    tmp_path: Path,
+) -> None:
+    """An analysis point series has no non-time dims, so the null-fraction mean is an
+    identity op that keeps bool dtype; bool arithmetic then reports fully-missing
+    positions as fraction 0.5 instead of 0.0."""
+    time = pd.date_range("2020-01-01", periods=6, freq="h")
+    lat = np.array([10.0, 20.0])
+    lon = np.array([30.0, 40.0])
+    values = np.ones((time.size, lat.size, lon.size))
+    values[2, :, :] = np.nan  # missing at both points
+    values[4, 0, 0] = np.nan  # missing at point 1 only
+    ds = xr.Dataset(
+        {"temperature_2m": (("time", "latitude", "longitude"), values)},
+        coords={"time": time, "latitude": lat, "longitude": lon},
+    )
+    ds["temperature_2m"].attrs["step_type"] = "instant"
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = ["temperature_2m"]
+
+    run_value_availability(ctx)
+
+    series = ctx.availability["temperature_2m"]
+    np.testing.assert_allclose(series.fraction, [1, 1, 0, 1, 0.5, 1])
+
+
 def test_run_value_availability_exempts_accum_hour_zero(tmp_path: Path) -> None:
     ctx = _ctx(_forecast_dataset(), tmp_path)
     run_value_availability(ctx)

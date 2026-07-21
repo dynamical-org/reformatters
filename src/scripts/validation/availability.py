@@ -236,7 +236,11 @@ def _compute_nulls_for_point(
         check_mask = null_mask.isel(lead_time=slice(1, None))
 
     time_dim = next(d for d in ("time", "init_time") if d in da_point.dims)
-    null_frac = check_mask.mean(dim=[d for d in non_time_dims if d in check_mask.dims])
+    # On an analysis dataset the point series has no non-time dims, and mean over an
+    # empty dim list keeps the mask's bool dtype; cast so callers can do arithmetic.
+    null_frac = check_mask.mean(
+        dim=[d for d in non_time_dims if d in check_mask.dims]
+    ).astype(np.float64)
 
     if check_mask.any():
         unavailable = null_frac[time_dim].where(null_frac > 0, drop=True)
