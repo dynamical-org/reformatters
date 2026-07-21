@@ -161,8 +161,10 @@ NetCDF variable metadata (from `chirps-v3.0.rnl.2025.days_p05.nc`, via `/vsicurl
   ±60°, 2400 rows). CRS, longitude grid, 0.05° step, float32 dtype, and `-9999` sentinel
   are identical.
 - **File format shift v2.0→v3.0**: v2.0 daily tifs are gzipped (`.tif.gz`); v3.0 finals
-  are uncompressed COGs (`.cog`) and v3.0 prelims are uncompressed `.tif`. COG internal
-  tiling + `/vsicurl/` means a backfill could read directly without a separate gunzip.
+  are COGs (`.cog`, LZW-compressed, 512×512 internal tiles) and v3.0 prelims are `.tif`.
+  `rasterio`/`/vsicurl/` reads them directly (LZW handled transparently, no gunzip step).
+  The per-year NetCDFs are HDF5 (netCDF4): v3.0 uncompressed raw float32 (`(1, 7200)`
+  scanline blocks, ~23.5 GB/yr), v2.0 compressed (~1.1 GB/yr).
 - **Land-only**: roughly half the grid is `-9999` (oceans). Empty-chunk friendly if fill
   is encoded well, but expect large no-data regions.
 - **rnl vs sat naming**: filename carries the downscaling flavor
@@ -210,3 +212,28 @@ NetCDF variable metadata (from `chirps-v3.0.rnl.2025.days_p05.nc`, via `/vsicurl
   (https://doi.org/10.15780/G2JQ0P) and the v3 paper: Funk, C., Peterson, P., Harrison,
   L. et al. "The Climate Hazards Center Infrared Precipitation with Stations, Version 3."
   Sci Data 13, 718 (2026).
+
+### Materialized vs. virtual
+
+Go materialized. A virtual dataset off this source does not work as-is, for reasons that
+are unlikely to change:
+
+- **The per-day files don't virtualize.** A virtual ref is `(location, offset, length)`
+  decoded by a zarr codec at read time. The daily COGs/tifs — the files with the right
+  granularity and the ideal one-timestep-full-grid shape — are LZW-compressed 512×512
+  tiled TIFFs, and there is no zarr codec for an LZW-tiled TIFF tile (unlike GRIB, which
+  has `GribberishCodec`). The per-year NetCDFs are referenceable (HDF5, v3.0 uncompressed
+  raw float32), but they are one file per year, so a new day only appears when CHC
+  rewrites the whole ~23 GB file — which forfeits the seconds-latency incremental-update
+  that is the point of going virtual — and each timestep chunk would be a ~69 MB slab.
+- **The HTTP backend is unsupported and CHC is the wrong host.** This repo's icechunk
+  virtual containers are S3-only (`common/storage.py` handles S3 / S3-compatible / Tigris
+  / local and raises otherwise; refs must point at an `s3://` container prefix, not an
+  `https://` mirror). CHC is a university HTTP file server, not durable/high-throughput
+  object storage, and a virtual store couples every reader's every read to it forever —
+  the opposite of why the repo's virtual datasets point at NODD-on-S3 / Source Coop.
+- **Prelim is revised in place**, but virtual refs assume immutable source bytes; only
+  `final` is immutable enough to virtualize safely.
+
+A map-optimized virtual companion would only make sense later, built on an S3-hosted,
+immutable, virtualizable mirror of the finals — not the CHC HTTP tifs.
