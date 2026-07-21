@@ -214,6 +214,10 @@ class NoaaMrmsRegionJob(
         # Also matches gribberish's float64 decode used by virtual datasets.
         decimal_scales = grib_decimal_scale_factors(coord.downloaded_path)
         decimal_scale = decimal_scales[rasterio_band - 1]
+        # Rounding in float32 is exact only while value * 10^D stays below 2^24.
+        assert decimal_scale <= 3, (
+            f"Decimal scale factor {decimal_scale} too large to round in float32"
+        )
         np.round(raw, decimal_scale, out=raw)
         result: ArrayFloat32 = raw
 
