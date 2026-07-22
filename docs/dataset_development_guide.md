@@ -48,10 +48,8 @@ Present the exploration findings and settle the scope with the human. Always ali
 ### 3. Backfill
 
 - **Goal**: a populated store.
-- **Sub-agent**:
-  - New dataset: create the bucket (`./deploy/aws/create_new_aws_open_data_bucket.sh`), then a `create-new-store` backfill via the Manual: Backfill GitHub action (or `backfill-kubernetes`). See [implementation_guide.md](implementation_guide.md) §6.
-  - Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable ([add_new_variable.md](add_new_variable.md) §2).
-- If the dataset already has an active operational update cronjob, do not suspend it — that would delay the production pipeline. Instead run the backfill between update fires so an update publish doesn't fail the backfill's finalize (see [parallel_processing.md](parallel_processing.md)).
+- **Sub-agent**: follow [backfill.md](backfill.md). New dataset: create the bucket, then a `create-new-store` backfill. Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable.
+- If the dataset already has an active operational update cronjob, do not suspend it — that would delay the production pipeline. Instead run the backfill between update fires so an update publish doesn't fail the backfill's finalize (see [backfill.md](backfill.md) and [parallel_processing.md](parallel_processing.md)).
 - **Output**: the store URL, with data written.
 - **Done**: the backfill job succeeded and the expected data is present.
 
@@ -68,8 +66,13 @@ Share the draft report URL (including after your own fix-and-re-validate passes)
 
 ### 5. Publish to dynamical-stac
 
-- Regenerate the STAC catalog in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac) and merge it; the dynamical.org site rebuilds on its next deploy. A **new dataset** first needs an entry added to `src/catalog.py` there; **adding a variable** needs only `./scripts/generate` (the generator reads variables from the store).
-- Publish the approved validation report to the stable path (`upload --publish`).
+- The dataset catalog on dynamical.org is built from the STAC catalog (`https://stac.dynamical.org/catalog.json`), maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). It is the source of truth — you never edit the website; you update the STAC and the site reflects it on its next deploy. Regenerate and merge the committed STAC output there:
+  ```bash
+  ./scripts/generate   # opens each store on S3; picks up new datasets and variables
+  git add stac/        # commit the regenerated collection.json
+  ```
+  A **new dataset** first needs an entry added to `src/catalog.py`; **adding a variable** to an existing dataset needs only the regenerate (the generator reads variables from the store).
+- Publish the approved validation report to the stable path (`upload --publish`; see [validation.md](validation.md) §5).
 - **Done**: the STAC change is merged and the report is published.
 
 ### 6. Publish to external catalogs

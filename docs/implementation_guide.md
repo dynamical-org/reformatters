@@ -2,7 +2,7 @@
 
 Implement the code for a new dataset that reformats source data into Zarr.
 
-This guide covers the implementation and backfill of a new dataset. It is the Implement and Backfill stages of the end-to-end [dataset development guide](dataset_development_guide.md); explore, validate, and publish are separate stages there. To add a single variable to an existing dataset instead, follow [add_new_variable.md](add_new_variable.md).
+This guide is the Implement stage of the end-to-end [dataset development guide](dataset_development_guide.md); explore, backfill, validate, and publish are separate stages there. To add a single variable to an existing dataset instead, follow [add_new_variable.md](add_new_variable.md).
 
 ## Overview
 
@@ -144,19 +144,6 @@ Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in you
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
 
-### 6. Backfill and deploy
-
-The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
-
-1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
-1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
-1. Run a backfill on a kubernetes cluster:
-   - This supports parallelism across servers to process much larger datasets.
-   - Once your dataset is merged to main, the simplest path is the [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) GitHub action with operation `create-new-store` (leave append_dim_end empty to backfill through now).
-   - Or from your machine (complete the steps in README.md > Deploying to the cloud > Setup): `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes`, then track the job with `kubectl get jobs`. It creates a new store and fails if one exists; see `--help` for the `--overwrite-*` flags that write into an existing store.
-1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
-1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
-
 ## Next
 
-Once the store is backfilled, validate it and publish it. Those are the Validate and Publish stages of the [dataset development guide](dataset_development_guide.md), which points to [validation.md](validation.md) and the STAC catalog.
+Once the code is merged to `main`, backfill the store ([backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).

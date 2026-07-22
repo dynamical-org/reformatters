@@ -40,7 +40,8 @@ src/reformatters/
 tests/                       # Mirrors src/ structure
 docs/
 ├── dataset_development_guide.md      # Agent-coordinated end-to-end pipeline (explore→implement→backfill→validate→publish)
-├── implementation_guide.md           # Step-by-step new dataset implementation + backfill walkthrough
+├── implementation_guide.md           # Step-by-step new dataset implementation walkthrough
+├── backfill.md                       # Populate a store: new-store, new-variable, and re-backfill operations
 ├── parallel_processing.md            # How parallel writes coordinate across workers
 ├── virtual_datasets.md               # Writing + reading virtual (chunk reference) Icechunk datasets
 ├── add_new_variable.md               # Add new variable to an existing dataset
@@ -125,6 +126,7 @@ Run via `uv run main`.
 - `uv run main <dataset-id> update-template` - Regenerate `templates/latest.zarr`. Run this after any change to a `TemplateConfig` subclass's metadata.
 
 ### Backfills
+See [docs/backfill.md](docs/backfill.md) for the full process; the commands:
 - `uv run main <dataset-id> backfill-kubernetes` - Create a new store and backfill it (fails if the store exists; `--append-dim-end` defaults to now).
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-chunks [--filter-...]` - Rewrite chunk data in an existing store.
 - `uv run main <dataset-id> backfill-kubernetes --overwrite-metadata` - Refresh metadata from the template (creates newly added variables; never trims). Add `--overwrite-chunks --filter-variable-names <name>` to also backfill a new variable's data.
