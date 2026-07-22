@@ -24,7 +24,7 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 - **New variable, or refresh metadata** — `overwrite-chunks-and-metadata` / `backfill-kubernetes --overwrite-chunks --overwrite-metadata --filter-variable-names <name>`. Refreshes metadata from the template (creating newly-added variables; the guards never trim the store) and writes the filtered chunk data. The store extent is unchanged unless you set an `append_dim_end` past the current end.
 - **Re-backfill flagged positions** — the same overwrite operation, filtered to the flagged positions. `--filter-contains` (repeatable — pass it once per flagged append-dim timestamp) is the most efficient: it runs only the region jobs those timestamps touch, rather than the whole `filter_start`/`filter_end` window. The validation `availability` scan prints a ready-to-paste `--filter-contains ...` retry filter for the missing positions.
 
-`uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag.
+`uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`.
 
 ## Tuning parallelism
 

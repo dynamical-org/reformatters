@@ -221,17 +221,17 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                         "type": "string",
                     },
                     "filter_start": {
-                        "description": "Only process regions at or after this timestamp (ISO, optional)",
+                        "description": "Only process regions at or after this timestamp (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
                         "required": False,
                         "type": "string",
                     },
                     "filter_end": {
-                        "description": "Only process regions before this timestamp (ISO, optional)",
+                        "description": "Only process regions before this timestamp (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
                         "required": False,
                         "type": "string",
                     },
                     "filter_contains": {
-                        "description": "Comma-separated append-dim timestamps (ISO, optional) to process only the regions whose jobs touch them — the most efficient way to re-backfill specific flagged positions.",
+                        "description": "Comma-separated append-dim timestamps (optional) to process only the regions whose jobs touch them — the most efficient way to re-backfill specific flagged positions. Each is full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
                         "required": False,
                         "type": "string",
                     },
