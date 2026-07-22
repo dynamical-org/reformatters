@@ -257,8 +257,8 @@ Note on `step_type` ≠ `instant` variables (accumulation / average / max): the 
 
 Once a run is reviewed, render it to a static HTML report, share it as one or more drafts for internal and external review, and finally publish the approved version. Two storage paths exist:
 
-- **Draft** — every non-final upload goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
-- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org.
+- **Draft** — every non-final upload goes here, timestamped, kept forever. Reachable only by its direct link and never surfaced to dataset users (the dynamical.org catalog links only the stable path), so uploading a draft does **not** make the report externally viewable — it's for sharing a run for review.
+- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org and therefore seen by external users.
 
 Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
 
@@ -292,7 +292,9 @@ Without `--publish`:
 <dataset-id>/drafts/<version>_<YYYY-MM-DDTHH-MM>/
 ```
 
-Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading. Drafts go to timestamped paths that are never overwritten, so uploading a draft is non-destructive and does not require confirmation — only `--publish` does.
+Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading. Re-upload a fresh draft after **every** change to the validation summary so the shared link always reflects the current review state. Drafts go to timestamped paths that are never overwritten, so uploading a draft is non-destructive and does not require confirmation.
+
+`--publish` is the opposite: it overwrites the stable, website-linked report, so **never run it without explicit direction from the user** — a draft is always the right default.
 
 With `--publish`:
 

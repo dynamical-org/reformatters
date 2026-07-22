@@ -58,6 +58,7 @@ class ExampleSpatialDynamicalDataset(
         so there is no workers_total/parallelism fan-out - one pod that polls through the
         source's publication window and exits once the manifest is complete.
         """
+        # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 6 * * *",
@@ -69,6 +70,7 @@ class ExampleSpatialDynamicalDataset(
         #     cpu="1.7",
         #     memory="7G",
         #     secret_names=self.store_factory.k8s_secret_names(),
+        #     suspend=suspend,
         # )
         # validation_cron_job = ValidationCronJob(
         #     name=f"{self.dataset_id}-validate",
@@ -80,6 +82,7 @@ class ExampleSpatialDynamicalDataset(
         #     cpu="1.3",
         #     memory="7G",
         #     secret_names=self.store_factory.k8s_secret_names(),
+        #     suspend=suspend,
         # )
 
         # return [operational_update_cron_job, validation_cron_job]

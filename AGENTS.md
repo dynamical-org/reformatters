@@ -1,5 +1,7 @@
 This project contains code to reformat weather data into the Zarr v3 / Icechunk file format.
 
+To add a new dataset/data product, or add variable(s) to an existing dataset, follow [docs/dataset_development_guide.md](docs/dataset_development_guide.md).
+
 ## Approach overview
 
 Datasets are created in 3 phases:
@@ -39,7 +41,9 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/
-├── dataset_integration_guide.md      # Step-by-step new dataset integration walkthrough
+├── dataset_development_guide.md      # explore→implement→backfill→validate→publish
+├── implementation_guide.md           # Step-by-step new dataset implementation walkthrough
+├── backfill.md                       # Populate a store: new-store, new-variable, and re-backfill operations
 ├── parallel_processing.md            # How parallel writes coordinate across workers
 ├── virtual_datasets.md               # Writing + reading virtual (chunk reference) Icechunk datasets
 ├── add_new_variable.md               # Add new variable to an existing dataset
@@ -58,7 +62,7 @@ deploy/                      # Docker and kubernetes configs
 
 ## Core classes
 
-Integrating a dataset requires subclassing three base classes. For a step by step walkthrough, see [docs/dataset_integration_guide.md](docs/dataset_integration_guide.md) and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
+Integrating a dataset requires subclassing three base classes. For a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
 
 ### TemplateConfig
 Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.
@@ -122,13 +126,6 @@ Run via `uv run main`.
 - `uv run main --help` - Show all commands and registered datasets
 - `uv run main initialize-new-integration <provider> <model> <variant> --kind <materialized|virtual>` - Scaffold new dataset
 - `uv run main <dataset-id> update-template` - Regenerate `templates/latest.zarr`. Run this after any change to a `TemplateConfig` subclass's metadata.
-
-### Backfills
-- `uv run main <dataset-id> backfill-kubernetes` - Create a new store and backfill it (fails if the store exists; `--append-dim-end` defaults to now).
-- `uv run main <dataset-id> backfill-kubernetes --overwrite-chunks [--filter-...]` - Rewrite chunk data in an existing store.
-- `uv run main <dataset-id> backfill-kubernetes --overwrite-metadata` - Refresh metadata from the template (creates newly added variables; never trims). Add `--overwrite-chunks --filter-variable-names <name>` to also backfill a new variable's data.
-- An operational update that publishes mid-backfill makes an overwrite backfill's final icechunk branch publish fail loudly (the update wins; re-run the backfill), so run overwrite backfills in between update runs (see docs/parallel_processing.md).
-- Prefer the "Manual: Backfill" GitHub action (workflow_dispatch): it runs only from main, waits for main's tip to finish deploying, submits the job with that deploy's image (driver and workers run the same commit), and only exposes the safe operations.
 
 ## Parallelization model
 

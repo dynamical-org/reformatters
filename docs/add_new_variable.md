@@ -1,8 +1,8 @@
 # Add new variable
 
-How to add a new data variable to an existing dataset.
+How to add a new data variable to an existing dataset. This is the Implement stage of the add-a-variable branch of the [dataset development guide](dataset_development_guide.md); backfill, validate, and publish are the shared stages there.
 
-## 1. Add the variable to the template
+## Add the variable to the template
 
 1a. Download a real, recent source file for the new variable. Open it (e.g. with `rasterio`, `gdalinfo`, or `xarray`) to inspect its attributes (units, grid dimensions, CRS, nodata/sentinel values) and data values (range, NaN/missing coverage, geographic distribution). This grounds the variable configuration in observed data rather than assumptions.
 
@@ -21,36 +21,6 @@ uv run main <DATASET_ID> update-template
 
 1e. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
 
-## 2. Backfill data for the new variable
+## Next
 
-After the PR is merged to main, run a backfill filtered to just the new variable. The easiest way is the GitHub Action [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) (requires reformatters repo write access):
-
-- **operation** = `overwrite-chunks-and-metadata` — refreshes the store's metadata from the template (creating the new variable) and writes its chunk data. The guards never trim the store, and its extent is unchanged unless you explicitly set an append_dim_end past the current end.
-- **filter_variable_names** = your new variable's name.
-- **jobs_per_pod** = 1 or 2 in most cases for materialized datasets; 30 for virtual. For both, the goal is jobs that take 3-15 minutes, to amortize startup time and reduce icechunk commit compare-and-set contention.
-- **max_parallelism** = materialized: 100-300 if the data source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.
-
-Or the equivalent CLI (requires kubectl access to the cluster):
-
-```bash
-DYNAMICAL_ENV=prod uv run main <DATASET_ID> backfill-kubernetes \
-  --overwrite-chunks --overwrite-metadata \
-  --filter-variable-names <VARIABLE_NAME>
-```
-
-An operational update that publishes while the backfill runs makes the backfill's finalize fail loudly and the backfill must be re-run, so run the backfill in between update runs — for a long history, as several smaller `filter_start`/`filter_end` backfills (see "Concurrent jobs writing to the same dataset" in [docs/parallel_processing.md](parallel_processing.md)).
-
-## 3. Validate
-
-Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist. When validating a new variable it is often useful to restrict with `--variable <name>` to iterate faster.
-
-## 4. Refresh the STAC catalog
-
-The dataset catalog on dynamical.org is built from the STAC catalog at `https://stac.dynamical.org/catalog.json`, maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). That STAC is the source of truth — you don't edit the website; you update the STAC and the site reflects the change on its next deploy.
-
-The STAC generator derives each collection's variables by opening the dataset's Icechunk store, so once the backfill (step 2) has written the new variable no `src/catalog.py` edit is needed (that's only for adding a whole new dataset). Just regenerate the committed output in `dynamical-stac` and merge:
-
-```bash
-./scripts/generate   # opens each store on S3; picks up the new variable
-git add stac/        # commit the regenerated collection.json
-```
+Once the PR is merged to `main`, backfill the new variable (an `overwrite-chunks-and-metadata` backfill filtered to it — see [backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).

@@ -221,12 +221,17 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                         "type": "string",
                     },
                     "filter_start": {
-                        "description": "Only process regions at or after this timestamp (ISO, optional)",
+                        "description": "Only process regions at or after this timestamp, inclusive (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
                         "required": False,
                         "type": "string",
                     },
                     "filter_end": {
-                        "description": "Only process regions before this timestamp (ISO, optional)",
+                        "description": "Only process regions before this timestamp, exclusive (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "filter_contains": {
+                        "description": "Comma-separated append-dim timestamps (optional) to process only the regions whose jobs touch them — the most efficient way to re-backfill specific flagged positions. Each is full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
                         "required": False,
                         "type": "string",
                     },
@@ -236,13 +241,13 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                         "type": "string",
                     },
                     "jobs_per_pod": {
-                        "description": "Region jobs per worker pod. Materialized: 1 or 2 in most cases; virtual: 30. For both, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.",
+                        "description": "Region jobs per worker pod. Materialized: 2-4 for non-ensemble datasets, 1 for ensemble; virtual: 30. For all, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.",
                         "required": False,
                         "type": "string",
                         "default": "2",
                     },
                     "max_parallelism": {
-                        "description": "Maximum concurrent worker pods. Materialized: 100-300 if the source supports highly parallel reads (100 is often sufficient; s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.",
+                        "description": "Maximum concurrent worker pods. Materialized: 50-200 (go higher if needed, but check cluster quotas so operational updates can still schedule); some sources cap useful parallelism (s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.",
                         "required": False,
                         "type": "string",
                         "default": "10",
@@ -366,6 +371,7 @@ exit 1
                             "APPEND_DIM_END": "${{ github.event.inputs.append_dim_end }}",
                             "FILTER_START": "${{ github.event.inputs.filter_start }}",
                             "FILTER_END": "${{ github.event.inputs.filter_end }}",
+                            "FILTER_CONTAINS": "${{ github.event.inputs.filter_contains }}",
                             "FILTER_VARIABLE_NAMES": "${{ github.event.inputs.filter_variable_names }}",
                             "JOBS_PER_POD": "${{ github.event.inputs.jobs_per_pod }}",
                             "MAX_PARALLELISM": "${{ github.event.inputs.max_parallelism }}",
@@ -393,10 +399,18 @@ fi
 if [ -n "${FILTER_END}" ]; then
   ARGS+=(--filter-end "${FILTER_END}")
 fi
+if [ -n "${FILTER_CONTAINS}" ]; then
+  IFS=',' read -ra CONTAINS_TIMESTAMPS <<< "${FILTER_CONTAINS}"
+  for CONTAINS_TIMESTAMP in "${CONTAINS_TIMESTAMPS[@]}"; do
+    CONTAINS_TIMESTAMP="$(echo "${CONTAINS_TIMESTAMP}" | xargs)"  # trim surrounding whitespace
+    [ -n "${CONTAINS_TIMESTAMP}" ] && ARGS+=(--filter-contains "${CONTAINS_TIMESTAMP}")
+  done
+fi
 if [ -n "${FILTER_VARIABLE_NAMES}" ]; then
   IFS=',' read -ra VARIABLE_NAMES <<< "${FILTER_VARIABLE_NAMES}"
   for VARIABLE_NAME in "${VARIABLE_NAMES[@]}"; do
-    ARGS+=(--filter-variable-names "${VARIABLE_NAME}")
+    VARIABLE_NAME="$(echo "${VARIABLE_NAME}" | xargs)"  # trim surrounding whitespace
+    [ -n "${VARIABLE_NAME}" ] && ARGS+=(--filter-variable-names "${VARIABLE_NAME}")
   done
 fi
 

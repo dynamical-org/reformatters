@@ -1,6 +1,8 @@
-# Dataset Integration Guide
+# Implementation Guide
 
-Integrate a dataset to reformat into Zarr.
+Implement the code for a new dataset that reformats source data into Zarr.
+
+This guide is the Implement stage of the end-to-end [dataset development guide](dataset_development_guide.md); explore, backfill, validate, and publish are separate stages there. To add a single variable to an existing dataset instead, follow [add_new_variable.md](add_new_variable.md).
 
 ## Overview
 
@@ -121,6 +123,8 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
+The scaffold sets `suspend=True` on both cron jobs so updates and validation stay off until the store is backfilled. Leave it set through this PR; a follow-up PR removes it once the backfill is complete (the Backfill stage of the [dataset development guide](dataset_development_guide.md)).
+
 Kubernetes resource values, materialized (fan-out across indexed jobs):
   - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
   - memory: 1.5x shared memory.
@@ -142,23 +146,6 @@ Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in you
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
 
-### 6. Deploy
+## Next
 
-The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
-
-1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
-1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
-1. Run a backfill on a kubernetes cluster:
-   - This supports parallelism across servers to process much larger datasets.
-   - Once your dataset is merged to main, the simplest path is the [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) GitHub action with operation `create-new-store` (leave append_dim_end empty to backfill through now).
-   - Or from your machine (complete the steps in README.md > Deploying to the cloud > Setup): `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes`, then track the job with `kubectl get jobs`. It creates a new store and fails if one exists; see `--help` for the `--overwrite-*` flags that write into an existing store.
-1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
-1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
-
-### 7. Validate
-
-Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
-
-### 8. Update dataset catalog documentation
-
-Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.
+Once the code is merged to `main`, backfill the store ([backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).
