@@ -95,8 +95,6 @@ class GefsAnalysisRegionJob(
 
         times = filter_available_times(times)
 
-        # Variables added after the reforecast (e.g. 80m fields) have no source data
-        # in the reforecast era; skip those times so they remain fill value.
         available_from = item(
             {var.internal_attrs.available_from for var in data_var_group}
         )

@@ -22,8 +22,6 @@ GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 class GEFSInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
-    # Earliest valid time the variable exists in the source archive; times before it
-    # are skipped and left as fill value (e.g. 80m fields absent from the reforecast).
     available_from: Timestamp | None = None
 
 

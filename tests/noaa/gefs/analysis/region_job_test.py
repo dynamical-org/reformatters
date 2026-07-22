@@ -290,7 +290,7 @@ def test_generate_source_file_coords_ensemble(
 def test_generate_source_file_coords_skips_times_before_available_from(
     template_ds: xr.Dataset,
 ) -> None:
-    """A variable with available_from gets no source coords for earlier times.
+    """A job straddling the reforecast end yields coords only from available_from onward.
 
     The 80m fields are absent from the GEFS v12 reforecast, so reforecast-era times
     must be skipped and left as fill value rather than building a nonexistent source URL.
@@ -299,25 +299,26 @@ def test_generate_source_file_coords_skips_times_before_available_from(
     wind_u_80m = next(v for v in template_config.data_vars if v.name == "wind_u_80m")
     assert wind_u_80m.internal_attrs.available_from == GEFS_REFORECAST_END
 
+    # 24 six-hourly times straddling the reforecast end: the first 12 are reforecast-era
+    # (before available_from) and skipped, the last 12 are at/after it and generate coords.
+    straddle_ds = template_ds.assign_coords(
+        time=pd.date_range("2019-12-29T00:00", freq="6h", periods=24)
+    )
+    assert (straddle_ds["time"].values < GEFS_REFORECAST_END).sum() == 12
+
     job = GefsAnalysisRegionJob(
         tmp_store=get_local_tmp_store(),
-        template_ds=xr.DataTree.from_dict({"/": template_ds}),
+        template_ds=xr.DataTree.from_dict({"/": straddle_ds}),
         data_vars=[wind_u_80m],
         append_dim="time",
-        region=slice(0, template_ds.sizes["time"]),
+        region=slice(0, straddle_ds.sizes["time"]),
         reformat_job_name="test-job",
     )
 
-    # The fixture's times are all in the reforecast era (2000); none are fetchable.
-    assert job.generate_source_file_coords(template_ds, [wind_u_80m]) == []
+    coords = job.generate_source_file_coords(straddle_ds, [wind_u_80m])
 
-    # From the reforecast end onward the 80m fields exist, so coords are generated.
-    post_reforecast_ds = template_ds.assign_coords(
-        time=pd.date_range(
-            GEFS_REFORECAST_END, freq="3h", periods=template_ds.sizes["time"]
-        )
-    )
-    assert len(job.generate_source_file_coords(post_reforecast_ds, [wind_u_80m])) > 0
+    assert len(coords) == 12
+    assert all(coord.init_time >= GEFS_REFORECAST_END for coord in coords)
 
 
 def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
