@@ -17,7 +17,7 @@ The stages are otherwise the same; Validate and Publish are shared.
 - **One stage at a time, gated.** Advance only when the stage's done-check passes. On failure, loop within the stage (bounded) — do not skip ahead or escalate on the first miss.
 - **Two human checkpoints are hard gates.** Stop, surface what's needed, and wait for an answer. Never cross a checkpoint on your own.
 - **Long-running work** (a Kubernetes backfill, a ~1–2 h virtual `run-all`) — launch it detached with a monitor and don't block; see the long-runs note in [validation.md](validation.md) §1.
-- **Multiple datasets in one run.** A run often produces several related datasets — forecast + analysis, early + late, virtual + materialized. Implement them all in a single shared Implement agent (they share source exploration, config, and utilities); Backfill, Validate, and Publish then run per dataset.
+- **Multiple datasets in one run.** A run often produces several related datasets — forecast + analysis, early + late, virtual + materialized. Implement them all in a single shared Implement agent (they share source exploration, config, and utilities); Backfill and Validate then run per dataset, and Publish can batch them into one STAC PR.
 - **Drive to completion.** After each sub-agent returns and each checkpoint is answered, proceed to the next stage automatically until Publish is done or you are blocked on a human.
 
 ## Stages
@@ -69,7 +69,7 @@ Share the draft report URL (including after your own fix-and-re-validate passes)
   ./scripts/generate   # opens each Zarr store; picks up new datasets and variables
   git add stac/        # commit the regenerated collection.json
   ```
-  A **new dataset** first needs an entry added to `src/catalog.py`; **adding a variable** to an existing dataset needs only the regenerate (the generator reads variables from the store).
+  A **new dataset** first needs an entry added to `src/catalog.py`; **adding a variable** to an existing dataset needs only the regenerate (the generator reads variables from the store). When the run produced several datasets, publish them all in one STAC PR.
 - **Done**: the STAC PR is merged to `main`.
 
 ### 6. Publish to external catalogs
