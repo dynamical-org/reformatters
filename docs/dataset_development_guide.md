@@ -64,13 +64,13 @@ Share the draft report URL (including after your own fix-and-re-validate passes)
 
 ### 5. Publish to dynamical-stac
 
-- The dataset catalog on dynamical.org is built from the STAC catalog (`https://stac.dynamical.org/catalog.json`), maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). It is the source of truth — you never edit the website; you update the STAC and the site reflects it on its next deploy (which also surfaces the validation report published at Checkpoint B). Regenerate and merge the committed STAC output there:
+- The dataset catalog on dynamical.org is built from the STAC catalog (`https://stac.dynamical.org/catalog.json`), maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). It is the source of truth — you never edit the website; you update the STAC and the site reflects it on its next deploy (which also surfaces the validation report published at Checkpoint B). Regenerate the committed STAC output and open a PR to `main` in dynamical-stac:
   ```bash
   ./scripts/generate   # opens each Zarr store; picks up new datasets and variables
   git add stac/        # commit the regenerated collection.json
   ```
   A **new dataset** first needs an entry added to `src/catalog.py`; **adding a variable** to an existing dataset needs only the regenerate (the generator reads variables from the store).
-- **Done**: the STAC change is merged.
+- **Done**: the STAC PR is merged to `main`.
 
 ### 6. Publish to external catalogs
 
