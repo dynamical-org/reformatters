@@ -48,6 +48,7 @@ Present the exploration findings and settle the scope with the human. Always ali
 - **Goal**: a populated store.
 - **Sub-agent**: follow [backfill.md](backfill.md). New dataset: create the bucket, then a `create-new-store` backfill. Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable.
 - If the dataset already has an active operational update cronjob, do not suspend it — that would delay the production pipeline. Instead run the backfill between update fires so an update publish doesn't fail the backfill's finalize (see [backfill.md](backfill.md) and [parallel_processing.md](parallel_processing.md)).
+- New dataset: its cron jobs ship suspended (`suspend=True`). Once this backfill completes, open a PR removing that so operational updates start keeping the store current.
 - **Output**: the store URL, with data written.
 - **Done**: the backfill job succeeded and the expected data is present.
 

@@ -123,6 +123,8 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
+The scaffold sets `suspend=True` on both cron jobs so updates and validation stay off until the store is backfilled. Leave it set through this PR; a follow-up PR removes it once the backfill is complete (the Backfill stage of the [dataset development guide](dataset_development_guide.md)).
+
 Kubernetes resource values, materialized (fan-out across indexed jobs):
   - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
   - memory: 1.5x shared memory.
