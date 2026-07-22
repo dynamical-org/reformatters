@@ -311,6 +311,12 @@ _PRE_V3_UNAVAILABLE = {
     "relative_humidity_2m",
     "snowfall_surface",
     "visible_beam_downward_solar_flux_surface",
+    "surface_roughness_surface",
+    "friction_velocity_surface",
+    "latent_heat_flux_surface",
+    "ground_heat_flux_surface",
+    "upward_long_wave_radiation_flux_surface",
+    "visible_diffuse_downward_solar_flux_surface",
 }
 
 
