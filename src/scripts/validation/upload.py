@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import boto3
+import httpx
 import typer
 
 from reformatters.common.logging import get_logger
@@ -17,6 +18,15 @@ PUBLIC_BASE_URL = "https://dataset-validation-reports.dynamical.org"
 def _content_type(path: Path) -> str:
     ct, _ = mimetypes.guess_type(path.name)
     return ct or "application/octet-stream"
+
+
+def _trigger_pages_deploy() -> None:
+    """POST the Cloudflare Pages deploy hook to rebuild dynamical.org with the new report; no-op if PAGES_DEPLOY_HOOK_URL is unset."""
+    hook_url = os.environ.get("PAGES_DEPLOY_HOOK_URL")
+    if hook_url is None:
+        return
+    httpx.post(hook_url, timeout=30).raise_for_status()
+    log.info("triggered dynamical.org Pages deploy")
 
 
 def upload(run_dir: Path, publish: bool) -> str:
@@ -49,6 +59,8 @@ def upload(run_dir: Path, publish: bool) -> str:
                 ExtraArgs={"ContentType": _content_type(f)},
             )
             log.info(f"uploaded {key}")
+    if publish:
+        _trigger_pages_deploy()
     return f"{PUBLIC_BASE_URL}/{prefixes[0]}/{REPORT_FILENAME}"
 
 

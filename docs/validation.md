@@ -19,7 +19,7 @@ To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. 
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type. Virtual stores are slower and their runtime scales differently — see [Virtual and multi-level datasets](#virtual-and-multi-level-datasets) below.
 
-Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. On a managed/remote session (e.g. Claude Code on the web), launch `run-all` detached in the background with a monitor that periodically emits a progress line (this keeps the session from being reclaimed mid-run) and that signals both completion (`validation_summary.md` written) and failure (the run process exited without writing it), so a crash surfaces immediately instead of looking like "still running". Budget ~6–8 GB RAM: a full virtual run-all holds several GB of decoded fields.
+Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. If you run these on a managed/remote session (e.g. Claude Code on the web), launch `run-all` as a background task and drive it with a monitor that emits a parsed progress line on a short cadence (≈4 minutes works well — frequent enough that the session is not reclaimed mid-run, and short enough to stay within the prompt-cache TTL so each wake-up stays cheap). The periodic emitted events are what keep the session warm — more reliable than a self-scheduled timer wake-up, which re-reads the whole session context on every fire and is blind to the run's actual state. A monitor that emits only at completion does not keep the session warm: the silent stretch until it finishes looks idle and the session is reclaimed mid-run, taking the ephemeral environment (and the run) with it. Make the monitor signal on both completion and failure — detect completion from the written `validation_summary.md` and failure from the run process having exited without it — so a crash surfaces immediately instead of looking like "still running". Launch the run detached (e.g. `setsid`) in its own process group so later cleanup can't cascade into the session's shell, watch the run's actual worker PID rather than the launcher's (and avoid a loose `pgrep` pattern that also matches the monitor's own command line and so never exits), and re-arm the monitor when it times out, since a single monitor is capped well under a multi-hour run. Also watch memory: a full virtual run-all holds several GB of decoded fields — budget ~6–8 GB RAM (measured peak ~6.5 GB on the 176-variable HRRR virtual store) and don't run it on an undersized host.
 
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
@@ -325,6 +325,8 @@ The report moves through three audiences before it can be published. Each phase 
 
 Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
 
+To skip the manual redeploy, set `PAGES_DEPLOY_HOOK_URL` (see Configuration) to a dynamical.org Cloudflare Pages deploy hook: a `--publish` upload then POSTs it after the files land, triggering one rebuild per publish. Draft uploads never trigger a deploy.
+
 ### Configuration
 
 `upload` (both for uploading drafts and for publishing) reads R2 credentials from these environment variables:
@@ -334,3 +336,5 @@ Once published, the report is picked up automatically on the next deploy of the 
 - `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
 
 Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running `upload`.
+
+Optionally set `PAGES_DEPLOY_HOOK_URL` to a dynamical.org Cloudflare Pages deploy hook URL; when set, a `--publish` upload POSTs it after uploading to trigger a site rebuild (unset → publishing uploads only, and the site refreshes on its next deploy).
