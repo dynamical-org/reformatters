@@ -1,5 +1,7 @@
 This project contains code to reformat weather data into the Zarr v3 / Icechunk file format.
 
+To add a new dataset/data product, or add variable(s) to an existing dataset, follow [docs/dataset_development_guide.md](docs/dataset_development_guide.md).
+
 ## Approach overview
 
 Datasets are created in 3 phases:
@@ -39,7 +41,7 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/
-├── dataset_development_guide.md      # Agent-coordinated end-to-end pipeline (explore→implement→backfill→validate→publish)
+├── dataset_development_guide.md      # explore→implement→backfill→validate→publish
 ├── implementation_guide.md           # Step-by-step new dataset implementation walkthrough
 ├── backfill.md                       # Populate a store: new-store, new-variable, and re-backfill operations
 ├── parallel_processing.md            # How parallel writes coordinate across workers
@@ -60,7 +62,7 @@ deploy/                      # Docker and kubernetes configs
 
 ## Core classes
 
-Integrating a dataset requires subclassing three base classes. For the end-to-end creation and validation process see [docs/dataset_development_guide.md](docs/dataset_development_guide.md), for a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
+Integrating a dataset requires subclassing three base classes. For a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
 
 ### TemplateConfig
 Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.

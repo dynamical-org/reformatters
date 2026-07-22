@@ -2,8 +2,6 @@
 
 Take a data product from nothing (or an existing dataset that needs a new variable) all the way to published, by running each stage of the pipeline in its own sub-agent. This doc is written for the agent that coordinates that work.
 
-Invoke it as: "follow the dataset development guide for `<product>`".
-
 You, the reader, are the **coordinator**. You do not do the stage work yourself — you sequence it, spawn a sub-agent per stage, and drive to completion.
 
 ## Two modes
