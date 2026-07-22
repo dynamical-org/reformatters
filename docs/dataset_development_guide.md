@@ -60,18 +60,17 @@ Present the exploration findings and settle the scope with the human. Always ali
 
 ### ⛔ Checkpoint B — human approves the draft report
 
-Share the draft report URL (including after your own fix-and-re-validate passes). The human reviews it. Publish only after explicit approval — never run `upload --publish` while `### For further review` is non-empty or unapproved.
+Share the draft report URL (including after your own fix-and-re-validate passes). The human reviews it. Never run `upload --publish` while `### For further review` is non-empty or unapproved. Once the user approves, publish the report to the stable path immediately (`upload --publish`; see [validation.md](validation.md) §5) — it becomes visible on dynamical.org when the STAC change in the next stage triggers a site deploy.
 
 ### 5. Publish to dynamical-stac
 
-- The dataset catalog on dynamical.org is built from the STAC catalog (`https://stac.dynamical.org/catalog.json`), maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). It is the source of truth — you never edit the website; you update the STAC and the site reflects it on its next deploy. Regenerate and merge the committed STAC output there:
+- The dataset catalog on dynamical.org is built from the STAC catalog (`https://stac.dynamical.org/catalog.json`), maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). It is the source of truth — you never edit the website; you update the STAC and the site reflects it on its next deploy (which also surfaces the validation report published at Checkpoint B). Regenerate and merge the committed STAC output there:
   ```bash
-  ./scripts/generate   # opens each store on S3; picks up new datasets and variables
+  ./scripts/generate   # opens each Zarr store; picks up new datasets and variables
   git add stac/        # commit the regenerated collection.json
   ```
   A **new dataset** first needs an entry added to `src/catalog.py`; **adding a variable** to an existing dataset needs only the regenerate (the generator reads variables from the store).
-- Publish the approved validation report to the stable path (`upload --publish`; see [validation.md](validation.md) §5).
-- **Done**: the STAC change is merged and the report is published.
+- **Done**: the STAC change is merged.
 
 ### 6. Publish to external catalogs
 
