@@ -222,6 +222,9 @@ def test_region_job_read_data(
     rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
     test_data = np.ones((1059, 1799), dtype=np.float32) * 42.0
     rasterio_reader.read = Mock(return_value=test_data)
+    rasterio_reader.read_masks = Mock(
+        return_value=np.full((1059, 1799), 255, dtype=np.uint8)
+    )
     monkeypatch.setattr(
         "reformatters.noaa.hrrr.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
@@ -235,6 +238,53 @@ def test_region_job_read_data(
     assert result.dtype == np.float32
 
     rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+
+
+def test_region_job_read_data_honors_grib_bitmap(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bitmap-missing cells (e.g. no cloud ceiling) become NaN, not the raw fill."""
+    coord = NoaaHrrrSourceFileCoord(
+        init_time=pd.Timestamp("2024-02-29T00:00"),
+        lead_time=pd.Timedelta(hours=0),
+        domain="conus",
+        file_type="sfc",
+        data_vars=template_config.data_vars[:1],
+        downloaded_path=Path("fake/path/to/downloaded/file.grib2"),
+    )
+
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars[:1],
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    rasterio_reader = Mock()
+    rasterio_reader.__enter__ = Mock(return_value=rasterio_reader)
+    rasterio_reader.__exit__ = Mock(return_value=False)
+    rasterio_reader.count = 1
+    rasterio_reader.descriptions = ['0[-] EATM="Entire Atmosphere"']
+    rasterio_reader.tags = Mock(return_value={"GRIB_ELEMENT": "REFC"})
+    test_data = np.full((1059, 1799), 9999.0, dtype=np.float32)
+    test_data[0, 0] = 42.0
+    rasterio_reader.read = Mock(return_value=test_data)
+    grib_mask = np.zeros((1059, 1799), dtype=np.uint8)
+    grib_mask[0, 0] = 255  # only this cell is present in the source bitmap
+    rasterio_reader.read_masks = Mock(return_value=grib_mask)
+    monkeypatch.setattr(
+        "reformatters.noaa.hrrr.region_job.rasterio.open",
+        Mock(return_value=rasterio_reader),
+    )
+
+    result = region_job.read_data(coord, template_config.data_vars[0])
+
+    assert result[0, 0] == 42.0
+    assert np.isnan(result[1:]).all()
+    assert np.count_nonzero(np.isnan(result)) == result.size - 1
 
 
 def test_region_job_read_data_no_matching_bands(
@@ -645,4 +695,6 @@ def test_download_file_from_nomads_hrrr() -> None:
 
         for data_var in group:
             data = region_job.read_data(coord, data_var)
-            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
+            # Some variables (e.g. cloud ceiling height over clear sky) are
+            # legitimately NaN where the source GRIB bitmap marks cells missing.
+            assert np.isfinite(data).any(), f"All values non-finite for {data_var.name}"

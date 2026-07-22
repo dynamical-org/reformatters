@@ -902,6 +902,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="2 metre dewpoint temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
+            comment="HRRR fills undefined 2 m dewpoint at scattered grid cells with a sentinel near -81 degC (~192.1 K); these are not physical measurements.",
         ),
         _root_var(
             "relative_humidity_2m",

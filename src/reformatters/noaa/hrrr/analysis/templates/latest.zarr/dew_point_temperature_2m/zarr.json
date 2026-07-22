@@ -69,6 +69,7 @@
     "short_name": "2d",
     "standard_name": "dew_point_temperature",
     "units": "degree_Celsius",
+    "comment": "HRRR fills undefined 2 m dewpoint at scattered grid cells with a sentinel near -81 degC (~192.1 K); these are not physical measurements.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

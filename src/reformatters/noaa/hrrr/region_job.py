@@ -212,6 +212,11 @@ class NoaaHrrrRegionJob(
             result: ArrayFloat32 = reader.read(
                 rasterio_band_index, out_dtype=np.float32
             )
+            # Honor the GRIB bitmap: HRRR marks absent data (e.g. cloud ceiling
+            # height where there is no ceiling) as missing, and rasterio returns the
+            # raw packing fill for those cells. NaN them so the result matches the
+            # virtual dataset's gribberish decode.
+            result[reader.read_masks(rasterio_band_index) == 0] = np.nan
             return result
 
     def apply_data_transformations(

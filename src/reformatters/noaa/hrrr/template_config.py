@@ -562,6 +562,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="2 metre dewpoint temperature",
                     units="degree_Celsius",
                     step_type="instant",
+                    comment="HRRR fills undefined 2 m dewpoint at scattered grid cells with a sentinel near -81 degC (~192.1 K); these are not physical measurements.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="DPT",
