@@ -15,11 +15,11 @@ The stages are otherwise the same; Validate and Publish are shared.
 
 ## Coordinator rules
 
-- **Hold only thread state**: the mode, the current stage, the human's scope decisions, and the artifact locations (report path, PR, store URL, report URL). Push every heavy step into a per-stage sub-agent (the Agent tool) and act on its compact return — keep the sub-agent's raw output (plot images, file dumps, long logs) out of your own context. This is the same reason the many-variable validation review fans out to sub-agents ([validation.md](validation.md) §3f).
+- **Hold only thread state**: the mode, the current stage, the human's scope decisions, and the artifact locations (report path, PR, store URL, report URL). Push every heavy step into a per-stage sub-agent (the Agent tool) and act on its compact return — keep the sub-agent's raw output (plot images, file dumps, long logs) out of your own context.
 - **One stage at a time, gated.** Advance only when the stage's done-check passes. On failure, loop within the stage (bounded) — do not skip ahead or escalate on the first miss.
 - **Two human checkpoints are hard gates.** Stop, surface what's needed, and wait for an answer. Never cross a checkpoint on your own.
 - **Long-running work** (a Kubernetes backfill, a ~1–2 h virtual `run-all`) — launch it detached with a monitor and don't block; see the long-runs note in [validation.md](validation.md) §1.
-- **Multiple products** (virtual + materialized, or a `-late` / `-final` split): run the pipeline once per product; stages that don't depend on each other can run in parallel sub-agents.
+- **Multiple datasets in one run.** A run often produces several related datasets — forecast + analysis, early + late, virtual + materialized. Implement them all in a single shared Implement agent (they share source exploration, config, and utilities); Backfill, Validate, and Publish then run per dataset.
 - **Drive to completion.** After each sub-agent returns and each checkpoint is answered, proceed to the next stage automatically until Publish is done or you are blocked on a human.
 
 ## Stages
@@ -33,13 +33,13 @@ The stages are otherwise the same; Validate and Publish are shared.
 
 ### ⛔ Checkpoint A — human scopes the dataset(s)
 
-Present the exploration findings and ask (via AskUserQuestion): exact **Provider / Model / Variant(s)**; **virtual, materialized, or both**; **one product or several** (e.g. a `-late` and a `-final`); **which variables**; **which vertical groups**. In add-variable mode this collapses to confirming the variable's name, level, and attrs. Record the answers — they drive every later stage.
+Present the exploration findings and settle the scope with the human. Always align on the exact **provider, model, and variant(s)** to produce — including whether this run creates several related datasets (see "Multiple datasets in one run" above). Beyond that, raise the non-obvious questions that surfaced while mapping the source data onto a datacube in our conventions — the decisions the exploration can't settle on its own (an awkwardly-structured or intermittently-available variable, an irregular level set, a coordinate that doesn't map cleanly, a choice between combining or splitting sources). Use judgement about what's worth asking rather than running a fixed checklist. In add-variable mode this collapses to confirming the variable's name, level, and attrs. Record what's decided — it drives every later stage.
 
 ### 2. Implement
 
 - **Goal**: reviewed code that reads the source data and writes the dataset, with tests.
 - **Sub-agent(s)**:
-  - New dataset: follow [implementation_guide.md](implementation_guide.md) (init → register → `TemplateConfig` → `RegionJob` → `DynamicalDataset` → integration test with snapshot values).
+  - New dataset: one agent implements every variant in this run, following [implementation_guide.md](implementation_guide.md) (init → register → `TemplateConfig` → `RegionJob` → `DynamicalDataset` → integration test with snapshot values).
   - Add variable: follow [add_new_variable.md](add_new_variable.md) §1.
   - Then a **code-review** sub-agent focused on correctness, simplicity, and the future maintainer — drive to the simplest maintainable end state (the `/code-review` skill, or a general-purpose agent).
 - **Output**: a PR (code + regenerated `templates/latest.zarr` + tests). A human reviews and merges it — the backfill runs from `main`.
@@ -51,7 +51,7 @@ Present the exploration findings and ask (via AskUserQuestion): exact **Provider
 - **Sub-agent**:
   - New dataset: create the bucket (`./deploy/aws/create_new_aws_open_data_bucket.sh`), then a `create-new-store` backfill via the Manual: Backfill GitHub action (or `backfill-kubernetes`). See [implementation_guide.md](implementation_guide.md) §6.
   - Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable ([add_new_variable.md](add_new_variable.md) §2).
-- If the dataset already has an operational update cronjob, coordinate the backfill around it so an update publish doesn't fail the backfill's finalize (see [parallel_processing.md](parallel_processing.md)); for a virtual store, suspend the update cronjob first.
+- If the dataset already has an active operational update cronjob, do not suspend it — that would delay the production pipeline. Instead run the backfill between update fires so an update publish doesn't fail the backfill's finalize (see [parallel_processing.md](parallel_processing.md)).
 - **Output**: the store URL, with data written.
 - **Done**: the backfill job succeeded and the expected data is present.
 
