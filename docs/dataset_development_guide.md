@@ -68,10 +68,10 @@ Share the draft report URL (including after your own fix-and-re-validate passes)
 
 ### 5. Publish to dynamical-stac
 
-- Regenerate the STAC catalog in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac) and merge it; the dynamical.org site rebuilds on its next deploy ([add_new_variable.md](add_new_variable.md) §4). A **new dataset** first needs an entry added to `src/catalog.py` there; **adding a variable** needs only `./scripts/generate` (the generator reads variables from the store).
+- Regenerate the STAC catalog in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac) and merge it; the dynamical.org site rebuilds on its next deploy. A **new dataset** first needs an entry added to `src/catalog.py` there; **adding a variable** needs only `./scripts/generate` (the generator reads variables from the store).
 - Publish the approved validation report to the stable path (`upload --publish`).
 - **Done**: the STAC change is merged and the report is published.
 
 ### 6. Publish to external catalogs
 
-Placeholder — this process is in flux (source.coop, Earthmover, data.gov, and others). Leave it to a human for now.
+Placeholder — this process is in flux (Source Coop, Earthmover Marketplace, AWS Open Data, and others). Leave it to a human for now.

@@ -59,7 +59,7 @@ deploy/                      # Docker and kubernetes configs
 
 ## Core classes
 
-Integrating a dataset requires subclassing three base classes. For an agent-coordinated end-to-end pipeline see [docs/dataset_development_guide.md](docs/dataset_development_guide.md), for a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
+Integrating a dataset requires subclassing three base classes. For the end-to-end creation and validation process see [docs/dataset_development_guide.md](docs/dataset_development_guide.md), for a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
 
 ### TemplateConfig
 Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.

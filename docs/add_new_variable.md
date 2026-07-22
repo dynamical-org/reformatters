@@ -44,13 +44,6 @@ An operational update that publishes while the backfill runs makes the backfill'
 
 Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist. When validating a new variable it is often useful to restrict with `--variable <name>` to iterate faster.
 
-## 4. Refresh the STAC catalog
+## 4. Publish
 
-The dataset catalog on dynamical.org is built from the STAC catalog at `https://stac.dynamical.org/catalog.json`, maintained in [`dynamical-org/dynamical-stac`](https://github.com/dynamical-org/dynamical-stac). That STAC is the source of truth — you don't edit the website; you update the STAC and the site reflects the change on its next deploy.
-
-The STAC generator derives each collection's variables by opening the dataset's Icechunk store, so once the backfill (step 2) has written the new variable no `src/catalog.py` edit is needed (that's only for adding a whole new dataset). Just regenerate the committed output in `dynamical-stac` and merge:
-
-```bash
-./scripts/generate   # opens each store on S3; picks up the new variable
-git add stac/        # commit the regenerated collection.json
-```
+Refresh the STAC catalog so the new variable appears on dynamical.org — the Publish stage of the [dataset development guide](dataset_development_guide.md#5-publish-to-dynamical-stac).
