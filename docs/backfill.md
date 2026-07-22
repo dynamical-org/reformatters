@@ -7,7 +7,6 @@ Run a backfill only after the dataset's code is merged to `main`: the GitHub act
 ## Prerequisites (new dataset)
 
 - Create the public bucket once: `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`.
-- To enable Sentry issue reporting and cron monitoring, create the secret once per cluster: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
 - Contact feedback@dynamical.org if you are setting up new compute or storage.
 
 ## Where to run
