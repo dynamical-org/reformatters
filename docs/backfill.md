@@ -22,14 +22,14 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 - **New store** — `create-new-store` / `backfill-kubernetes`. Creates the store and fails if one already exists. `append_dim_end` defaults to now (leave it empty to backfill through now).
 - **New variable, or refresh metadata** — `overwrite-chunks-and-metadata` / `backfill-kubernetes --overwrite-chunks --overwrite-metadata --filter-variable-names <name>`. Refreshes metadata from the template (creating newly-added variables; the guards never trim the store) and writes the filtered chunk data. The store extent is unchanged unless you set an `append_dim_end` past the current end.
-- **Re-backfill flagged positions** — the same overwrite operation, filtered to the variables and the `filter_start`/`filter_end` window a validation pass flagged.
+- **Re-backfill flagged positions** — the same overwrite operation, filtered to the flagged positions. `--filter-contains` (repeatable — pass it once per flagged append-dim timestamp) is the most efficient: it runs only the region jobs those timestamps touch, rather than the whole `filter_start`/`filter_end` window. The validation `availability` scan prints a ready-to-paste `--filter-contains ...` retry filter for the missing positions.
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag.
 
 ## Tuning parallelism
 
-- **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 1–2 in most cases. Virtual: ~30.
-- **max_parallelism** — materialized: 100–300 if the source supports highly parallel reads (100 is often enough; `s3://ecmwf-forecasts` supports at most 8). Virtual: 10 — higher risks heavy compare-and-set contention.
+- **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble. Virtual: ~30.
+- **max_parallelism** — materialized: 50–200; go higher if needed, but check cluster quotas so operational updates can still schedule. Some sources cap useful parallelism (`s3://ecmwf-forecasts` supports at most 8). Virtual: 10 — higher risks heavy compare-and-set contention.
 
 For the cpu / memory / shared-memory a dataset's jobs request, see the Kubernetes resource values in [implementation_guide.md](implementation_guide.md) §5.
 
