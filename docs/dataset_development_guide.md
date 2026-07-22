@@ -56,6 +56,7 @@ Present the exploration findings and settle the scope with the human. Always ali
 
 - **Goal**: a reviewed, ready-to-publish dataset and a draft validation report.
 - **Sub-agent**: follow [validation.md](validation.md) — run `run-all`, review every plot (a many-variable dataset uses the §3f batched sub-agent process), and investigate-and-verify every anomaly. Fix issues found, run a **targeted re-backfill** of only the affected variables/positions, and re-validate. Iterate until `### For further review` is empty, then rewrite the summary for an external audience and upload a draft (`upload`, no `--publish`).
+- **Add variable**: run the full `run-all` (not `-v`-filtered) and carry the current published report's approved `## Summary` forward, updating only the new variable's pieces rather than rewriting it — see [validation.md](validation.md) §5c′.
 - **Output**: the draft report URL.
 - **Done**: draft uploaded, `### For further review` empty, summary reworded for external readers.
 

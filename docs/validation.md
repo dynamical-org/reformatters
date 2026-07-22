@@ -321,6 +321,15 @@ The report moves through three audiences before it can be published. Each phase 
 
 **Phase 3 — Publish.** Only after a human reviewer approves the Phase 2 draft, run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
 
+### 5c′. Re-validating after adding a variable
+
+When the dataset already has a published report and you are only adding a variable (not creating the dataset), do not rebuild the summary from scratch:
+
+- Run the full `run-all` (all variables, **not** `-v`-filtered). `--publish` overwrites the dataset's single website-linked report, so a variable-filtered run would drop every other variable from the catalog page.
+- Carry the already-approved commentary forward: read the current published `validation_summary.md` (`https://dataset-validation-reports.dynamical.org/<dataset-id>/latest/validation_summary.md`) and reuse its approved `## Summary` text for every finding that isn't new. Update or add only the pieces about the new variable, then run the draft → publish cycle from that merged summary. This keeps human-approved wording that the review cycle already vetted rather than regenerating (and re-litigating) it.
+- New-variable notes still follow the [3e](#3e-update-validation_summarymd) split — time-windowed archive facts go in `### Review notes`, intrinsic variable facts go in the variable's `comment`.
+- If no published report exists yet (`latest/` 404s), there is nothing to carry forward — write a fresh full summary.
+
 ### 5d. Surfacing the published report on dynamical.org
 
 Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
