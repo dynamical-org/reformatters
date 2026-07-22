@@ -1,6 +1,8 @@
-# Dataset Integration Guide
+# Implementation Guide
 
-Integrate a dataset to reformat into Zarr.
+Implement the code for a new dataset that reformats source data into Zarr.
+
+This guide covers the implementation and backfill of a new dataset. It is the Implement and Backfill stages of the end-to-end [dataset development guide](dataset_development_guide.md); explore, validate, and publish are separate stages there. To add a single variable to an existing dataset instead, follow [add_new_variable.md](add_new_variable.md).
 
 ## Overview
 
@@ -142,7 +144,7 @@ Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in you
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
 
-### 6. Deploy
+### 6. Backfill and deploy
 
 The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
 
@@ -155,10 +157,6 @@ The details here depend on the computing resources and the Zarr storage location
 1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
 1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
 
-### 7. Validate
+## Next
 
-Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
-
-### 8. Update dataset catalog documentation
-
-Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.
+Once the store is backfilled, validate it and publish it. Those are the Validate and Publish stages of the [dataset development guide](dataset_development_guide.md), which points to [validation.md](validation.md) and the STAC catalog.
