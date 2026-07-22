@@ -323,6 +323,8 @@ The report moves through three audiences before it can be published. Each phase 
 
 Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
 
+To skip the manual redeploy, set `PAGES_DEPLOY_HOOK_URL` (see Configuration) to a dynamical.org Cloudflare Pages deploy hook: a `--publish` upload then POSTs it after the files land, triggering one rebuild per publish. Draft uploads never trigger a deploy.
+
 ### Configuration
 
 `upload` (both for uploading drafts and for publishing) reads R2 credentials from these environment variables:
@@ -332,3 +334,5 @@ Once published, the report is picked up automatically on the next deploy of the 
 - `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
 
 Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running `upload`.
+
+Optionally set `PAGES_DEPLOY_HOOK_URL` to a dynamical.org Cloudflare Pages deploy hook URL; when set, a `--publish` upload POSTs it after uploading to trigger a site rebuild (unset → publishing uploads only, and the site refreshes on its next deploy).
