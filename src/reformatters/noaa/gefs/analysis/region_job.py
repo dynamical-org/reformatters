@@ -95,6 +95,12 @@ class GefsAnalysisRegionJob(
 
         times = filter_available_times(times)
 
+        available_from = item(
+            {var.internal_attrs.available_from for var in data_var_group}
+        )
+        if available_from is not None:
+            times = times[times >= available_from]
+
         var_has_hour_0_values = item({has_hour_0_values(var) for var in data_var_group})
 
         # If var doesn't have hour 0 values we have to go back one forecast
