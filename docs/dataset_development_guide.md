@@ -25,7 +25,7 @@ The stages are otherwise the same; Validate and Publish are shared.
 ### 1. Explore
 
 - **Goal**: know exactly what source data exists, how it's structured, and how to access it.
-- **Sub-agent**: follow [source_data_exploration_guide.md](source_data_exploration_guide.md) and produce its filled-in template. New-dataset mode does the full archive search; add-variable mode only inspects a recent source file for the variable ([add_new_variable.md](add_new_variable.md) §1a).
+- **Sub-agent**: follow [source_data_exploration_guide.md](source_data_exploration_guide.md) and produce its filled-in template. New-dataset mode does the full archive search; add-variable mode only inspects a recent source file for the variable ([add_new_variable.md](add_new_variable.md), step 1a).
 - **Output**: an exploration report (a markdown file — keep the path).
 - **Done**: every claim in the report is verified against real source files, with gaps noted rather than guessed.
 
@@ -38,7 +38,7 @@ Present the exploration findings and settle the scope with the human. Always ali
 - **Goal**: reviewed code that reads the source data and writes the dataset, with tests.
 - **Sub-agent(s)**:
   - New dataset: one agent implements every variant in this run, following [implementation_guide.md](implementation_guide.md) (init → register → `TemplateConfig` → `RegionJob` → `DynamicalDataset` → integration test with snapshot values).
-  - Add variable: follow [add_new_variable.md](add_new_variable.md) §1.
+  - Add variable: follow [add_new_variable.md](add_new_variable.md).
   - Then a **code-review** sub-agent focused on correctness, simplicity, and the future maintainer — drive to the simplest maintainable end state (the `/code-review` skill, or a general-purpose agent).
 - **Output**: a PR (code + regenerated `templates/latest.zarr` + tests). A human reviews and merges it — the backfill runs from `main`.
 - **Done**: `ruff format`, `ruff check`, `ty check`, and the dataset's tests are green, and the PR is merged to `main`.
@@ -48,7 +48,7 @@ Present the exploration findings and settle the scope with the human. Always ali
 - **Goal**: a populated store.
 - **Sub-agent**: follow [backfill.md](backfill.md). New dataset: create the bucket, then a `create-new-store` backfill. Add variable: an `overwrite-chunks-and-metadata` backfill filtered to the new variable.
 - If the dataset already has an active operational update cronjob, do not suspend it — that would delay the production pipeline. Instead run the backfill between update fires so an update publish doesn't fail the backfill's finalize (see [backfill.md](backfill.md) and [parallel_processing.md](parallel_processing.md)).
-- New dataset: its cron jobs ship suspended (`suspend=True`). Once this backfill completes, open a PR removing that so operational updates start keeping the store current.
+- New dataset: its cron jobs ship suspended (`suspend=True`). Once this backfill completes, open a PR removing that so operational updates start keeping the store current — the targeted re-backfills in the Validate stage then follow the between-update-fires rule above.
 - **Output**: the store URL, with data written.
 - **Done**: the backfill job succeeded and the expected data is present.
 

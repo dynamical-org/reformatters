@@ -13,15 +13,15 @@ Run a backfill only after the dataset's code is merged to `main`: the GitHub act
 
 - **GitHub Action (preferred).** The [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) action (workflow_dispatch, requires repo write access) runs only from `main`, waits for main's tip to finish deploying, and submits the job with that deploy's image. It exposes only the safe operations.
 - **Kubernetes from your machine.** `DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes [flags]`, then track with `kubectl get jobs`. Complete README.md > Deploying to the cloud > Setup first.
-- **Local.** `DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-local <append-dim-end>`. Simple and fine when the dataset fits your disk and time budget.
 
 ## Operations
 
 Pick the operation by what you're doing (action operation name / equivalent CLI flags):
 
 - **New store** — `create-new-store` / `backfill-kubernetes`. Creates the store and fails if one already exists. `append_dim_end` defaults to now (leave it empty to backfill through now).
-- **New variable, or refresh metadata** — `overwrite-chunks-and-metadata` / `backfill-kubernetes --overwrite-chunks --overwrite-metadata --filter-variable-names <name>`. Refreshes metadata from the template (creating newly-added variables; the guards never trim the store) and writes the filtered chunk data. The store extent is unchanged unless you set an `append_dim_end` past the current end.
-- **Re-backfill flagged positions** — the same overwrite operation, filtered to the flagged positions. `--filter-contains` (repeatable — pass it once per flagged append-dim timestamp) is the most efficient: it runs only the region jobs those timestamps touch, rather than the whole `filter_start`/`filter_end` window. The validation `availability` scan prints a ready-to-paste `--filter-contains ...` retry filter for the missing positions.
+- **New variable** — `overwrite-chunks-and-metadata` / `backfill-kubernetes --overwrite-chunks --overwrite-metadata --filter-variable-names <name>`. Refreshes metadata from the template (creating the variable; the guards never trim the store) and writes its chunk data. The store extent is unchanged unless you set an `append_dim_end` past the current end.
+- **Refresh metadata only** (an attr/encoding change, no data rewrite) — `overwrite-metadata` / `backfill-kubernetes --overwrite-metadata`. Rewrites metadata in place; launches no workers.
+- **Rewrite or re-backfill chunk data** — `overwrite-chunks` / `backfill-kubernetes --overwrite-chunks [--filter-...]`. For specific flagged positions, `--filter-contains` (repeatable — pass it once per append-dim timestamp) is the most efficient: it runs only the region jobs those timestamps touch, rather than the whole `filter_start`/`filter_end` window. The validation `availability` scan lists the flagged timestamps in `unavailable_timestamps.txt`.
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 

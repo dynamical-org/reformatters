@@ -402,13 +402,15 @@ fi
 if [ -n "${FILTER_CONTAINS}" ]; then
   IFS=',' read -ra CONTAINS_TIMESTAMPS <<< "${FILTER_CONTAINS}"
   for CONTAINS_TIMESTAMP in "${CONTAINS_TIMESTAMPS[@]}"; do
-    ARGS+=(--filter-contains "${CONTAINS_TIMESTAMP}")
+    CONTAINS_TIMESTAMP="$(echo "${CONTAINS_TIMESTAMP}" | xargs)"  # trim surrounding whitespace
+    [ -n "${CONTAINS_TIMESTAMP}" ] && ARGS+=(--filter-contains "${CONTAINS_TIMESTAMP}")
   done
 fi
 if [ -n "${FILTER_VARIABLE_NAMES}" ]; then
   IFS=',' read -ra VARIABLE_NAMES <<< "${FILTER_VARIABLE_NAMES}"
   for VARIABLE_NAME in "${VARIABLE_NAMES[@]}"; do
-    ARGS+=(--filter-variable-names "${VARIABLE_NAME}")
+    VARIABLE_NAME="$(echo "${VARIABLE_NAME}" | xargs)"  # trim surrounding whitespace
+    [ -n "${VARIABLE_NAME}" ] && ARGS+=(--filter-variable-names "${VARIABLE_NAME}")
   done
 fi
 
