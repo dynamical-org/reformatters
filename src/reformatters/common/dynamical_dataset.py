@@ -209,7 +209,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
-        See the Backfills section in AGENTS.md for usage.
+        See docs/backfill.md for usage.
         """
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
