@@ -58,7 +58,7 @@ class ExampleSpatialDynamicalDataset(
         so there is no workers_total/parallelism fan-out - one pod that polls through the
         source's publication window and exits once the manifest is complete.
         """
-        # suspend = True  # Keeps updates and validation off until the store is backfilled; once the backfill is complete, remove via a PR so operational updates run.
+        # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 6 * * *",
