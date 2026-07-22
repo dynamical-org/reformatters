@@ -35,6 +35,8 @@ from reformatters.ecmwf.aifs_single.forecast import (
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
+from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
+from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
 from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
     GefsForecast10DaySpatialDataset,
@@ -124,6 +126,14 @@ class DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class NasaImergIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """NASA IMERG on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-nasa-imerg"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -201,6 +211,13 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # ECCC
     EcccHrdpsForecastTemporalDynamicalDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+    ),
+    # NASA
+    NasaImergAnalysisEarlyDataset(
+        primary_storage_config=NasaImergIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    NasaImergAnalysisLateDataset(
+        primary_storage_config=NasaImergIcechunkAwsOpenDataDatasetStorageConfig()
     ),
     # Contrib
     UarizonaSwannAnalysisDataset(

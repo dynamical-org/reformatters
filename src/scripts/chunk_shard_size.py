@@ -514,7 +514,8 @@ def calculate_shared_memory_estimate(
         append_dim: Name of the append dimension (e.g., 'init_time' or 'time')
 
     Returns:
-        Shared memory estimate in GB
+        Shared memory estimate in SI GB (10^9 bytes), matching the Kubernetes `G`
+        resource unit so it maps directly to a pod's memory/shared_memory request.
     """
     dim_names = config.dim_names
     dim_lengths = tuple(spec.length for spec in config.dim_specs)
@@ -527,10 +528,11 @@ def calculate_shared_memory_estimate(
                 dim_lengths[i], config.shard_shape[i]
             )
 
-    # Calculate uncompressed shard size in GB
+    # Uncompressed shard size in SI GB (10^9 bytes = Kubernetes `G`), so the estimate
+    # can be rounded up to a k8s memory request directly.
     shard_elements = product(config.shard_shape)
     shard_storage = calculate_storage(shard_elements)
-    uncompressed_shard_gb = shard_storage.raw_bytes / (1024 * 1024 * 1024)
+    uncompressed_shard_gb = shard_storage.raw_bytes / 1_000_000_000
 
     # Total shared memory needed = shards touched x uncompressed shard size
     shared_memory_gb = shards_touched * uncompressed_shard_gb
@@ -888,7 +890,12 @@ def print_diagnostic_table(
         + " " * (78 - len(f"│ 4. SHARED MEMORY ESTIMATE (slice along {append_dim})"))
         + "│"
     )
-    print(f"│    Uncompressed data:   {shared_memory_gb:>10.2f} GB" + " " * 39 + "│")
+    shared_memory_gib = shared_memory_gb * 1_000_000_000 / (1024**3)
+    mem_line = (
+        f"    Uncompressed data:   {shared_memory_gb:.2f} GB (k8s G)  /  "
+        f"{shared_memory_gib:.2f} GiB (k8s Gi)"
+    )
+    print("│" + mem_line + " " * (78 - len(mem_line)) + "│")
 
     print("└" + "─" * 78 + "┘")
 

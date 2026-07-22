@@ -32,7 +32,7 @@ def test_backfill_local_and_operational_update(
     mock_session.get.return_value = mock_response
 
     monkeypatch.setattr(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_earthdata_session",
         lambda: mock_session,
     )
 

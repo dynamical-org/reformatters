@@ -396,6 +396,8 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "categorical_freezing_rain_surface",
     "categorical_rain_surface",
     "categorical_precipitation_type_surface",
+    # NASA IMERG quality index (dimensionless, no CF standard name)
+    "precipitation_quality_index_surface",
     "flash_qpe_ffg_max_surface",
     "soil_water_runoff",
     "qa",
@@ -594,6 +596,8 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "80sp",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
+    # NASA IMERG quality index (no ECMWF equivalent)
+    "pqi",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
     "aotk",
     "cangle",
@@ -633,6 +637,8 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "quality_assurance",
     "Soil Moisture (AM)",
     "Soil Moisture (PM)",
+    # NASA IMERG quality index (no ECMWF equivalent)
+    "Quality index for precipitation",
     # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
     "80 metre U wind component",
     "80 metre V wind component",

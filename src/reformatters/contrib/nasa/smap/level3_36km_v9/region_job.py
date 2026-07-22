@@ -22,8 +22,8 @@ from reformatters.common.types import (
     DatetimeLike,
     Timestamp,
 )
+from reformatters.nasa.nasa_auth import get_earthdata_session
 
-from .earthdata_auth import get_authenticated_session
 from .template_config import NasaSmapDataVar
 
 log = get_logger(__name__)
@@ -67,7 +67,7 @@ class NasaSmapLevel336KmV9RegionJob(
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         def _download() -> Path:
-            session = get_authenticated_session()
+            session = get_earthdata_session()
             response = session.get(url, timeout=10, stream=True, allow_redirects=True)
             if response.status_code == 404:
                 # URLs contain a per file reprocessed version suffix (e.g. _001.h5, _002.h5, etc.)

@@ -20,6 +20,10 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-aifs-single-forecast-validate
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
+        - nasa-imerg-analysis-early-update
+        - nasa-imerg-analysis-early-validate
+        - nasa-imerg-analysis-late-update
+        - nasa-imerg-analysis-late-validate
         - nasa-smap-level3-36km-v9-update
         - nasa-smap-level3-36km-v9-validate
         - noaa-gefs-analysis-update
