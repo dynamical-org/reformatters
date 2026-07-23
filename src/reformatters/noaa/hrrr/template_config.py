@@ -310,6 +310,24 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
             ),
             NoaaHrrrDataVar(
+                name="visible_beam_downward_solar_flux_surface",
+                encoding=encoding,
+                attrs=DataVarAttrs(
+                    short_name="vbdsf",
+                    long_name="Visible Beam Downward Solar Flux",
+                    units="W m-2",
+                    step_type="instant",
+                ),
+                internal_attrs=NoaaHrrrInternalAttrs(
+                    grib_element="VBDSF",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_index_level="surface",
+                    index_position=128,
+                    keep_mantissa_bits=default_keep_mantissa_bits,
+                    hrrr_file_type="sfc",
+                ),
+            ),
+            NoaaHrrrDataVar(
                 name="downward_long_wave_radiation_flux_surface",
                 encoding=encoding,
                 attrs=DataVarAttrs(
