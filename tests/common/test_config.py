@@ -1,4 +1,6 @@
-from reformatters.common.config import DynamicalConfig, Env
+import pytest
+
+from reformatters.common.config import DynamicalConfig, Env, _errors_dsn
 
 
 class TestEnv:
@@ -39,3 +41,22 @@ class TestDynamicalConfig:
     def test_sentry_disabled_when_dsn_none(self) -> None:
         config = DynamicalConfig(env=Env.dev, sentry_dsn=None)
         assert config.is_sentry_enabled is False
+
+
+class TestErrorsDsn:
+    def test_prefers_betterstack_over_sentry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BETTERSTACK_ERRORS_DSN", "https://betterstack/dsn")
+        monkeypatch.setenv("DYNAMICAL_SENTRY_DSN", "https://sentry/dsn")
+        assert _errors_dsn() == "https://betterstack/dsn"
+
+    def test_falls_back_to_sentry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BETTERSTACK_ERRORS_DSN", raising=False)
+        monkeypatch.setenv("DYNAMICAL_SENTRY_DSN", "https://sentry/dsn")
+        assert _errors_dsn() == "https://sentry/dsn"
+
+    def test_none_when_neither_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BETTERSTACK_ERRORS_DSN", raising=False)
+        monkeypatch.delenv("DYNAMICAL_SENTRY_DSN", raising=False)
+        assert _errors_dsn() is None

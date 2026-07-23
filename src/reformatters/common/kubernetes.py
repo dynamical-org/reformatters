@@ -123,6 +123,15 @@ class Job(pydantic.BaseModel):
                                         },
                                     },
                                     {
+                                        "name": "BETTERSTACK_ERRORS_DSN",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "key": "BETTERSTACK_ERRORS_DSN",
+                                                "name": "betterstack",
+                                            }
+                                        },
+                                    },
+                                    {
                                         "name": "JOB_NAME",
                                         "valueFrom": {
                                             "fieldRef": {
