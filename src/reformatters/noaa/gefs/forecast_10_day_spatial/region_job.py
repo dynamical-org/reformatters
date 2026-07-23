@@ -1,15 +1,12 @@
-from collections.abc import Callable, Sequence
-from pathlib import Path
-from typing import Literal
+from collections.abc import Sequence
+from typing import ClassVar, Literal
 
 import pandas as pd
 import xarray as xr
-from zarr.abc.store import Store
 
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import RegionJob
-from reformatters.common.types import AppendDim, DatetimeLike
+from reformatters.common.types import Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
@@ -64,6 +61,10 @@ class GefsForecast10DaySpatialRegionJob(
     VirtualRegionJob[GEFSDataVar, GefsForecast10DaySpatialSourceFileCoord]
 ):
     """RegionJob for the GEFS 10-day spatial (virtual) forecast dataset."""
+
+    # 24h window = the last 4 inits at the 6h cadence, so a couple of missed or
+    # late-publishing runs still self-heal.
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
@@ -140,42 +141,6 @@ class GefsForecast10DaySpatialRegionJob(
             )
             for var, start, end in zip(coord.data_vars, starts, ends, strict=True)
         ]
-
-    @classmethod
-    def operational_update_jobs(
-        cls,
-        primary_store: Store,  # noqa: ARG003 - the icechunk manifest, not a coordinate, tracks ingested data
-        tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
-        append_dim: AppendDim,
-        all_data_vars: Sequence[GEFSDataVar],
-        reformat_job_name: str,
-    ) -> tuple[
-        Sequence[RegionJob[GEFSDataVar, GefsForecast10DaySpatialSourceFileCoord]],
-        xr.DataTree,
-    ]:
-        """A single polling job over the recent init times (24h window, the last 4 inits).
-
-        Polls until all expected files are ingested; filter_already_present derives
-        the remaining work from the manifest. See "Operational updates" in
-        docs/virtual_datasets.md.
-        """
-        append_dim_end = pd.Timestamp.now()
-        template_ds = get_template_fn(append_dim_end)
-        init_times = template_ds.to_dataset().get_index(append_dim)
-        window_start = int(
-            init_times.searchsorted(append_dim_end - pd.Timedelta("24h"))
-        )
-        job = cls(
-            tmp_store=tmp_store,
-            template_ds=template_ds,
-            data_vars=all_data_vars,
-            append_dim=append_dim,
-            region=slice(window_start, len(init_times)),
-            reformat_job_name=reformat_job_name,
-            processing_mode="update",
-        )
-        return [job], template_ds
 
 
 def _vars_in_s_file(

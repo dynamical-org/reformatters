@@ -133,7 +133,7 @@ ignore = [
     "ARG005",  # unused lambda arg
     "RUF012",  # mutable default
 ]
-"**/template_config.py" = ["RUF012"]  # allow mutable dict for `dims: dict[Group, tuple[Dim, ...]]`
+"**/*template_config.py" = ["RUF012"]  # allow mutable dict for `dims: dict[Group, tuple[Dim, ...]]`
 
 [tool.ty.terminal]
 error-on-warning = true

@@ -256,6 +256,7 @@ class MultiGroupRegionJob(
     messages_url: ClassVar[str] = ""
     # Whole files per yielded batch (one commit per batch).
     backfill_batch_files: ClassVar[int] = 1
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
 
     def generate_source_file_coords(
         self,

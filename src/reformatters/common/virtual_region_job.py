@@ -1,6 +1,6 @@
 import asyncio
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
 from pathlib import Path
@@ -13,6 +13,7 @@ import xarray as xr
 import zarr
 from icechunk import VirtualChunkSpec
 from icechunk.store import IcechunkStore
+from zarr.abc.store import Store
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage, template_utils
@@ -26,7 +27,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.types import Dim, Timedelta
+from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta
 
 log = get_logger(__name__)
 
@@ -74,9 +75,47 @@ class VirtualRegionJob(
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
     download_concurrency: ClassVar[int] = 64
 
+    # The recent span of the append dim each operational update fire re-sweeps.
+    operational_update_window: ClassVar[Timedelta]
+
     # ----- Overridable methods -----
     # A dataset implements file_refs and generate_source_file_coords (from
-    # RegionJob); the rest have working defaults.
+    # RegionJob) and sets operational_update_window; the rest have working defaults.
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,  # noqa: ARG003 - the icechunk manifest, not a coordinate, tracks ingested data
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[DATA_VAR],
+        reformat_job_name: str,
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
+        """A single polling job over the operational_update_window of recent steps.
+
+        Polls until every expected file is ingested; filter_already_present derives
+        the remaining work from the manifest. See "Operational updates" in
+        docs/virtual_datasets.md.
+        """
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
+        append_dim_index = template_ds.to_dataset().get_index(append_dim)
+        window_start = int(
+            append_dim_index.searchsorted(
+                append_dim_end - cls.operational_update_window
+            )
+        )
+        job = cls(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            data_vars=all_data_vars,
+            append_dim=append_dim,
+            region=slice(window_start, len(append_dim_index)),
+            reformat_job_name=reformat_job_name,
+            processing_mode="update",
+        )
+        return [job], template_ds
 
     def file_refs(self, coord: SOURCE_FILE_COORD, file_size: int) -> list[VirtualRef]:
         """Build every virtual ref a single source file contributes (or [] to skip it).

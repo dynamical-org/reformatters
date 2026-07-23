@@ -323,7 +323,7 @@ class ExampleVirtualConfig(ExampleConfig):
 
 
 class ExampleVirtualRegionJob(VirtualRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
-    pass
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
 
 
 class ExampleVirtualDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):

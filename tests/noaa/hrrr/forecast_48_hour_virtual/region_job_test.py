@@ -7,15 +7,17 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.noaa.hrrr.forecast_48_hour_virtual import (
-    region_job as region_job_module,
+from reformatters.noaa.hrrr import (
+    forecast_virtual_region_job as region_job_module,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
     NoaaHrrrForecast48HourVirtualRegionJob,
-    NoaaHrrrForecast48HourVirtualSourceFileCoord,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
     NoaaHrrrForecast48HourVirtualTemplateConfig,
+)
+from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+    NoaaHrrrForecastVirtualSourceFileCoord,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
@@ -53,8 +55,8 @@ def _coord(
     file_type: Literal["sfc", "prs", "nat"],
     data_vars: Sequence[NoaaHrrrDataVar],
     lead_time: pd.Timedelta = _LEAD_6H,
-) -> NoaaHrrrForecast48HourVirtualSourceFileCoord:
-    return NoaaHrrrForecast48HourVirtualSourceFileCoord(
+) -> NoaaHrrrForecastVirtualSourceFileCoord:
+    return NoaaHrrrForecastVirtualSourceFileCoord(
         init_time=pd.Timestamp("2024-06-01T00:00"),
         lead_time=lead_time,
         domain="conus",
@@ -308,8 +310,8 @@ def test_discover_available_lists_source_bucket_requiring_index(
     captured: dict[str, object] = {}
 
     def fake(
-        pending: list[NoaaHrrrForecast48HourVirtualSourceFileCoord], **kwargs: object
-    ) -> list[tuple[NoaaHrrrForecast48HourVirtualSourceFileCoord, int]]:
+        pending: list[NoaaHrrrForecastVirtualSourceFileCoord], **kwargs: object
+    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
         captured.update(kwargs)
         return [(pending[0], 9000)]
 

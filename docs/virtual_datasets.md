@@ -44,7 +44,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 (Between 1 and 2 the base runs `filter_already_present` to drop files already in the manifest; steps 2–3 then repeat each tick until everything is ingested. See "The write loop" above.)
 
-**Also required:** `operational_update_jobs(...)` — the update factory (per-subclass, like materialized datasets); encodes the re-sweep window and constructs the job with `processing_mode="update"`.
+**Also required:** `operational_update_window` — the recent append-dim span each update fire re-sweeps. The base `operational_update_jobs` builds a single polling job over that window with `processing_mode="update"`; override the method itself only for an update shape a single windowed job can't express.
 
 **On the `SourceFileCoord` subclass** (identifies one source file):
 
