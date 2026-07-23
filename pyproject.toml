@@ -27,6 +27,7 @@ dependencies = [
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
     "gribberish==1.5.0",
+    "logtail-python>=0.3.4",
 ]
 
 [build-system]
