@@ -103,6 +103,15 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 },
                             },
                             {
+                                "name": "BETTERSTACK_ERRORS_DSN",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "BETTERSTACK_ERRORS_DSN",
+                                        "name": "betterstack",
+                                    }
+                                },
+                            },
+                            {
                                 "name": "JOB_NAME",
                                 "valueFrom": {
                                     "fieldRef": {
