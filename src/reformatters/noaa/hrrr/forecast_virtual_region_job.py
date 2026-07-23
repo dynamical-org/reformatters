@@ -21,7 +21,6 @@ from reformatters.noaa.hrrr.forecast_virtual_template_config import (
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
 from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -97,7 +96,7 @@ class NoaaHrrrForecastVirtualRegionJob(
                         var
                         for var in data_var_group
                         if var.internal_attrs.hrrr_file_type == file_type
-                        and (lead_time > pd.Timedelta(0) or has_hour_0_values(var))
+                        and (lead_time > pd.Timedelta(0) or var.has_hour_0_values())
                     ]
                     if not vars_in_file:
                         continue

@@ -17,7 +17,6 @@ from reformatters.noaa.noaa_grib_index import (
     _lead_time_str,
     grib_message_byte_ranges_from_index,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 IDX_FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -36,7 +35,7 @@ def test_grib_index_geavg_s_f000() -> None:
     data_vars = [
         v
         for v in get_shared_data_var_configs(CHUNKS, SHARDS)
-        if has_hour_0_values(v) and v.internal_attrs.gefs_file_type == "s+a"
+        if v.has_hour_0_values() and v.internal_attrs.gefs_file_type == "s+a"
     ]
     assert len(data_vars) > 0
 
@@ -167,7 +166,7 @@ def test_grib_index_gfs_f000() -> None:
     lead_time = pd.Timedelta("0h")
 
     data_vars = [
-        v for v in NoaaGfsForecastTemplateConfig().data_vars if has_hour_0_values(v)
+        v for v in NoaaGfsForecastTemplateConfig().data_vars if v.has_hour_0_values()
     ]
     assert len(data_vars) > 0
 
@@ -217,7 +216,7 @@ def test_grib_index_hrrr_f00() -> None:
     lead_time = pd.Timedelta("0h")
 
     cfg = NoaaHrrrForecast48HourTemplateConfig()
-    data_vars = [v for v in cfg.data_vars if has_hour_0_values(v)]
+    data_vars = [v for v in cfg.data_vars if v.has_hour_0_values()]
     assert len(data_vars) > 0
 
     starts, ends = grib_message_byte_ranges_from_index(
@@ -322,7 +321,7 @@ def test_grib_index_skips_missing_vars() -> None:
     lead_time = pd.Timedelta("0h")
 
     cfg = NoaaHrrrForecast48HourTemplateConfig()
-    hour_0_vars = [v for v in cfg.data_vars if has_hour_0_values(v)]
+    hour_0_vars = [v for v in cfg.data_vars if v.has_hour_0_values()]
     assert len(hour_0_vars) > 1
 
     # Add a var with a bogus element name that won't be in the index

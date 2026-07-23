@@ -23,7 +23,6 @@ from reformatters.common.types import (
 )
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
-    has_hour_0_values,
     vars_available,
 )
 from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
@@ -65,7 +64,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         for data_var in data_vars:
             key = (
                 data_var.internal_attrs.date_available,
-                has_hour_0_values(data_var),
+                data_var.has_hour_0_values(),
             )
             vars_by_key[key].append(data_var)
         return list(vars_by_key.values())
@@ -77,7 +76,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     ) -> Sequence[IfsEnsSourceFileCoord]:
         """Returns a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         coords: list[IfsEnsSourceFileCoord] = []
-        group_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
+        group_has_hour_0_values = item({v.has_hour_0_values() for v in data_var_group})
         for init_time, lead_time, ensemble_member in itertools.product(
             processing_region_ds["init_time"].values,
             processing_region_ds["lead_time"].values,

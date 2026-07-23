@@ -16,7 +16,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrRegionJob, NoaaHrrrSourceFileCoord
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -39,7 +38,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisSourceFileCoord]:
         times = pd.to_datetime(processing_region_ds["time"].values)
-        group_has_hour_0 = item({has_hour_0_values(var) for var in data_var_group})
+        group_has_hour_0 = item({var.has_hour_0_values() for var in data_var_group})
 
         if group_has_hour_0:
             init_times = times

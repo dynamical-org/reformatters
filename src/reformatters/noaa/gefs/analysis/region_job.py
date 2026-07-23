@@ -36,7 +36,6 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 from reformatters.noaa.gefs.read_data import read_data
 from reformatters.noaa.gefs.utils import gefs_download_file
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -101,7 +100,9 @@ class GefsAnalysisRegionJob(
         if available_from is not None:
             times = times[times >= available_from]
 
-        var_has_hour_0_values = item({has_hour_0_values(var) for var in data_var_group})
+        var_has_hour_0_values = item(
+            {var.has_hour_0_values() for var in data_var_group}
+        )
 
         # If var doesn't have hour 0 values we have to go back one forecast
         # so the first step after the reforecast will still be drawn from the reforecast.

@@ -81,6 +81,11 @@ def _var(
         path=name,
         attrs=SimpleNamespace(step_type=step_type),
         internal_attrs=SimpleNamespace(hour_0_values_override=hour_0_values_override),
+        has_hour_0_values=lambda: (
+            hour_0_values_override
+            if hour_0_values_override is not None
+            else step_type == "instant"
+        ),
     )
 
 

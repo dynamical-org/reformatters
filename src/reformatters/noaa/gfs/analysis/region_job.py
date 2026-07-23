@@ -17,7 +17,6 @@ from reformatters.noaa.gfs.region_job import (
     NoaaGfsSourceFileCoord,
 )
 from reformatters.noaa.models import NoaaDataVar
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 NOAA_GFS_INIT_FREQUENCY = pd.Timedelta("6h")
 
@@ -45,7 +44,7 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
         data_var_group: Sequence[NoaaDataVar],
     ) -> Sequence[NoaaGfsAnalysisSourceFileCoord]:
         times = pd.to_datetime(processing_region_ds["time"].values)
-        group_has_hour_0 = item({has_hour_0_values(var) for var in data_var_group})
+        group_has_hour_0 = item({var.has_hour_0_values() for var in data_var_group})
 
         init_freq_hours = f"{whole_hours(NOAA_GFS_INIT_FREQUENCY)}h"
         if group_has_hour_0:

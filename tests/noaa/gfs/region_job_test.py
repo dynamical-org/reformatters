@@ -20,7 +20,6 @@ from reformatters.noaa.gfs.region_job import (
     NoaaGfsCommonRegionJob,
     NoaaGfsSourceFileCoord,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 class ConcreteSourceFileCoord(NoaaGfsSourceFileCoord):
@@ -75,7 +74,7 @@ def test_common_region_job_source_groups() -> None:
 
     # All variables in each group should have the same has_hour_0_values status
     for group in groups:
-        group_has_hour_0 = {has_hour_0_values(v) for v in group}
+        group_has_hour_0 = {v.has_hour_0_values() for v in group}
         assert len(group_has_hour_0) == 1
 
 

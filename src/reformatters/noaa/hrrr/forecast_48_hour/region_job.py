@@ -15,7 +15,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrRegionJob, NoaaHrrrSourceFileCoord
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -39,7 +38,7 @@ class NoaaHrrrForecast48HourRegionJob(NoaaHrrrRegionJob):
         """Generate source file coordinates for the processing region."""
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        group_has_hour_0 = item({has_hour_0_values(var) for var in data_var_group})
+        group_has_hour_0 = item({var.has_hour_0_values() for var in data_var_group})
         if not group_has_hour_0:
             lead_times = lead_times[lead_times > pd.Timedelta(hours=0)]
 

@@ -37,7 +37,6 @@ from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
-    has_hour_0_values,
     nomads_rate_limiter,
 )
 
@@ -86,7 +85,7 @@ class NoaaGfsCommonRegionJob(
         data_vars: Sequence[NoaaDataVar],
     ) -> Sequence[Sequence[NoaaDataVar]]:
         """Return groups of variables that can be downloaded from the same source file."""
-        return group_by(data_vars, has_hour_0_values)
+        return group_by(data_vars, lambda v: v.has_hour_0_values())
 
     def _download_from_source(
         self, coord: NoaaGfsSourceFileCoord, source: DownloadSource

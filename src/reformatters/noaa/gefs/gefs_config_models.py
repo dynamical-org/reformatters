@@ -9,7 +9,6 @@ from reformatters.common.config_models import DataVar, EnsembleStatistic
 from reformatters.common.region_job import CoordinateValue, SourceFileCoord
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.noaa.models import NoaaInternalAttrs
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 # We pull data from 3 types of source files: `a`, `b` and `s`.
 # Selected variables are available in `s` at higher resolution (0.25 vs 0.5 deg)
@@ -177,7 +176,7 @@ class GefsSourceFileCoord(SourceFileCoord):
         # Accumulated and last N hour avg values don't exist in the 0-hour forecast.
         if lead_time_hours == 0:
             data_vars = [
-                data_var for data_var in data_vars if has_hour_0_values(data_var)
+                data_var for data_var in data_vars if data_var.has_hour_0_values()
             ]
             assert len(data_vars) > 0, "No data variables with hour 0 values"
 

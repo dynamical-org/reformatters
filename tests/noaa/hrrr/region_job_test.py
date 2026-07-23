@@ -19,7 +19,6 @@ from reformatters.noaa.hrrr.region_job import (
     NoaaHrrrSourceFileCoord,
 )
 from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -101,7 +100,7 @@ def test_region_job_source_groups(
     assert len(groups) == 2
     for group in groups:
         assert len({v.internal_attrs.hrrr_file_type for v in group}) == 1
-        assert len({has_hour_0_values(v) for v in group}) == 1
+        assert len({v.has_hour_0_values() for v in group}) == 1
 
 
 def test_region_job_source_groups_multiple_file_types(

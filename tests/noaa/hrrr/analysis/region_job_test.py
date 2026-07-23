@@ -16,7 +16,6 @@ from reformatters.noaa.hrrr.analysis.region_job import (
 from reformatters.noaa.hrrr.analysis.template_config import (
     NoaaHrrrAnalysisTemplateConfig,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 @pytest.fixture
@@ -345,7 +344,7 @@ def test_download_and_read_all_variables(
     )
 
     for source_group in NoaaHrrrAnalysisRegionJob.source_file_var_groups(all_vars):
-        is_hour_0 = has_hour_0_values(source_group[0])
+        is_hour_0 = source_group[0].has_hour_0_values()
         lead_time = pd.Timedelta("0h") if is_hour_0 else pd.Timedelta("1h")
         coord_init_time = init_time if is_hour_0 else init_time - pd.Timedelta("1h")
 
