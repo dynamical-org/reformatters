@@ -59,19 +59,10 @@ def test_run_parameters_table_includes_vertical_level_with_vertical_dim(
     assert any("Vertical level" in line for line in table)
 
 
-def test_availability_line_includes_method_and_handles_unmeasured() -> None:
-    measured = VariableStats(
-        name="v",
-        positions_total=6,
-        positions_complete=6,
-        availability_method="via co-ingested variables",
-    )
-    assert (
-        _availability_line(measured)
-        == "**Availability** — 6 of 6 positions complete (via co-ingested variables)"
+def test_availability_line_complete_and_unmeasured() -> None:
+    measured = VariableStats(name="v", positions_total=6, positions_complete=6)
+    assert _availability_line(measured) == (
+        "**Availability** — 6 of 6 positions complete"
     )
 
-    unmeasured = VariableStats(name="v", availability_method="not measured — reason")
-    assert _availability_line(unmeasured) == (
-        "**Availability** — n/a (not measured — reason)"
-    )
+    assert _availability_line(VariableStats(name="v")) == "**Availability** — n/a"
