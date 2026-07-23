@@ -5,7 +5,7 @@ from typing import Any
 
 import typer
 
-from reformatters.common import docker, kubernetes, staging
+from reformatters.common import betterstack, docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
 
@@ -42,6 +42,11 @@ def deploy_operational_resources(
 
     assert len(reformat_jobs) > 0, "No cronjobs to deploy" + (
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
+    )
+
+    # Provision heartbeats (and write their secret) before the cron pods that mount it.
+    betterstack.provision_heartbeats(
+        cj for cj in reformat_jobs if isinstance(cj, kubernetes.CronJob)
     )
 
     k8s_resource_list = {
@@ -103,14 +108,17 @@ def register_commands(
         version: str,
         force: bool = False,
     ) -> None:
-        """Clean up staging resources: kubernetes cronjobs and git branch."""
+        """Clean up staging resources: Better Stack heartbeats, kubernetes cronjobs and git branch."""
         staging.find_dataset(datasets, dataset_id)  # validate dataset_id
         if not force:
             cronjob_names = staging.staging_cronjob_names(dataset_id, version)
             branch = staging.staging_branch_name(dataset_id, version)
             log.info(
-                f"Will delete cronjobs {cronjob_names} and branch {branch}. "
+                f"Will delete heartbeats, cronjobs {cronjob_names} and branch {branch}. "
                 "Run with --force to execute."
             )
             return
+        # Clean up cronjobs + branch first; delete heartbeats last so a missing
+        # BETTERSTACK_API_KEY_RW can't leave the more important resources orphaned.
         staging.cleanup_staging_resources(dataset_id, version)
+        betterstack.delete_staging_heartbeats(dataset_id, version)

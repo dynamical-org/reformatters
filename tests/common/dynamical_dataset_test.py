@@ -1,5 +1,6 @@
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
@@ -11,8 +12,6 @@ import icechunk.store
 import numpy as np
 import pandas as pd
 import pytest
-import sentry_sdk
-import sentry_sdk.crons
 import xarray as xr
 from pydantic import Field, ValidationError, computed_field
 
@@ -739,106 +738,90 @@ class ExampleDatasetWithThreeCronJobs(
         ]
 
 
-def test_monitor_with_cron_job_name_filters_by_name(
+def _recording_monitor(
+    events: list[tuple[str, str]],
+) -> dynamical_dataset.RunMonitor:
+    @contextmanager
+    def monitor(
+        cron_job: CronJob,
+        reformat_job_name: str,
+        *,
+        send_in_progress: bool,
+        send_result: bool,
+    ) -> Iterator[None]:
+        events.append(("enter", cron_job.name))
+        try:
+            yield
+        except Exception:
+            events.append(("error", cron_job.name))
+            raise
+        else:
+            events.append(("ok", cron_job.name))
+
+    return monitor
+
+
+def test_monitor_noop_without_registered_monitors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When multiple cron jobs match a type (e.g. all are CronJob subclasses),
-    cron_job_name disambiguates."""
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
-    dataset = ExampleDatasetWithThreeCronJobs()
-
-    # Without cron_job_name, filtering by base CronJob matches all 3 → should fail
-    with (
-        pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
-        dataset._monitor(CronJob, "job-name"),
-    ):
-        pass
-
-    # With cron_job_name, it narrows to exactly one
-    with dataset._monitor(
-        CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
-    ):
-        pass
-
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
-
-    # Verify the monitor used the archive job's schedule
-    call_kwargs = mock_capture.call_args_list[0].kwargs
-    assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
-
-
-def test_monitor_with_cron_job_name_still_filters_by_type(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """cron_job_name and cron_type are both applied."""
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
-    dataset = ExampleDatasetWithThreeCronJobs()
-
-    # ReformatCronJob filter with the update name should work
-    with dataset._monitor(
-        ReformatCronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-update"
-    ):
-        pass
-
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
-
-
-def test_monitor_context_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-
-    dataset = ExampleDataset(
-        template_config=ExampleConfig(),
-        region_job_class=ExampleRegionJob,
-    )
-
-    # Mock capture_checkin to record statuses
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
-    # Success case: should record "in_progress" then "ok"
-    with dataset._monitor(ReformatCronJob, "job-name"):
-        pass
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
-
-    # Error case: should record "in_progress" then "error"
-    mock_capture.reset_mock()
-    with pytest.raises(ValueError, match="failure"):  # noqa: SIM117
-        with dataset._monitor(ReformatCronJob, "job-name"):
-            raise ValueError("failure")
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "error"]
-
-
-def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Test that it's ok to not define operational_kubernetes_resources if sentry reporting is disabled
-
-    # disable sentry reporting
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", False)
-    dataset = ExampleDataset(
-        template_config=ExampleConfig(),
-        region_job_class=ExampleRegionJob,
-    )
-
-    # make operational_kubernetes_resources raise if called
+    # With no monitors registered, _monitor must not even look up cron jobs.
     def fail_resources(image_tag: str) -> None:
         raise RuntimeError("operational_kubernetes_resources should not be called")
 
     monkeypatch.setattr(
         ExampleDataset, "operational_kubernetes_resources", fail_resources
     )
-
-    # this should not raise
-    with dataset._monitor(ReformatCronJob, "job"):
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(), region_job_class=ExampleRegionJob
+    )
+    with dataset._monitor(ReformatCronJob, "job-name"):
         pass
+
+
+def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
+    events: list[tuple[str, str]] = []
+    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+
+    dataset = ExampleDatasetWithThreeCronJobs()
+    # cron_job_name disambiguates among the three crons; the resolved cron reaches monitors.
+    with dataset._monitor(
+        CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
+    ):
+        pass
+
+    name = f"{dataset.dataset_id}-archive"
+    assert events == [("enter", name), ("enter", name), ("ok", name), ("ok", name)]
+
+
+def test_monitor_requires_exactly_one_matching_cron() -> None:
+    dynamical_dataset.register_run_monitor(_recording_monitor([]))
+    dataset = ExampleDatasetWithThreeCronJobs()
+    # Base CronJob with no name matches all three -> ambiguous.
+    with (
+        pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
+        dataset._monitor(CronJob, "job-name"),
+    ):
+        pass
+
+
+def test_monitor_propagates_errors_to_monitors() -> None:
+    events: list[tuple[str, str]] = []
+    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(), region_job_class=ExampleRegionJob
+    )
+    with (
+        pytest.raises(ValueError, match="failure"),
+        dataset._monitor(ReformatCronJob, "job-name"),
+    ):
+        raise ValueError("failure")
+
+    assert events == [
+        ("enter", "example-dataset-update"),
+        ("error", "example-dataset-update"),
+    ]
 
 
 def _existing_store_tree(n_time: int = 3) -> xr.DataTree:

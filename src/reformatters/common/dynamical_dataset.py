@@ -1,11 +1,11 @@
 import json
 import subprocess
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -17,7 +17,6 @@ from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
-    monitoring,
     parallel_coordination,
     template_utils,
     validation,
@@ -790,8 +789,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         send_in_progress: bool = True,
         send_result: bool = True,
     ) -> Iterator[None]:
-        # Don't require operational_kubernetes_resources to be defined unless sentry reporting is enabled
-        if not Config.is_sentry_enabled:
+        # No registered monitors -> nothing to report to, and no need to require
+        # operational_kubernetes_resources to be defined.
+        if not _RUN_MONITORS:
             yield
             return
 
@@ -802,12 +802,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         cron_jobs = (c for c in cron_jobs if isinstance(c, cron_type))
         cron_job = item(cron_jobs)
 
-        with monitoring.monitor_cron(
-            cron_job,
-            reformat_job_name,
-            send_in_progress=send_in_progress,
-            send_result=send_result,
-        ):
+        with ExitStack() as stack:
+            for monitor in _RUN_MONITORS:
+                stack.enter_context(
+                    monitor(
+                        cron_job,
+                        reformat_job_name,
+                        send_in_progress=send_in_progress,
+                        send_result=send_result,
+                    )
+                )
             yield
 
     @model_validator(mode="after")
@@ -871,3 +875,31 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 f"materialized datasets do not yet support vertical groups: {grouped}"
             )
         return self
+
+
+class RunMonitor(Protocol):
+    """Wraps a single operational cron run to report it to a monitoring service.
+
+    The application registers monitors (see `register_run_monitor`); `DynamicalDataset._monitor`
+    enters every registered one around each update/validate run. This keeps
+    DynamicalDataset agnostic of any specific monitoring service (Better Stack,
+    Sentry, ...) — a different deployment registers whatever it uses, or nothing.
+    """
+
+    def __call__(
+        self,
+        cron_job: CronJob,
+        reformat_job_name: str,
+        *,
+        send_in_progress: bool,
+        send_result: bool,
+    ) -> AbstractContextManager[None]: ...
+
+
+_RUN_MONITORS: list[RunMonitor] = []
+
+
+def register_run_monitor(monitor: RunMonitor) -> None:
+    """Register a monitor to wrap every operational cron run. With none registered,
+    monitoring is a no-op."""
+    _RUN_MONITORS.append(monitor)

@@ -132,6 +132,8 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy staging
+        env:
+          BETTERSTACK_API_KEY_RW: ${{ secrets.BETTERSTACK_API_KEY_RW }}
         run: >
           uv run main deploy-staging
           ${{ steps.parse.outputs.dataset_id }}

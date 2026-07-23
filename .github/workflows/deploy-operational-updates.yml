@@ -80,4 +80,6 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy
+        env:
+          BETTERSTACK_API_KEY_RW: ${{ secrets.BETTERSTACK_API_KEY_RW }}
         run: uv run main deploy --docker-image ${{ env.IMAGE_TAG }}

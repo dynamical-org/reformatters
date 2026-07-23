@@ -89,6 +89,9 @@ uv run main cleanup-staging noaa-gfs-forecast 0.3.0 --force
 This deletes:
 - Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
 - The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
+- The staged version's Better Stack heartbeats
+
+Deleting heartbeats requires `BETTERSTACK_API_KEY_RW` in your environment (a read/write Better Stack Uptime API token); it is also required by `deploy-staging`. Cronjobs and the branch are deleted first, so a missing key can't leave them orphaned.
 
 The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
 

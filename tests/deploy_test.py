@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import deploy
+from reformatters.common import betterstack, deploy
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
@@ -56,6 +56,7 @@ class ExampleDataset2(ExampleDataset1):
 def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(betterstack, "provision_heartbeats", lambda cron_jobs: None)
 
     example_datasets = [
         ExampleDatasetInDevelopment(),
@@ -98,6 +99,7 @@ def test_deploy_operational_resources_dataset_id_filter(
 ) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(betterstack, "provision_heartbeats", lambda cron_jobs: None)
 
     test_datasets: list[DynamicalDataset[Any, Any]] = [
         ExampleDataset1(),
