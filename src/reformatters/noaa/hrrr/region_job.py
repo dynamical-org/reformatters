@@ -37,7 +37,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
-    has_hour_0_values,
     nomads_rate_limiter,
 )
 
@@ -92,7 +91,8 @@ class NoaaHrrrRegionJob(
         data_vars: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
         return group_by(
-            data_vars, lambda v: (v.internal_attrs.hrrr_file_type, has_hour_0_values(v))
+            data_vars,
+            lambda v: (v.internal_attrs.hrrr_file_type, v.has_hour_0_values()),
         )
 
     @classmethod

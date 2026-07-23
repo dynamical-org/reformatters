@@ -22,7 +22,6 @@ from reformatters.noaa.noaa_grib_index import (
     GRIB_INDEX_UNKNOWN_END_PAD,
     grib_message_byte_ranges_from_index,
 )
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -158,5 +157,5 @@ def _vars_in_s_file(
             var.internal_attrs.gefs_file_type != "s+b-b22"
             or init_time >= GEFS_B22_TRANSITION_DATE
         )
-        and (lead_time != pd.Timedelta(0) or has_hour_0_values(var))
+        and (lead_time != pd.Timedelta(0) or var.has_hour_0_values())
     ]

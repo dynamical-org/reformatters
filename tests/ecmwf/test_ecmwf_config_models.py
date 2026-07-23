@@ -9,7 +9,6 @@ from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     EcmwfInternalAttrs,
     InitTimeScaleFactor,
-    has_hour_0_values,
     vars_available,
 )
 
@@ -88,21 +87,23 @@ def test_vars_available_raises_on_mixed_date_available() -> None:
 def test_has_hour_0_values_true_for_non_extremum_step_types(
     step_type: StepType,
 ) -> None:
-    assert has_hour_0_values(_make_data_var(step_type)) is True
+    assert _make_data_var(step_type).has_hour_0_values() is True
 
 
 @pytest.mark.parametrize("step_type", ["max", "min"])
 def test_has_hour_0_values_false_for_extremum_step_types(step_type: StepType) -> None:
-    assert has_hour_0_values(_make_data_var(step_type)) is False
+    assert _make_data_var(step_type).has_hour_0_values() is False
 
 
 def test_has_hour_0_values_override_true_overrides_step_type() -> None:
-    assert has_hour_0_values(_make_data_var("max", hour_0_values_override=True)) is True
+    assert (
+        _make_data_var("max", hour_0_values_override=True).has_hour_0_values() is True
+    )
 
 
 def test_has_hour_0_values_override_false_overrides_step_type() -> None:
     assert (
-        has_hour_0_values(_make_data_var("instant", hour_0_values_override=False))
+        _make_data_var("instant", hour_0_values_override=False).has_hour_0_values()
         is False
     )
 

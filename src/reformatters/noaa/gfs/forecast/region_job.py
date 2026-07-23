@@ -16,7 +16,6 @@ from reformatters.noaa.gfs.region_job import (
     NoaaGfsSourceFileCoord,
 )
 from reformatters.noaa.models import NoaaDataVar
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 
 class NoaaGfsForecastSourceFileCoord(NoaaGfsSourceFileCoord):
@@ -31,7 +30,7 @@ class NoaaGfsForecastRegionJob(NoaaGfsCommonRegionJob):
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[NoaaDataVar]
     ) -> Sequence[NoaaGfsForecastSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        var_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
+        var_has_hour_0_values = item({v.has_hour_0_values() for v in data_var_group})
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 

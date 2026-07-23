@@ -21,7 +21,6 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 from reformatters.noaa.gefs.read_data import read_data
 from reformatters.noaa.gefs.utils import gefs_download_file
-from reformatters.noaa.noaa_utils import has_hour_0_values
 
 log = get_logger(__name__)
 
@@ -53,7 +52,7 @@ class GefsForecast35DayRegionJob(
         grouper: dict[tuple[GEFSFileType, bool], list[GEFSDataVar]] = defaultdict(list)
         for data_var in data_vars:
             gefs_file_type = data_var.internal_attrs.gefs_file_type
-            grouper[(gefs_file_type, has_hour_0_values(data_var))].append(data_var)
+            grouper[(gefs_file_type, data_var.has_hour_0_values())].append(data_var)
 
         # Sort by index position for better coalescing of byte range requests to the grib
         groups = [
@@ -70,7 +69,7 @@ class GefsForecast35DayRegionJob(
         """Generate source file coordinates for forecast data."""
         # Filter out lead_time=0 for variables that don't have hour 0 values
         # (accumulated and last N hour avg values don't exist in the 0-hour forecast)
-        var_has_hour_0_values = item({has_hour_0_values(v) for v in data_var_group})
+        var_has_hour_0_values = item({v.has_hour_0_values() for v in data_var_group})
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 

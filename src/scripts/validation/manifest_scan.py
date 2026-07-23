@@ -156,15 +156,6 @@ def _fold_file_availability(
         bucket[0] += int(is_present)
 
 
-def _has_hour_0_values(var: DataVar[Any]) -> bool:
-    """Whether `var` has a ref at lead 0 — mirrors the providers' has_hour_0_values,
-    reading only common fields so it works for any virtual dataset."""
-    override = var.internal_attrs.hour_0_values_override
-    if override is not None:
-        return override
-    return var.attrs.step_type == "instant"
-
-
 def _coord_carries(coord: SourceFileCoord, var: DataVar[Any]) -> bool:
     coord_vars = getattr(coord, "data_vars", None)
     return coord_vars is None or any(v.name == var.name for v in coord_vars)
@@ -202,7 +193,7 @@ def _probe_coord_for_var(
     present the variable is not probed at this position. Analysis datasets (no
     lead_time in out_loc) probe at any present file.
     """
-    skip_lead_0 = not _has_hour_0_values(var)
+    skip_lead_0 = not var.has_hour_0_values()
     for lead, coord in sorted_coords:
         if skip_lead_0 and lead is not None and lead == pd.Timedelta(0):
             continue

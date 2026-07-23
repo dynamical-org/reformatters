@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, assert_never
 
 import pandas as pd
 
@@ -82,7 +82,23 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
-    pass
+    def has_hour_0_values(self) -> bool:
+        """Returns True if this variable has a value at lead_time=0h.
+
+        ECMWF avg/accum variables (e.g. total precipitation, radiation) include a 0h
+        accumulation of 0 in the GRIB, so they do have hour 0 values. Only "max" and "min"
+        step_type variables are absent at lead_time=0h since they represent the extremum
+        since the previous post-processing step, which doesn't exist at initialization time.
+        """
+        if self.internal_attrs.hour_0_values_override is not None:
+            return self.internal_attrs.hour_0_values_override
+        match self.attrs.step_type:
+            case "instant" | "accum" | "avg":
+                return True
+            case "max" | "min":
+                return False
+            case _ as unreachable:
+                assert_never(unreachable)
 
 
 def vars_available(
@@ -109,16 +125,3 @@ def _resolve_grib_index_param(
                 ),
             )
     return data_var
-
-
-def has_hour_0_values(data_var: EcmwfDataVar) -> bool:
-    """Returns True if this variable has a value at lead_time=0h.
-
-    ECMWF avg/accum variables (e.g. total precipitation, radiation) include a 0h
-    accumulation of 0 in the GRIB, so they do have hour 0 values. Only "max" and "min"
-    step_type variables are absent at lead_time=0h since they represent the extremum
-    since the previous post-processing step, which doesn't exist at initialization time.
-    """
-    if data_var.internal_attrs.hour_0_values_override is not None:
-        return data_var.internal_attrs.hour_0_values_override
-    return data_var.attrs.step_type not in ("max", "min")

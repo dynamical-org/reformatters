@@ -1,7 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from scripts.validation.availability import (
@@ -163,3 +165,112 @@ def test_write_availability_artifacts_ignores_unprobed_positions(
     assert summary.first_incomplete == summary.last_incomplete == "2020-01-02T00:00"
     assert summary.plot == "availability_temperature_2m.png"
     assert (tmp_path / summary.plot).exists()
+
+
+def _stub_registry(
+    monkeypatch: pytest.MonkeyPatch, data_vars: list[SimpleNamespace]
+) -> None:
+    """Register a stub dataset: all data_vars share one source file group."""
+    dataset = SimpleNamespace(
+        template_config=SimpleNamespace(data_vars=data_vars),
+        region_job_class=SimpleNamespace(source_file_var_groups=lambda dvs: [dvs]),
+    )
+    monkeypatch.setattr(
+        "scripts.validation.availability.find_registered_dataset", lambda _id: dataset
+    )
+
+
+def _stub_var(name: str, has_hour_0: bool) -> SimpleNamespace:
+    return SimpleNamespace(name=name, path=name, has_hour_0_values=lambda: has_hour_0)
+
+
+def test_run_value_availability_exempts_hour_0_override_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An instant var the provider marks hour-0-NaN (hour_0_values_override=False)
+    has its structural lead-0 NaN excluded, like an accumulated var's."""
+    ds = _forecast_dataset()
+    flag = np.ones_like(ds["temperature_2m"].values)
+    flag[:, 0, :, :] = np.nan  # structural hour-0 NaN on an *instant* var
+    ds["categorical_rain_surface"] = (ds["temperature_2m"].dims, flag)
+    ds["categorical_rain_surface"].attrs["step_type"] = "instant"
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var("temperature_2m", has_hour_0=True),
+            _stub_var("precipitation_surface", has_hour_0=False),
+            _stub_var("categorical_rain_surface", has_hour_0=False),
+        ],
+    )
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = [*ctx.variables, "categorical_rain_surface"]
+
+    run_value_availability(ctx)
+
+    categorical = ctx.stats["categorical_rain_surface"]
+    assert categorical.positions_complete == categorical.positions_total == 6
+    assert categorical.availability_method is None
+
+
+def test_run_value_availability_sentinel_masked_uses_co_ingested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A masked-sentinel var (missing_value) can't be value-scanned — NaN is ambiguous
+    between not-ingested and legitimately-no-data — so its availability is the mean of
+    its source-file group co-members'."""
+    ds = _forecast_dataset()
+    sentinel = np.full(ds["temperature_2m"].shape, np.nan)  # all "no data" at points
+    ds["percent_frozen_precipitation_surface"] = (
+        ds["temperature_2m"].dims,
+        sentinel,
+    )
+    ds["percent_frozen_precipitation_surface"].attrs["step_type"] = "instant"
+    ds["percent_frozen_precipitation_surface"].attrs["missing_value"] = -50.0
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var("temperature_2m", has_hour_0=True),
+            _stub_var("precipitation_surface", has_hour_0=False),
+            _stub_var("percent_frozen_precipitation_surface", has_hour_0=False),
+        ],
+    )
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = [*ctx.variables, "percent_frozen_precipitation_surface"]
+
+    run_value_availability(ctx)
+
+    stats = ctx.stats["percent_frozen_precipitation_surface"]
+    assert stats.availability_method is not None
+    assert "co-ingested" in stats.availability_method
+    # Mean of temperature ([1,1,0,1,1,1]) and precipitation ([1]*6) series.
+    np.testing.assert_allclose(
+        ctx.availability["percent_frozen_precipitation_surface"].fraction,
+        [1, 1, 0.5, 1, 1, 1],
+    )
+    # No direct value scan: no per-point null counts, nothing in the retry list.
+    assert stats.null_count_p1 is None
+    assert stats.unavailable_timestamps_p1 == []
+    assert "percent_frozen" not in (tmp_path / "unavailable_timestamps.txt").read_text()
+
+
+def test_run_value_availability_sentinel_masked_unregistered_store(
+    tmp_path: Path,
+) -> None:
+    """Without a registered dataset there is nothing co-ingested to measure through;
+    the variable reports why instead of a fabricated number."""
+    ds = _forecast_dataset()
+    ds["percent_frozen_precipitation_surface"] = (
+        ds["temperature_2m"].dims,
+        np.full(ds["temperature_2m"].shape, np.nan),
+    )
+    ds["percent_frozen_precipitation_surface"].attrs["missing_value"] = -50.0
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = [*ctx.variables, "percent_frozen_precipitation_surface"]
+
+    run_value_availability(ctx)
+
+    stats = ctx.stats["percent_frozen_precipitation_surface"]
+    assert stats.positions_total is None
+    assert stats.availability_method is not None
+    assert "not measured" in stats.availability_method
+    assert "percent_frozen_precipitation_surface" not in ctx.availability

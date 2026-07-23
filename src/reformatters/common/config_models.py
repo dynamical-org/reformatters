@@ -214,7 +214,7 @@ class BaseInternalAttrs(FrozenBaseModel):
     keep_mantissa_bits: int | Literal["no-rounding"]
     deaccumulate_to_rate: bool = False
     # If None, defers to attrs.step_type. Useful when an instantaneous variable does not have hour 0 values.
-    # Access via has_hour_0_values(data_var), not directly.
+    # Access via data_var.has_hour_0_values(), not directly.
     hour_0_values_override: bool | None = None
 
 
@@ -233,6 +233,16 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     @property
     def path(self) -> str:
         return var_path(self.group, self.name)
+
+    def has_hour_0_values(self) -> bool:
+        """Whether this variable has values at lead_time=0 (the analysis step).
+
+        Providers with different lead-0 semantics override this default.
+        Per-variable exceptions set internal_attrs.hour_0_values_override.
+        """
+        if self.internal_attrs.hour_0_values_override is not None:
+            return self.internal_attrs.hour_0_values_override
+        return self.attrs.step_type == "instant"
 
     @pydantic.model_validator(mode="after")
     def validate_missing_value_matches_fill_value(self) -> DataVar[INTERNAL_ATTRS_co]:
