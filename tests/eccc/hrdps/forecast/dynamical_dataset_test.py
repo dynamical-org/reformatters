@@ -1,9 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-import sentry_sdk.crons
 
-from reformatters.common.config import Config
 from reformatters.eccc.hrdps.forecast.dynamical_dataset import (
     EcccHrdpsForecastTemporalDynamicalDataset,
 )
@@ -88,18 +86,14 @@ def test_archive_grib_files_passes_s3_credentials(
     assert env_vars["RCLONE_S3_PROVIDER"] == "AWS"
 
 
-def test_archive_grib_files_sends_cron_checkins(
+def test_archive_grib_files_runs(
     dataset: EcccHrdpsForecastTemporalDynamicalDataset,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
-    mock_capture = Mock()
-    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
-
+    copy_mock = Mock()
     with (
         patch(
             "reformatters.eccc.hrdps.forecast.dynamical_dataset.copy_files_from_eccc_https",
-            Mock(),
+            copy_mock,
         ),
         patch(
             "reformatters.eccc.hrdps.forecast.dynamical_dataset.kubernetes.load_secret",
@@ -108,12 +102,7 @@ def test_archive_grib_files_sends_cron_checkins(
     ):
         dataset.archive_grib_files(reformat_job_name="test")
 
-    statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
-    assert (
-        mock_capture.call_args_list[0].kwargs["monitor_slug"]
-        == f"{dataset.dataset_id}-archive-grib-files"
-    )
+    assert copy_mock.called
 
 
 def test_get_cli_has_archive_command(

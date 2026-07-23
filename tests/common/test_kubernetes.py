@@ -9,6 +9,8 @@ import pytest
 
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
+    BETTERSTACK_HEARTBEATS_SECRET_NAME,
+    CronJob,
     Job,
     ReformatCronJob,
     ValidationCronJob,
@@ -427,3 +429,54 @@ def test_load_secret_from_kubernetes_api() -> None:
 
     assert result == secret_data
     mock_v1.read_namespaced_secret.assert_called_once_with("db-credentials", "default")
+
+
+def _cron_volume_names(cron: CronJob) -> set[str]:
+    spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]["template"][
+        "spec"
+    ]
+    return {volume["name"] for volume in spec["volumes"]}
+
+
+def test_update_cron_mounts_heartbeats_secret_alongside_dataset_secrets() -> None:
+    cron = ReformatCronJob(
+        name="weather-data-update",
+        schedule="0 * * * *",
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+        secret_names=["source-creds"],
+    )
+    volume_names = _cron_volume_names(cron)
+    assert BETTERSTACK_HEARTBEATS_SECRET_NAME in volume_names
+    assert "source-creds" in volume_names
+
+
+def test_validate_cron_mounts_heartbeats_secret() -> None:
+    cron = ValidationCronJob(
+        name="weather-data-validate",
+        schedule="0 * * * *",
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+    )
+    assert BETTERSTACK_HEARTBEATS_SECRET_NAME in _cron_volume_names(cron)
+
+
+def test_all_crons_mount_heartbeats_secret() -> None:
+    # Every cron mounts the secret (even archive, which has no heartbeat step);
+    # its runtime monitor just finds no matching entry and skips pinging.
+    cron = CronJob(
+        name="weather-data-archive",
+        schedule="0 * * * *",
+        command=["archive"],
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+        workers_total=1,
+        parallelism=1,
+    )
+    assert BETTERSTACK_HEARTBEATS_SECRET_NAME in _cron_volume_names(cron)

@@ -3,6 +3,7 @@ import faulthandler
 import multiprocessing
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +24,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 os.environ["DYNAMICAL_ENV"] = "test"
 
 
-from reformatters.common import storage  # noqa: E402
+from reformatters.common import dynamical_dataset, storage  # noqa: E402
 
 
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
@@ -61,6 +62,15 @@ def set_local_zarr_store_base_path(
     ):
         return
     monkeypatch.setattr(storage, "_LOCAL_ZARR_STORE_BASE_PATH", tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def reset_run_monitors() -> Iterator[None]:
+    """Keep the module-level monitor registry empty by default so importing
+    __main__ (which registers prod monitors) in one test doesn't leak into others."""
+    dynamical_dataset._RUN_MONITORS.clear()
+    yield
+    dynamical_dataset._RUN_MONITORS.clear()
 
 
 @pytest.fixture
