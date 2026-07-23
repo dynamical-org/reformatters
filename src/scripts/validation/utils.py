@@ -152,6 +152,9 @@ class VariableStats:
     positions_complete: int | None = None
     first_incomplete: str | None = None
     last_incomplete: str | None = None
+    # Set when the variable couldn't be value-scanned directly (masked sentinel);
+    # states how availability was measured instead, or why it wasn't.
+    availability_method: str | None = None
 
     # Null value counts at the two run points (materialized stores only)
     null_count_p1: int | None = None

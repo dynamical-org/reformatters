@@ -12,6 +12,7 @@ See docs/validation.md.
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,13 +21,14 @@ import typer
 import xarray as xr
 from matplotlib.colors import LinearSegmentedColormap
 
+from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
 from scripts.validation.manifest_scan import (
     result_availability_series,
     scan_manifest,
     write_incomplete_positions_file,
 )
-from scripts.validation.scan_common import resolve_scan_window
+from scripts.validation.scan_common import find_registered_dataset, resolve_scan_window
 from scripts.validation.utils import (
     AvailabilitySeries,
     RunContext,
@@ -221,18 +223,18 @@ def apply_availability(ctx: RunContext) -> None:
 
 
 def _compute_nulls_for_point(
-    da_point: xr.DataArray,
+    da_point: xr.DataArray, *, has_hour_0: bool
 ) -> tuple[xr.DataArray, list[str], int, int]:
     """Null fraction per position, plus unavailable timestamps + counts.
 
-    For accumulated/avg variables, excludes the first lead_time (analysis step) from the
-    tally — it's structurally NaN by design.
+    For variables without hour-0 values, excludes the first lead_time (analysis step)
+    from the tally — it's structurally NaN by design.
     """
     non_time_dims = [dim for dim in da_point.dims if dim not in ("time", "init_time")]
     null_mask = da_point.isnull()
 
     check_mask = null_mask
-    if da_point.attrs.get("step_type") != "instant" and "lead_time" in da_point.dims:
+    if not has_hour_0 and "lead_time" in da_point.dims:
         check_mask = null_mask.isel(lead_time=slice(1, None))
 
     time_dim = next(d for d in ("time", "init_time") if d in da_point.dims)
@@ -304,6 +306,82 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     return filename
 
 
+def _is_sentinel_masked(da: xr.DataArray) -> bool:
+    """A masked sentinel (CF missing_value, equal to the fill value) makes a value scan
+    ambiguous: an unwritten chunk and a legitimately-all-sentinel field both read NaN."""
+    return (
+        da.attrs.get("missing_value") is not None
+        or da.encoding.get("missing_value") is not None
+    )
+
+
+def _template_data_vars(ctx: RunContext) -> dict[str, DataVar[Any]]:
+    """The registered dataset's data vars by store path, {} for unregistered stores."""
+    dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
+    if dataset is None:
+        return {}
+    return {v.path: v for v in dataset.template_config.data_vars}
+
+
+def _co_ingested_availability(
+    ctx: RunContext, var: str, template_vars: dict[str, DataVar[Any]]
+) -> AvailabilitySeries | None:
+    """Availability of `var`'s source-file group, from its value-scanned co-members.
+
+    A sentinel-masked variable can't be value-scanned (see _is_sentinel_masked), but it
+    is written from the same source files as its RegionJob source_file_var_groups
+    co-members, so the mean of their availability measures whether its data was
+    ingested. None when nothing co-ingested was scanned (unregistered store, or a
+    variable-filtered run).
+    """
+    dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
+    if dataset is None or var not in template_vars:
+        return None
+    group = next(
+        (
+            g
+            for g in dataset.region_job_class.source_file_var_groups(
+                dataset.template_config.data_vars  # type: ignore[arg-type]
+            )
+            if any(v.path == var for v in g)
+        ),
+        [],
+    )
+    co_series = [
+        ctx.availability[v.path]
+        for v in group
+        if v.path != var and v.path in ctx.availability
+    ]
+    if not co_series:
+        return None
+    return AvailabilitySeries(
+        positions=co_series[0].positions,
+        fraction=np.mean([s.fraction for s in co_series], axis=0),
+    )
+
+
+def _apply_sentinel_availability(
+    ctx: RunContext, sentinel_vars: list[str], template_vars: dict[str, DataVar[Any]]
+) -> None:
+    for var in sentinel_vars:
+        stats = ctx.stats_for(var)
+        series = _co_ingested_availability(ctx, var, template_vars)
+        if series is None:
+            stats.availability_method = (
+                "not measured — this variable's masked sentinel makes a value scan "
+                "ambiguous, and no co-ingested variable was scanned to measure through"
+            )
+            log.info(f"  nulls {var}: skipped ({stats.availability_method})")
+            continue
+        ctx.availability[var] = series
+        stats.availability_method = (
+            "via co-ingested variables — this variable's masked sentinel (missing_value) "
+            "reads as NaN wherever no data value applies, so its availability is "
+            "measured from variables written from the same source files"
+        )
+        log.info(f"  nulls {var}: measured via co-ingested variables")
+
+
 def run_value_availability(ctx: RunContext) -> None:
     """Value-scan availability at the two run points (materialized stores)."""
     assert not ctx.is_virtual, (
@@ -316,6 +394,11 @@ def run_value_availability(ctx: RunContext) -> None:
     p1_label = f"Point 1 (lat={ctx.point1_lat:.2f}, lon={ctx.point1_lon:.2f})"
     p2_label = f"Point 2 (lat={ctx.point2_lat:.2f}, lon={ctx.point2_lon:.2f})"
     log.info(f"availability: {len(ctx.variables)} variables at {p1_label} / {p2_label}")
+
+    template_vars = _template_data_vars(ctx)
+    sentinel_vars = [
+        var for var in ctx.variables if _is_sentinel_masked(ctx.validation_ds[var])
+    ]
 
     for var in ctx.variables:
         stats = ctx.stats_for(var)
@@ -332,8 +415,21 @@ def run_value_availability(ctx: RunContext) -> None:
         da_p2 = load_retried(da_p2)
         ctx.loaded_point_data[var] = (da_p1, da_p2)
 
-        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(da_p1)
-        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(da_p2)
+        if var in sentinel_vars:
+            continue
+
+        template_var = template_vars.get(var)
+        has_hour_0 = (
+            template_var.has_hour_0_values()
+            if template_var is not None
+            else da_p1.attrs.get("step_type") == "instant"
+        )
+        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(
+            da_p1, has_hour_0=has_hour_0
+        )
+        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(
+            da_p2, has_hour_0=has_hour_0
+        )
 
         stats.unavailable_timestamps_p1 = unavailable_p1
         stats.unavailable_timestamps_p2 = unavailable_p2
@@ -351,6 +447,13 @@ def run_value_availability(ctx: RunContext) -> None:
         p1_fmt = _format_unavailable_summary(unavailable_p1)
         p2_fmt = _format_unavailable_summary(unavailable_p2)
         log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
+
+    _apply_sentinel_availability(ctx, sentinel_vars, template_vars)
+
+    # Heatmap rows render in scan order.
+    ctx.availability = {
+        var: ctx.availability[var] for var in ctx.variables if var in ctx.availability
+    }
 
     ctx.unavailable_timestamps_file = write_unavailable_timestamps_file(
         ctx.output_dir, ctx

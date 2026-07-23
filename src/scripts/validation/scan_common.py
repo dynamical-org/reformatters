@@ -23,14 +23,19 @@ from reformatters.common.virtual_region_job import VirtualRegionJob
 from scripts.validation.utils import RunContext, open_icechunk_readonly
 
 
+def find_registered_dataset(dataset_id: str) -> DynamicalDataset[Any, Any] | None:
+    """Look up a registered dataset by id, or None if unregistered."""
+    from reformatters.__main__ import DYNAMICAL_DATASETS  # noqa: PLC0415
+
+    return next((d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id), None)
+
+
 def resolve_virtual_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
     """Look up a registered virtual dataset by id, or raise a CLI error."""
     from reformatters.__main__ import DYNAMICAL_DATASETS  # noqa: PLC0415
 
-    for dataset in DYNAMICAL_DATASETS:
-        if dataset.dataset_id == dataset_id:
-            break
-    else:
+    dataset = find_registered_dataset(dataset_id)
+    if dataset is None:
         known = ", ".join(d.dataset_id for d in DYNAMICAL_DATASETS)
         raise typer.BadParameter(f"Unknown dataset id {dataset_id!r}. Known: {known}")
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
