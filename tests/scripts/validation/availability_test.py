@@ -209,7 +209,6 @@ def test_run_value_availability_exempts_hour_0_override_vars(
 
     categorical = ctx.stats["categorical_rain_surface"]
     assert categorical.positions_complete == categorical.positions_total == 6
-    assert categorical.availability_method is None
 
 
 def test_run_value_availability_sentinel_masked_uses_co_ingested(
@@ -240,8 +239,6 @@ def test_run_value_availability_sentinel_masked_uses_co_ingested(
     run_value_availability(ctx)
 
     stats = ctx.stats["percent_frozen_precipitation_surface"]
-    assert stats.availability_method is not None
-    assert "co-ingested" in stats.availability_method
     # Mean of temperature ([1,1,0,1,1,1]) and precipitation ([1]*6) series.
     np.testing.assert_allclose(
         ctx.availability["percent_frozen_precipitation_surface"].fraction,
@@ -257,7 +254,7 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
     tmp_path: Path,
 ) -> None:
     """Without a registered dataset there is nothing co-ingested to measure through;
-    the variable reports why instead of a fabricated number."""
+    the variable reports n/a instead of a fabricated number."""
     ds = _forecast_dataset()
     ds["percent_frozen_precipitation_surface"] = (
         ds["temperature_2m"].dims,
@@ -271,6 +268,4 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
 
     stats = ctx.stats["percent_frozen_precipitation_surface"]
     assert stats.positions_total is None
-    assert stats.availability_method is not None
-    assert "not measured" in stats.availability_method
     assert "percent_frozen_precipitation_surface" not in ctx.availability

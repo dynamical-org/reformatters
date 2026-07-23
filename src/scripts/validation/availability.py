@@ -364,21 +364,14 @@ def _apply_sentinel_availability(
     ctx: RunContext, sentinel_vars: list[str], template_vars: dict[str, DataVar[Any]]
 ) -> None:
     for var in sentinel_vars:
-        stats = ctx.stats_for(var)
         series = _co_ingested_availability(ctx, var, template_vars)
         if series is None:
-            stats.availability_method = (
-                "not measured — this variable's masked sentinel makes a value scan "
-                "ambiguous, and no co-ingested variable was scanned to measure through"
+            log.info(
+                f"  nulls {var}: not measured (masked sentinel, "
+                "nothing co-ingested scanned)"
             )
-            log.info(f"  nulls {var}: skipped ({stats.availability_method})")
             continue
         ctx.availability[var] = series
-        stats.availability_method = (
-            "via co-ingested variables — this variable's masked sentinel (missing_value) "
-            "reads as NaN wherever no data value applies, so its availability is "
-            "measured from variables written from the same source files"
-        )
         log.info(f"  nulls {var}: measured via co-ingested variables")
 
 

@@ -204,8 +204,6 @@ def _availability_line(stats: VariableStats) -> str:
             f"; nulls P1 {_fmt_count(stats.null_count_p1, stats.total_count_p1)}, "
             f"P2 {_fmt_count(stats.null_count_p2, stats.total_count_p2)}"
         )
-    if stats.availability_method is not None:
-        detail += f" ({stats.availability_method})"
     return f"**Availability** — {detail}"
 
 
@@ -317,17 +315,6 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         lines.append("")
         lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
         lines.append("")
-    indirect = [
-        ctx.stats[var]
-        for var in ctx.variables
-        if var in ctx.stats and ctx.stats[var].availability_method is not None
-    ]
-    lines.extend(
-        f"- `{stats.name}`: {stats.availability_method}." for stats in indirect
-    )
-    if indirect:
-        lines.append("")
-
     incomplete = [
         ctx.stats[var]
         for var in ctx.variables
