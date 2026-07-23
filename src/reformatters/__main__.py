@@ -247,6 +247,7 @@ if Config.is_error_tracking_enabled:
         integrations=[
             TyperIntegration(),
         ],
+        before_send=betterstack.group_error_fingerprint,
     )
     sentry_sdk.set_tag("env", Config.env.value)
     sentry_sdk.set_tag("cron_job_name", os.getenv("CRON_JOB_NAME"))
