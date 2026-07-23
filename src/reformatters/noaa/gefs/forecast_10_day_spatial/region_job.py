@@ -62,11 +62,6 @@ class GefsForecast10DaySpatialRegionJob(
 ):
     """RegionJob for the GEFS 10-day spatial (virtual) forecast dataset."""
 
-    # Concurrent index file downloads. The .idx files are ~30KB latency-bound
-    # requests; measured throughput vs pool width: 8 -> ~105 files/s,
-    # 32 -> ~310, 64 -> ~380, 128 -> ~435 (diminishing).
-    download_concurrency: ClassVar[int] = 64
-
     # 24h window = the last 4 inits at the 6h cadence, so a couple of missed or
     # late-publishing runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")

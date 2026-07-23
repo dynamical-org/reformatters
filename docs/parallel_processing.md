@@ -33,13 +33,17 @@ Readers must always see a consistent view — either the old data or the fully u
 
 ### Structure guard (operational updates)
 
-Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`, called from `DynamicalDataset._process_region_jobs`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill, which is exempt from this guard.
+Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
+
+### Overwrite guard (backfills into an existing store)
+
+A backfill into an existing store (`--overwrite-chunks` / `--overwrite-metadata`) runs `template_utils.assert_safe_overwrite` — in the `backfill-kubernetes` driver before submitting, and again on worker 0 before any writes (the deployed image's template can differ from the driver's). It rejects structural drift of arrays the store already has, any template shorter than the store along the append dim (trimming an existing store is never supported), new arrays unless `--overwrite-metadata` was passed, and a longer template unless an explicit `--append-dim-end` was given with both overwrite flags. Overwrite metadata writes also exclude coordinate value chunks the template renders entirely null (`template_utils.store_written_coords`, e.g. `ingested_forecast_length`) so job-written coordinate state is never clobbered by the template's empty values.
 
 ### Zarr v3 stores
 
 Data chunks can be written directly because they occupy new shard regions that readers won't access until the metadata (which defines the dataset's dimensions) is updated. The metadata write is deferred until the last worker completes, making all new data visible atomically.
 
-For backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. Those calls are required for Zarr v3 support; once the project only supports Icechunk, those calls are no longer needed. `parallel_setup` writes metadata to local tmp storage and to temporary Icechunk branches, but not to final zarr v3 stores. For operational updates, metadata is deferred to finalization.
+For fresh-store backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. `parallel_setup` writes metadata to local tmp storage and to temporary Icechunk branches, but not to final zarr v3 stores. For operational updates and overwrite backfills, metadata is deferred to finalization, so a metadata change (a new variable, an extension) appears only after all chunk data is written.
 
 ### Icechunk stores
 
@@ -59,7 +63,7 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`.
+For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
 
 ### Setup signal
 
@@ -98,7 +102,7 @@ Workers 1+ that were polling for setup will proceed once the file appears.
 
 Finalization is not atomic. Possible partial states:
 - **Died before any `reset_branch`** — main unchanged, all data is on the temp branch. Retry re-enters finalization and completes it.
-- **Died after resetting some replicas but not primary** — replicas are ahead of primary. Primary drives future work, so a retry or fresh job will redo everything. Replicas get re-updated (idempotent), then primary gets updated.
+- **Died after resetting some replicas but not primary** — replicas are ahead of primary. On retry, finalize detects a repo whose main is already on the temp branch (reset by the previous attempt) and skips it, then resets the remaining repos, primary last.
 - **Died after resetting all stores but before branch cleanup** — data is fully committed. Orphan branch and coordination files remain but don't affect correctness. A fresh job uses a different job name.
 
 In all cases, `main` either hasn't moved (safe) or has moved to the correct final state. Reader-visible data is never corrupted.
@@ -109,7 +113,9 @@ The entire Kubernetes job fails. The team is notified and can run a fresh job. S
 
 ### Concurrent jobs writing to the same dataset
 
-The `from_snapshot_id` check in `reset_branch` prevents two concurrent jobs from both resetting main. The second job to finalize will fail, be retried, and eventually succeed once it picks up the first job's changes.
+The `from_snapshot_id` check in `reset_branch` prevents two concurrent jobs from both resetting main. Icechunk can rebase only uncommitted sessions, not a committed temp branch, so a job that finds main moved past its starting snapshot cannot merge — finalize raises, leaving its temp branch and coordination files in place for inspection, and the job that moved main wins. (A finalize retry after a crash is distinguished by checking whether main's snapshot is already on the temp branch.) The losing job's work must be re-run.
+
+Because any operational update that publishes during an overwrite backfill makes the backfill lose this way, run overwrite backfills so they complete in between update runs (a long backfill can be run as several smaller, filtered backfills).
 
 ## Replica ordering
 

@@ -68,5 +68,8 @@ class NoaaHrrrAnalysisDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                # CF-masks its -50 "no precipitation" sentinel to NaN, so the field
+                # is legitimately all/mostly NaN wherever no precipitation is falling.
+                exclude_vars=("percent_frozen_precipitation_surface",),
             ),
         )

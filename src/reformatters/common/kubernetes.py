@@ -36,6 +36,8 @@ class Job(pydantic.BaseModel):
     pod_active_deadline: timedelta = timedelta(hours=6)
     ttl: timedelta = timedelta(days=1)
 
+    pod_annotations: dict[str, str] = pydantic.Field(default_factory=dict)
+
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
     @cached_property
@@ -81,6 +83,7 @@ class Job(pydantic.BaseModel):
                     ]
                 },
                 "template": {
+                    "metadata": {"annotations": self.pod_annotations},
                     "spec": {
                         "containers": [
                             {
@@ -210,7 +213,7 @@ class Job(pydantic.BaseModel):
                                 for secret_name in self.secret_names
                             ],
                         ],
-                    }
+                    },
                 },
                 "ttlSecondsAfterFinished": int(self.ttl.total_seconds()),
             },
@@ -250,6 +253,8 @@ class ReformatCronJob(CronJob):
     # Operational updates expect a single worker
     workers_total: int = 1
     parallelism: int = 1
+    # A mid-run eviction restarts the whole job, so opt out of consolidation.
+    pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
 
 class ValidationCronJob(CronJob):

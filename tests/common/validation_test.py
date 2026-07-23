@@ -216,6 +216,37 @@ def test_check_forecast_recent_nans_init_time_offset(
     ).passed
 
 
+def test_check_forecast_recent_nans_window_catches_older_init(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A window > 1 catches NaNs in a recent-but-not-newest init_time."""
+    # NaN a whole init_time that is not the newest (index 2 of 5, i.e. offset -3)
+    bad_init = forecast_dataset.init_time[2]
+    forecast_dataset["temperature"].loc[{"init_time": bad_init}] = np.nan
+
+    # The default window of 1 only checks the newest init_time, so it misses it.
+    assert validation.check_forecast_recent_nans(forecast_dataset).passed
+
+    # A window reaching back to it catches the gap and names the offending init_time.
+    result = validation.check_forecast_recent_nans(
+        forecast_dataset, num_recent_init_times=3
+    )
+    assert not result.passed
+    assert "Excessive NaN fraction" in result.message
+    assert pd.Timestamp(bad_init.values).isoformat() in result.message
+
+
+def test_check_forecast_recent_nans_window_all_clean_passes(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A clean window passes and reports how many init_times were checked."""
+    result = validation.check_forecast_recent_nans(
+        forecast_dataset, num_recent_init_times=3
+    )
+    assert result.passed
+    assert "All 3 recent init_times" in result.message
+
+
 def test_check_analysis_current_data_passes(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:

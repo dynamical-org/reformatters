@@ -1,6 +1,8 @@
-# Dataset Integration Guide
+# Implementation Guide
 
-Integrate a dataset to reformat into Zarr.
+Implement the code for a new dataset that reformats source data into Zarr.
+
+This guide is the Implement stage of the end-to-end [dataset development guide](dataset_development_guide.md); explore, backfill, validate, and publish are separate stages there. To add a single variable to an existing dataset instead, follow [add_new_variable.md](add_new_variable.md).
 
 ## Overview
 
@@ -63,6 +65,7 @@ DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
         primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
 ]
 ```
 
@@ -75,6 +78,8 @@ Work through `src/reformatters/$DATASET_PATH/template_config.py`, setting the at
 Set `dataset_id` and `name` in `dataset_attributes` following the id/name convention: a materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`; a virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix — `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`.
 
 Read the [chunk/shard layout tool](./chunk_shard_layout_tool.md) docs and use the tool to find chunk and shard sizes for your data variables.
+
+Follow the `keep_mantissa_bits` guidance in AGENTS.md when setting each data variable's encoding.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:
 
@@ -91,7 +96,7 @@ Run the tests, making any changes necessary.
 uv run pytest tests/$DATASET_PATH/template_config_test.py
 ```
 
-If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#common-dataset-structures).
+If your dataset mixes single-level variables with variables on a dense vertical dimension, it becomes a Zarr group hierarchy; see "Vertical levels" in [AGENTS.md](../AGENTS.md#dataset-structures).
 
 ### 4. Implement `RegionJob` subclass
 
@@ -118,6 +123,8 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
 
+The scaffold sets `suspend=True` on both cron jobs so updates and validation stay off until the store is backfilled. Leave it set through this PR; a follow-up PR removes it once the backfill is complete (the Backfill stage of the [dataset development guide](dataset_development_guide.md)).
+
 Kubernetes resource values, materialized (fan-out across indexed jobs):
   - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
   - memory: 1.5x shared memory.
@@ -139,23 +146,6 @@ Wrap the trimmed template in `tests.chunk_utils.shrink_chunks_and_shards` in you
 uv run pytest tests/$DATASET_PATH/dynamical_dataset_test.py
 ```
 
-### 6. Deploy
+## Next
 
-The details here depend on the computing resources and the Zarr storage location you'll be using. Get in touch with feedback@dynamical.org for support at this point if you haven't already.
-
-1. Run a backfill on your local computer: `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-local <append-dim-end>`. If this is fast enough and you have the disk space, it is a nice and simple approach.
-1. If you're working to create a public dynamical.org dataset, run `./deploy/aws/create_new_aws_open_data_bucket.sh <provider>-<model>`
-1. Run a backfill on a kubernetes cluster:
-   - This supports parallelism across servers to process much larger datasets.
-   - Complete the steps in README.md > Deploying to the cloud > Setup.
-   - `DYNAMICAL_ENV=prod uv run main $DATASET_ID backfill-kubernetes <append-dim-end> <jobs-per-pod> <max-parallelism>`, then track the job with `kubectl get jobs`.
-1. See operational cronjobs in your kubernetes cluster and check their schedule: `kubectl get cronjobs`.
-1. To enable issue reporting and cron monitoring with the error reporting service Sentry, create a secret in your kubernetes cluster with your Sentry account's DSN: `kubectl create secret generic sentry --from-literal='DYNAMICAL_SENTRY_DSN=xxx'`.
-
-## 7. Validate
-
-Follow [docs/validation.md](validation.md) — it walks through running `run-all`, reading `validation_summary.md`, inspecting every plot, and the full data quality checklist.
-
-## 8. Update dataset catalog documentation
-
-Update the dataset catalog docs on `dynamical.org` by adding entries into the `catalog.js`, rebuilding (`npm run build`), and merging updates to main in `https://github.com/dynamical-org/dynamical.org`.
+Once the code is merged to `main`, backfill the store ([backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).

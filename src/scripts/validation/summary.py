@@ -117,17 +117,30 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
             header += f", member={ctx.value_ts_member}"
         if stats.level_dim is not None:
             header += f", {stats.level_dim}={stats.level_value:g}"
-    return [
-        header,
-        "",
-        "| Point | min | mean | std | max |",
-        "|---|---|---|---|---|",
-        f"| P1 | {_fmt_num(stats.value_min_p1)} | {_fmt_num(stats.value_mean_p1)} "
-        f"| {_fmt_num(stats.value_std_p1)} | {_fmt_num(stats.value_max_p1)} |",
-        f"| P2 | {_fmt_num(stats.value_min_p2)} | {_fmt_num(stats.value_mean_p2)} "
-        f"| {_fmt_num(stats.value_std_p2)} | {_fmt_num(stats.value_max_p2)} |",
-        "",
-    ]
+    # std spreads over the non-time dims (lead / member); virtual and analysis stores
+    # reduce to a single value per timestep, so there is no std to show — drop the column.
+    has_std = stats.value_std_p1 is not None or stats.value_std_p2 is not None
+    if has_std:
+        rows = [
+            "| Point | min | mean | std | max |",
+            "|---|---|---|---|---|",
+            f"| P1 | {_fmt_num(stats.value_min_p1)} | {_fmt_num(stats.value_mean_p1)} "
+            f"| {_fmt_num(stats.value_std_p1)} | {_fmt_num(stats.value_max_p1)} |",
+            f"| P2 | {_fmt_num(stats.value_min_p2)} | {_fmt_num(stats.value_mean_p2)} "
+            f"| {_fmt_num(stats.value_std_p2)} | {_fmt_num(stats.value_max_p2)} |",
+        ]
+    else:
+        rows = [
+            "| Point | min | mean | max |",
+            "|---|---|---|---|",
+            _stats_row(
+                "P1", stats.value_min_p1, stats.value_mean_p1, stats.value_max_p1
+            ),
+            _stats_row(
+                "P2", stats.value_min_p2, stats.value_mean_p2, stats.value_max_p2
+            ),
+        ]
+    return [header, "", *rows, ""]
 
 
 def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:

@@ -282,12 +282,20 @@ class NoaaNdviCdrAnalysisRegionJob(
         """
         ncei_url = f"{self.root_nc_url}/{year}/"
 
-        response = retry(lambda: requests.get(ncei_url, timeout=15))
+        def get_listing() -> requests.Response:
+            response = requests.get(ncei_url, timeout=15)
+            # 404 is a deterministic outcome handled below; any other non-2xx
+            # (e.g. NCEI's intermittent 500s) raises here so retry() retries it.
+            if response.status_code != 404:
+                response.raise_for_status()
+            return response
+
+        response = retry(get_listing)
         if response.status_code == 404:
             now = pd.Timestamp.now()
             if now.year == year and now.month == 1:
                 return []
-        response.raise_for_status()
+            response.raise_for_status()
 
         content = response.text
         filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)

@@ -20,6 +20,8 @@ apt-get install -qyy \
     -o APT::Install-Suggests=false \
     build-essential \
     ca-certificates \
+    curl \
+    git \
     python3-setuptools \
     python3.14-dev \
     build-essential \
@@ -46,6 +48,14 @@ ENV DISABLE_NUMCODECS_SSE2=1 \
     CFLAGS="-Wno-implicit-function-declaration" 
 
 ### End Build Prep
+
+# TEST-ONLY: Rust toolchain so uv can compile the git-pinned icechunk from source
+# during `uv sync`. Remove together with the pyproject git pin once the icechunk
+# changes are released upstream.
+RUN <<EOT
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+EOT
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Since there's no point in shipping lock files, we move them
 # into a directory that is NOT copied into the runtime image.

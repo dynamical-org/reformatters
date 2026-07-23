@@ -5,7 +5,7 @@ Reformat weather datasets into zarr.
 Browse the datasets produced by this repo at https://dynamical.org/catalog/.
 
 * See [AGENTS.md](AGENTS.md) for an overview of the approach and this repository.
-* [Integrate a new dataset](docs/dataset_integration_guide.md) to be reformatted.
+* [Develop a new dataset](docs/dataset_development_guide.md) end to end, or dive into just the [implementation](docs/implementation_guide.md).
 * [Add a new variable](docs/add_new_variable.md) to an existing dataset.
 
 [![DOI](https://zenodo.org/badge/859043226.svg)](https://doi.org/10.5281/zenodo.18777399)

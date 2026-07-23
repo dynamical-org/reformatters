@@ -741,6 +741,15 @@ def test_resolve_chunk_keys_mixed_present_and_absent_in_one_group() -> None:
     assert results == [job.chunk_key(out_loc, v) for out_loc, v in items]
 
 
+def test_resolve_chunk_keys_asserts_absent_multi_chunk_dim() -> None:
+    # lead_time spans multiple chunks (size 2, chunk size 1); an out_loc without it
+    # would silently collapse every ref to lead chunk 0.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    out_loc: Mapping[Dim, CoordinateValue] = {"init_time": APPEND_DIM_START}
+    with pytest.raises(AssertionError, match="absent from out_loc"):
+        job.chunk_key(out_loc, job.data_vars[0])
+
+
 def test_needed_append_dim_size() -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
     refs = [
@@ -756,6 +765,23 @@ def test_needed_append_dim_size() -> None:
         )
     ]
     assert job._needed_append_dim_size(refs) == 3  # init index 2 -> size 3
+
+
+def test_needed_append_dim_size_asserts_label_beyond_template() -> None:
+    # Growing to fit such a ref would size the append dim past the labels the
+    # template can supply coordinate values for.
+    job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
+    refs = [
+        VirtualRef(
+            VirtualTestDataVar(name="temperature_2m"),
+            {"init_time": pd.Timestamp("2030-01-01"), "lead_time": LEAD_TIMES[0]},
+            "file://x",
+            0,
+            BLOCK_NBYTES,
+        )
+    ]
+    with pytest.raises(AssertionError, match="not present in the template"):
+        job._needed_append_dim_size(refs)
 
 
 def test_virtual_get_jobs_regions_in_append_dim_order() -> None:
@@ -871,6 +897,28 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
     )
     with pytest.raises(AssertionError, match="do not cover representative chunk"):
         _process_virtual(job, repo)
+
+
+def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> None:
+    # icechunk silently reports (rather than raises on) refs outside every registered
+    # VirtualChunkContainer prefix; _emit_refs must fail loudly on them, or the
+    # chunks would be unreadable.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(1)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    session = repo.writable_session("main")
+    ref = VirtualRef(
+        job.data_vars[0],
+        {"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]},
+        "file:///not-a-registered-container/messages.bin",
+        0,
+        BLOCK_NBYTES,
+    )
+    with pytest.raises(AssertionError, match="registered container"):
+        job._emit_refs([session.store], [ref])
 
 
 def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
@@ -1576,6 +1624,60 @@ def test_process_virtual_recovers_when_replica_ahead(tmp_path: Path) -> None:
     )
     for repo in (primary_repo, replica_repo):
         _assert_store_values(repo.readonly_session("main").store, n_inits=4)
+
+
+def test_refresh_metadata_applies_to_replica_repos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A deployed template fix must reach every repo, not just the primary; a
+    # replica left stale would drift from what primary readers see.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    primary_repo = _primary_repo(dataset.store_factory)
+    replica_repo = _make_replica_repo(tmp_path, dataset)
+    template_utils.write_metadata(
+        _create_template_ds(2), replica_repo.writable_session("main").store, mode="w-"
+    )
+    _process_virtual(
+        _make_region_job(template_ds, region=slice(0, 2)), primary_repo, [replica_repo]
+    )
+
+    # The test harness collapses a dataset's replicas onto the primary path, so
+    # route refresh_store_metadata's store enumeration to the independent replica.
+    def fake_replica_stores(
+        _self: StoreFactory, writable: bool = False, branch: str = "main"
+    ) -> list[Any]:
+        assert writable
+        return [replica_repo.writable_session(branch).store]
+
+    monkeypatch.setattr(StoreFactory, "replica_stores", fake_replica_stores)
+
+    fixed = _create_template_ds(2)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    job = _make_region_job(fixed, region=slice(0, 2), processing_mode="update")
+    replica_snapshots_before = _snapshot_count(replica_repo)
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+
+    assert _snapshot_count(replica_repo) == replica_snapshots_before + 1
+    for repo in (primary_repo, replica_repo):
+        ds = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
+        assert ds["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+
+
+def test_refresh_metadata_empty_store_returns_without_commit(tmp_path: Path) -> None:
+    # Initial sizing is the backfill's job: a refresh on a store whose append dim is
+    # size 0 must write and commit nothing, even when the template carries a fix.
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    fixed = _create_template_ds(4)
+    fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    job = _make_region_job(fixed, region=slice(0, 4), processing_mode="update")
+    snapshots_before = _snapshot_count(repo)
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+    assert _snapshot_count(repo) == snapshots_before
 
 
 def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> None:

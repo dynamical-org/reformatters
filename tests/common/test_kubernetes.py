@@ -10,6 +10,8 @@ import pytest
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
     Job,
+    ReformatCronJob,
+    ValidationCronJob,
     _load_secret_from_kubernetes_api,
     load_secret,
 )
@@ -58,6 +60,7 @@ def test_as_kubernetes_object_comprehensive() -> None:
             ]
         },
         "template": {
+            "metadata": {"annotations": {}},
             "spec": {
                 "containers": [
                     {
@@ -161,12 +164,53 @@ def test_as_kubernetes_object_comprehensive() -> None:
                     {"name": "aws-creds", "secret": {"secretName": "aws-creds"}},
                     {"name": "db-creds", "secret": {"secretName": "db-creds"}},
                 ],
-            }
+            },
         },
         "ttlSecondsAfterFinished": 86400,  # default 24 hours
     }
 
     assert k8s_obj["spec"] == expected_spec
+
+
+def test_do_not_disrupt_annotation_only_on_reformat_jobs() -> None:
+    reformat = ReformatCronJob(
+        name="weather-data-update",
+        schedule="0 * * * *",
+        image="img:v1",
+        dataset_id="weather_data",
+        cpu="1",
+        memory="1Gi",
+    )
+    validate = ValidationCronJob(
+        name="weather-data-validate",
+        schedule="0 * * * *",
+        image="img:v1",
+        dataset_id="weather_data",
+        cpu="1",
+        memory="1Gi",
+    )
+    backfill = Job(
+        command=["backfill-kubernetes"],
+        image="img:v1",
+        dataset_id="weather_data",
+        cpu="1",
+        memory="1Gi",
+        workers_total=1,
+        parallelism=1,
+    )
+
+    def pod_template(obj: dict[str, Any], *, cron: bool) -> dict[str, Any]:
+        spec = obj["spec"]["jobTemplate"]["spec"] if cron else obj["spec"]
+        return spec["template"]
+
+    def annotations(obj: dict[str, Any], *, cron: bool) -> dict[str, str]:
+        return pod_template(obj, cron=cron)["metadata"]["annotations"]
+
+    assert annotations(reformat.as_kubernetes_object(), cron=True) == {
+        "karpenter.sh/do-not-disrupt": "true"
+    }
+    assert annotations(validate.as_kubernetes_object(), cron=True) == {}
+    assert annotations(backfill.as_kubernetes_object(), cron=False) == {}
 
 
 def test_kubernetes_job_name() -> None:
