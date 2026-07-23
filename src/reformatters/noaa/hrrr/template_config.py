@@ -323,9 +323,6 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=128,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
-                    # HRRR f00 VBDSF (the analysis-time record) is not properly diagnosed
-                    # and contains non-physical spikes (>9000 W m-2); use the f01 value.
-                    hour_0_values_override=False,
                 ),
             ),
             NoaaHrrrDataVar(
