@@ -27,6 +27,7 @@ The last two priorities can sometimes be in tension. In those cases, we often wa
 - **Temporal frequency**: (e.g. One initialization time every 6 hours, with a 1 hour forecast step for hours 0-90 and a 3 hour step for hours 93-384.)
 - **Latency**: (e.g. Files for lead time 0 are available ~60 minutes after init time, and the last step is published 120 to 123 minutes after init time.)
 - **Access notes**:
+- **License**: (name/link to the data license or terms of use; flag anything that is not clearly open, e.g. non-commercial, share-alike, attribution-required, or unstated terms)
 - **Browse root**: (link to browsable file listing, if available)
 - **URL format**:
 ```
@@ -176,6 +177,10 @@ As you compare files from different periods, note:
 - File naming pattern changes
 - Coordinate shifts or resolution changes
 
-### 7. Fill out the template
+### 7. Find the data license
+
+Locate the source's data license or terms of use — check the provider's data policy page, dataset catalog entry, and any LICENSE or README shipped alongside the files. Record it in the **License** field, and flag anything that is not clearly open: non-commercial restrictions, share-alike or attribution requirements, redistribution limits, or terms you cannot find at all. An unstated license is itself a flag. Surface non-open terms early — they can block redistribution and determine whether we can integrate the dataset.
+
+### 8. Fill out the template
 
 Record everything as you discover it. This becomes your reference when implementing `TemplateConfig` and `RegionJob`.
