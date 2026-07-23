@@ -780,6 +780,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where there is no cloud ceiling (e.g. clear sky); HRRR marks these cells missing in the source GRIB.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

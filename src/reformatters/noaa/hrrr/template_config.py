@@ -504,6 +504,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Geopotential height",
                     units="m",
                     step_type="instant",
+                    comment="NaN where there is no cloud ceiling (e.g. clear sky); HRRR marks these cells missing in the source GRIB.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="HGT",

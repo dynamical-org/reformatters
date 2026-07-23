@@ -1353,6 +1353,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            comment="NaN where there is no cloud ceiling (e.g. clear sky); HRRR marks these cells missing in the source GRIB.",
         ),
         _root_var(
             "geopotential_height_cloud_base",
