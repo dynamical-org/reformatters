@@ -7,11 +7,14 @@ import subprocess
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, cast
 
 import httpx
 from croniter import croniter
 from logtail import LogtailHandler
+
+if TYPE_CHECKING:
+    from sentry_sdk.types import Event, Hint
 
 from reformatters.common.kubernetes import (
     BETTERSTACK_HEARTBEATS_SECRET_NAME,
@@ -70,6 +73,36 @@ def attach_logtail() -> None:
     handler.setLevel(logging.INFO)
     handler.addFilter(_ContextFilter())
     logger.addHandler(handler)
+
+
+# --- Error grouping ---------------------------------------------------------
+# Better Stack Errors groups by the rendered message. Our messages interpolate
+# unique data (source file paths, timestamps, coordinates), so message grouping
+# splits one failure mode into thousands of single-occurrence groups — e.g. a
+# backfill over a gappy archive emits one expected FileNotFoundError per missing
+# file. Fingerprinting on exception type + originating in-app code location
+# collapses each failure mode back to a single group.
+
+
+def group_error_fingerprint(event: Event, hint: Hint) -> Event:  # noqa: ARG001  # sentry before_send signature; hint unused
+    """Sentry `before_send`: fingerprint by exception type + innermost in-app
+    frame instead of the message. Events without an exception (bare log records)
+    keep default grouping."""
+    values = (event.get("exception") or {}).get("values")
+    if not values:
+        return event
+
+    exception = values[-1]
+    frames = (exception.get("stacktrace") or {}).get("frames") or []
+    in_app_frames = [frame for frame in frames if frame.get("in_app")]
+    culprit_frames = in_app_frames or frames
+
+    fingerprint = [str(exception.get("type", "Error"))]
+    if culprit_frames:
+        culprit = culprit_frames[-1]  # innermost: where the exception was raised
+        fingerprint += [str(culprit.get("module")), str(culprit.get("function"))]
+    event["fingerprint"] = fingerprint
+    return event
 
 
 # --- Heartbeats -------------------------------------------------------------

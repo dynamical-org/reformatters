@@ -131,6 +131,5 @@ def cleanup_staging_resources(
         log.info(f"Could not delete branch {branch}: {result.stderr.strip()}")
 
     log.info(
-        "Cleanup complete. Dataset store and Sentry cron monitors were NOT deleted. "
-        f"Manually delete Sentry monitors: {cronjob_names}"
+        f"Cleanup complete. Dataset store was NOT deleted for cronjobs: {cronjob_names}"
     )
