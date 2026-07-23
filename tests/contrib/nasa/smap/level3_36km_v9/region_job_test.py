@@ -96,7 +96,7 @@ def test_download_file_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     mock_session.get = Mock(return_value=mock_response)
 
     monkeypatch.setattr(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_earthdata_session",
         lambda: mock_session,
     )
 
@@ -142,7 +142,7 @@ def test_download_file_retries_on_failure(
     mock_session.get = Mock(side_effect=[mock_response_fail, mock_response_success])
 
     monkeypatch.setattr(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_earthdata_session",
         lambda: mock_session,
     )
 
@@ -186,7 +186,7 @@ def test_download_file_fallback_to_002(
     mock_session.get = Mock(side_effect=[mock_response_404, mock_response_success])
 
     monkeypatch.setattr(
-        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_authenticated_session",
+        "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_earthdata_session",
         lambda: mock_session,
     )
 
