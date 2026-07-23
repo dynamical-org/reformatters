@@ -710,6 +710,47 @@ def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=2)
 
 
+def _grow_root_only(
+    repo: icechunk.Repository, full_template: xr.DataTree, needed_size: int
+) -> None:
+    """Append only the root group's append-dim slice, leaving the pressure_level group
+    behind — an unequal-groups state only external surgery can create (every code path
+    grows all groups in one atomic commit)."""
+    session = repo.writable_session("main")
+    root_init_time = zarr.open_group(session.store, mode="r")["init_time"]
+    assert isinstance(root_init_time, zarr.Array)
+    slice_ds = full_template.to_dataset().isel(
+        init_time=slice(int(root_init_time.shape[0]), needed_size)
+    )
+    slice_ds = slice_ds.drop_vars(
+        [
+            name
+            for name, variable in slice_ds.variables.items()
+            if "init_time" not in variable.dims
+        ]
+    )
+    slice_ds.to_zarr(
+        session.store, append_dim="init_time", compute=False, consolidated=False
+    )
+    session.commit("root grown, pressure_level lagging (simulated crash)")
+
+
+def test_unequal_group_sizes_fail_loudly(tmp_path: Path) -> None:
+    # Every code path grows all groups in one atomic commit, so unequal committed
+    # group sizes can only come from external surgery; the write loop must refuse
+    # such a store rather than write into it. (refresh_store_metadata also fails
+    # loudly on this state — xr.open_datatree raises on unequal group dims.)
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    full_template = _create_template_ds(2)
+    _grow_root_only(repo, full_template, 2)
+
+    job = _make_region_job(full_template, region=slice(0, 2))
+    with pytest.raises(AssertionError, match="append dim size differs across groups"):
+        _process_virtual(job, repo)
+
+
 def test_refresh_metadata_deploys_template_fixes_trimmed(tmp_path: Path) -> None:
     # A code-side metadata fix (attrs, coordinate values) must reach the live store on
     # the next operational update, trimmed to the committed extent (never growing the

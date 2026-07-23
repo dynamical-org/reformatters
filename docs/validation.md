@@ -19,7 +19,7 @@ To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. 
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type. Virtual stores are slower and their runtime scales differently — see [Virtual and multi-level datasets](#virtual-and-multi-level-datasets) below.
 
-Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. If you run these on a managed/remote session (e.g. Claude Code on the web), launch `run-all` as a background task and drive it with a monitor that emits a parsed progress line on a short cadence (≈4 minutes works well — frequent enough that the session is not reclaimed mid-run, and short enough to stay within the prompt-cache TTL so each wake-up stays cheap). The periodic emitted events are what keep the session warm — more reliable than a self-scheduled timer wake-up, which re-reads the whole session context on every fire and is blind to the run's actual state. Make the monitor signal on both completion and failure — detect completion from the written `validation_summary.md` and failure from the run process having exited without it — so a crash surfaces immediately instead of looking like "still running". Launch the run detached (e.g. `setsid`) in its own process group so later cleanup can't cascade into the session's shell, watch the run's actual worker PID rather than the launcher's (and avoid a loose `pgrep` pattern that also matches the monitor's own command line and so never exits), and re-arm the monitor when it times out, since a single monitor is capped well under a multi-hour run. Also watch memory: a full virtual run-all holds several GB of decoded fields — budget ~6–8 GB RAM (measured peak ~6.5 GB on the 176-variable HRRR virtual store) and don't run it on an undersized host.
+Long runs and remote sessions: a full virtual `run-all` takes on the order of an hour or two (see below), and `upload` of a many-variable run pushes hundreds of images. If you run these on a managed/remote session (e.g. Claude Code on the web), launch `run-all` as a background task and drive it with a monitor that emits a parsed progress line on a short cadence (≈4 minutes works well — frequent enough that the session is not reclaimed mid-run, and short enough to stay within the prompt-cache TTL so each wake-up stays cheap). The periodic emitted events are what keep the session warm — more reliable than a self-scheduled timer wake-up, which re-reads the whole session context on every fire and is blind to the run's actual state. A monitor that emits only at completion does not keep the session warm: the silent stretch until it finishes looks idle and the session is reclaimed mid-run, taking the ephemeral environment (and the run) with it. Make the monitor signal on both completion and failure — detect completion from the written `validation_summary.md` and failure from the run process having exited without it — so a crash surfaces immediately instead of looking like "still running". Launch the run detached (e.g. `setsid`) in its own process group so later cleanup can't cascade into the session's shell, watch the run's actual worker PID rather than the launcher's (and avoid a loose `pgrep` pattern that also matches the monitor's own command line and so never exits), and re-arm the monitor when it times out, since a single monitor is capped well under a multi-hour run. Also watch memory: a full virtual run-all holds several GB of decoded fields — budget ~6–8 GB RAM (measured peak ~6.5 GB on the 176-variable HRRR virtual store) and don't run it on an undersized host.
 
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
@@ -151,7 +151,7 @@ Before writing the summary, work through every item you flagged during the revie
 **If you can name a verification, you must run it.** Any time you can write down a specific command, time range, lat/lon, or alternate snapshot that would confirm or rule out an item, run it yourself before stopping. The single-step tools are cheap (under a minute per re-render) and exist for this. Conclusions like "worth re-running on another snapshot", "should re-confirm against the raw GRIB", or "warrants checking at a 3-hourly slot" are unfinished verifications — they must be executed and the bullet updated with what the verification revealed, not left as a to-do for the next reader.
 
 - **Rerun a single plot type targeted at the variable, time, and location in question** to confirm an anomaly is real and not an artifact of the randomly chosen snapshot or timeseries window. For example, `uv run src/scripts/validation/plots.py compare-spatial <DATASET_URL> --variable <name> --time <t> --output-dir <run-dir>` to re-render one spatial plot at a chosen time, or `compare-timeseries` with `--start-date` / `--end-date` and the same lat/lon as the original run to zoom in on a temporal anomaly. Re-rendering into the existing `--output-dir` overwrites the original PNG so the summary's links stay valid.
-  - **Gotcha — a `-v`-filtered re-render shrinks `availability_heatmap.png` and desyncs the summary stats.** A single-step command rebuilds `availability_heatmap.png` from scratch using **only** the variables passed in that invocation — it does not merge with the previously rendered full set, so `availability <url> -v one_var --output-dir <run-dir>` leaves a heatmap with a single row. Likewise, only `run-all` writes `validation_summary.md`, so a subset re-render updates the PNGs but **not** the per-variable stats tables or the `Spatial comparison time` line in the markdown, leaving them stale. When the random snapshot missed variables that only exist for part of the archive (e.g. a field whose `date_available` is after the chosen `init_time`), don't patch it with a per-variable re-render — instead re-run the **full** `run-all` with the snapshot pinned (`--init-time` / `--lead-time` for forecasts, `--time` for analyses, or `--start-date` / `--end-date`) to a date where every variable is present, so the heatmap and the summary stay coherent. Reserve `-v`-filtered single-step runs for throwaway investigation in a scratch `--output-dir`, not for updating the report you intend to publish.
+  - **Gotcha — a `-v`-filtered re-render shrinks `availability_heatmap.png` and desyncs the summary stats.** A single-step command rebuilds `availability_heatmap.png` from **only** the variables passed in that invocation, and only `run-all` writes `validation_summary.md` — so a subset re-render into the run dir leaves the heatmap and the summary's stats stale. To fix a report whose random snapshot missed part-of-archive variables, re-run the **full** `run-all` with the snapshot pinned (`--init-time` / `--lead-time` for forecasts, `--time` for analyses, or `--start-date` / `--end-date`) to a date where every variable is present. Reserve `-v`-filtered single-step runs for throwaway investigation in a scratch `--output-dir`, not for updating the report you intend to publish.
 - **For unexpected unavailable timesteps, you must fetch a representative sample of the unavailable timestamps from the upstream archive before attributing the gap to an upstream cause** — outages happen, but so do ingestion errors, and an LLM or a hurried reviewer will tend to default to "outage" without checking. A single spot-check is not enough: sample across the affected init cycles and lead times so a per-file bug (like a stale sidecar on individual leads) doesn't get mistaken for a clean outage. Verify both the source data file (e.g. the GRIB) **and** any sidecar the reformatter depends on (e.g. the `.idx` byte index for GRIB-based datasets). Compare what you find against what the reformatted archive has at the same timestamp to determine whether to retry the backfill (the positions listed in `unavailable_timestamps.txt`) or document the gap as a confirmed source outage with the URL(s) you checked.
 - **For suspected unit, scale, or coordinate bugs**, cross-check against a third independent source (the raw GRIB/NetCDF file, a public viewer such as NOAA's nowCOAST or ECMWF's open charts, or another reformatted archive) — the GEFS reference is convenient but it's only one comparison and shares some biases with GFS-derived datasets.
 - **For ensemble datasets**, rerun once more without `--variable` filters so a different ensemble member is selected; an anomaly that only appears for one member is structurally different from one that appears across members.
@@ -203,7 +203,7 @@ BATCH OBSERVATIONS
 
 Verdicts + precise pointers, not narration: the lead acts on `next-verification` lines and never re-reads the images behind an OK.
 
-**Sizing (measured on noaa-hrrr-forecast-48-hour-virtual).** A batch reviewer spends ~6k tokens per variable all-in (plots + stats section + checklist + reasoning), ~2.5 minutes per 6-variable batch. So budget 10-15 variables per batch subagent (~60-90k tokens); 177 variables → 12-18 parallel batches, then a handful of verification subagents (a targeted source-parity check — idx fetch, byte-range GRIB download, gribberish decode — ran in under a minute and ~18k tokens). Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
+**Sizing.** Budget 10-15 variables per batch subagent — a 177-variable dataset is 12-18 parallel batches, then a handful of verification subagents. Keep batches under ~15 variables; a subagent that also does follow-up re-renders needs the headroom.
 
 ## 4. Data quality checklist
 
@@ -222,7 +222,7 @@ Look for each of these in every image.
 - [ ] **Validation min/max is physically plausible.** Temperature in °C roughly −50 to +50. Pressure in Pa is ~50000–110000. Precipitation rate mm/s is tiny (10⁻⁵). Wind speed m/s is 0–100. Check `units` in `validation_summary.md` vs observed range.
 - [ ] **No obvious quantization banding in the spatial map.** Large flat patches of identical values or "staircasing" in smooth gradients indicates `keep_mantissa_bits` is too low.
 - [ ] **No suspicious sentinel values showing through.** Values like 9999 / -9999 / 32767 / 1e20 appearing as a color extreme mean a source nodata value was not translated to NaN.
-- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
+- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a key layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meteorological knowledge to first define what you expect to see and compare that to what you actually see in the plots.
 
 ### Time series plots (from `temporal_<var>.png`)
 
@@ -231,7 +231,7 @@ Look for each of these in every image.
 - [ ] **No unexpected flatlines or spikes.** Flatlines at one value for many steps can be a read error or a stuck sentinel; isolated spikes can be unit bugs at specific lead times (common in accumulated variables).
 - [ ] **Accumulated variables reset as expected.** Precipitation and radiation accumulators should typically reset each forecast — check the `step_type` in `validation_summary.md` and confirm the shape.
 - [ ] **No obvious quantization in time series.** Time series which are snapped or binned to a limited set of values or "staircasing" in what should be smooth time series indicates `keep_mantissa_bits` is too low.
-- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a ley layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meterological knowlege to first define what you expect to see and compare that to what you actually see in the plots.
+- [ ] **Whole plot matches meteorological expectations.** Look closely for subtly or obviously wrong new types of problems not enumerated here. Visual plots are a key layer of our defense in depth approach to catching data quality issues. We can't list every possible issue, rather use your meteorological knowledge to first define what you expect to see and compare that to what you actually see in the plots.
 
 ### Full-period value time series (from `value_timeseries_<var>.png`)
 
@@ -243,12 +243,10 @@ Look for each of these in every image.
 
 - [ ] **Every variable is fully available, or the gaps are explained.** Any incomplete variable should have a reason: source data unavailable before a date for a specific variable, known source outage, ocean point for a land-only variable. Unexplained gaps are the bug.
 - [ ] **Unavailable pattern is not structural.** Gaps concentrated at specific lead times, specific hours of day, or specific forecast cycles suggest a processing or indexing bug, not a random source outage. Use the heatmap and the first/last incomplete columns in the summary table to spot patterns shared across variables (e.g. a consistent first-incomplete date points to source coverage starting later; a variable available only after a date is typically a model-version addition — document it, don't retry it).
-- [ ] **Any availability gap you intend to label as an upstream outage has been verified by fetching a representative sample of the unavailable timestamps from the upstream archive.** Sample across the affected init cycles and lead times — a single spot-check can miss per-file failure modes like stale sidecars on individual leads. If every sampled file (and its sidecar index, if applicable) is present and intact, the gap is an ingestion bug, not an outage — keep it in `### For further review` and use the positions listed in `unavailable_timestamps.txt`.
+- [ ] **Any availability gap you intend to label as an upstream outage has been verified per the sampling tactic in [3d](#3d-dig-into-each-follow-up-item).** If every sampled file (and its sidecar index, if applicable) is present and intact, the gap is an ingestion bug, not an outage — keep it in `### For further review` and target the positions listed in `unavailable_timestamps.txt`.
 - [ ] **First step of an analysis dataset is NaN for accumulated variables.** For analysis datasets, `step_type` ≠ `instant` variables (accumulation / average / max / min) are structurally NaN at the very first timestamp — there is no prior window to accumulate / average / extremize over. This is expected and not a bug.
 
 Note on `step_type` ≠ `instant` variables (accumulation / average / max): the first lead time of each forecast is structurally NaN (there is no prior window to accumulate/average over). Both availability paths exclude it — the value scan drops that slice from the null counts, and the manifest probe never probes an accumulated variable at lead 0 — so "complete" for an accumulated variable means *no unexpected* gaps.
-
-For a sampling of unexplained gaps, go manually fetch source data files and inspect them. Do they have the data we expect, or is the data really unavailable at the source?
 
 ### Cross-dataset checks
 
@@ -259,8 +257,8 @@ For a sampling of unexplained gaps, go manually fetch source data files and insp
 
 Once a run is reviewed, render it to a static HTML report, share it as one or more drafts for internal and external review, and finally publish the approved version. Two storage paths exist:
 
-- **Draft** — every non-final upload goes here, timestamped, kept forever. Use for sharing a single run for review without committing to it.
-- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org.
+- **Draft** — every non-final upload goes here, timestamped, kept forever. Reachable only by its direct link and never surfaced to dataset users (the dynamical.org catalog links only the stable path), so uploading a draft does **not** make the report externally viewable — it's for sharing a run for review.
+- **Stable** — the canonical, published report for a dataset, overwritten by each new publish. Embedded in dynamical.org and therefore seen by external users.
 
 Both paths live in the `dataset-validation-reports` Cloudflare R2 bucket, served publicly at `https://dataset-validation-reports.dynamical.org`. Drafts and previously-published reports are archived forever — only the file at the stable path is overwritten.
 
@@ -294,7 +292,9 @@ Without `--publish`:
 <dataset-id>/drafts/<version>_<YYYY-MM-DDTHH-MM>/
 ```
 
-Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading. Drafts go to timestamped paths that are never overwritten, so uploading a draft is non-destructive and does not require confirmation — only `--publish` does.
+Use this to share a single run for review without committing to it. Drafts are kept forever; iterate by re-running `run-all` (a new timestamped run dir) and re-uploading. Re-upload a fresh draft after **every** change to the validation summary so the shared link always reflects the current review state. Drafts go to timestamped paths that are never overwritten, so uploading a draft is non-destructive and does not require confirmation.
+
+`--publish` is the opposite: it overwrites the stable, website-linked report, so **never run it without explicit direction from the user** — a draft is always the right default.
 
 With `--publish`:
 
@@ -321,9 +321,20 @@ The report moves through three audiences before it can be published. Each phase 
 
 **Phase 3 — Publish.** Only after a human reviewer approves the Phase 2 draft, run `upload <run-dir> --publish` to write to the stable path. Do not run `--publish` while `### For further review` is non-empty or while the summary still reads as internal-audience prose — share another draft instead.
 
+### 5c′. Re-validating after adding a variable
+
+When the dataset already has a published report and you are only adding a variable (not creating the dataset), do not rebuild the summary from scratch:
+
+- Run the full `run-all` (all variables, **not** `-v`-filtered). `--publish` overwrites the dataset's single website-linked report, so a variable-filtered run would drop every other variable from the catalog page.
+- Carry the already-approved commentary forward: read the current published `validation_summary.md` (`https://dataset-validation-reports.dynamical.org/<dataset-id>/latest/validation_summary.md`) and reuse its approved `## Summary` text for every finding that isn't new. Update or add only the pieces about the new variable, then run the draft → publish cycle from that merged summary. This keeps human-approved wording that the review cycle already vetted rather than regenerating (and re-litigating) it.
+- New-variable notes still follow the [3e](#3e-update-validation_summarymd) split — time-windowed archive facts go in `### Review notes`, intrinsic variable facts go in the variable's `comment`.
+- If no published report exists yet (`latest/` 404s), there is nothing to carry forward — write a fresh full summary.
+
 ### 5d. Surfacing the published report on dynamical.org
 
 Once published, the report is picked up automatically on the next deploy of the dynamical.org site — the site's build pulls the latest published report for each dataset and incorporates it into the catalog page for that data product. No per-dataset wiring is required; just redeploy dynamical.org to refresh the catalog with the new report.
+
+To skip the manual redeploy, set `PAGES_DEPLOY_HOOK_URL` (see Configuration) to a dynamical.org Cloudflare Pages deploy hook: a `--publish` upload then POSTs it after the files land, triggering one rebuild per publish. Draft uploads never trigger a deploy.
 
 ### Configuration
 
@@ -334,3 +345,5 @@ Once published, the report is picked up automatically on the next deploy of the 
 - `R2_VALIDATION_REPORTS_SECRET_ACCESS_KEY`
 
 Scoped to the `dataset-validation-reports` bucket. Set them in the environment before running `upload`.
+
+Optionally set `PAGES_DEPLOY_HOOK_URL` to a dynamical.org Cloudflare Pages deploy hook URL; when set, a `--publish` upload POSTs it after uploading to trigger a site rebuild (unset → publishing uploads only, and the site refreshes on its next deploy).

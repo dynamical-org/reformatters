@@ -1151,11 +1151,11 @@ class TestReplicaOrdering:
 class TestConcurrentJobs:
     """Two jobs with overlapping lifetimes both capture the same initial
     snapshot during setup. When they race to finalize, the second to arrive
-    finds main has moved past its original snapshot and skips resetting —
-    preserving the first job's work. The second job's temp branch and
-    coordination files are still cleaned up."""
+    finds main has moved past its original snapshot and cannot publish —
+    preserving the first job's work. It fails loudly, leaving its temp branch
+    and coordination files in place for inspection."""
 
-    def test_second_job_finalize_skips_reset_when_main_already_moved(
+    def test_second_job_finalize_raises_when_main_already_moved(
         self, tmp_path: Path
     ) -> None:
         dataset = ParallelDataset(
@@ -1227,21 +1227,20 @@ class TestConcurrentJobs:
         assert after_a != initial_snapshot
 
         # Job B last worker finalizes: current main (S_A) != job-b's
-        # original_snapshot (initial), so the per-repo skip fires. No reset,
-        # no error. Job B's work is silently dropped.
-        _run_workers(
-            dataset,
-            jobs_b,
-            template_ds,
-            workers_total=2,
-            reformat_job_name="job-b",
-            worker_indices=[1],
-        )
+        # original_snapshot (initial), so it cannot publish and raises.
+        with pytest.raises(RuntimeError, match="main moved during this job"):
+            _run_workers(
+                dataset,
+                jobs_b,
+                template_ds,
+                workers_total=2,
+                reformat_job_name="job-b",
+                worker_indices=[1],
+            )
         assert primary_repo.lookup_branch("main") == after_a
 
-        # Both jobs' temp branches and coordination directories are cleaned up
-        # (the second-pass branch cleanup and clear_coordination_files run
-        # unconditionally after the first-pass reset loop).
-        assert list(primary_repo.list_branches()) == ["main"]
+        # Job A cleaned up; job B's temp branch and coordination files are left
+        # in place for inspection.
+        assert set(primary_repo.list_branches()) == {"_job_job-b", "main"}
         assert dataset.store_factory.read_all_coordination_files("job-a", "setup") == []
-        assert dataset.store_factory.read_all_coordination_files("job-b", "setup") == []
+        assert dataset.store_factory.read_all_coordination_files("job-b", "setup") != []

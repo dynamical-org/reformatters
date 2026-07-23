@@ -71,7 +71,7 @@ def align_to_valid_time_forecast(
         ]
         selected_lead_time = rng.choice(covered or candidate_leads, 1)[0]
     else:
-        selected_lead_time = lead_time
+        selected_lead_time = pd.Timedelta(hours=int(lead_time))
 
     ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
     valid_time = pd.Timestamp(ds.valid_time.item())

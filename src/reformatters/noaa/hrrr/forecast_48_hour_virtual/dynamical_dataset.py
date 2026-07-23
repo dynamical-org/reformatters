@@ -36,17 +36,16 @@ class NoaaHrrrForecast48HourVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=hrrr_virtual_chunk_containers(),
-            # Sized per group from measured ~16.4 bytes/ref so full manifests land
-            # comfortably under the reader budgets (single-level <= 3 MiB/var, vertical
-            # 5-8 MiB) while keeping the total manifest count low; see "Manifest
-            # splitting" in docs/virtual_datasets.md. Full-window sizes: single-level
-            # 2400 x 49 refs/init ~= 1.8 MiB, pressure 180 x 1911 ~= 5.4 MiB,
-            # model 160 x 2450 ~= 6.1 MiB.
+            # Sized for operational commit latency: active-window manifest bytes bound
+            # per-commit flush cost. Full-window sizes at ~16.4 bytes/ref: single-level
+            # 600 x 49 refs/init ~= 0.55 MiB, pressure 90 x 1911 ~= 2.8 MiB, model
+            # 80 x 2450 ~= 3.2 MiB; see "Manifest splitting" in docs/virtual_datasets.md
+            # for the cost model.
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 180,
-                    r"^/model_level/": 160,
-                    None: 2400,
+                    r"^/pressure_level/": 90,
+                    r"^/model_level/": 80,
+                    None: 600,
                 },
                 dim="init_time",
             ),
@@ -64,7 +63,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="1.5",
+            cpu="4",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )

@@ -14,9 +14,7 @@ import pytest
 import sentry_sdk
 import sentry_sdk.crons
 import xarray as xr
-import zarr
-import zarr.errors
-from pydantic import ValidationError, computed_field
+from pydantic import Field, ValidationError, computed_field
 
 from reformatters.common import dynamical_dataset, storage, template_utils, validation
 from reformatters.common.config import Config, Env
@@ -40,6 +38,13 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from tests.common.virtual_region_job_test import (
+    VirtualTestRegionJob,
+    _create_template_ds,
+    _make_dataset,
+    _make_region_job,
+    _primary_repo,
+)
 
 NOOP_STORAGE_CONFIG = StorageConfig(
     base_path="noop",
@@ -228,22 +233,22 @@ def test_dynamical_dataset_init() -> None:
     )
 
 
-class TestIcechunkVirtualConfigValidation:
-    @staticmethod
-    def _virtual_config() -> IcechunkVirtualConfig:
-        container = icechunk.VirtualChunkContainer(
-            "s3://noaa-gfs-bdp-pds/",
-            icechunk.s3_store(region="us-east-1", anonymous=True),
-        )
-        return IcechunkVirtualConfig(
-            containers=(container,),
-            manifest_split=manifest_append_dim_split(split_size=1000, dim="time"),
-        )
+def _example_icechunk_virtual_config() -> IcechunkVirtualConfig:
+    container = icechunk.VirtualChunkContainer(
+        "s3://noaa-gfs-bdp-pds/",
+        icechunk.s3_store(region="us-east-1", anonymous=True),
+    )
+    return IcechunkVirtualConfig(
+        containers=(container,),
+        manifest_split=manifest_append_dim_split(split_size=1000, dim="time"),
+    )
 
+
+class TestIcechunkVirtualConfigValidation:
     def test_rejects_non_icechunk_primary(self) -> None:
         # ExampleDataset's default primary_storage_config uses the ZARR3 format.
         with pytest.raises(ValidationError, match="ICECHUNK"):
-            ExampleDataset(icechunk_virtual_config=self._virtual_config())
+            ExampleDataset(icechunk_virtual_config=_example_icechunk_virtual_config())
 
     def test_rejects_non_icechunk_replica(self) -> None:
         with pytest.raises(ValidationError, match="ICECHUNK"):
@@ -256,7 +261,7 @@ class TestIcechunkVirtualConfigValidation:
                         base_path="s3://bucket/replica", format=DatasetFormat.ZARR3
                     )
                 ],
-                icechunk_virtual_config=self._virtual_config(),
+                icechunk_virtual_config=_example_icechunk_virtual_config(),
             )
 
     def test_accepts_all_icechunk_stores(self) -> None:
@@ -264,7 +269,7 @@ class TestIcechunkVirtualConfigValidation:
             primary_storage_config=ExampleDatasetStorageConfig(
                 format=DatasetFormat.ICECHUNK
             ),
-            icechunk_virtual_config=self._virtual_config(),
+            icechunk_virtual_config=_example_icechunk_virtual_config(),
         )
         assert dataset.store_factory.icechunk_virtual_config is not None
 
@@ -298,6 +303,46 @@ def test_materialized_dataset_rejects_vertical_group_var() -> None:
     # _validate_virtual_storage rejects a materialized dataset with any non-root var.
     with pytest.raises(ValidationError, match="do not yet support vertical groups"):
         GroupedVarDataset()
+
+
+class ExampleVirtualConfig(ExampleConfig):
+    @computed_field
+    @property
+    def data_vars(self) -> list[ExampleDataVar]:
+        return [
+            ExampleDataVar(
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    chunks=(1,),
+                    shards=None,
+                    compressors=(),
+                )
+            )
+        ]
+
+
+class ExampleVirtualRegionJob(VirtualRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+
+
+class ExampleVirtualDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: ExampleVirtualConfig = ExampleVirtualConfig()
+    region_job_class: type[ExampleVirtualRegionJob] = ExampleVirtualRegionJob
+    primary_storage_config: ExampleDatasetStorageConfig = ExampleDatasetStorageConfig(
+        format=DatasetFormat.ICECHUNK
+    )
+    # default_factory: pydantic deep-copies plain defaults per instance, and
+    # VirtualChunkContainer is not copyable.
+    icechunk_virtual_config: IcechunkVirtualConfig | None = Field(
+        default_factory=_example_icechunk_virtual_config
+    )
+
+    def operational_kubernetes_resources(
+        self,
+        image_tag: str,  # noqa: ARG002
+    ) -> Sequence[CronJob]:
+        return ()
 
 
 def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -551,6 +596,97 @@ def test_validate_dataset_calls_validators(
     )
 
 
+def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # check_for_expected_shards and compare_replica_and_primary are
+    # materialized-only; a virtual dataset's replica gets the base validators.
+    configured_validators = [Mock(), Mock()]
+    monkeypatch.setattr(
+        ExampleVirtualDataset, "validators", lambda self: configured_validators
+    )
+    mock_validate = Mock()
+    monkeypatch.setattr(validation, "validate_dataset", mock_validate)
+    mock_open = Mock()
+    monkeypatch.setattr(validation, "open_flattened_dataset", mock_open)
+
+    dataset = ExampleVirtualDataset(
+        replica_storage_configs=[
+            ExampleDatasetStorageConfig(
+                base_path="s3://replica-bucket-a/path",
+                format=DatasetFormat.ICECHUNK,
+            ),
+        ],
+    )
+
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleVirtualDataset, "store_factory", store_factory)
+    mock_store = Mock()
+    monkeypatch.setattr(store_factory, "primary_store", lambda: mock_store)
+    mock_replica_store = Mock()
+    monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
+
+    dataset.validate_dataset("example-job-name")
+
+    assert mock_validate.call_count == 2
+    primary_call, replica_call = mock_validate.call_args_list
+    assert primary_call.args == (mock_store,)
+    assert primary_call.kwargs["validators"] == configured_validators
+    assert replica_call.args == (mock_replica_store,)
+    assert replica_call.kwargs["validators"] == configured_validators
+    # No VirtualDataValidator configured, so no operational-window job is built.
+    assert primary_call.kwargs["region_job"] is None
+    assert replica_call.kwargs["region_job"] is None
+    # compare_replica_and_primary's replica dataset is never opened.
+    mock_open.assert_not_called()
+
+
+def test_run_virtual_operational_update_asserts_single_writer() -> None:
+    dataset = ExampleVirtualDataset()
+    with pytest.raises(AssertionError, match="single-writer"):
+        dataset._run_virtual_operational_update(
+            [Mock()], worker_index=0, workers_total=2
+        )
+    with pytest.raises(AssertionError, match="single-writer"):
+        dataset._run_virtual_operational_update(
+            [Mock()], worker_index=1, workers_total=1
+        )
+
+
+@pytest.mark.slow
+def test_virtual_update_rejects_structural_drift_before_any_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    main_before = repo.lookup_branch("main")
+
+    # Update template whose structure drifted from the published store: the
+    # existing variable was renamed.
+    drifted = xr.DataTree.from_dict(
+        {
+            "/": _create_template_ds(2)
+            .to_dataset()
+            .rename({"temperature_2m": "temperature_renamed"})
+        }
+    )
+    job = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], drifted)),
+    )
+
+    with pytest.raises(ValueError, match="does not match the existing store"):
+        dataset.update("test")
+
+    # Worker 0's guard raised before any commit landed on main.
+    assert repo.lookup_branch("main") == main_before
+
+
 class ExampleDatasetWithThreeCronJobs(
     DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
 ):
@@ -705,36 +841,34 @@ def test_monitor_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
         pass
 
 
-def test_backfill_kubernetes_overwrite_existing_flag(
+def _existing_store_tree(n_time: int = 3) -> xr.DataTree:
+    var = xr.DataArray(
+        np.zeros(n_time, dtype=np.float32),
+        dims=("time",),
+        coords={"time": pd.date_range("2000-01-01", periods=n_time, freq="D")},
+    )
+    var.encoding = {"dtype": "float32", "chunks": (1,), "shards": (1,)}
+    return xr.DataTree.from_dict({"/": xr.Dataset({"var": var})})
+
+
+def _template_tree_for_end(end: pd.Timestamp) -> xr.DataTree:
+    times = pd.date_range("2000-01-01", end, freq="D", inclusive="left")
+    var = xr.DataArray(
+        np.zeros(len(times), dtype=np.float32), dims=("time",), coords={"time": times}
+    )
+    var.encoding = {"dtype": "float32", "chunks": (1,), "shards": (1,)}
+    return xr.DataTree.from_dict({"/": xr.Dataset({"var": var})})
+
+
+@pytest.fixture
+def kubernetes_backfill_dataset(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
+) -> ExampleDataset:
+    # Generally monkeypatching _can_run_in_kubernetes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
         DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
     )
-
-    dataset = ExampleDataset(
-        template_config=ExampleConfig(),
-        region_job_class=ExampleRegionJob,
-        primary_storage_config=ExampleDatasetStorageConfig(
-            base_path="s3://bucket/data",
-            format=DatasetFormat.ZARR3,
-        ),
-        replica_storage_configs=[
-            ExampleDatasetStorageConfig(
-                base_path="s3://bucket/data",
-                format=DatasetFormat.ICECHUNK,
-            ),
-        ],
-    )
-    # Open stores as writable so that they are created
-    # (this is only necessary for icechunk stores)
-    dataset.store_factory.primary_store(writable=True)
-    dataset.store_factory.replica_stores(writable=True)
-
-    monkeypatch.setattr(xr, "open_zarr", Mock())
-
     monkeypatch.setattr(
         dynamical_dataset,
         "get_deployed_cronjob_image",
@@ -744,84 +878,107 @@ def test_backfill_kubernetes_overwrite_existing_flag(
     monkeypatch.setattr(
         ExampleConfig,
         "get_template",
-        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
+        lambda self, end: _template_tree_for_end(pd.Timestamp(end)),
     )
     monkeypatch.setattr(
         ExampleRegionJob, "get_jobs", Mock(return_value=[Mock(spec=ExampleRegionJob)])
     )
-    monkeypatch.setattr(
-        ExampleDataset,
-        "backfill",
-        Mock(),
-    )
-    mock_write_metadata = Mock()
-    monkeypatch.setattr(template_utils, "write_metadata", mock_write_metadata)
-
-    dataset.backfill_kubernetes(
-        append_dim_end=pd.Timestamp("2000-01-02"),
-        jobs_per_pod=1,
-        max_parallelism=1,
-        overwrite_existing=True,
-    )
-    mock_write_metadata.assert_not_called()
-    mock_write_metadata.reset_mock()
-
-    dataset.backfill_kubernetes(
-        append_dim_end=pd.Timestamp("2000-01-02"),
-        jobs_per_pod=1,
-        max_parallelism=1,
-        overwrite_existing=False,
-    )
-    mock_write_metadata.assert_called_once()
-
-
-def test_backfill_kubernetes_overwrite_existing_flag_fails_if_not_all_stores_exist(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        DynamicalDataset, "_can_run_in_kubernetes", Mock(return_value=True)
-    )
-    monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        Mock(side_effect=zarr.errors.GroupNotFoundError("Group not found")),
-    )
-    monkeypatch.setattr(
-        ExampleConfig,
-        "get_template",
-        lambda self, end: xr.DataTree.from_dict({"/": xr.Dataset()}),
-    )
-
-    monkeypatch.setattr(
-        dynamical_dataset,
-        "get_deployed_cronjob_image",
-        Mock(return_value="test-image-tag"),
-    )
-    monkeypatch.setattr(subprocess, "run", Mock())
+    monkeypatch.setattr(template_utils, "write_metadata", Mock())
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
-        primary_storage_config=ExampleDatasetStorageConfig(
-            base_path="s3://bucket/data",
-            format=DatasetFormat.ZARR3,
-        ),
     )
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "all_stores_exist", lambda: True)
+    monkeypatch.setattr(store_factory, "k8s_secret_names", lambda: [_NO_SECRET_NAME])
+    return dataset
 
-    with pytest.raises(
-        AssertionError,
-        match="Not all stores exist, cannot run with overwrite_existing=True",
-    ):
-        dataset.backfill_kubernetes(
+
+def test_backfill_kubernetes_rejects_create_over_existing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree()
+    )
+    with pytest.raises(AssertionError, match="store already exists"):
+        kubernetes_backfill_dataset.backfill_kubernetes()
+
+
+def test_backfill_kubernetes_rejects_overwrite_of_missing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(ExampleDataset, "_open_existing_store", lambda self: None)
+    with pytest.raises(AssertionError, match="No existing store found"):
+        kubernetes_backfill_dataset.backfill_kubernetes(overwrite_chunks=True)
+
+
+def test_backfill_kubernetes_never_trims_existing_store(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    with pytest.raises(ValueError, match="trimming an existing store is never"):
+        kubernetes_backfill_dataset.backfill_kubernetes(
             append_dim_end=pd.Timestamp("2000-01-02"),
-            jobs_per_pod=1,
-            max_parallelism=1,
-            overwrite_existing=True,
+            overwrite_chunks=True,
+            overwrite_metadata=True,
         )
 
 
+def test_backfill_kubernetes_extension_requires_both_overwrite_flags(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    with pytest.raises(ValueError, match="extending requires"):
+        kubernetes_backfill_dataset.backfill_kubernetes(
+            append_dim_end=pd.Timestamp("2000-01-10"), overwrite_chunks=True
+        )
+
+
+def test_backfill_kubernetes_overwrite_defaults_to_existing_store_end(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(
+        overwrite_chunks=True, filter_variable_names=["var"]
+    )
+
+    input_str = mock_run.call_args.kwargs["input"]
+    # Store has 2000-01-01..2000-01-03 daily, so the resolved exclusive end is 2000-01-04.
+    assert '"backfill", "2000-01-04T00:00:00"' in input_str
+    assert "--overwrite-chunks" in input_str
+    assert "--overwrite-metadata" not in input_str
+
+
+def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    mock_refresh = Mock()
+    monkeypatch.setattr(template_utils, "refresh_store_metadata", mock_refresh)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(overwrite_metadata=True)
+
+    mock_refresh.assert_called_once()
+    mock_run.assert_not_called()
+
+
 @pytest.mark.parametrize("env", [Env.dev, Env.test])
-def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
+def test_backfill_kubernetes_fails_in_wrong_environment(
     monkeypatch: pytest.MonkeyPatch,
     env: Env,
 ) -> None:
@@ -836,9 +993,7 @@ def test_backfill_kubernetes_overwrite_existing_flag_fails_in_wrong_environment(
     ):
         dataset.backfill_kubernetes(
             append_dim_end=pd.Timestamp("2000-01-02"),
-            jobs_per_pod=1,
-            max_parallelism=1,
-            overwrite_existing=True,
+            overwrite_chunks=True,
         )
 
 

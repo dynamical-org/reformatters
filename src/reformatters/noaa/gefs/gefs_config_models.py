@@ -22,6 +22,7 @@ GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 class GEFSInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
+    available_from: Timestamp | None = None
 
 
 class GEFSDataVar(DataVar[GEFSInternalAttrs]):

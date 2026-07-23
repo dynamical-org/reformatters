@@ -1,10 +1,12 @@
 This project contains code to reformat weather data into the Zarr v3 / Icechunk file format.
 
+To add a new dataset/data product, or add variable(s) to an existing dataset, follow [docs/dataset_development_guide.md](docs/dataset_development_guide.md).
+
 ## Approach overview
 
 Datasets are created in 3 phases:
 1. A template of the dataset, in the form of zarr metadata that is checked into the repo, is created with `uv run main <dataset_id> update-template`. This template (not in-code config) is loaded by steps 2 and 3 and drives processing and output in those steps. This approach of checking in the metadata allow us to review diffs if the structure or metadata of the dataset changes.
-2. A zarr backfill is run. The backfill uses kubernetes indexed jobs to run work in parallel. When the user runs a `uv run main <dataset-id> backfill-kubernetes ...` command the metadata for the zarr is first written by the local process to the final zarr store, then a kubernetes index job is kicked off with each job index responsible for writing a portion of the zarr chunk data into the zarr archive.
+2. A zarr backfill is run. A backfill validates the request against the existing store, then kicks off a kubernetes indexed job with each job index responsible for writing a portion of the zarr chunk data into the zarr archive.
 3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk backfills and materialized updates use a temporary branch that is atomically merged to main; virtual updates commit directly to main.
 
 ## Repository structure
@@ -39,7 +41,9 @@ src/reformatters/
 
 tests/                       # Mirrors src/ structure
 docs/
-├── dataset_integration_guide.md      # Step-by-step new dataset integration walkthrough
+├── dataset_development_guide.md      # explore→implement→backfill→validate→publish
+├── implementation_guide.md           # Step-by-step new dataset implementation walkthrough
+├── backfill.md                       # Populate a store: new-store, new-variable, and re-backfill operations
 ├── parallel_processing.md            # How parallel writes coordinate across workers
 ├── virtual_datasets.md               # Writing + reading virtual (chunk reference) Icechunk datasets
 ├── add_new_variable.md               # Add new variable to an existing dataset
@@ -58,7 +62,7 @@ deploy/                      # Docker and kubernetes configs
 
 ## Core classes
 
-Integrating a dataset requires subclassing three base classes. For a step by step walkthrough, see [docs/dataset_integration_guide.md](docs/dataset_integration_guide.md) and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
+Integrating a dataset requires subclassing three base classes. For a step by step implementation walkthrough see [docs/implementation_guide.md](docs/implementation_guide.md), and for complete details of what and how subclassers should implement see the commented templates in `src/reformatters/example_{materialized|virtual}/{dynamical_dataset|template_config|region_job}.py`.
 
 ### TemplateConfig
 Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.
@@ -79,6 +83,8 @@ Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  
 Categorical / flag variables set `flag_values` (the coded values) and `flag_meanings` (a blank separated label per value) per CF Conventions section 3.5. Verify the codes against the authoritative source table for that product (e.g. GRIB2 code table 4.201/4.222, the NSSL MRMS flag tables) rather than guessing.
 
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
+
+Set each data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) by convention: use 7 unless the variable is wind (6), a precipitation flux/rate (8), or a pressure variable with `units="Pa"` (11); match an existing equivalent variable rather than re-deriving.
 
 
 ### RegionJob
@@ -118,7 +124,7 @@ Run via `uv run main`.
 
 ### Global commands
 - `uv run main --help` - Show all commands and registered datasets
-- `uv run main initialize-new-integration <provider> <model> <variant>` - Scaffold new dataset
+- `uv run main initialize-new-integration <provider> <model> <variant> --kind <materialized|virtual>` - Scaffold new dataset
 - `uv run main <dataset-id> update-template` - Regenerate `templates/latest.zarr`. Run this after any change to a `TemplateConfig` subclass's metadata.
 
 ## Parallelization model

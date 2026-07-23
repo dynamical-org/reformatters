@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -51,6 +51,22 @@ def get_all_cronjob_names() -> list[str]:
             continue
 
     return sorted(cronjob_names)
+
+
+def get_backfill_dataset_ids() -> list[str]:
+    """Dataset ids backfill-kubernetes can run for: those with an update CronJob
+    (it provides the worker resource shapes and deployed image)."""
+    dataset_ids = []
+    for dataset in DYNAMICAL_DATASETS:
+        try:
+            resources = dataset.operational_kubernetes_resources(
+                "placeholder-image-tag"
+            )
+        except NotImplementedError:
+            continue
+        if any(isinstance(r, ReformatCronJob) for r in resources):
+            dataset_ids.append(dataset.dataset_id)
+    return sorted(dataset_ids)
 
 
 def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
@@ -157,6 +173,262 @@ echo "- Manual Get Pods: https://github.com/${{ github.repository }}/actions/wor
   echo "- [Sentry job logs](https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME})"
   echo "- [Manual Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
   echo "- [Manual Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
+} >> $GITHUB_STEP_SUMMARY
+"""
+                        ),
+                    },
+                ],
+            }
+        },
+    }
+
+
+def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
+    """Generate the workflow_dispatch workflow that kicks off a backfill.
+
+    Exposes only safe operations: creating a new store, overwriting chunk data,
+    and overwriting metadata (which never trims and only expands with an explicit
+    append_dim_end plus both overwrite flags — the CLI enforces all guards).
+
+    Runs only from main, waits for main's tip to finish its operational deploy,
+    and submits the kubernetes job with that deploy's image so driver code and
+    worker image are the same commit."""
+    return {
+        "name": "Manual: Backfill",
+        "on": {
+            "workflow_dispatch": {
+                "inputs": {
+                    "dataset_id": {
+                        "description": "Dataset to backfill",
+                        "required": True,
+                        "type": "choice",
+                        "options": dataset_ids,
+                    },
+                    "operation": {
+                        "description": "create-new-store fails if the store exists; overwrite-* require it to exist. Backfilling a newly added variable = overwrite-chunks-and-metadata + filter_variable_names.",
+                        "required": True,
+                        "type": "choice",
+                        "options": [
+                            "create-new-store",
+                            "overwrite-chunks",
+                            "overwrite-metadata",
+                            "overwrite-chunks-and-metadata",
+                        ],
+                    },
+                    "append_dim_end": {
+                        "description": "Exclusive end timestamp (ISO). Leave empty for the default: an existing store's current end (extent unchanged), or the current time for a new store. Setting this past an existing store's end extends it (requires overwrite-chunks-and-metadata); trimming is never supported.",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "filter_start": {
+                        "description": "Only process regions at or after this timestamp, inclusive (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "filter_end": {
+                        "description": "Only process regions before this timestamp, exclusive (optional). Full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "filter_contains": {
+                        "description": "Comma-separated append-dim timestamps (optional) to process only the regions whose jobs touch them — the most efficient way to re-backfill specific flagged positions. Each is full ISO with seconds precision, e.g. 2024-01-15T00:00:00.",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "filter_variable_names": {
+                        "description": "Comma-separated variable names to process (optional, default all)",
+                        "required": False,
+                        "type": "string",
+                    },
+                    "jobs_per_pod": {
+                        "description": "Region jobs per worker pod. Materialized: 2-4 for non-ensemble datasets, 1 for ensemble; virtual: 30. For all, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.",
+                        "required": False,
+                        "type": "string",
+                        "default": "2",
+                    },
+                    "max_parallelism": {
+                        "description": "Maximum concurrent worker pods. Materialized: 50-200 (go higher if needed, but check cluster quotas so operational updates can still schedule); some sources cap useful parallelism (s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.",
+                        "required": False,
+                        "type": "string",
+                        "default": "10",
+                    },
+                }
+            }
+        },
+        "concurrency": {
+            "group": "k8s-manual-${{ github.actor }}-${{ github.run_id }}",
+            "cancel-in-progress": False,
+        },
+        "permissions": {
+            "id-token": "write",
+            "contents": "read",
+            "actions": "read",
+        },
+        "jobs": {
+            "backfill": {
+                "name": "Backfill",
+                "runs-on": "ubuntu-24.04",
+                "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
+                "steps": [
+                    {
+                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                    },
+                    {
+                        "name": "Install uv",
+                        "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+                        "with": {
+                            "enable-cache": True,
+                            "cache-dependency-glob": "uv.lock",
+                        },
+                    },
+                    {
+                        "name": "Set up Python",
+                        "uses": "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+                        "with": {"python-version-file": ".python-version"},
+                    },
+                    {
+                        "name": "Install the project",
+                        "run": "uv sync --all-extras --dev --locked",
+                    },
+                    {
+                        "name": "Configure AWS Credentials",
+                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "with": {
+                            "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
+                            "aws-region": "${{ secrets.AWS_REGION }}",
+                        },
+                    },
+                    {
+                        "name": "Install kubectl",
+                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "with": {"version": "latest"},
+                    },
+                    {
+                        "name": "Update kubeconfig",
+                        "run": "aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}",
+                    },
+                    {
+                        "name": "Require main and wait for its deploy",
+                        "env": {
+                            "GH_TOKEN": "${{ github.token }}",
+                            "GH_REPO": "${{ github.repository }}",
+                        },
+                        "run": LiteralString(
+                            r"""#!/bin/bash
+set -euo pipefail
+
+if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+  echo "::error::Backfills must run from main (got ${GITHUB_REF}); the worker image is built by main's deploy."
+  exit 1
+fi
+
+# The kubernetes workers run the image the deploy of this exact commit built,
+# so wait for that deploy (Code Quality gates it) before submitting anything.
+echo "Waiting up to 30 minutes for the deploy of ${GITHUB_SHA} so the backfill runs exactly that code..."
+for _ in $(seq 1 60); do
+  DEPLOY=$(gh run list --workflow deploy-operational-updates.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
+  if [ -n "${DEPLOY}" ]; then
+    read -r STATUS CONCLUSION <<< "${DEPLOY}"
+    if [ "${STATUS}" = "completed" ]; then
+      if [ "${CONCLUSION}" = "success" ]; then
+        echo "Deploy of ${GITHUB_SHA} succeeded."
+        exit 0
+      fi
+      echo "::error::The deploy of ${GITHUB_SHA} concluded '${CONCLUSION}'. Fix the deploy, then re-run this backfill."
+      exit 1
+    fi
+    echo "Deploy is ${STATUS}..."
+  else
+    QUALITY=$(gh run list --workflow code-quality.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
+    if [ -n "${QUALITY}" ]; then
+      read -r STATUS CONCLUSION <<< "${QUALITY}"
+      if [ "${STATUS}" = "completed" ] && [ "${CONCLUSION}" != "success" ]; then
+        echo "::error::Code Quality concluded '${CONCLUSION}' for ${GITHUB_SHA}, so it will never deploy."
+        exit 1
+      fi
+      echo "Deploy not started yet (Code Quality is ${STATUS})..."
+    else
+      echo "Waiting for Code Quality and deploy runs to appear for ${GITHUB_SHA}..."
+    fi
+  fi
+  sleep 30
+done
+
+echo "::error::Timed out waiting for the deploy of ${GITHUB_SHA}."
+exit 1
+"""
+                        ),
+                    },
+                    {
+                        "name": "Start backfill (SEE LOGS)",
+                        # Inputs are passed via env, never interpolated into the
+                        # script, so free-form input text cannot inject shell.
+                        "env": {
+                            "DYNAMICAL_ENV": "prod",
+                            "DOCKER_IMAGE": "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}",
+                            "DATASET_ID": "${{ github.event.inputs.dataset_id }}",
+                            "OPERATION": "${{ github.event.inputs.operation }}",
+                            "APPEND_DIM_END": "${{ github.event.inputs.append_dim_end }}",
+                            "FILTER_START": "${{ github.event.inputs.filter_start }}",
+                            "FILTER_END": "${{ github.event.inputs.filter_end }}",
+                            "FILTER_CONTAINS": "${{ github.event.inputs.filter_contains }}",
+                            "FILTER_VARIABLE_NAMES": "${{ github.event.inputs.filter_variable_names }}",
+                            "JOBS_PER_POD": "${{ github.event.inputs.jobs_per_pod }}",
+                            "MAX_PARALLELISM": "${{ github.event.inputs.max_parallelism }}",
+                        },
+                        "run": LiteralString(
+                            r"""#!/bin/bash
+set -euo pipefail
+
+# The image this exact commit's deploy built (waited for above), so the
+# workers run the same code the driver just validated with.
+ARGS=(--docker-image "${DOCKER_IMAGE}")
+ARGS+=(--jobs-per-pod "${JOBS_PER_POD}" --max-parallelism "${MAX_PARALLELISM}")
+case "${OPERATION}" in
+  create-new-store) ;;
+  overwrite-chunks) ARGS+=(--overwrite-chunks) ;;
+  overwrite-metadata) ARGS+=(--overwrite-metadata) ;;
+  overwrite-chunks-and-metadata) ARGS+=(--overwrite-chunks --overwrite-metadata) ;;
+esac
+if [ -n "${APPEND_DIM_END}" ]; then
+  ARGS+=(--append-dim-end "${APPEND_DIM_END}")
+fi
+if [ -n "${FILTER_START}" ]; then
+  ARGS+=(--filter-start "${FILTER_START}")
+fi
+if [ -n "${FILTER_END}" ]; then
+  ARGS+=(--filter-end "${FILTER_END}")
+fi
+if [ -n "${FILTER_CONTAINS}" ]; then
+  IFS=',' read -ra CONTAINS_TIMESTAMPS <<< "${FILTER_CONTAINS}"
+  for CONTAINS_TIMESTAMP in "${CONTAINS_TIMESTAMPS[@]}"; do
+    CONTAINS_TIMESTAMP="$(echo "${CONTAINS_TIMESTAMP}" | xargs)"  # trim surrounding whitespace
+    [ -n "${CONTAINS_TIMESTAMP}" ] && ARGS+=(--filter-contains "${CONTAINS_TIMESTAMP}")
+  done
+fi
+if [ -n "${FILTER_VARIABLE_NAMES}" ]; then
+  IFS=',' read -ra VARIABLE_NAMES <<< "${FILTER_VARIABLE_NAMES}"
+  for VARIABLE_NAME in "${VARIABLE_NAMES[@]}"; do
+    VARIABLE_NAME="$(echo "${VARIABLE_NAME}" | xargs)"  # trim surrounding whitespace
+    [ -n "${VARIABLE_NAME}" ] && ARGS+=(--filter-variable-names "${VARIABLE_NAME}")
+  done
+fi
+
+echo "Running: uv run main ${DATASET_ID} backfill-kubernetes ${ARGS[*]}"
+uv run main "${DATASET_ID}" backfill-kubernetes "${ARGS[@]}"
+
+{
+  echo "## Backfill Started"
+  echo ""
+  echo "**Dataset:** \`${DATASET_ID}\`"
+  echo ""
+  echo "**Operation:** \`${OPERATION}\`"
+  echo ""
+  echo "### Monitoring"
+  echo ""
+  echo "- [Manual: Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
+  echo "- [Manual: Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
+  echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)"
 } >> $GITHUB_STEP_SUMMARY
 """
                         ),
@@ -359,6 +631,10 @@ def main() -> None:
         (
             generate_create_job_workflow(cronjob_names),
             "manual-create-job-from-cronjob.yml",
+        ),
+        (
+            generate_backfill_workflow(get_backfill_dataset_ids()),
+            "manual-backfill.yml",
         ),
         (generate_get_jobs_workflow(), "manual-get-jobs.yml"),
         (generate_get_pods_workflow(), "manual-get-pods.yml"),

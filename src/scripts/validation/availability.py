@@ -236,7 +236,11 @@ def _compute_nulls_for_point(
         check_mask = null_mask.isel(lead_time=slice(1, None))
 
     time_dim = next(d for d in ("time", "init_time") if d in da_point.dims)
-    null_frac = check_mask.mean(dim=[d for d in non_time_dims if d in check_mask.dims])
+    # On an analysis dataset the point series has no non-time dims, and mean over an
+    # empty dim list keeps the mask's bool dtype; cast so callers can do arithmetic.
+    null_frac = check_mask.mean(
+        dim=[d for d in non_time_dims if d in check_mask.dims]
+    ).astype(np.float64)
 
     if check_mask.any():
         unavailable = null_frac[time_dim].where(null_frac > 0, drop=True)
@@ -285,27 +289,16 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     filename = "unavailable_timestamps.txt"
     path = output_dir / filename
     total = sum(len(m) for _, _, m in entries)
-    all_unavailable = sorted(
-        {ts for _, _, unavailable in entries for ts in unavailable}
-    )
-    combined_filter = " ".join(f"--filter-contains {ts}" for ts in all_unavailable)
     lines = [
         "# Unavailable timestamps",
         f"# Total: {total} across {len(entries)} (variable, point) combinations.",
         "# Use --filter-contains <timestamp> to retry those source files with backfill.",
-        "",
-        f"# Combined retry filter ({len(all_unavailable)} unique timestamps across all variables):",
-        f"combined-retry-filter: {combined_filter}",
         "",
     ]
     for var, point_label, unavailable in entries:
         lines.append(f"## {var} @ {point_label}")
         lines.append(f"count: {len(unavailable)}")
         lines.extend(unavailable)
-        lines.append("")
-        lines.append(
-            "retry-filter: " + " ".join(f"--filter-contains {m}" for m in unavailable)
-        )
         lines.append("")
     path.write_text("\n".join(lines))
     return filename

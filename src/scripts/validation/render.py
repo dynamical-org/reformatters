@@ -22,11 +22,13 @@ def _extract_per_var_html(html: str) -> list[str]:
     return re.findall(r"<h3><code>([^<]+)</code></h3>", html)
 
 
+# Order mirrors the per-variable text/table sections: value time series, spatial,
+# temporal, then availability last.
 _PLOT_TYPES = (
-    ("availability", "availability over append dim"),
     ("value_timeseries", "full-period value time series"),
     ("spatial", "spatial comparison"),
     ("temporal", "time series comparison"),
+    ("availability", "availability over append dim"),
 )
 
 

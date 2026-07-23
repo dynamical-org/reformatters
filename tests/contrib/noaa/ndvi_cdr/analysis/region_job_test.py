@@ -433,6 +433,49 @@ def test_list_source_files_routing_by_year(
         mock_ncei.assert_not_called()
 
 
+def test_list_ncei_source_files_retries_on_server_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transient 5xx responses from NCEI are retried rather than failing the job."""
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    call_count = 0
+
+    def mock_requests_get(url: str, **kwargs: Any) -> Mock:  # noqa: ANN401
+        nonlocal call_count
+        call_count += 1
+        mock_response = Mock()
+        if call_count < 3:
+            mock_response.status_code = 500
+
+            def raise_http_error() -> None:
+                raise requests.HTTPError(response=mock_response)
+
+            mock_response.raise_for_status = raise_http_error
+        else:
+            mock_response.status_code = 200
+            mock_response.raise_for_status = Mock()
+            mock_response.text = '<a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc">x</a>'
+        return mock_response
+
+    monkeypatch.setattr("requests.get", mock_requests_get)
+
+    template_config = NoaaNdviCdrAnalysisTemplateConfig()
+    region_job = NoaaNdviCdrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=Mock(spec=slice),
+        reformat_job_name="test",
+    )
+
+    result = region_job._list_ncei_source_files(2025)
+
+    assert call_count == 3
+    assert result == ["VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc"]
+
+
 @pytest.fixture
 def mock_404_response(monkeypatch: pytest.MonkeyPatch) -> Mock:
     """Fixture to mock requests.get returning a 404 response."""

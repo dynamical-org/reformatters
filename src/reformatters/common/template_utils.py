@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import dask.array
+import icechunk
 import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
 import zarr.abc.store
 import zarr.storage
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common.config import Config
@@ -18,7 +20,7 @@ from reformatters.common.config_models import Coordinate, DataVar
 from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
-from reformatters.common.zarr import assert_fill_values_set
+from reformatters.common.zarr import assert_fill_values_set, copy_zarr_metadata
 
 log = get_logger(__name__)
 
@@ -193,14 +195,30 @@ def assert_no_structural_drift_from_existing_store(
     Compares every variable across all groups (by var.path) and every non-append
     dimension coordinate's values (a reordered vertical level or moved lat/lon would
     relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
-    template may freely add new ones. Backfills are exempt (they rewrite the whole store
-    and may legitimately change structure), so callers only run this for operational updates.
+    template may freely add new ones. Callers run this for operational updates;
+    overwrite backfills run assert_safe_overwrite instead.
 
     The append dimension's chunk/shard size is compared in dev/prod but skipped under
     Config.env == test, where the integration auto-shrink helper sizes append-dim chunks
     to the (varying) template length. In production these sizes are fixed config, so any
     change is caught here as well as at PR time by the template-drift test.
     """
+    mismatches = structural_mismatches(template_ds, existing_ds, append_dim)
+    if mismatches:
+        raise ValueError(
+            "Update template structure does not match the existing store. "
+            "Operational updates cannot change the structure of a published dataset; "
+            "run a backfill to change structure. Mismatches:\n"
+            + "\n".join(f"- {m}" for m in mismatches)
+        )
+
+
+def structural_mismatches(
+    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
+) -> list[str]:
+    """Describe how the template's structure diverges from an existing store's, for
+    every variable and non-append dimension coordinate present in `existing_ds`
+    (the template may freely add new ones). Empty list means no drift."""
     compare_append_axis = not Config.is_test
     template_by_path = dict(walk_data_arrays(template_ds))
     mismatches: list[str] = []
@@ -236,13 +254,146 @@ def assert_no_structural_drift_from_existing_store(
         elif not existing_coord.equals(template_coords[name]):
             mismatches.append(f"coord {name}: values differ from the existing store")
 
-    if mismatches:
+    return mismatches
+
+
+def assert_safe_overwrite(
+    template_ds: xr.DataTree,
+    existing_ds: xr.DataTree,
+    append_dim: str,
+    *,
+    allow_new_arrays: bool,
+    allow_expansion: bool,
+) -> None:
+    """Fail a backfill whose template would corrupt the existing store it overwrites.
+
+    Always rejects structural drift of arrays present in the store and any template
+    smaller than the store along the append dim (trimming an existing store is never
+    supported). `allow_new_arrays=False` additionally rejects arrays the store doesn't
+    have yet (require --overwrite-metadata to add them); `allow_expansion=False` rejects
+    a template longer than the store (require an explicit --append-dim-end with
+    --overwrite-metadata and --overwrite-chunks to extend).
+    """
+    problems = structural_mismatches(template_ds, existing_ds, append_dim)
+
+    if not allow_new_arrays:
+        existing_paths = {path for path, _ in walk_data_arrays(existing_ds)}
+        new_paths = [
+            path
+            for path, _ in walk_data_arrays(template_ds)
+            if path not in existing_paths
+        ]
+        if new_paths:
+            problems.append(
+                f"template adds arrays not in the store: {new_paths} "
+                "(pass --overwrite-metadata to add them)"
+            )
+
+    existing_sizes = {
+        node.path: node.sizes[append_dim]
+        for node in existing_ds.subtree
+        if append_dim in node.sizes
+    }
+    for node in template_ds.subtree:
+        if append_dim not in node.sizes or node.path not in existing_sizes:
+            continue
+        template_size = node.sizes[append_dim]
+        existing_size = existing_sizes[node.path]
+        if template_size < existing_size:
+            problems.append(
+                f"{node.path}: template has {template_size} {append_dim} steps but the "
+                f"store has {existing_size}; trimming an existing store is never supported"
+            )
+        elif template_size > existing_size and not allow_expansion:
+            problems.append(
+                f"{node.path}: template has {template_size} {append_dim} steps but the "
+                f"store has {existing_size}; extending requires an explicit "
+                "--append-dim-end with both --overwrite-metadata and --overwrite-chunks"
+            )
+
+    if problems:
         raise ValueError(
-            "Update template structure does not match the existing store. "
-            "Operational updates cannot change the structure of a published dataset; "
-            "run a backfill to change structure. Mismatches:\n"
-            + "\n".join(f"- {m}" for m in mismatches)
+            "Template is not safe to write over the existing store:\n"
+            + "\n".join(f"- {p}" for p in problems)
         )
+
+
+def store_written_coords(template_ds: xr.DataTree) -> set[str]:
+    """Coordinates the template renders entirely null are runtime state written by jobs
+    (e.g. ingested_forecast_length); their store values must never be overwritten by a
+    template metadata write into an existing store."""
+    return {
+        str(name)
+        for node in template_ds.subtree
+        for name, coord in node.to_dataset(inherit=False).coords.items()
+        if bool(coord.isnull().all())
+    }
+
+
+def refresh_store_metadata(
+    store_factory: StoreFactory,
+    template_ds: xr.DataTree,
+    append_dim: str,
+    tmp_store: Path,
+    *,
+    consolidated: bool,
+) -> None:
+    """Rewrite attrs, encodings, and template-derived coordinate values on every
+    existing store from the current template, trimmed to the store's committed extent
+    so arrays are never resized. Arrays the template adds are created (all-NaN until
+    backfilled); store-written coordinate values are preserved. Icechunk stores commit
+    only when something actually changed.
+    """
+    existing = xr.open_datatree(
+        store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        decode_timedelta=True,
+    )
+    existing_sizes = {
+        node.path: node.sizes[append_dim]
+        for node in existing.subtree
+        if append_dim in node.sizes
+    }
+    # Group sizes are always equal: every group grows in one atomic commit, and
+    # open_datatree above raises on a store where they differ.
+    committed_size = existing_sizes.get("/", 0)
+    if committed_size == 0:
+        log.info("Primary store is empty, initial sizing is the backfill's job")
+        return
+
+    trimmed = xr.DataTree.from_dict(
+        {
+            node.path: node.to_dataset(inherit=False).isel(
+                {append_dim: slice(0, committed_size)}
+            )
+            for node in template_ds.subtree
+        }
+    )
+    assert_safe_overwrite(
+        trimmed, existing, append_dim, allow_new_arrays=True, allow_expansion=False
+    )
+
+    write_metadata(trimmed, tmp_store, consolidated=consolidated)
+    exclude_coords = store_written_coords(trimmed)
+    ordered_stores = [
+        *store_factory.replica_stores(writable=True),
+        store_factory.primary_store(writable=True),
+    ]
+    for store in ordered_stores:
+        copy_zarr_metadata(
+            trimmed,
+            tmp_store,
+            store,
+            skip_unchanged=True,
+            exclude_coord_value_chunks=exclude_coords,
+        )
+        if isinstance(store, IcechunkStore) and store.session.has_uncommitted_changes:
+            store.session.commit(
+                "Refresh metadata from template",
+                rebase_with=icechunk.ConflictDetector(),
+            )
+            log.info(f"Refreshed metadata from template on {store}")
 
 
 def make_empty_variable(

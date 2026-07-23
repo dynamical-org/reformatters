@@ -99,7 +99,7 @@ def run_all(
     lead_time: str | None = typer.Option(
         None,
         "--lead-time",
-        help="Forecast lead_time for spatial plots (default: random)",
+        help="Forecast lead_time in hours for spatial plots (default: random)",
     ),
     time: str | None = typer.Option(
         None, "--time", help="Analysis time for spatial plots (default: random)"

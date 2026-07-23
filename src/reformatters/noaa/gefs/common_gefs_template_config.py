@@ -15,7 +15,11 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar, GEFSInternalAttrs
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_REFORECAST_END,
+    GEFSDataVar,
+    GEFSInternalAttrs,
+)
 
 
 def get_shared_template_dimension_coordinates() -> dict[str, Any]:
@@ -290,6 +294,86 @@ def get_shared_data_var_configs(
                 grib_index_level="100 m above ground",
                 gefs_file_type="b",
                 index_position=358,
+                keep_mantissa_bits=6,
+            ),
+        ),
+        GEFSDataVar(
+            name="temperature_80m",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="80t",
+                long_name="80 metre temperature",
+                units="degree_Celsius",
+                step_type="instant",
+                standard_name="air_temperature",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="TMP",
+                grib_description='80[m] HTGL="Specified height level above ground"',
+                grib_index_level="80 m above ground",
+                gefs_file_type="b",
+                index_position=351,
+                available_from=GEFS_REFORECAST_END,
+                keep_mantissa_bits=keep_mantissa_bits_default,
+            ),
+        ),
+        GEFSDataVar(
+            name="pressure_80m",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="80sp",
+                long_name="80 metre pressure",
+                units="Pa",
+                step_type="instant",
+                standard_name="air_pressure",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="PRES",
+                grib_description='80[m] HTGL="Specified height level above ground"',
+                grib_index_level="80 m above ground",
+                gefs_file_type="b",
+                index_position=353,
+                available_from=GEFS_REFORECAST_END,
+                keep_mantissa_bits=10,
+            ),
+        ),
+        GEFSDataVar(
+            name="wind_u_80m",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="80u",
+                long_name="80 metre U wind component",
+                standard_name="eastward_wind",
+                units="m s-1",
+                step_type="instant",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="UGRD",
+                grib_description='80[m] HTGL="Specified height level above ground"',
+                grib_index_level="80 m above ground",
+                gefs_file_type="b",
+                index_position=354,
+                available_from=GEFS_REFORECAST_END,
+                keep_mantissa_bits=6,
+            ),
+        ),
+        GEFSDataVar(
+            name="wind_v_80m",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="80v",
+                long_name="80 metre V wind component",
+                units="m s-1",
+                step_type="instant",
+                standard_name="northward_wind",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="VGRD",
+                grib_index_level="80 m above ground",
+                grib_description='80[m] HTGL="Specified height level above ground"',
+                gefs_file_type="b",
+                index_position=355,
+                available_from=GEFS_REFORECAST_END,
                 keep_mantissa_bits=6,
             ),
         ),
