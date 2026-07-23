@@ -237,8 +237,8 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     def has_hour_0_values(self) -> bool:
         """Whether this variable has values at lead_time=0 (the analysis step).
 
-        Providers with different lead-0 semantics override this default (see
-        EcmwfDataVar); per-variable exceptions set internal_attrs.hour_0_values_override.
+        Providers with different lead-0 semantics override this default.
+        Per-variable exceptions set internal_attrs.hour_0_values_override.
         """
         if self.internal_attrs.hour_0_values_override is not None:
             return self.internal_attrs.hour_0_values_override
