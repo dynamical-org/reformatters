@@ -57,11 +57,12 @@ MAX_HEATMAP_COLUMNS = 1200
 _HEATMAP_DPI = 110
 _HEATMAP_WIDTH_INCHES = (14 * 80 / _HEATMAP_DPI) * 2 / 3
 
-# Availability heatmap colors: light red (missing, 0.0) -> dark green (present, 1.0). The
-# ramp is monotonically light->dark so colorblind readers can read it by lightness rather
-# than red/green hue. Green endpoint is kept from RdYlGn; the red end is lightened.
+# Availability heatmap colors, categorical by fraction available: red (none, 0.0) ->
+# yellow (partial, 0.5) -> green (full, 1.0). The yellow midpoint makes partial
+# availability read distinctly instead of as a muddy red/green blend. Green endpoint
+# kept from RdYlGn; red end lightened.
 _AVAILABILITY_CMAP = LinearSegmentedColormap.from_list(
-    "availability", ["#fa4848", plt.get_cmap("RdYlGn")(1.0)]
+    "availability", ["#fa4848", "#ffd633", plt.get_cmap("RdYlGn")(1.0)]
 )
 
 
