@@ -33,6 +33,14 @@ def test_variant_region_jobs_carry_run() -> None:
     assert NasaImergAnalysisLateRegionJob.model_fields["run"].default == "late"
 
 
+def test_variant_region_jobs_carry_publish_latency() -> None:
+    # Late publishes later than Early; operational updates must stay behind both.
+    assert (
+        NasaImergAnalysisEarlyRegionJob.publish_latency
+        < NasaImergAnalysisLateRegionJob.publish_latency
+    )
+
+
 def test_version_computed_from_time() -> None:
     # The V07B->V07C switchover time differs per run.
     early_before = NasaImergAnalysisSourceFileCoord(
