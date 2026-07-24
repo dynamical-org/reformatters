@@ -78,6 +78,15 @@ def test_as_kubernetes_object_comprehensive() -> None:
                         "env": [
                             {"name": "DYNAMICAL_ENV", "value": "prod"},
                             {
+                                "name": "DYNAMICAL_SENTRY_DSN",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "key": "DYNAMICAL_SENTRY_DSN",
+                                        "name": "sentry",
+                                    }
+                                },
+                            },
+                            {
                                 "name": "BETTERSTACK_SOURCE_TOKEN",
                                 "valueFrom": {
                                     "secretKeyRef": {

@@ -1,12 +1,10 @@
 import json
 import logging
 from datetime import timedelta
-from typing import cast
 
 import httpx
 import pytest
 from logtail import LogtailHandler
-from sentry_sdk.types import Event, Hint
 
 from reformatters.common import betterstack, staging
 from reformatters.common.betterstack import (
@@ -83,78 +81,6 @@ def test_attach_logtail_adds_handler_and_is_idempotent(
         for handler in logger.handlers[:]:
             if isinstance(handler, LogtailHandler):
                 logger.removeHandler(handler)
-
-
-def _exception_event(
-    exc_type: str, message: str, frames: list[dict[str, object]]
-) -> Event:
-    return cast(
-        "Event",
-        {
-            "exception": {
-                "values": [
-                    {
-                        "type": exc_type,
-                        "value": message,
-                        "stacktrace": {"frames": frames},
-                    }
-                ]
-            }
-        },
-    )
-
-
-_HINT = cast("Hint", {})
-
-
-def test_group_error_fingerprint_collapses_varied_messages() -> None:
-    frames: list[dict[str, object]] = [
-        {"module": "obstore._store", "function": "get", "in_app": False},
-        {
-            "module": "reformatters.common.download",
-            "function": "http_download_to_disk",
-            "in_app": True,
-        },
-    ]
-    first = betterstack.group_error_fingerprint(
-        _exception_event(
-            "FileNotFoundError", "Object at hrrr.20161124/...t16z", frames
-        ),
-        _HINT,
-    )
-    second = betterstack.group_error_fingerprint(
-        _exception_event(
-            "FileNotFoundError", "Object at hrrr.20190630/...t18z", frames
-        ),
-        _HINT,
-    )
-    # Same failure mode, different interpolated path -> identical fingerprint.
-    assert first["fingerprint"] == second["fingerprint"]
-    # Fingerprints on the innermost in-app frame, not the noisy library frame.
-    assert first["fingerprint"] == [
-        "FileNotFoundError",
-        "reformatters.common.download",
-        "http_download_to_disk",
-    ]
-
-
-def test_group_error_fingerprint_separates_distinct_types() -> None:
-    frames: list[dict[str, object]] = [
-        {"module": "reformatters.x", "function": "f", "in_app": True}
-    ]
-    not_found = betterstack.group_error_fingerprint(
-        _exception_event("FileNotFoundError", "a", frames), _HINT
-    )
-    value_error = betterstack.group_error_fingerprint(
-        _exception_event("ValueError", "a", frames), _HINT
-    )
-    assert not_found["fingerprint"] != value_error["fingerprint"]
-
-
-def test_group_error_fingerprint_leaves_non_exception_events() -> None:
-    event = cast("Event", {"message": "just a log line"})
-    result = betterstack.group_error_fingerprint(event, _HINT)
-    assert "fingerprint" not in result
 
 
 def test_cron_name_prefix_strips_step() -> None:

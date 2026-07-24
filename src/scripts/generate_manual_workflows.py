@@ -154,8 +154,8 @@ echo "Job Name: ${JOB_NAME}"
 echo ""
 echo "### Monitoring"
 echo ""
-echo "- Better Stack heartbeats (cron status): https://uptime.betterstack.com/team/552704/monitors"
-echo "- Better Stack logs (filter by job_name=${JOB_NAME}): https://telemetry.betterstack.com/team/552704/tail"
+echo "- Sentry cron status: https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/"
+echo "- Sentry job logs: https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME}"
 echo "- Manual Get Jobs: https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml"
 echo "- Manual Get Pods: https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml"
 
@@ -169,8 +169,8 @@ echo "- Manual Get Pods: https://github.com/${{ github.repository }}/actions/wor
   echo ""
   echo "### Monitoring"
   echo ""
-  echo "- [Better Stack heartbeats (cron status)](https://uptime.betterstack.com/team/552704/monitors)"
-  echo "- [Better Stack logs (filter by job_name=\`${JOB_NAME}\`)](https://telemetry.betterstack.com/team/552704/tail)"
+  echo "- [Sentry cron status](https://dynamical.sentry.io/issues/alerts/rules/crons/reformatters/${CRONJOB_NAME}/details/)"
+  echo "- [Sentry job logs](https://dynamical.sentry.io/explore/logs/?logsQuery=job_name%3A${JOB_NAME})"
   echo "- [Manual Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
   echo "- [Manual Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
 } >> $GITHUB_STEP_SUMMARY
@@ -428,7 +428,7 @@ uv run main "${DATASET_ID}" backfill-kubernetes "${ARGS[@]}"
   echo ""
   echo "- [Manual: Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
   echo "- [Manual: Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
-  echo "- [Better Stack logs](https://telemetry.betterstack.com/team/552704/tail)"
+  echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)"
 } >> $GITHUB_STEP_SUMMARY
 """
                         ),
@@ -488,8 +488,8 @@ echo "$OUTPUT"
 echo ""
 echo "### Monitoring"
 echo ""
-echo "- Better Stack heartbeats: https://uptime.betterstack.com/team/552704/monitors"
-echo "- Better Stack logs: https://telemetry.betterstack.com/team/552704/tail"
+echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
+echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
 
 # Write to job summary
 echo "## Kubernetes Jobs" >> $GITHUB_STEP_SUMMARY
@@ -500,8 +500,8 @@ echo '```' >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
-echo "- [Better Stack heartbeats](https://uptime.betterstack.com/team/552704/monitors)" >> $GITHUB_STEP_SUMMARY
-echo "- [Better Stack logs](https://telemetry.betterstack.com/team/552704/tail)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },
@@ -560,8 +560,8 @@ echo "$OUTPUT"
 echo ""
 echo "### Monitoring"
 echo ""
-echo "- Better Stack heartbeats: https://uptime.betterstack.com/team/552704/monitors"
-echo "- Better Stack logs: https://telemetry.betterstack.com/team/552704/tail"
+echo "- Sentry crons overview: https://dynamical.sentry.io/insights/crons/"
+echo "- Sentry logs: https://dynamical.sentry.io/explore/logs/"
 
 # Write to job summary
 echo "## Kubernetes Pods" >> $GITHUB_STEP_SUMMARY
@@ -572,8 +572,8 @@ echo '```' >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
 echo "### Monitoring" >> $GITHUB_STEP_SUMMARY
 echo "" >> $GITHUB_STEP_SUMMARY
-echo "- [Better Stack heartbeats](https://uptime.betterstack.com/team/552704/monitors)" >> $GITHUB_STEP_SUMMARY
-echo "- [Better Stack logs](https://telemetry.betterstack.com/team/552704/tail)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry crons overview](https://dynamical.sentry.io/insights/crons/)" >> $GITHUB_STEP_SUMMARY
+echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)" >> $GITHUB_STEP_SUMMARY
 """
                         ),
                     },

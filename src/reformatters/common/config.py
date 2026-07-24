@@ -10,11 +10,16 @@ class Env(StrEnum):
     test = "test"
 
 
+def _errors_dsn() -> str | None:
+    # Prefer the Better Stack Errors DSN (Sentry-protocol compatible); fall back to
+    # the Sentry DSN so unsetting BETTERSTACK_ERRORS_DSN reverts error tracking to Sentry.
+    return os.getenv("BETTERSTACK_ERRORS_DSN") or os.getenv("DYNAMICAL_SENTRY_DSN")
+
+
 class DynamicalConfig(pydantic.BaseModel):
     env: Env = Env(os.getenv("DYNAMICAL_ENV", "dev"))
 
-    # Sentry-protocol DSN for the Better Stack Errors application.
-    errors_dsn: str | None = os.getenv("BETTERSTACK_ERRORS_DSN")
+    sentry_dsn: str | None = _errors_dsn()
 
     @property
     def is_test(self) -> bool:
@@ -29,8 +34,8 @@ class DynamicalConfig(pydantic.BaseModel):
         return self.env == Env.prod
 
     @property
-    def is_error_tracking_enabled(self) -> bool:
-        return self.errors_dsn is not None
+    def is_sentry_enabled(self) -> bool:
+        return self.sentry_dsn is not None
 
 
 Config = DynamicalConfig()
