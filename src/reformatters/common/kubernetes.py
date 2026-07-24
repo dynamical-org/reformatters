@@ -17,10 +17,6 @@ from reformatters.common.config import Config
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
-# k8s secret holding the {dataset_id}_{step}_{role} -> heartbeat url map that
-# update/validate cron pods load at runtime (provisioned at deploy time).
-BETTERSTACK_HEARTBEATS_SECRET_NAME = "betterstack-heartbeats"  # noqa: S105
-
 
 class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
@@ -233,11 +229,6 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
-
-    def mounted_secret_names(self) -> Sequence[str]:
-        # All cron pods mount the heartbeat url-map secret; runs of crons without a
-        # heartbeat (e.g. archive) simply find no matching entry and skip pinging.
-        return [*self.secret_names, BETTERSTACK_HEARTBEATS_SECRET_NAME]
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
