@@ -34,14 +34,24 @@ def test_variant_region_jobs_carry_run() -> None:
 
 
 def test_version_computed_from_time() -> None:
-    before = NasaImergAnalysisSourceFileCoord(
+    # The V07B->V07C switchover time differs per run.
+    early_before = NasaImergAnalysisSourceFileCoord(
         run="early", time=pd.Timestamp("2026-03-03T23:30")
     )
-    on_cutover = NasaImergAnalysisSourceFileCoord(
+    early_on = NasaImergAnalysisSourceFileCoord(
         run="early", time=pd.Timestamp("2026-03-04T00:00")
     )
-    assert before.version == "V07B"
-    assert on_cutover.version == "V07C"
+    assert early_before.version == "V07B"
+    assert early_on.version == "V07C"
+
+    late_before = NasaImergAnalysisSourceFileCoord(
+        run="late", time=pd.Timestamp("2026-03-03T13:30")
+    )
+    late_on = NasaImergAnalysisSourceFileCoord(
+        run="late", time=pd.Timestamp("2026-03-03T14:00")
+    )
+    assert late_before.version == "V07B"
+    assert late_on.version == "V07C"
 
 
 def test_gesdisc_url_early_v07c() -> None:

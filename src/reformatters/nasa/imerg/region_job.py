@@ -31,8 +31,11 @@ from reformatters.nasa.nasa_auth import get_earthdata_session, get_pps_session
 
 log = get_logger(__name__)
 
-# Early/Late filenames carry V07C from this granule date onward, V07B before.
-_V07C_START = pd.Timestamp("2026-03-04")
+# Filenames carry V07C from this granule time onward, V07B before.
+_V07C_START: dict[ImergRun, pd.Timestamp] = {
+    "early": pd.Timestamp("2026-03-04T00:00"),
+    "late": pd.Timestamp("2026-03-03T14:00"),
+}
 
 # The PPS NRT server (jsimpson) carries a rolling window of recent granules; older
 # granules roll off to the GES DISC archive. Pick jsimpson for granules younger than
@@ -59,7 +62,7 @@ class NasaImergAnalysisSourceFileCoord(SourceFileCoord):
 
     @property
     def version(self) -> str:
-        return "V07C" if self.time >= _V07C_START else "V07B"
+        return "V07C" if self.time >= _V07C_START[self.run] else "V07B"
 
     def _source_by_age(self) -> DownloadSource:
         age = pd.Timestamp.now() - self.time
