@@ -8,6 +8,7 @@ import xarray as xr
 
 from scripts.validation.availability import (
     HEATMAP_FILENAME,
+    _heatmap_xticks,
     run_value_availability,
     write_availability_artifacts,
 )
@@ -269,3 +270,24 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
     stats = ctx.stats["percent_frozen_precipitation_surface"]
     assert stats.positions_total is None
     assert "percent_frozen_precipitation_surface" not in ctx.availability
+
+
+def test_heatmap_xticks_thins_long_archive() -> None:
+    """A ~28-year span ticks on round years thinned to a nice step (5 here), not one
+    label per year, so labels stay readable."""
+    positions = pd.date_range("1998-01-01", "2026-01-01", freq="D").to_numpy()
+    columns, labels = _heatmap_xticks(positions, n_columns=500)
+
+    years = [int(label) for label in labels]
+    assert len(labels) <= 12
+    assert all(year % 5 == 0 for year in years)
+    assert years == sorted(years)
+    assert columns == sorted(columns)
+    assert len(set(columns)) == len(columns)  # thinned, so columns don't collide
+
+
+def test_heatmap_xticks_short_archive_ticks_every_year() -> None:
+    positions = pd.date_range("2020-01-01", "2021-12-31", freq="D").to_numpy()
+    _, labels = _heatmap_xticks(positions, n_columns=500)
+
+    assert labels == ["2020", "2021"]

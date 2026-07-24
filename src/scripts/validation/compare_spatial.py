@@ -142,6 +142,37 @@ def _compute_spatial_stats(
     return data_clean, ref_clean
 
 
+def _spatial_color_range(
+    var: str,
+    data: xr.DataArray,
+    ref_data: xr.DataArray | None,
+    data_clean: np.ndarray,
+    ref_clean: np.ndarray,
+) -> tuple[float, float]:
+    """Shared (vmin, vmax) for the reference and validation maps."""
+    if ref_data is not None:
+        vmin = min(float(data.min()), float(ref_data.min()))
+        vmax = max(float(data.max()), float(ref_data.max()))
+    else:
+        vmin = float(data.min()) if data_clean.size else 0.0
+        vmax = float(data.max()) if data_clean.size else 1.0
+
+    if var == "precipitation_surface":
+        # Precip's heavy right tail lets a few extreme cells wash out all spatial detail
+        # under a raw-max scale; clip vmax to the 99th percentile, falling back to the
+        # raw max for a near-constant field to avoid a degenerate vmin == vmax range.
+        combined_clean = (
+            np.concatenate([data_clean, ref_clean])
+            if ref_data is not None
+            else data_clean
+        )
+        if combined_clean.size:
+            p99 = float(np.quantile(combined_clean, 0.99))
+            if p99 > vmin:
+                vmax = p99
+    return vmin, vmax
+
+
 def _draw_spatial_triplet(
     ax_ref: Axes,
     ax_val: Axes,
@@ -156,12 +187,7 @@ def _draw_spatial_triplet(
     ref_title: str,
 ) -> None:
     """Draw reference map, validation map, and histogram onto provided axes."""
-    if ref_data is not None:
-        vmin = min(float(data.min()), float(ref_data.min()))
-        vmax = max(float(data.max()), float(ref_data.max()))
-    else:
-        vmin = float(data.min()) if data_clean.size else 0.0
-        vmax = float(data.max()) if data_clean.size else 1.0
+    vmin, vmax = _spatial_color_range(var, data, ref_data, data_clean, ref_clean)
 
     # Reference map
     if ref_data is not None:
