@@ -35,15 +35,6 @@ The main functions which have (effectively) interchangeable interfaces are
 """
 
 
-def http_status_code(e: Exception) -> int | None:
-    """HTTP status code from an httpx or requests error response, else None."""
-    if isinstance(e, httpx.HTTPStatusError):
-        return e.response.status_code
-    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
-        return e.response.status_code
-    return None
-
-
 def download_to_disk(
     store: ObjectStore,
     path: str,
@@ -367,3 +358,12 @@ def httpx_download_to_disk(
         raise
 
     return local_path
+
+
+def http_status_code(e: Exception) -> int | None:
+    """HTTP status code from an httpx or requests error response, else None."""
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code
+    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+        return e.response.status_code
+    return None
