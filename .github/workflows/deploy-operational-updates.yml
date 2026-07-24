@@ -80,5 +80,4 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy
-        env:
         run: uv run main deploy --docker-image ${{ env.IMAGE_TAG }}

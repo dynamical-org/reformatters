@@ -132,7 +132,6 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy staging
-        env:
         run: >
           uv run main deploy-staging
           ${{ steps.parse.outputs.dataset_id }}
