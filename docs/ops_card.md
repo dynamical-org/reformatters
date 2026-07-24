@@ -4,6 +4,12 @@ _Report issues to feedback@dynamical.org._
 
 For each dataset there are two workflows: `{dataset-id}-update` runs first, followed by `{dataset-id}-validate`.
 
+## Sentry monitoring
+_Requires sentry organization invitation._
+- [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.
+- [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
+- [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by job name
+
 ## Better Stack monitoring
 _Requires Better Stack (dynamical.org team) invitation._
 - **Logs** — the `reformatters` source (Live tail). Filter by the `cron_job_name` / `job_name` / `pod_name` / `env` fields.

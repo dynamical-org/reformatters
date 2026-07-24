@@ -93,7 +93,7 @@ This deletes:
 
 Deleting heartbeats requires `BETTERSTACK_API_KEY_RW` in your environment (a read/write Better Stack Uptime API token); it is also required by `deploy-staging`. Cronjobs and the branch are deleted first, so a missing key can't leave them orphaned.
 
-The dataset store is **not** deleted. Clean it up manually when ready.
+The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
 
 ## Constraints
 

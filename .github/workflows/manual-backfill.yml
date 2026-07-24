@@ -215,5 +215,5 @@ jobs:
           echo ""
           echo "- [Manual: Get Jobs](https://github.com/${{ github.repository }}/actions/workflows/manual-get-jobs.yml)"
           echo "- [Manual: Get Pods](https://github.com/${{ github.repository }}/actions/workflows/manual-get-pods.yml)"
-          echo "- [Better Stack logs](https://telemetry.betterstack.com/team/552704/tail)"
+          echo "- [Sentry logs](https://dynamical.sentry.io/explore/logs/)"
         } >> $GITHUB_STEP_SUMMARY

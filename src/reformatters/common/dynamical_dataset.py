@@ -882,8 +882,8 @@ class RunMonitor(Protocol):
 
     The application registers monitors (see `register_run_monitor`); `DynamicalDataset._monitor`
     enters every registered one around each update/validate run. This keeps
-    DynamicalDataset agnostic of any specific monitoring service (e.g. Better Stack)
-    — a different deployment registers whatever it uses, or nothing.
+    DynamicalDataset agnostic of any specific monitoring service (Better Stack,
+    Sentry, ...) — a different deployment registers whatever it uses, or nothing.
     """
 
     def __call__(
