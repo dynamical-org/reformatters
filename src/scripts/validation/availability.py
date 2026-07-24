@@ -131,17 +131,20 @@ def _downsample_columns(grid: np.ndarray, max_columns: int) -> np.ndarray:
 def _heatmap_xticks(
     positions: np.ndarray, n_columns: int
 ) -> tuple[list[int], list[str]]:
-    """Ticks on the heatmap's downsampled column axis: one per calendar-year start
-    (labeled with the year) when the archive spans multiple years, else 8 evenly spaced
-    date ticks."""
+    """Ticks on the heatmap's downsampled column axis: round-year starts (labeled with
+    the year) when the archive spans multiple years, thinned to a "nice" year step from
+    {1, 2, 5, 10, 20} so at most ~12 labels are drawn; else 8 evenly spaced date ticks."""
     positions_dt = pd.DatetimeIndex(positions)
     years = positions_dt.year.to_numpy()
     span = max(1, len(positions) - 1)
     if years[-1] > years[0]:
-        year_range = range(int(years[0]), int(years[-1]) + 1)
-        position_idx = np.array([np.searchsorted(years, year) for year in year_range])
+        first_year, last_year = int(years[0]), int(years[-1])
+        n_years = last_year - first_year + 1
+        step = next((s for s in (1, 2, 5, 10, 20) if n_years / s <= 12), 20)
+        tick_years = [y for y in range(first_year, last_year + 1) if y % step == 0]
+        position_idx = np.array([np.searchsorted(years, year) for year in tick_years])
         columns = np.round(position_idx / span * (n_columns - 1)).astype(int)
-        return columns.tolist(), [str(year) for year in year_range]
+        return columns.tolist(), [str(year) for year in tick_years]
     columns = np.unique(np.linspace(0, n_columns - 1, 8).astype(int))
     column_to_position = np.linspace(0, len(positions) - 1, n_columns).astype(int)
     labels = [str(p)[:10] for p in positions_dt[column_to_position[columns]]]
