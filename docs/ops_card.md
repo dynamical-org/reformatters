@@ -8,14 +8,9 @@ For each dataset there are two workflows: `{dataset-id}-update` runs first, foll
 _Requires sentry organization invitation._
 - [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.
 - [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
-- [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by job name
+- [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by `cron_job_name` / `job_name` / `pod_name` attributes.
 
-## Better Stack monitoring
-_Requires Better Stack (dynamical.org team) invitation._
-- **Logs** — the `reformatters` source (Live tail). Filter by the `cron_job_name` / `job_name` / `pod_name` / `env` fields.
-- **Errors** — the `reformatters` errors application (grouped exceptions).
-- **Heartbeats** — one `reformatters <dataset> <update|validate> <start|complete>` uptime monitor per cron. A missing start ping means a run didn't fire; a missing complete ping (or a `/fail`) means a run didn't finish. Period is derived from the cron schedule and grace from its `pod_active_deadline`, so heartbeats mirror the cron config automatically.
-  - Heartbeats are provisioned at deploy time; the deploy requires the `BETTERSTACK_API_KEY_RW` secret. Redeploy to reconcile them after changing a cron's schedule or deadline.
+Alerts route to Slack `#ops-reformatters` via each project's alert rule.
 
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._

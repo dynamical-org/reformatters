@@ -14,8 +14,8 @@ import typer
 from sentry_sdk.integrations.typer import TyperIntegration
 from sentry_sdk.types import Hint, Log
 
-from reformatters.common import betterstack, monitoring
 from reformatters.common import deploy as deploy_module
+from reformatters.common import monitoring
 from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset, register_run_monitor
 from reformatters.common.initialize_new_integration import initialize_new_integration
@@ -232,10 +232,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
 ]
 
-# Register the monitors that wrap each operational cron run. Sentry first so its
-# check-in nests outside the Better Stack heartbeat, matching prior ordering.
 register_run_monitor(monitoring.monitor_cron)
-register_run_monitor(betterstack.monitor_cron_run)
 
 if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
