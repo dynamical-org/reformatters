@@ -12,6 +12,7 @@ from typing import Any, ClassVar, Generic, cast
 import httpx
 import numpy as np
 import pandas as pd
+import requests
 import xarray as xr
 from zarr.abc.store import Store
 
@@ -36,6 +37,15 @@ from reformatters.common.types import ArrayND
 from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
+
+
+def _http_status_code(e: Exception) -> int | None:
+    """HTTP status code from an httpx or requests error response, else None."""
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code
+    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+        return e.response.status_code
+    return None
 
 
 class MaterializedRegionJob(
@@ -311,9 +321,7 @@ class MaterializedRegionJob(
                 append_dim_coord = coord.append_dim_coord
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 is_not_found = isinstance(e, FileNotFoundError) or (
-                    isinstance(e, httpx.HTTPStatusError)
-                    and e.response.status_code
-                    in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                    _http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
                 )
                 if (
                     is_not_found
