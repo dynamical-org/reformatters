@@ -9,7 +9,6 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
 
-import httpx
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -17,6 +16,7 @@ from zarr.abc.store import Store
 
 from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.download import http_status_code
 from reformatters.common.iterating import split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
@@ -311,9 +311,7 @@ class MaterializedRegionJob(
                 append_dim_coord = coord.append_dim_coord
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 is_not_found = isinstance(e, FileNotFoundError) or (
-                    isinstance(e, httpx.HTTPStatusError)
-                    and e.response.status_code
-                    in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                    http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
                 )
                 if (
                     is_not_found

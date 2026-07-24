@@ -11,6 +11,7 @@ import httpx
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import xarray as xr
 
 from reformatters.common import template_utils, validation
@@ -1144,6 +1145,14 @@ def _make_http_status_error(status_code: int) -> httpx.HTTPStatusError:
     )
 
 
+def _make_requests_http_error(status_code: int) -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = status_code
+    return requests.exceptions.HTTPError(
+        f"{status_code} Client Error", response=response
+    )
+
+
 class TestDownloadErrorLogging:
     """Test that download errors for recent files use quiet logging for expected errors."""
 
@@ -1239,6 +1248,42 @@ class TestDownloadErrorLogging:
         job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
         levels = self._download_and_get_log_levels(
             job, FileNotFoundError("missing"), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_requests_404_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_requests_http_error(404), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_requests_403_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_requests_http_error(403), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_requests_500_recent_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_requests_http_error(500), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_requests_404_old_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
+        levels = self._download_and_get_log_levels(
+            job, _make_requests_http_error(404), monkeypatch, caplog
         )
         assert levels == [logging.ERROR]
 
