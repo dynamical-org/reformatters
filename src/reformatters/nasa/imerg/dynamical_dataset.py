@@ -29,10 +29,8 @@ class NasaImergAnalysisMaterializedDataset(
     max_expected_delay: ClassVar[timedelta]
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Suspended until the store is backfilled; a follow-up PR enables them.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            suspend=True,
             schedule=self.update_schedule,
             pod_active_deadline=timedelta(minutes=60),
             image=image_tag,
@@ -50,7 +48,6 @@ class NasaImergAnalysisMaterializedDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            suspend=True,
             schedule=self.validate_schedule,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
