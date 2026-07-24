@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Literal, assert_never
+from typing import ClassVar, Literal, assert_never
 from urllib.parse import urlparse
 
 import numpy as np
@@ -121,6 +121,12 @@ class NasaImergAnalysisMaterializedRegionJob(
 ):
     run: ImergRun
 
+    # How long after its nominal time a granule typically takes to fully publish
+    # (all grids populated, not just the file existing). Operational updates stay
+    # behind this so they don't repeatedly request a granule whose fields (e.g.
+    # precipitationQualityIndex) haven't landed yet. See src/scripts/imerg_latency_probe.py.
+    publish_latency: ClassVar[pd.Timedelta]
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -200,7 +206,7 @@ class NasaImergAnalysisMaterializedRegionJob(
     ]:
         existing_ds = xr.open_zarr(primary_store)
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = pd.Timestamp.now() - cls.publish_latency
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

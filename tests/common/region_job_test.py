@@ -1206,6 +1206,15 @@ class TestDownloadErrorLogging:
         )
         assert levels == [logging.INFO]
 
+    def test_httpx_302_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(302), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
     def test_httpx_500_recent_logs_exception(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:

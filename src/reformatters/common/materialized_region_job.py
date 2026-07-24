@@ -312,8 +312,13 @@ class MaterializedRegionJob(
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
                 is_not_found = isinstance(e, FileNotFoundError) or (
                     isinstance(e, httpx.HTTPStatusError)
-                    and e.response.status_code
-                    in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                    and (
+                        e.response.status_code
+                        in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+                        # Some sources (e.g. NOMADS) redirect instead of 404ing when
+                        # a file isn't published yet.
+                        or e.response.is_redirect
+                    )
                 )
                 if (
                     is_not_found

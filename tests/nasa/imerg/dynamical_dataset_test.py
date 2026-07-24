@@ -8,6 +8,9 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
+from reformatters.nasa.imerg.analysis_early.region_job import (
+    NasaImergAnalysisEarlyRegionJob,
+)
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.nasa.imerg.dynamical_dataset import (
     NasaImergAnalysisMaterializedDataset,
@@ -105,8 +108,11 @@ def test_backfill_local_and_operational_update(
     assert south["precipitation_quality_index_surface"].values[0] < 100
 
     # Operational update adds the 01:00 granule through the jsimpson (PPS) path.
+    # `now` is offset ahead by the run's publish latency buffer so the granule
+    # arriving at 01:00 falls inside the requested append_dim_end.
     update_end = pd.Timestamp("1998-01-01T01:30")
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **k: update_end))
+    mocked_now = update_end + NasaImergAnalysisEarlyRegionJob.publish_latency
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **k: mocked_now))
     dataset.update("test-update")
     updated = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     assert_array_equal(
