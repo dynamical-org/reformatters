@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 import pytest
+import requests
 import xarray as xr
 
 from reformatters.common.pydantic import replace
@@ -123,6 +124,30 @@ def _job() -> NasaImergAnalysisEarlyRegionJob:
         region=slice(0, 1),
         reformat_job_name="test",
     )
+
+
+def test_download_file_connection_reset_raises_file_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # jsimpson resets the connection for not-yet-published granules; the base job
+    # treats a missing recent granule as expected, so a persistent connection
+    # failure must surface as FileNotFoundError rather than ConnectionError.
+    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _seconds: None)
+    session = MagicMock()
+    session.get.side_effect = requests.ConnectionError("Connection reset by peer")
+    monkeypatch.setattr(
+        "reformatters.nasa.imerg.region_job.get_pps_session", lambda: session
+    )
+    monkeypatch.setattr(
+        "reformatters.nasa.imerg.region_job.get_earthdata_session", lambda: session
+    )
+
+    job = _job()
+    coord = NasaImergAnalysisSourceFileCoord(
+        run="early", time=pd.Timestamp.now().floor("30min") - pd.Timedelta(hours=6)
+    )
+    with pytest.raises(FileNotFoundError):
+        job.download_file(coord)
 
 
 def test_read_data_masks_exact_sentinel_and_scales(

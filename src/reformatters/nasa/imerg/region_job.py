@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 import numpy as np
 import pandas as pd
 import rasterio
+import requests
 import xarray as xr
 from zarr.abc.store import Store
 
@@ -157,7 +158,15 @@ class NasaImergAnalysisMaterializedRegionJob(
                 f"No IMERG granule found for {coord.run} {coord.time}"
             )
 
-        return retry(_download, max_attempts=6)
+        try:
+            return retry(_download, max_attempts=6)
+        except requests.ConnectionError as e:
+            # jsimpson resets the connection for a not-yet-published granule
+            # instead of returning 404. Convert to a missing-file error so a
+            # persistent connection failure is handled like an absent granule.
+            raise FileNotFoundError(
+                f"Connection failed for IMERG granule {coord.run} {coord.time}"
+            ) from e
 
     def read_data(
         self,
