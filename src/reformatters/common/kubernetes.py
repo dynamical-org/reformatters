@@ -113,24 +113,6 @@ class Job(pydantic.BaseModel):
                                         },
                                     },
                                     {
-                                        "name": "BETTERSTACK_SOURCE_TOKEN",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "key": "BETTERSTACK_SOURCE_TOKEN",
-                                                "name": "betterstack",
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "name": "BETTERSTACK_INGESTING_HOST",
-                                        "valueFrom": {
-                                            "secretKeyRef": {
-                                                "key": "BETTERSTACK_INGESTING_HOST",
-                                                "name": "betterstack",
-                                            }
-                                        },
-                                    },
-                                    {
                                         "name": "JOB_NAME",
                                         "valueFrom": {
                                             "fieldRef": {
