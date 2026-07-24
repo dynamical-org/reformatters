@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import httpx
 import numpy as np
 import obstore
+import requests
 
 from reformatters.common.logging import get_logger
 
@@ -32,6 +33,15 @@ The main functions which have (effectively) interchangeable interfaces are
 `http_download_to_disk` which uses obstore and
 `httpx_download_to_disk` which uses httpx and supports redirects and cookies.
 """
+
+
+def http_status_code(e: Exception) -> int | None:
+    """HTTP status code from an httpx or requests error response, else None."""
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code
+    if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
+        return e.response.status_code
+    return None
 
 
 def download_to_disk(

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 import httpx
 import obstore.store
 import pytest
+import requests
 
 from reformatters.common import download as download_module
 from reformatters.common.download import (
@@ -14,11 +15,44 @@ from reformatters.common.download import (
     download_to_disk,
     get_local_path,
     http_download_to_disk,
+    http_status_code,
     http_store,
     httpx_download_to_disk,
     s3_download_to_disk,
     s3_store,
 )
+
+
+def _httpx_error(status_code: int) -> httpx.HTTPStatusError:
+    return httpx.HTTPStatusError(
+        message=f"Client error '{status_code}'",
+        request=httpx.Request("GET", "https://example.com/file"),
+        response=httpx.Response(status_code),
+    )
+
+
+def _requests_error(status_code: int) -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = status_code
+    return requests.exceptions.HTTPError(
+        f"{status_code} Client Error", response=response
+    )
+
+
+def test_http_status_code_httpx() -> None:
+    assert http_status_code(_httpx_error(404)) == 404
+
+
+def test_http_status_code_requests() -> None:
+    assert http_status_code(_requests_error(403)) == 403
+
+
+def test_http_status_code_requests_without_response() -> None:
+    assert http_status_code(requests.exceptions.HTTPError("no response")) is None
+
+
+def test_http_status_code_other_exception() -> None:
+    assert http_status_code(FileNotFoundError("missing")) is None
 
 
 def test_get_local_path_basic() -> None:
