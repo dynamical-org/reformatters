@@ -12,6 +12,7 @@ from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.nasa.imerg.dynamical_dataset import (
     NasaImergAnalysisMaterializedDataset,
 )
+from reformatters.nasa.imerg.region_job import _HDF5_MAGIC
 from reformatters.nasa.imerg.template_config import (
     GRID_LAT_SIZE,
     GRID_LON_SIZE,
@@ -50,7 +51,8 @@ def _patch_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_response = Mock()
     mock_response.status_code = 200
     mock_response.raise_for_status = lambda: None
-    mock_response.iter_content = lambda chunk_size: [b"fake_hdf5"]
+    # download_file checks the leading bytes are HDF5 before accepting the body.
+    mock_response.iter_content = lambda chunk_size: [_HDF5_MAGIC + b"fake_hdf5"]
     mock_session = Mock()
     mock_session.get.return_value = mock_response
 
