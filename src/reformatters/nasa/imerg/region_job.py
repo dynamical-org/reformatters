@@ -32,6 +32,9 @@ from reformatters.nasa.nasa_auth import get_earthdata_session, get_pps_session
 
 log = get_logger(__name__)
 
+# Leading bytes of every HDF5 file; used to reject non-granule response bodies.
+_HDF5_MAGIC = b"\x89HDF\r\n\x1a\n"
+
 # Filenames carry V07C from this granule time onward, V07B before.
 _V07C_START: dict[ImergRun, pd.Timestamp] = {
     "early": pd.Timestamp("2026-03-04T00:00"),
@@ -140,33 +143,40 @@ class NasaImergAnalysisMaterializedRegionJob(
                     if source == "jsimpson"
                     else get_earthdata_session()
                 )
-                response = session.get(
-                    url, timeout=30, stream=True, allow_redirects=True
-                )
-                if response.status_code == 404:
-                    log.warning(f"File not found at {url}, trying next candidate")
+                try:
+                    response = session.get(
+                        url, timeout=30, stream=True, allow_redirects=True
+                    )
+                    if response.status_code == 404:
+                        log.warning(f"File not found at {url}, trying next candidate")
+                        continue
+                    response.raise_for_status()
+                    local_path = get_local_path(
+                        self.template_ds.attrs["dataset_id"], path=urlparse(url).path
+                    )
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(local_path, "wb") as f:
+                        f.writelines(response.iter_content(chunk_size=8192))
+                except requests.ConnectionError:
+                    # jsimpson resets the connection for a not-yet-published
+                    # granule rather than returning 404; fall through to the
+                    # next candidate (e.g. the GES DISC archive).
+                    log.warning(f"Connection failed for {url}, trying next candidate")
                     continue
-                response.raise_for_status()
-                local_path = get_local_path(
-                    self.template_ds.attrs["dataset_id"], path=urlparse(url).path
-                )
-                local_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(local_path, "wb") as f:
-                    f.writelines(response.iter_content(chunk_size=8192))
+                with open(local_path, "rb") as f:
+                    is_hdf5 = f.read(len(_HDF5_MAGIC)) == _HDF5_MAGIC
+                if not is_hdf5:
+                    # GES DISC serves an HTML/JSON error body (not a 404) for a
+                    # not-yet-published granule; skip it rather than handing a
+                    # non-HDF5 file to the reader.
+                    log.warning(f"Non-HDF5 body from {url}, trying next candidate")
+                    continue
                 return local_path
             raise FileNotFoundError(
                 f"No IMERG granule found for {coord.run} {coord.time}"
             )
 
-        try:
-            return retry(_download, max_attempts=6)
-        except requests.ConnectionError as e:
-            # jsimpson resets the connection for a not-yet-published granule
-            # instead of returning 404. Convert to a missing-file error so a
-            # persistent connection failure is handled like an absent granule.
-            raise FileNotFoundError(
-                f"Connection failed for IMERG granule {coord.run} {coord.time}"
-            ) from e
+        return retry(_download, max_attempts=6)
 
     def read_data(
         self,

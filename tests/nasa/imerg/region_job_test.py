@@ -18,6 +18,7 @@ from reformatters.nasa.imerg.analysis_late.region_job import (
     NasaImergAnalysisLateRegionJob,
 )
 from reformatters.nasa.imerg.region_job import (
+    _HDF5_MAGIC,
     _JSIMPSON_MAX_AGE,
     NasaImergAnalysisSourceFileCoord,
 )
@@ -118,7 +119,9 @@ def test_candidate_urls_old_prefers_gesdisc() -> None:
 def _job() -> NasaImergAnalysisEarlyRegionJob:
     return NasaImergAnalysisEarlyRegionJob(
         tmp_store=Path("unused.zarr"),
-        template_ds=xr.DataTree(),
+        template_ds=xr.DataTree(
+            xr.Dataset(attrs={"dataset_id": "nasa-imerg-analysis-early"})
+        ),
         data_vars=list(NasaImergAnalysisEarlyTemplateConfig().data_vars),
         append_dim="time",
         region=slice(0, 1),
@@ -126,28 +129,79 @@ def _job() -> NasaImergAnalysisEarlyRegionJob:
     )
 
 
-def test_download_file_connection_reset_raises_file_not_found(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # jsimpson resets the connection for not-yet-published granules; the base job
-    # treats a missing recent granule as expected, so a persistent connection
-    # failure must surface as FileNotFoundError rather than ConnectionError.
-    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _seconds: None)
-    session = MagicMock()
-    session.get.side_effect = requests.ConnectionError("Connection reset by peer")
-    monkeypatch.setattr(
-        "reformatters.nasa.imerg.region_job.get_pps_session", lambda: session
-    )
-    monkeypatch.setattr(
-        "reformatters.nasa.imerg.region_job.get_earthdata_session", lambda: session
-    )
+def _fake_response(body: bytes) -> MagicMock:
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status.return_value = None
+    response.iter_content.return_value = [body]
+    return response
 
-    job = _job()
-    coord = NasaImergAnalysisSourceFileCoord(
+
+def _recent_coord() -> NasaImergAnalysisSourceFileCoord:
+    return NasaImergAnalysisSourceFileCoord(
         run="early", time=pd.Timestamp.now().floor("30min") - pd.Timedelta(hours=6)
     )
+
+
+def _patch_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    pps: MagicMock,
+    earthdata: MagicMock,
+) -> None:
+    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("reformatters.common.download.DOWNLOAD_DIR", tmp_path)
+    monkeypatch.setattr(
+        "reformatters.nasa.imerg.region_job.get_pps_session", lambda: pps
+    )
+    monkeypatch.setattr(
+        "reformatters.nasa.imerg.region_job.get_earthdata_session", lambda: earthdata
+    )
+
+
+def test_download_file_falls_through_connection_error_to_archive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # jsimpson resets the connection for a not-yet-published granule; the GES DISC
+    # archive candidate must still be tried rather than the whole attempt aborting.
+    jsimpson = MagicMock()
+    jsimpson.get.side_effect = requests.ConnectionError("Connection reset by peer")
+    gesdisc = MagicMock()
+    gesdisc.get.return_value = _fake_response(_HDF5_MAGIC + b"granule-bytes")
+    _patch_sessions(monkeypatch, tmp_path, pps=jsimpson, earthdata=gesdisc)
+
+    path = _job().download_file(_recent_coord())
+
+    assert path.read_bytes().startswith(_HDF5_MAGIC)
+    assert jsimpson.get.called
+    assert gesdisc.get.called
+
+
+def test_download_file_rejects_non_hdf5_body(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # GES DISC returns an HTML/JSON error body (not a 404) for a not-yet-published
+    # granule; a non-HDF5 body must never be handed to the reader as a granule.
+    session = MagicMock()
+    session.get.return_value = _fake_response(b"<html>not found</html>")
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+
     with pytest.raises(FileNotFoundError):
-        job.download_file(coord)
+        _job().download_file(_recent_coord())
+
+
+def test_download_file_all_sources_connection_error_raises_file_not_found(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # When every candidate fails to connect, the exhausted loop reports a missing
+    # file, which the base job's recency gate treats as expected for recent granules.
+    session = MagicMock()
+    session.get.side_effect = requests.ConnectionError("Connection reset by peer")
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+
+    with pytest.raises(FileNotFoundError):
+        _job().download_file(_recent_coord())
 
 
 def test_read_data_masks_exact_sentinel_and_scales(
