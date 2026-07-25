@@ -232,6 +232,7 @@ def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
             window_reset_frequency=reset_freq,
             deaccumulation_invalid_below_threshold_rate=-50.0,
             deaccumulation_expected_clamp_fraction=0.25,
+            deaccumulation_expected_invalid_fraction=1e-6,
             deaccumulation_type="running_mean",
         ),
     )
@@ -253,6 +254,7 @@ def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
         accumulation_type="running_mean",
         invalid_below_threshold_rate=-50.0,
         expected_clamp_fraction=0.25,
+        expected_invalid_fraction=1e-6,
     )
 
 

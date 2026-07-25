@@ -182,6 +182,7 @@ class DwdIconEuForecast5DayRegionJob(
             optional_kwargs: dict[str, Any] = {
                 "invalid_below_threshold_rate": attrs.deaccumulation_invalid_below_threshold_rate,
                 "expected_clamp_fraction": attrs.deaccumulation_expected_clamp_fraction,
+                "expected_invalid_fraction": attrs.deaccumulation_expected_invalid_fraction,
             }
             optional_kwargs = {
                 k: v for k, v in optional_kwargs.items() if v is not None
