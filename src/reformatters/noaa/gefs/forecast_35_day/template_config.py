@@ -54,11 +54,11 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
             attribution="NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
             spatial_domain="Global",
-            spatial_resolution="0-240 hours: 0.25 degrees (~20km), 243-840 hours: 0.5 degrees (~40km)",
+            spatial_resolution="0-240 hours: 0.25 degrees (~20km), 246-840 hours: 0.5 degrees (~40km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution="Forecasts initialized every 24 hours",
             forecast_domain="Forecast lead time 0-840 hours (0-35 days) ahead",
-            forecast_resolution="Forecast step 0-240 hours: 3 hourly, 243-840 hours: 6 hourly",
+            forecast_resolution="Forecast step 0-240 hours: 3 hourly, 246-840 hours: 6 hourly",
         )
 
     def append_dim_coordinate_chunk_size(self) -> int:
