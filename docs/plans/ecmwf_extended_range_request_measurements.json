@@ -1,20 +1,96 @@
 {
-  "generated_at": "2026-07-28T00:00:00Z",
+  "generated_at": "2026-07-28T18:05:00Z",
   "environment": {
-    "authenticated_ecds_access": false,
-    "reason": "Neither ECDS_API_ENDPOINT nor ECDS_API_KEY was exposed to the process, and no CDS/ECDS credential file was available. No request was submitted."
+    "authenticated_ecds_access": true,
+    "accepted_s2s_terms": true,
+    "credential_source": ".cdsapirc"
   },
-  "observations": [],
+  "observations": [
+    {
+      "id": "recent_smoke_2m_temperature",
+      "request_id": "1699ae8a-eb95-4f03-afc0-1339a72fcf50",
+      "status": "failed",
+      "variable": "2m_temperature",
+      "members": 1,
+      "steps": [
+        24,
+        48,
+        72
+      ],
+      "error_category": "ambiguous_backend_parameter_mapping"
+    },
+    {
+      "id": "recent_smoke_wind_u_10m",
+      "request_id": "4f5026a6-90f3-4469-9fb4-4cfef9f44dab",
+      "status": "downloaded",
+      "variable": "10_m_u_component_of_wind",
+      "members": 1,
+      "steps": [
+        24,
+        48,
+        72
+      ],
+      "queue_seconds": 12.824365,
+      "server_processing_seconds": 4.511008,
+      "download_seconds": 0.826459,
+      "downloaded_bytes": 174786,
+      "grib_messages": 3,
+      "http_range_resume": true,
+      "partial_bytes_before_resume": 87393
+    }
+  ],
   "planned_matrix": [
-    {"id": "recent_smoke", "status": "blocked_credentials", "variables": 1, "members": 1, "steps": [24, 48, 72]},
-    {"id": "recent_surface_all_members", "status": "blocked_credentials"},
-    {"id": "recent_pressure_all_members", "status": "blocked_credentials", "levels_hpa": [500, 700, 850]},
-    {"id": "recent_complete_sharded", "status": "blocked_credentials"},
-    {"id": "archive_start_complete_sharded", "status": "blocked_credentials"},
-    {"id": "completed_request_rerun", "status": "blocked_credentials"},
-    {"id": "interrupted_download_resume", "status": "simulated_only"},
-    {"id": "intermediate_smoke", "status": "blocked_credentials"},
-    {"id": "second_recent_smoke", "status": "blocked_credentials"},
-    {"id": "transient_poll_failure", "status": "simulated_only"}
+    {
+      "id": "recent_smoke",
+      "status": "completed",
+      "variables": 1,
+      "members": 1,
+      "steps": [
+        24,
+        48,
+        72
+      ]
+    },
+    {
+      "id": "recent_surface_all_members",
+      "status": "pending"
+    },
+    {
+      "id": "recent_pressure_all_members",
+      "status": "pending",
+      "levels_hpa": [
+        500,
+        700,
+        850
+      ]
+    },
+    {
+      "id": "recent_complete_sharded",
+      "status": "pending"
+    },
+    {
+      "id": "archive_start_complete_sharded",
+      "status": "pending"
+    },
+    {
+      "id": "completed_request_rerun",
+      "status": "pending"
+    },
+    {
+      "id": "interrupted_download_resume",
+      "status": "completed"
+    },
+    {
+      "id": "intermediate_smoke",
+      "status": "pending"
+    },
+    {
+      "id": "second_recent_smoke",
+      "status": "pending"
+    },
+    {
+      "id": "transient_poll_failure",
+      "status": "simulated_only"
+    }
   ]
 }

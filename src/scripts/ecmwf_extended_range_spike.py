@@ -17,7 +17,7 @@ log = get_logger(__name__)
 DEFAULT_API_URL = (
     "https://ecds.ecmwf.int/api/retrieve/v1/processes/s2s-forecasts/execution"
 )
-TERMINAL_FAILURES = {"failed", "dismissed", "cancelled"}
+TERMINAL_FAILURES = {"failed", "rejected", "dismissed", "cancelled"}
 
 
 def utc_now() -> str:
@@ -75,19 +75,32 @@ class EcdsRequest:
         session: requests.Session | None = None,
     ) -> None:
         self.state_store = state_store
+        cdsapi_config = _read_cdsapi_config()
         self.api_url = _execution_url(
-            api_url or os.environ.get("ECDS_API_ENDPOINT", DEFAULT_API_URL)
+            api_url
+            or os.environ.get("ECDS_API_ENDPOINT")
+            or os.environ.get("CDSAPI_URL")
+            or cdsapi_config.get("url")
+            or DEFAULT_API_URL
         )
         self.session = session or requests.Session()
-        api_key = os.environ.get("ECDS_API_KEY")
+        api_key = (
+            os.environ.get("ECDS_API_KEY")
+            or os.environ.get("CDSAPI_KEY")
+            or cdsapi_config.get("key")
+        )
         if api_key and ":" in api_key:
-            self.session.auth = tuple(api_key.split(":", maxsplit=1))
+            username, key = api_key.split(":", maxsplit=1)
+            self.session.auth = (username, key)
         elif api_key:
-            self.session.headers["Authorization"] = f"Bearer {api_key}"
+            self.session.headers["PRIVATE-TOKEN"] = api_key
+        self.credentials_configured = bool(
+            api_key or self.session.auth or self.session.headers.get("PRIVATE-TOKEN")
+        )
 
     def submit(self, payload: dict[str, Any]) -> RequestMeasurement:
-        assert os.environ.get("ECDS_API_KEY") or self.session.auth, (
-            "Set ECDS_API_KEY before submitting a request"
+        assert self.credentials_configured, (
+            "Configure ECDS credentials in .cdsapirc or the environment"
         )
         response = self.session.post(self.api_url, json={"inputs": payload}, timeout=60)
         response.raise_for_status()
@@ -103,8 +116,13 @@ class EcdsRequest:
             submitted_at=utc_now(),
             status_url=status_url,
             expected_members=[int(value) for value in payload.get("number", [])],
-            expected_steps=[int(value) for value in payload.get("step", [])],
-            expected_variables=_as_strings(payload.get("param", [])),
+            expected_steps=[
+                int(value)
+                for value in payload.get("leadtime_hour", payload.get("step", []))
+            ],
+            expected_variables=_as_strings(
+                payload.get("variable", payload.get("param", []))
+            ),
         )
         self.state_store.write(measurement)
         return measurement
@@ -117,11 +135,34 @@ class EcdsRequest:
         measurement.status = str(
             response_body.get("status") or response_body.get("state")
         ).lower()
-        if measurement.status in TERMINAL_FAILURES:
-            measurement.errors.append(json.dumps(response_body, sort_keys=True))
         result_url = _result_url(response_body)
+        results_url = _related_url(response_body, "results")
+        if measurement.status in TERMINAL_FAILURES:
+            error_body = response_body
+            if results_url is not None:
+                error_body = self.session.get(results_url, timeout=60).json()
+            measurement.errors.append(json.dumps(error_body, sort_keys=True))
+        elif (
+            measurement.status == "successful"
+            and result_url is None
+            and results_url is not None
+        ):
+            results_response = self.session.get(results_url, timeout=60)
+            results_response.raise_for_status()
+            result_url = _result_url(results_response.json())
+        measurement.queue_seconds = _duration_seconds(
+            response_body.get("created"), response_body.get("started")
+        )
+        measurement.server_processing_seconds = _duration_seconds(
+            response_body.get("started"), response_body.get("finished")
+        )
         if result_url is not None:
-            measurement.completed_at = utc_now()
+            finished_at = response_body.get("finished")
+            measurement.completed_at = (
+                _utc_datetime(finished_at).isoformat()
+                if isinstance(finished_at, str)
+                else utc_now()
+            )
             measurement.result_url = result_url
         self.state_store.write(measurement)
         return measurement, result_url
@@ -188,6 +229,18 @@ def _as_strings(value: object) -> list[str]:
     return []
 
 
+def _read_cdsapi_config() -> dict[str, str]:
+    config_path = Path(os.environ.get("CDSAPI_RC", Path.home() / ".cdsapirc"))
+    if not config_path.exists():
+        return {}
+    config: dict[str, str] = {}
+    for line in config_path.read_text().splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip() in {"url", "key"}:
+            config[key.strip()] = value.strip()
+    return config
+
+
 def _execution_url(api_endpoint: str) -> str:
     if api_endpoint.rstrip("/").endswith("/execution"):
         return api_endpoint.rstrip("/")
@@ -199,10 +252,38 @@ def _result_url(response_body: Mapping[str, Any]) -> str | None:
         value = response_body.get(key)
         if isinstance(value, str):
             return value
-    result = response_body.get("result")
-    if isinstance(result, Mapping):
-        return _result_url(result)
+    for key in ("result", "asset", "value"):
+        nested = response_body.get(key)
+        if isinstance(nested, Mapping):
+            result_url = _result_url(nested)
+            if result_url is not None:
+                return result_url
     return None
+
+
+def _related_url(response_body: Mapping[str, Any], relation: str) -> str | None:
+    links = response_body.get("links")
+    if not isinstance(links, Sequence):
+        return None
+    for link in links:
+        if isinstance(link, Mapping) and link.get("rel") == relation:
+            href = link.get("href")
+            if isinstance(href, str):
+                return href
+    return None
+
+
+def _duration_seconds(start: object, end: object) -> float | None:
+    if not isinstance(start, str) or not isinstance(end, str):
+        return None
+    return (_utc_datetime(end) - _utc_datetime(start)).total_seconds()
+
+
+def _utc_datetime(value: str) -> datetime:
+    timestamp = datetime.fromisoformat(value)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return timestamp.astimezone(UTC)
 
 
 def _count_grib_messages(path: Path) -> int:
@@ -219,7 +300,7 @@ def _validate_grib_container(path: Path) -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--state", type=Path, required=True)
-    parser.add_argument("--api-url", default=DEFAULT_API_URL)
+    parser.add_argument("--api-url")
     subparsers = parser.add_subparsers(dest="command", required=True)
     submit = subparsers.add_parser("submit")
     submit.add_argument("--payload", type=Path, required=True)
