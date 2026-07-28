@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-**Recommendation: CONDITIONAL GO, with no fixed-price production commitment until the authenticated acceptance gate below passes.** The repository has most of the expensive transformation machinery, and a durable asynchronous retrieval prototype demonstrates the required local control flow under simulated responses. This run could not answer the primary source question, however: the environment had no CDS/ECDS credential, so it submitted no live request and downloaded no GRIB. Consequently there are **no measured bytes, queue times, success rate, transformation costs, or end-to-end development Zarr from ECDS**. Documentation is not a substitute for those decision criteria.
+**Recommendation: CONDITIONAL GO, with no fixed-price production commitment until the full acceptance gate below passes.** Authenticated submission, one-shot polling, persisted result discovery, GRIB download, and HTTP Range resume now work against live ECDS. A three-message control-forecast smoke file was 174,786 bytes; its observed queue time was 12.8 seconds and server processing time was 4.5 seconds. The official `2m_temperature` example failed in the backend because its parameter name was ambiguous, while `10_m_u_component_of_wind` succeeded. The full surface/pressure/member matrix and an end-to-end development Zarr remain untested.
 
 The minimum acceptance gate is three real dates (near June 2023, intermediate, and recent), one complete proposed initialization, ten total request shards, interruption/retry exercises, a strict GRIB inventory, and an end-to-end Zarr. A fixed implementation price should wait for that run. If it fails because operational ECDS retrieval is unreliable, seek a quote for scheduled dissemination rather than making the public dataset depend on manual recovery.
 
@@ -31,9 +31,11 @@ There is also an important completeness gap: failed individual downloads can rem
 
 ### Observed in this run
 
-* Neither `ECDS_API_ENDPOINT` nor `ECDS_API_KEY` was exposed to the process, and no CDS credential file was present. No authenticated request was attempted. This was rechecked after the environment secrets were identified by name.
-* The checked-in prototype defaults to the process endpoint for the live `s2s-forecasts` collection. The retrieve endpoint and response body still require an authenticated smoke test.
-* The prototype's submission/status body compatibility is intentionally small. The official client or an observed response should determine the final response schema.
+* A standard `.cdsapirc` with accepted S2S terms authenticated successfully. Personal access tokens are sent in the `PRIVATE-TOKEN` header.
+* ECDS submission returned a job ID and status location. Successful status responses exposed `links[rel=results]`; the results endpoint returned the signed download URL at `asset.value.href`.
+* Request `4f5026a6-90f3-4469-9fb4-4cfef9f44dab` retrieved ECMWF control `10_m_u_component_of_wind` for 2026-07-24 at leads 24, 48, and 72 hours. It queued for 12.824 seconds, processed for 4.511 seconds, downloaded in 0.826 seconds, contained three GRIB messages, and occupied 174,786 bytes.
+* Restarting from a seeded 87,393-byte partial file received HTTP 206, appended the remaining bytes, and reproduced the valid 174,786-byte GRIB.
+* Request `1699ae8a-eb95-4f03-afc0-1339a72fcf50` used the official `2m_temperature` payload shape but failed because the backend resolved that name ambiguously. This is an ECDS/MARS mapping issue rather than an authentication or transport failure.
 
 ### Authoritative documentation findings, not file observations
 
@@ -41,7 +43,7 @@ The live ECDS catalogue exposes the exact collection identifier [`s2s-forecasts`
 
 The authoritative [S2S model table](https://confluence.ecmwf.int/display/S2S/Models) records CY48R1 from 2023-06-27 with 100 perturbed members plus one control, daily runs through day 46, TCo319 (~32 km), and a 0.25° archived grid. CY49R1 begins 2024-11-12 with the same headline dimensions but replaces CAPE with MUCAPE, a schema boundary inside the target archive. Live constraints list pressure levels 10, 50, 100, 200, 300, 500, 700, 850, 925, and 1000 hPa and daily pressure-field leads from 0 through 1,104 hours.
 
-Authentication requires an ECMWF account, accepted dataset terms, and a `$HOME/.cdsapirc` token. The official page recommends `cdsapi>=0.7.2`. The incubating [`ecmwf-datastores-client`](https://ecmwf.github.io/ecmwf-datastores-client/) exposes asynchronous submission and status, but production should pin a tested release. Actual member encoding, per-date file inventory, GRIB edition, coordinate orientation, result retention, latency, concurrency, and rate limits remain unobserved.
+Authentication requires an ECMWF account, accepted dataset terms, and a `$HOME/.cdsapirc` token. The official page recommends `cdsapi>=0.7.2`. The incubating [`ecmwf-datastores-client`](https://ecmwf.github.io/ecmwf-datastores-client/) exposes asynchronous submission and status, but production should pin a tested release. Actual member encoding, per-date file inventory, GRIB edition, coordinate orientation, result retention, concurrency, and rate limits remain unobserved.
 
 ## Candidate request and production sharding
 
@@ -52,12 +54,12 @@ A smoke payload should start from this official shape and be generated separatel
   "origin": "ecmwf",
   "forecast_type": "control_forecast",
   "level_type": "single_level",
-  "variable": ["2m_temperature"],
+  "variable": ["10_m_u_component_of_wind"],
   "year": ["2026"],
   "month": ["07"],
   "day": ["24"],
   "leadtime_hour": ["024", "048", "072"],
-  "time": "00:00:00",
+  "time": ["00:00"],
   "data_format": "grib"
 }
 ```
@@ -95,8 +97,7 @@ Relative humidity (`r` / 157) is a fallback if specific humidity is absent; do n
 Run the tool as separate cheap invocations so a scheduler, pod, or replacement process can resume state:
 
 ```bash
-export ECDS_API_ENDPOINT=... # environment secret; never commit it
-export ECDS_API_KEY=...      # environment secret; never commit it
+# Configure url and key in ~/.cdsapirc and accept the S2S terms first.
 uv run src/scripts/ecmwf_extended_range_spike.py --state data/ecmwf-er/recent-smoke.json submit --payload payload.json
 uv run src/scripts/ecmwf_extended_range_spike.py --state data/ecmwf-er/recent-smoke.json poll --maximum-polls 1
 uv run src/scripts/ecmwf_extended_range_spike.py --state data/ecmwf-er/recent-smoke.json download --target data/ecmwf-er/recent-smoke.grib
@@ -104,7 +105,7 @@ uv run src/scripts/ecmwf_extended_range_spike.py --state data/ecmwf-er/recent-sm
 
 State writes use a temporary sibling and atomic rename. Poll failures are recorded with bounded exponential backoff. Downloads use `.partial`, request a byte range on restart, only append after HTTP 206, validate leading `GRIB` and terminal `7777`, count messages, atomically rename, and write a completion marker. A production adapter must additionally parse every GRIB key, validate content length/checksum or stable validator, and compare the exact expected Cartesian inventory before completion.
 
-The machine-readable matrix records seven required cases plus intermediate, second-recent, and simulated-transient cases. Authenticated cases are `blocked_credentials`; restart and state persistence are unit-tested with simulated HTTP responses. Empty observations are deliberate and must not be interpreted as zero latency or 100% reliability.
+The machine-readable matrix records seven required cases plus intermediate, second-recent, and simulated-transient cases. The recent control smoke and real HTTP Range restart are complete; the larger authenticated cases remain pending. State persistence, live result discovery, and both HTTP 206 append and HTTP 200 restart behavior are covered by unit tests.
 
 ## Development Zarr proof
 
@@ -114,17 +115,17 @@ The unit test writes a deterministic 101-member × 46-daily-lead synthetic initi
 
 | Metric | Observation |
 |---|---|
-| authenticated requests | 0 |
-| success rate | not measured |
-| typical/worst queue time | not measured |
-| typical/worst end-to-end latency | not measured |
+| authenticated requests | 3 small control requests: two wind successes and one `2m_temperature` backend failure |
+| success rate | 2/2 for the wind smoke shape; 2/3 across both tested variable names |
+| typical/worst queue time | one instrumented fresh run: 12.824 seconds |
+| typical/worst end-to-end latency | one instrumented fresh run: 17.335 seconds queue plus server processing; download added 0.826 seconds |
 | update-cadence fit | unknown |
-| real restart/retry/idempotency | unknown; simulated state recovery only |
+| real restart/retry/idempotency | HTTP 206 resume succeeded from a 50% partial file; duplicate submission behavior remains untested |
 | incomplete-success behavior | unknown; strict inventory requirement identified |
 
 ## Storage and compute
 
-There were no actual downloaded or generated representative files, so raw GRIB bytes per initialization, staging bytes, production Zarr bytes, compression ratio, peak memory, CPU time, transform wall time, requests per initialization, annual growth, initial archive size, backfill duration, and dollar cost are **not measured**. Supplying numeric values from theoretical dimensions would violate the spike requirement to use actual files.
+The three-message smoke GRIB was 174,786 bytes. It is not representative of a complete initialization, so staging bytes, production Zarr bytes, compression ratio, peak memory, CPU time, transform wall time, requests per initialization, annual growth, initial archive size, backfill duration, and dollar cost remain unmeasured.
 
 After one complete initialization, calculate:
 
@@ -149,8 +150,8 @@ Paid pre-scheduled delivery would replace unpredictable on-demand queueing and i
 
 Top risks:
 
-1. **Unobserved source contract:** authenticated request syntax, archive calendar, schema eras, full manifest, member completeness, and result retention are not established.
-2. **Unobserved operational behavior:** queue latency, throughput, limits, resumability, idempotency, and structurally incomplete successful responses are not measured.
+1. **Incomplete source contract:** authentication and the small control request work, but archive calendar, schema eras, full manifest, member completeness, and result retention are not established; `2m_temperature` currently fails in backend parameter mapping.
+2. **Partially observed operational behavior:** one small request had low latency and resumability worked, but production-size throughput, limits, duplicate submission behavior, and structurally incomplete successful responses are not measured.
 3. **Redistribution and cost:** dataset-specific terms need confirmation, while actual storage/compute and paid-delivery economics have no measured basis.
 
 Recommend GO only after all of these pass unattended:
@@ -163,7 +164,7 @@ Recommend GO only after all of these pass unattended:
 
 ## Proposed `dynamical-org/meta#144` comment
 
-> **ECMWF Extended Range is a conditional go, not yet ready for a fixed-price commitment.** Most GRIB normalization, deaccumulation, Zarr writing, metadata, and validation can be reused from IFS ENS, but ECDS needs a durable asynchronous source adapter and strict whole-initialization completeness checks. I recommend a bounded first product: ECMWF real-time forecasts only, daily lead samples through the available extended horizon, all members, a useful surface set, and temperature/wind/humidity/geopotential at 500/700/850 hPa represented as fixed-level variables; start at the first live-verified stable 101-member date. This spike environment had no ECDS credentials, so it produced no defensible bytes/init, archive-size, compute, queue-latency, or reliability measurements. Remaining source risk is therefore high: live schema/calendar, unattended queue behavior, and dataset-specific redistribution terms. Budget human effort for an authenticated acceptance run plus source-adapter/integration work; do not quote production until three dates, ten shards, one complete real Zarr, restart/retry tests, measured storage, and ECMWF terms confirmation pass.
+> **ECMWF Extended Range is a conditional go, not yet ready for a fixed-price commitment.** Authenticated ECDS submission, durable one-shot polling, nested result discovery, validated GRIB download, and real HTTP Range resume now work. A three-lead wind smoke request queued for 12.8 seconds, processed for 4.5 seconds, and produced a 174,786-byte GRIB with three messages; the official `2m_temperature` name failed in backend parameter mapping. Most GRIB normalization, deaccumulation, Zarr writing, metadata, and validation can be reused from IFS ENS, but the full member/surface/pressure inventory and a complete real Zarr remain untested. Do not quote production until three dates, ten representative shards, one complete real Zarr, duplicate/retry tests, measured storage, and ECMWF terms confirmation pass.
 
 ## Artifacts
 

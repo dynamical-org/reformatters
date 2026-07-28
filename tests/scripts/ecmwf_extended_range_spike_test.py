@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
+import requests
 import xarray as xr
 
 from scripts.ecmwf_extended_range_spike import (
@@ -28,23 +29,46 @@ def test_request_state_can_resume_in_another_process(
     monkeypatch.setenv("ECDS_API_KEY", "test-key")
     session = Mock()
     session.headers = {}
-    session.post.return_value = response({"jobID": "job-1", "location": "status"})
+    submit_response = response({"jobID": "job-1"})
+    submit_response.headers = {"Location": "status"}
+    session.post.return_value = submit_response
     state_store = StateStore(tmp_path / "state.json")
     request = EcdsRequest(state_store, session=session)
 
-    request.submit({"number": [0, 1], "step": [24], "param": ["2t"]})
+    request.submit(
+        {
+            "number": [0, 1],
+            "leadtime_hour": ["024"],
+            "variable": ["10_m_u_component_of_wind"],
+        }
+    )
 
     resumed_session = Mock()
     resumed_session.headers = {}
-    resumed_session.get.return_value = response(
-        {"status": "successful", "result": {"href": "result"}}
-    )
+    resumed_session.get.side_effect = [
+        response(
+            {
+                "status": "successful",
+                "created": "2026-07-28T17:46:07",
+                "started": "2026-07-28T17:47:07",
+                "finished": "2026-07-28T17:48:07",
+                "links": [{"rel": "results", "href": "results"}],
+            }
+        ),
+        response({"asset": {"value": {"href": "result"}}}),
+    ]
     resumed = EcdsRequest(state_store, session=resumed_session)
     measurement, result_url = resumed.poll_once()
     assert measurement.request_id == "job-1"
     assert measurement.expected_members == [0, 1]
+    assert measurement.expected_steps == [24]
+    assert measurement.expected_variables == ["10_m_u_component_of_wind"]
+    assert measurement.queue_seconds == 60
+    assert measurement.server_processing_seconds == 60
+    assert measurement.completed_at == "2026-07-28T17:48:07+00:00"
     assert result_url == "result"
     assert state_store.read().result_url == "result"
+    assert resumed_session.get.call_args_list[1].args == ("results",)
 
 
 def test_configures_endpoint_and_basic_credentials_from_environment(
@@ -60,11 +84,57 @@ def test_configures_endpoint_and_basic_credentials_from_environment(
     assert request.session.auth == ("user", "key")
 
 
+def test_configures_endpoint_and_token_from_cdsapirc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / ".cdsapirc"
+    config_path.write_text(
+        "url: https://example.test/api\nkey: personal-access-token\n"
+    )
+    monkeypatch.setenv("CDSAPI_RC", str(config_path))
+    monkeypatch.delenv("ECDS_API_ENDPOINT", raising=False)
+    monkeypatch.delenv("ECDS_API_KEY", raising=False)
+    request = EcdsRequest(StateStore(tmp_path / "state.json"))
+
+    assert request.api_url == (
+        "https://example.test/api/retrieve/v1/processes/s2s-forecasts/execution"
+    )
+    assert request.session.headers["PRIVATE-TOKEN"] == "personal-access-token"
+    assert "Authorization" not in request.session.headers
+
+
 def test_state_writes_machine_readable_measurements_atomically(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "measurement.json")
     state_store.write(RequestMeasurement("id", {"date": "2026-07-24"}, "now", "status"))
     assert json.loads(state_store.path.read_text())["request_id"] == "id"
     assert not state_store.path.with_suffix(".json.tmp").exists()
+
+
+def test_failed_poll_records_results_error(tmp_path: Path) -> None:
+    state_store = StateStore(tmp_path / "measurement.json")
+    state_store.write(RequestMeasurement("id", {}, "now", "status"))
+    failure: dict[str, object] = {
+        "status": 400,
+        "title": "The job has failed",
+        "traceback": "failure detail",
+    }
+    session = Mock()
+    session.headers = {}
+    session.auth = ("user", "key")
+    session.get.side_effect = [
+        response(
+            {
+                "status": "failed",
+                "links": [{"rel": "results", "href": "results"}],
+            }
+        ),
+        response(failure, status_code=400),
+    ]
+
+    measurement, result_url = EcdsRequest(state_store, session=session).poll_once()
+
+    assert result_url is None
+    assert measurement.errors == [json.dumps(failure, sort_keys=True)]
 
 
 def test_download_uses_result_url_saved_by_poll(tmp_path: Path) -> None:
@@ -88,6 +158,48 @@ def test_download_uses_result_url_saved_by_poll(tmp_path: Path) -> None:
     assert measurement.downloaded_bytes == len(b"GRIBcontents7777")
     assert measurement.grib_messages == 1
     assert (tmp_path / "result.grib.complete").exists()
+
+
+def test_download_resumes_partial_file_after_http_206(tmp_path: Path) -> None:
+    state_store = StateStore(tmp_path / "measurement.json")
+    state_store.write(
+        RequestMeasurement("id", {}, "now", "status", result_url="result")
+    )
+    target = tmp_path / "result.grib"
+    target.with_suffix(".grib.partial").write_bytes(b"GRIB")
+    download_response = response({}, status_code=requests.codes.partial)
+    download_response.iter_content.return_value = [b"contents7777"]
+    session = Mock()
+    session.headers = {}
+    session.auth = ("user", "key")
+    session.get.return_value = download_response
+
+    measurement = EcdsRequest(state_store, session=session).download(target)
+
+    assert target.read_bytes() == b"GRIBcontents7777"
+    assert measurement.interrupted_download_resumable
+    assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=4-"}
+
+
+def test_download_restarts_partial_file_after_http_200(tmp_path: Path) -> None:
+    state_store = StateStore(tmp_path / "measurement.json")
+    state_store.write(
+        RequestMeasurement("id", {}, "now", "status", result_url="result")
+    )
+    target = tmp_path / "result.grib"
+    target.with_suffix(".grib.partial").write_bytes(b"incomplete")
+    download_response = response({})
+    download_response.iter_content.return_value = [b"GRIBcontents7777"]
+    session = Mock()
+    session.headers = {}
+    session.auth = ("user", "key")
+    session.get.return_value = download_response
+
+    measurement = EcdsRequest(state_store, session=session).download(target)
+
+    assert target.read_bytes() == b"GRIBcontents7777"
+    assert not measurement.interrupted_download_resumable
+    assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=10-"}
 
 
 def test_complete_initialization_can_be_written_and_queried(tmp_path: Path) -> None:
