@@ -1,0 +1,18 @@
+{
+  "attributes": {
+    "dataset_id": "noaa-hrrr-forecast-18-hour-virtual",
+    "dataset_version": "0.1.0",
+    "name": "NOAA HRRR forecast, 18 hour, virtual",
+    "description": "Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
+    "attribution": "NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+    "license": "CC-BY-4.0",
+    "spatial_domain": "Continental United States",
+    "spatial_resolution": "3 km",
+    "time_domain": "Forecasts initialized 2018-07-13 12:00:00 UTC to Present",
+    "time_resolution": "Forecasts initialized every hour",
+    "forecast_domain": "Forecast lead time 0-18 hours ahead",
+    "forecast_resolution": "Hourly"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}
