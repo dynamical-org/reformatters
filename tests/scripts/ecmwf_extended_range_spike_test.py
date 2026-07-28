@@ -23,6 +23,17 @@ def response(body: dict[str, object], status_code: int = 200) -> Mock:
     return result
 
 
+def grib_message(payload: bytes = b"contents") -> bytes:
+    message_size = 16 + len(payload) + 4
+    return (
+        b"GRIB"
+         b"\x00\x00\x00\x02"
+        + message_size.to_bytes(8, byteorder="big")
+        + payload
+        + b"7777"
+    )
+
+
 def test_request_state_can_resume_in_another_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -145,7 +156,8 @@ def test_download_uses_result_url_saved_by_poll(tmp_path: Path) -> None:
         )
     )
     download_response = response({})
-    download_response.iter_content.return_value = [b"GRIB", b"contents", b"7777"]
+    message = grib_message()
+    download_response.iter_content.return_value = [message]
     session = Mock()
     session.headers = {}
     session.auth = ("user", "key")
@@ -155,7 +167,7 @@ def test_download_uses_result_url_saved_by_poll(tmp_path: Path) -> None:
         tmp_path / "result.grib"
     )
 
-    assert measurement.downloaded_bytes == len(b"GRIBcontents7777")
+    assert measurement.downloaded_bytes == len(message)
     assert measurement.grib_messages == 1
     assert (tmp_path / "result.grib.complete").exists()
 
@@ -166,9 +178,10 @@ def test_download_resumes_partial_file_after_http_206(tmp_path: Path) -> None:
         RequestMeasurement("id", {}, "now", "status", result_url="result")
     )
     target = tmp_path / "result.grib"
-    target.with_suffix(".grib.partial").write_bytes(b"GRIB")
+    message = grib_message()
+    target.with_suffix(".grib.partial").write_bytes(message[:4])
     download_response = response({}, status_code=requests.codes.partial)
-    download_response.iter_content.return_value = [b"contents7777"]
+    download_response.iter_content.return_value = [message[4:]]
     session = Mock()
     session.headers = {}
     session.auth = ("user", "key")
@@ -176,7 +189,7 @@ def test_download_resumes_partial_file_after_http_206(tmp_path: Path) -> None:
 
     measurement = EcdsRequest(state_store, session=session).download(target)
 
-    assert target.read_bytes() == b"GRIBcontents7777"
+    assert target.read_bytes() == message
     assert measurement.interrupted_download_resumable
     assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=4-"}
 
@@ -189,7 +202,8 @@ def test_download_restarts_partial_file_after_http_200(tmp_path: Path) -> None:
     target = tmp_path / "result.grib"
     target.with_suffix(".grib.partial").write_bytes(b"incomplete")
     download_response = response({})
-    download_response.iter_content.return_value = [b"GRIBcontents7777"]
+    message = grib_message()
+    download_response.iter_content.return_value = [message]
     session = Mock()
     session.headers = {}
     session.auth = ("user", "key")
@@ -197,9 +211,31 @@ def test_download_restarts_partial_file_after_http_200(tmp_path: Path) -> None:
 
     measurement = EcdsRequest(state_store, session=session).download(target)
 
-    assert target.read_bytes() == b"GRIBcontents7777"
+    assert target.read_bytes() == message
     assert not measurement.interrupted_download_resumable
     assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=10-"}
+
+
+def test_download_counts_structural_messages_not_embedded_grib_bytes(
+    tmp_path: Path,
+) -> None:
+    state_store = StateStore(tmp_path / "measurement.json")
+    state_store.write(
+        RequestMeasurement("id", {}, "now", "status", result_url="result")
+    )
+    message = grib_message(b"compressed GRIB payload")
+    download_response = response({})
+    download_response.iter_content.return_value = [message]
+    session = Mock()
+    session.headers = {}
+    session.auth = ("user", "key")
+    session.get.return_value = download_response
+
+    measurement = EcdsRequest(state_store, session=session).download(
+        tmp_path / "result.grib"
+    )
+
+    assert measurement.grib_messages == 1
 
 
 def test_complete_initialization_can_be_written_and_queried(tmp_path: Path) -> None:

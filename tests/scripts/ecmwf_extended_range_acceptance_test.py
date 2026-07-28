@@ -1,10 +1,20 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Self
 
+import numpy as np
 import pytest
+import xarray as xr
+from affine import Affine
 
-from scripts.ecmwf_extended_range_acceptance import inspect_grib
+from scripts.ecmwf_extended_range_acceptance import (
+    DevelopmentSource,
+    GribInventory,
+    InventoryRecord,
+    build_development_zarr,
+    inspect_grib,
+)
 
 
 @dataclass
@@ -183,3 +193,111 @@ def test_inspect_grib_rejects_missing_messages(
                 "leadtime_hour": ["24"],
             },
         )
+
+
+def test_build_development_zarr_streams_complete_realization_product(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.grib"
+    source.write_bytes(b"source")
+    payload: dict[str, object] = {
+        "year": ["2026"],
+        "month": ["07"],
+        "day": ["24"],
+        "time": ["00:00"],
+        "forecast_type": "perturbed_forecast",
+        "number": ["1", "2"],
+        "level_type": "single_level",
+        "variable": ["total_precipitation"],
+        "leadtime_hour": ["24", "48"],
+    }
+    records = [
+        InventoryRecord(
+            offset=(band - 1) * 24,
+            message_size=24,
+            variable="total_precipitation",
+            level=None,
+            ensemble_member=member,
+            leadtime_hour=lead,
+            units="ms-1",
+            grib_level_type="specific height level above ground",
+            grib_level_value=10,
+            grid_shape=(2, 3),
+        )
+        for band, (lead, member) in enumerate(
+            [("24", 1), ("24", 2), ("48", 1), ("48", 2)], start=1
+        )
+    ]
+    inventory = GribInventory(
+        source=str(source),
+        valid=True,
+        byte_count=96,
+        message_count=4,
+        grid_shape=[2, 3],
+        variables=["total_precipitation"],
+        levels=[],
+        members=[1, 2],
+        leadtimes=["24", "48"],
+        records=records,
+    )
+    monkeypatch.setattr(
+        "scripts.ecmwf_extended_range_acceptance.inspect_grib",
+        lambda source, payload: inventory,
+    )
+
+    class FakeReader:
+        count = 4
+        transform = Affine(1.5, 0, -180.75, 0, -1.5, 90.75)
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(
+            self, bands: list[int], *, out_dtype: object, masked: bool
+        ) -> np.ma.MaskedArray:
+            assert out_dtype is np.float32
+            assert masked
+            return np.ma.array(
+                np.stack(
+                    [np.full((2, 3), band * 86_400, dtype=np.float32) for band in bands]
+                )
+            )
+
+    monkeypatch.setattr(
+        "scripts.ecmwf_extended_range_acceptance.rasterio.open",
+        lambda source: FakeReader(),
+    )
+    target = tmp_path / "development.zarr"
+
+    measurement = build_development_zarr([DevelopmentSource(source, payload)], target)
+    rerun = build_development_zarr([DevelopmentSource(source, payload)], target)
+
+    reopened = xr.open_zarr(target)
+    assert measurement.complete
+    assert rerun.complete
+    assert {"valid_time", "spatial_ref"} <= set(reopened.coords)
+    assert reopened.sizes == {
+        "init_time": 1,
+        "lead_time": 2,
+        "ensemble_member": 2,
+        "latitude": 2,
+        "longitude": 3,
+    }
+    assert (
+        reopened.precipitation_surface.sel(lead_time="24h", ensemble_member=2).values[
+            0, 0, 0
+        ]
+        == 2
+    )
+    assert (
+        reopened.precipitation_surface.sel(lead_time="48h", ensemble_member=1).values[
+            0, 0, 0
+        ]
+        == 2
+    )
+    assert np.array_equal(reopened.valid_time, reopened.init_time + reopened.lead_time)
+    assert reopened.longitude.values.tolist() == [-180.0, -178.5, -177.0]
+    assert reopened.latitude.values.tolist() == [90.0, 88.5]

@@ -287,13 +287,25 @@ def _utc_datetime(value: str) -> datetime:
 
 
 def _count_grib_messages(path: Path) -> int:
-    return path.read_bytes().count(b"GRIB")
+    message_count = 0
+    with path.open("rb") as source:
+        while header := source.read(16):
+            assert len(header) == 16
+            assert header[:4] == b"GRIB"
+            message_size = int.from_bytes(header[8:16], byteorder="big")
+            assert message_size >= 20
+            source.seek(message_size - len(header) - 4, 1)
+            assert source.read(4) == b"7777"
+            message_count += 1
+        assert source.tell() == path.stat().st_size
+    return message_count
 
 
 def _validate_grib_container(path: Path) -> None:
-    contents = path.read_bytes()
-    assert contents.startswith(b"GRIB"), "Download does not start with a GRIB message"
-    assert contents.endswith(b"7777"), "Download ends inside a GRIB message"
+    with path.open("rb") as source:
+        assert source.read(4) == b"GRIB", "Download does not start with a GRIB message"
+        source.seek(-4, 2)
+        assert source.read(4) == b"7777", "Download ends inside a GRIB message"
     assert _count_grib_messages(path) > 0, "Download contains no GRIB messages"
 
 
