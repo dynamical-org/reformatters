@@ -34,13 +34,13 @@ class NoaaHrrrForecast18HourVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=hrrr_virtual_chunk_containers(),
-            # At ~16.4 B/ref these splits cap root/pressure/model manifests near
-            # 1.8/5.2/5.9 MiB while full windows remain above 1,000 refs.
+            # Scale the 48-hour product's splits by 2.5 to keep full manifest
+            # byte sizes comparable across the two forecast lengths.
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 450,
-                    r"^/model_level/": 400,
-                    None: 6000,
+                    r"^/pressure_level/": 225,
+                    r"^/model_level/": 200,
+                    None: 1500,
                 },
                 dim="init_time",
             ),
@@ -79,7 +79,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
         return (
             partial(
                 validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=5),
+                max_latest_init_time_age=timedelta(hours=2),
             ),
             # The current and prior hourly cycles may still be publishing.
             validation.CheckVirtualManifestCompleteness(

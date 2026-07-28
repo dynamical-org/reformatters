@@ -202,7 +202,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         if isinstance(validator, partial)
         and validator.func is validation.check_forecast_current_data
     ]
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=5)}
+    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=2)}
     completeness = next(
         validator
         for validator in validators
@@ -230,9 +230,9 @@ def test_manifest_split_size_resolves_per_group(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
     split = dataset.icechunk_virtual_config.manifest_split
-    assert _resolved_split_size(split, "/pressure_level/temperature") == 450
-    assert _resolved_split_size(split, "/model_level/temperature") == 400
-    assert _resolved_split_size(split, "/temperature_2m") == 6000
+    assert _resolved_split_size(split, "/pressure_level/temperature") == 225
+    assert _resolved_split_size(split, "/model_level/temperature") == 200
+    assert _resolved_split_size(split, "/temperature_2m") == 1500
 
 
 def test_virtual_container_matches_ref_prefix(
