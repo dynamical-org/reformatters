@@ -601,7 +601,9 @@ def _virtual_repository_config_and_credentials(
                 icechunk.s3_anonymous_credentials()
             )
         elif isinstance(container.store, icechunk.ObjectStoreConfig.LocalFileSystem):
-            credentials_by_prefix[container.url_prefix] = None  # local files: no creds
+            credentials_by_prefix[container.url_prefix] = (
+                icechunk.credentials.LocalFileSystemAccess
+            )
         else:
             raise AssertionError(
                 f"Virtual chunk container {container.url_prefix} uses an unsupported "

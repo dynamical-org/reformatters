@@ -28,6 +28,12 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrInternalAttrs,
 )
 
+# HRRR v3 ran the 00/06/12/18Z cycles to 36h; v4 extended them to 48h starting with the
+# 2020-12-02T12Z init (the first init with f37-f48 files on NODD).
+HRRR_V4_FIRST_INIT = pd.Timestamp("2020-12-02T12:00")
+EXPECTED_FORECAST_LENGTH_V3 = pd.Timedelta(hours=36)
+EXPECTED_FORECAST_LENGTH_V4 = pd.Timedelta(hours=48)
+
 
 class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
     @computed_field

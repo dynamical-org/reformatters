@@ -13,12 +13,11 @@ from reformatters.common.types import Timedelta
 from reformatters.noaa.hrrr.forecast_virtual_template_config import (
     NoaaHrrrForecastVirtualTemplateConfig,
 )
-
-EXPECTED_FORECAST_LENGTH = pd.Timedelta(hours=48)
-# HRRR v3 ran the 00/06/12/18Z cycles to 36h; v4 extended them to 48h starting with the
-# 2020-12-02T12Z init (the first init with f37-f48 files on NODD).
-HRRR_V4_FIRST_INIT = pd.Timestamp("2020-12-02T12:00")
-EXPECTED_FORECAST_LENGTH_V3 = pd.Timedelta(hours=36)
+from reformatters.noaa.hrrr.template_config import (
+    EXPECTED_FORECAST_LENGTH_V3,
+    EXPECTED_FORECAST_LENGTH_V4,
+    HRRR_V4_FIRST_INIT,
+)
 
 
 class NoaaHrrrForecast48HourVirtualTemplateConfig(
@@ -29,7 +28,7 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(
     Mirrors the materialized noaa-hrrr-forecast-48-hour temporal structure.
     """
 
-    forecast_length: Timedelta = EXPECTED_FORECAST_LENGTH
+    forecast_length: Timedelta = EXPECTED_FORECAST_LENGTH_V4
     append_dim_frequency: Timedelta = pd.Timedelta("6h")  # only 00/06/12/18 reach f48
 
     @computed_field
@@ -45,10 +44,10 @@ class NoaaHrrrForecast48HourVirtualTemplateConfig(
         return np.where(
             ds["init_time"].values < HRRR_V4_FIRST_INIT.to_datetime64(),
             EXPECTED_FORECAST_LENGTH_V3.to_timedelta64(),
-            EXPECTED_FORECAST_LENGTH.to_timedelta64(),
+            EXPECTED_FORECAST_LENGTH_V4.to_timedelta64(),
         )
 
     def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
         return StatisticsApproximate(
-            min=str(EXPECTED_FORECAST_LENGTH_V3), max=str(EXPECTED_FORECAST_LENGTH)
+            min=str(EXPECTED_FORECAST_LENGTH_V3), max=str(EXPECTED_FORECAST_LENGTH_V4)
         )

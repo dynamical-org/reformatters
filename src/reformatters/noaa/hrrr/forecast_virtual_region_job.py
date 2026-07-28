@@ -1,4 +1,6 @@
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import ClassVar
 
 import icechunk
 import pandas as pd
@@ -77,6 +79,10 @@ class NoaaHrrrForecastVirtualRegionJob(
     """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
     subclass declares operational_update_window."""
 
+    source_file_coord_class: ClassVar[type[NoaaHrrrForecastVirtualSourceFileCoord]] = (
+        NoaaHrrrForecastVirtualSourceFileCoord
+    )
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -101,7 +107,7 @@ class NoaaHrrrForecastVirtualRegionJob(
                     if not vars_in_file:
                         continue
                     coords.append(
-                        NoaaHrrrForecastVirtualSourceFileCoord(
+                        self.source_file_coord_class(
                             init_time=init_time,
                             lead_time=lead_time,
                             domain="conus",
@@ -121,12 +127,16 @@ class NoaaHrrrForecastVirtualRegionJob(
             require_index=True,
         )
 
+    def _download_index(self, coord: NoaaHrrrForecastVirtualSourceFileCoord) -> Path:
+        """Fetch coord's grib index to a local path; the caller unlinks it."""
+        return s3_download_to_disk(
+            coord.get_index_url(), self.dataset_id, region=S3_BUCKET_REGION
+        )
+
     def file_refs(
         self, coord: NoaaHrrrForecastVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
-        index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=S3_BUCKET_REGION
-        )
+        index_path = self._download_index(coord)
         try:
             index_lines = parse_grib_index_lines(index_path)
         finally:
