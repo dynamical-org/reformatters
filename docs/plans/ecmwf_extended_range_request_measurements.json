@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-07-28T00:00:00Z",
+  "environment": {
+    "authenticated_ecds_access": false,
+    "reason": "Neither ECDS_API_ENDPOINT nor ECDS_API_KEY was exposed to the process, and no CDS/ECDS credential file was available. No request was submitted."
+  },
+  "observations": [],
+  "planned_matrix": [
+    {"id": "recent_smoke", "status": "blocked_credentials", "variables": 1, "members": 1, "steps": [24, 48, 72]},
+    {"id": "recent_surface_all_members", "status": "blocked_credentials"},
+    {"id": "recent_pressure_all_members", "status": "blocked_credentials", "levels_hpa": [500, 700, 850]},
+    {"id": "recent_complete_sharded", "status": "blocked_credentials"},
+    {"id": "archive_start_complete_sharded", "status": "blocked_credentials"},
+    {"id": "completed_request_rerun", "status": "blocked_credentials"},
+    {"id": "interrupted_download_resume", "status": "simulated_only"},
+    {"id": "intermediate_smoke", "status": "blocked_credentials"},
+    {"id": "second_recent_smoke", "status": "blocked_credentials"},
+    {"id": "transient_poll_failure", "status": "simulated_only"}
+  ]
+}
