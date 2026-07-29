@@ -360,6 +360,17 @@ def httpx_download_to_disk(
     return local_path
 
 
+def httpx_get_text(
+    url: str,
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+) -> str:
+    """Fetch a small text resource (e.g. an HTML directory index) into memory."""
+    return _httpx_get_with_retry(
+        url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+    ).text
+
+
 def http_status_code(e: Exception) -> int | None:
     """HTTP status code from an httpx or requests error response, else None."""
     if isinstance(e, httpx.HTTPStatusError):

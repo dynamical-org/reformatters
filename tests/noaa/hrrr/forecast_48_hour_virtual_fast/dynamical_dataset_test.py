@@ -47,12 +47,30 @@ def test_operational_timing_matches_the_full_virtual_dataset(
     )
     fast_jobs = {j.name: j for j in dataset.operational_kubernetes_resources("tag")}
     full_jobs = {j.name: j for j in full.operational_kubernetes_resources("tag")}
-    assert len(fast_jobs) == len(full_jobs)
-    for fast_name, fast_job in fast_jobs.items():
-        full_name = fast_name.replace("-virtual-fast-", "-virtual-")
-        assert full_name in full_jobs, fast_name
-        assert fast_job.schedule == full_jobs[full_name].schedule
-        assert fast_job.pod_active_deadline == full_jobs[full_name].pod_active_deadline
+    for suffix in ("-update", "-validate"):
+        fast_job = next(j for n, j in fast_jobs.items() if n.endswith(suffix))
+        full_job = next(j for n, j in full_jobs.items() if n.endswith(suffix))
+        assert fast_job.schedule == full_job.schedule, suffix
+        assert fast_job.pod_active_deadline == full_job.pod_active_deadline, suffix
+
+
+def test_has_a_mirror_job_the_full_dataset_lacks(
+    dataset: NoaaHrrrForecast48HourVirtualFastDataset,
+) -> None:
+    names = [j.name for j in dataset.operational_kubernetes_resources("tag")]
+    assert f"{dataset.dataset_id}-mirror" in names
+    mirror = next(
+        j
+        for j in dataset.operational_kubernetes_resources("tag")
+        if j.name.endswith("-mirror")
+    )
+    # The mirror must be warm before the update starts polling the cache.
+    update = next(
+        j
+        for j in dataset.operational_kubernetes_resources("tag")
+        if j.name.endswith("-update")
+    )
+    assert mirror.schedule.split()[0] < update.schedule.split()[0]
 
 
 def test_cron_job_names_are_dns_safe(
