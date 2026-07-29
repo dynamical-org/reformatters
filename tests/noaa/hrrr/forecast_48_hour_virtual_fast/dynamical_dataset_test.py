@@ -9,6 +9,9 @@ from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual_fast.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualFastDataset,
 )
+from reformatters.noaa.hrrr.forecast_48_hour_virtual_fast.region_job import (
+    CACHE_LOCATION_PREFIX,
+)
 
 
 @pytest.fixture
@@ -30,11 +33,18 @@ def test_manifest_split_is_a_single_root_rule(
     assert size == 600
 
 
-def test_virtual_container_matches_ref_prefix(
+def test_registers_both_cache_and_archive_containers(
     dataset: NoaaHrrrForecast48HourVirtualFastDataset,
 ) -> None:
-    (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "s3://noaa-hrrr-bdp-pds/"
+    prefixes = {c.url_prefix for c in dataset.icechunk_virtual_config.containers}
+    assert prefixes == {CACHE_LOCATION_PREFIX, "s3://noaa-hrrr-bdp-pds/"}
+
+
+def test_only_the_private_cache_carries_explicit_credentials(
+    dataset: NoaaHrrrForecast48HourVirtualFastDataset,
+) -> None:
+    credentials = dataset.icechunk_virtual_config.container_credentials
+    assert set(credentials) == {CACHE_LOCATION_PREFIX}
 
 
 def test_operational_timing_matches_the_full_virtual_dataset(

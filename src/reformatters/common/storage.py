@@ -563,6 +563,9 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     )
     # Per-array manifest splitting policy (see manifest_append_dim_split).
     manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
+    # Credentials per container url_prefix, for a source that is not anonymous-read.
+    # Prefixes absent here get the anonymous credential for their store type.
+    container_credentials: Mapping[str, Any] = {}
 
 
 def _virtual_repository_config_and_credentials(
@@ -596,7 +599,11 @@ def _virtual_repository_config_and_credentials(
     )
     credentials_by_prefix: dict[str, Any] = {}
     for container in virtual_config.containers:
-        if isinstance(container.store, s3_compatible_stores):
+        if (
+            explicit := virtual_config.container_credentials.get(container.url_prefix)
+        ) is not None:
+            credentials_by_prefix[container.url_prefix] = explicit
+        elif isinstance(container.store, s3_compatible_stores):
             credentials_by_prefix[container.url_prefix] = (
                 icechunk.s3_anonymous_credentials()
             )

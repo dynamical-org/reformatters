@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Annotated, ClassVar
 
+import icechunk
 import pandas as pd
 import typer
 from pydantic import Field
@@ -20,10 +21,12 @@ from reformatters.noaa.hrrr.archive_gribs.copy_files_from_nomads import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualDataset,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
-    hrrr_virtual_chunk_containers,
-)
 
+from .region_job import (
+    CACHE_LOCATION_PREFIX,
+    NoaaHrrrForecast48HourVirtualFastRegionJob,
+    hrrr_fast_virtual_chunk_containers,
+)
 from .template_config import NoaaHrrrForecast48HourVirtualFastTemplateConfig
 
 _CACHE_SECRET_NAME = "noaa-hrrr-nomads-cache-storage-options-key"  # noqa: S105
@@ -37,6 +40,9 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
     template_config: NoaaHrrrForecast48HourVirtualFastTemplateConfig = (
         NoaaHrrrForecast48HourVirtualFastTemplateConfig()
     )
+    region_job_class: type[NoaaHrrrForecast48HourVirtualFastRegionJob] = (
+        NoaaHrrrForecast48HourVirtualFastRegionJob
+    )
 
     # Must be in the format `rclone` expects: `:s3:<bucket>/<path>`. No double slash
     # after `:s3:` - the leading colon tells `rclone` to create an on-the-fly remote
@@ -45,7 +51,12 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
-            containers=hrrr_virtual_chunk_containers(),
+            containers=hrrr_fast_virtual_chunk_containers(),
+            # The NOMADS cache is private, so readers resolving a leading-edge ref
+            # must supply credentials; the AWS archive stays anonymous.
+            container_credentials={
+                CACHE_LOCATION_PREFIX: icechunk.s3_from_env_credentials()
+            },
             # Root-only, so one split size: 600 inits x 49 refs at ~16.4 bytes/ref
             # is ~0.5 MiB of active manifest per array, matching the full virtual
             # dataset's root arrays. See "Manifest splitting" in docs/virtual_datasets.md.

@@ -156,11 +156,18 @@ def s3_download_to_disk(
     byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
     local_path_suffix: str = "",
     disk_cache: bool = False,
+    skip_signature: bool = True,
 ) -> Path:
-    """Download s3://bucket/key to disk via the cached anonymous obstore S3 store."""
+    """Download s3://bucket/key to disk via a cached obstore S3 store.
+
+    Anonymous unless `skip_signature=False`, which signs requests with the ambient
+    AWS credentials so a private bucket can be read.
+    """
     parsed_url = urlparse(url)
     assert parsed_url.scheme == "s3", url
-    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
+    store = s3_store(
+        f"s3://{parsed_url.netloc}", region=region, skip_signature=skip_signature
+    )
     local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
     download_to_disk(
         store,
