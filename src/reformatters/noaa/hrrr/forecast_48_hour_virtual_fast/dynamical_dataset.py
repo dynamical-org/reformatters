@@ -8,6 +8,7 @@ from pydantic import Field
 
 from reformatters.common import kubernetes
 from reformatters.common.kubernetes import CronJob
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -72,7 +73,13 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
             ephemeral_storage="1G",
             secret_names=[_CACHE_SECRET_NAME],
         )
-        return [mirror_job, *super().operational_kubernetes_resources(image_tag)]
+        # The store has not been backfilled, so ingest stays suspended while the
+        # mirror runs on its own; drop the suspend once the backfill completes.
+        ingest_jobs = [
+            replace(job, suspend=True)
+            for job in super().operational_kubernetes_resources(image_tag)
+        ]
+        return [mirror_job, *ingest_jobs]
 
     def mirror_nomads_gribs(
         self,

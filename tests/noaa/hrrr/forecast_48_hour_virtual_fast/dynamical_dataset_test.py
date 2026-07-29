@@ -73,6 +73,19 @@ def test_has_a_mirror_job_the_full_dataset_lacks(
     assert mirror.schedule.split()[0] < update.schedule.split()[0]
 
 
+def test_ingest_is_suspended_until_backfilled(
+    dataset: NoaaHrrrForecast48HourVirtualFastDataset,
+) -> None:
+    """The mirror can run alone; ingest must not write an unbackfilled store."""
+    by_suffix = {
+        j.name.rsplit("-", 1)[-1]: j
+        for j in dataset.operational_kubernetes_resources("tag")
+    }
+    assert by_suffix["mirror"].suspend is False
+    assert by_suffix["update"].suspend is True
+    assert by_suffix["validate"].suspend is True
+
+
 def test_cron_job_names_are_dns_safe(
     dataset: NoaaHrrrForecast48HourVirtualFastDataset,
 ) -> None:
