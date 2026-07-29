@@ -1,96 +1,158 @@
 {
-  "generated_at": "2026-07-28T18:05:00Z",
+  "generated_at": "2026-07-28T21:48:00Z",
   "environment": {
     "authenticated_ecds_access": true,
     "accepted_s2s_terms": true,
-    "credential_source": ".cdsapirc"
+    "credential_source": ".cdsapirc",
+    "signed_result_urls_persisted_in_report": false
   },
-  "observations": [
-    {
-      "id": "recent_smoke_2m_temperature",
-      "request_id": "1699ae8a-eb95-4f03-afc0-1339a72fcf50",
-      "status": "failed",
-      "variable": "2m_temperature",
-      "members": 1,
-      "steps": [
-        24,
-        48,
-        72
-      ],
-      "error_category": "ambiguous_backend_parameter_mapping"
+  "verdict": {
+    "ecds_transport_and_source_contract": "go",
+    "revised_1_5_degree_product": "conditional_go",
+    "original_0_25_degree_product": "no_go"
+  },
+  "source_contract": {
+    "first_verified_initialization": "2023-06-28T00:00:00Z",
+    "grid_shape": [
+      121,
+      240
+    ],
+    "resolution_degrees": 1.5,
+    "latitude_bounds": [
+      90.0,
+      -90.0
+    ],
+    "longitude_bounds": [
+      -180.0,
+      178.5
+    ],
+    "control_members": 1,
+    "perturbed_members": 100,
+    "daily_leads": 46,
+    "maximum_lead_hours": 1104
+  },
+  "request_summary": {
+    "accepted_jobs_downloaded_and_inventory_valid": 27,
+    "accepted_job_failures": 0,
+    "pre_job_http_502_submissions": 1,
+    "downloaded_bytes_all_acceptance_cases": 7128215624,
+    "download_seconds_total": 410.54932024894515,
+    "download_seconds_max": 154.79949450001004,
+    "queue_seconds": {
+      "min": 11.705325,
+      "median": 64.28604,
+      "p95": 216.431367,
+      "max": 299.645518,
+      "mean": 87.56604644444444
     },
-    {
-      "id": "recent_smoke_wind_u_10m",
-      "request_id": "4f5026a6-90f3-4469-9fb4-4cfef9f44dab",
-      "status": "downloaded",
-      "variable": "10_m_u_component_of_wind",
-      "members": 1,
-      "steps": [
-        24,
-        48,
-        72
-      ],
-      "queue_seconds": 12.824365,
-      "server_processing_seconds": 4.511008,
-      "download_seconds": 0.826459,
-      "downloaded_bytes": 174786,
-      "grib_messages": 3,
-      "http_range_resume": true,
-      "partial_bytes_before_resume": 87393
+    "server_processing_seconds": {
+      "min": 2.884146,
+      "median": 12.592311,
+      "p95": 71.636,
+      "max": 201.414532,
+      "mean": 25.576666962962964
     }
-  ],
-  "planned_matrix": [
-    {
-      "id": "recent_smoke",
+  },
+  "acceptance_matrix": {
+    "representative_shards": {
       "status": "completed",
-      "variables": 1,
-      "members": 1,
-      "steps": [
-        24,
-        48,
-        72
+      "count": 10,
+      "dates": [
+        "2023-06-28",
+        "2024-06-27",
+        "2026-07-23",
+        "2026-07-24"
       ]
     },
-    {
-      "id": "recent_surface_all_members",
-      "status": "pending"
+    "all_member_single_lead_surface": {
+      "status": "completed",
+      "members": 100
     },
-    {
-      "id": "recent_pressure_all_members",
-      "status": "pending",
+    "all_member_three_level_pressure": {
+      "status": "completed",
+      "members": 100,
       "levels_hpa": [
         500,
         700,
         850
       ]
     },
-    {
-      "id": "recent_complete_sharded",
-      "status": "pending"
+    "full_candidate_initialization": {
+      "status": "completed",
+      "date": "2026-07-24",
+      "shards": 14,
+      "source_variables": 17,
+      "field_level_outputs": 27,
+      "members": 101,
+      "leads": 46,
+      "source_bytes": 6985939316,
+      "grib_messages": 125442
     },
-    {
-      "id": "archive_start_complete_sharded",
-      "status": "pending"
+    "duplicate_request": {
+      "status": "completed",
+      "byte_identical": true,
+      "sha256": "85abedb05adcffcb405879ef136cb8e019dad5d8713f382625ac23900dafaad9"
     },
-    {
-      "id": "completed_request_rerun",
-      "status": "pending"
+    "interrupted_download_resume": {
+      "status": "completed",
+      "http_206_append": true,
+      "http_200_restart": true
     },
-    {
-      "id": "interrupted_download_resume",
-      "status": "completed"
-    },
-    {
-      "id": "intermediate_smoke",
-      "status": "pending"
-    },
-    {
-      "id": "second_recent_smoke",
-      "status": "pending"
-    },
-    {
-      "id": "transient_poll_failure",
-      "status": "simulated_only"
+    "transient_failure": {
+      "status": "completed",
+      "failure": "HTTP 502 before request ID",
+      "recovery": "resubmission succeeded"
     }
+  },
+  "development_zarr": {
+    "status": "completed",
+    "complete": true,
+    "source_bytes": 6985939316,
+    "zarr_bytes": 8958032476,
+    "message_count": 125442,
+    "transformation_seconds": 784.0782916249882,
+    "rerun_transformation_seconds": 772.1013115830137,
+    "file_count": 13703,
+    "deterministic_tree_sha1": "215e037503e6ffc413ce38b87cb545616331753b",
+    "field_level_outputs": 27,
+    "members": 101,
+    "leads": 46,
+    "ensemble_chunk_size": 10,
+    "regional_query_shape": [
+      1,
+      46,
+      101,
+      21,
+      17
+    ],
+    "variables_without_missing_values": 25,
+    "land_only_missing_fraction": 0.6618457300275482,
+    "land_only_variables": [
+      "runoff_surface",
+      "soil_moisture_0_20cm"
+    ]
+  },
+  "storage_projection": {
+    "assumed_initializations_through_2026_07_24": 1123,
+    "projected_initial_archive_bytes": 10059870470548,
+    "projected_annual_growth_bytes": 3269681853740,
+    "storage_price_usd_per_decimal_gb_month": 0.015,
+    "projected_initial_monthly_storage_usd": 150.89805705822,
+    "projected_added_monthly_storage_usd_per_year": 49.045227806099994,
+    "excluded": [
+      "replicas",
+      "Icechunk metadata",
+      "requests",
+      "compute",
+      "staging overlap",
+      "missing initialization dates",
+      "compression changes across model cycles"
+    ]
+  },
+  "remaining_decisions": [
+    "Confirm that a 1.5 degree product meets the product need.",
+    "Confirm attribution presentation and unattended request rate with ECMWF.",
+    "Run a bounded multi-initialization throughput test before pricing the backfill.",
+    "Clamp measured soil-moisture and cloud-cover packing artifacts in production."
   ]
 }
