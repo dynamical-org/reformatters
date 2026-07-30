@@ -144,7 +144,7 @@ def test_run_value_availability_exempts_accum_hour_zero(tmp_path: Path) -> None:
     )
 
 
-def test_write_availability_artifacts_ignores_unprobed_positions(
+def test_write_availability_artifacts_counts_unprobed_positions_as_incomplete(
     tmp_path: Path,
 ) -> None:
     positions = np.array(
@@ -161,9 +161,10 @@ def test_write_availability_artifacts_ignores_unprobed_positions(
     assert heatmap == HEATMAP_FILENAME
     assert (tmp_path / HEATMAP_FILENAME).exists()
     summary = summaries["temperature_2m"]
-    assert summary.positions_total == 3  # NaN (not probed) excluded
+    assert summary.positions_total == 4
     assert summary.positions_complete == 2
-    assert summary.first_incomplete == summary.last_incomplete == "2020-01-02T00:00"
+    assert summary.first_incomplete == "2020-01-02T00:00"
+    assert summary.last_incomplete == "2020-01-03T00:00"
     assert summary.plot == "availability_temperature_2m.png"
     assert (tmp_path / summary.plot).exists()
 

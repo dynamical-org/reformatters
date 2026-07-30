@@ -72,6 +72,25 @@ def test_non_temperature_var_has_no_filter() -> None:
     assert var.attrs.units == "m s-1"
 
 
+def test_corrected_metadata_declarations() -> None:
+    for path in (
+        "vertical_u_component_shear_0_1000m",
+        "vertical_v_component_shear_0_1000m",
+        "vertical_u_component_shear_0_6000m",
+        "vertical_v_component_shear_0_6000m",
+    ):
+        assert get_var(path).attrs.units == "m s-1"
+
+    assert (
+        get_var("ground_heat_flux_surface").attrs.standard_name
+        == "upward_heat_flux_at_ground_level_in_soil"
+    )
+
+    maximum_wind = get_var("maximum_wind_speed_10m")
+    assert maximum_wind.attrs.short_name == "max_10si"
+    assert maximum_wind.attrs.long_name == "Time-maximum 10 metre wind speed"
+
+
 def test_grid_is_north_first() -> None:
     # north_up decodes every message north-first, so the y/latitude coords descend to
     # match: y from largest (north) to smallest, and the 2D latitude grid's first row

@@ -158,7 +158,7 @@ def _fold_file_availability(
 
 def _coord_carries(coord: SourceFileCoord, var: DataVar[Any]) -> bool:
     coord_vars = getattr(coord, "data_vars", None)
-    return coord_vars is None or any(v.name == var.name for v in coord_vars)
+    return coord_vars is None or any(v.path == var.path for v in coord_vars)
 
 
 def _sort_coords_for_probe(
