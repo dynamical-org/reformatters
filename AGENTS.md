@@ -51,7 +51,8 @@ docs/
 ├── chunk_shard_layout_tool.md        # Zarr V3 chunk/shard layout optimizer
 ├── source_data_exploration_guide.md  # Explore/document source data structure before integration
 ├── ops_card.md                       # Operations: monitoring, troubleshooting, manual updates
-└── staging.md                        # Run concurrent dataset versions for testing
+├── staging.md                        # Run concurrent dataset versions for testing
+└── derived_products_design.md        # Design proposal: datasets derived from our own archives (ensemble statistics, climatologies)
 deploy/                      # Docker and kubernetes configs
 ├── Dockerfile               # Container image for reformatter jobs
 └── aws/                     # nodepool.yaml, create_new_aws_open_data_bucket.sh
