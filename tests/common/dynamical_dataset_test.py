@@ -943,6 +943,84 @@ def test_backfill_kubernetes_overwrite_defaults_to_existing_store_end(
     assert "--overwrite-metadata" not in input_str
 
 
+def test_backfill_kubernetes_defers_update_region_to_operational_updates(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_append_dim_start",
+        lambda self: pd.Timestamp("2000-01-02"),
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(overwrite_chunks=True)
+
+    input_str = mock_run.call_args.kwargs["input"]
+    assert "--filter-end=2000-01-02T00:00:00" in input_str
+    assert "--expansion" not in input_str
+
+
+def test_backfill_kubernetes_no_defer_to_updates_skips_clamp(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_append_dim_start",
+        lambda self: pd.Timestamp("2000-01-02"),
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(
+        overwrite_chunks=True, defer_to_updates=False
+    )
+
+    assert "--filter-end" not in mock_run.call_args.kwargs["input"]
+
+
+def test_backfill_kubernetes_expansion_flag_passed_to_workers(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    monkeypatch.setattr(
+        ExampleDataset, "_open_existing_store", lambda self: _existing_store_tree(3)
+    )
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    kubernetes_backfill_dataset.backfill_kubernetes(
+        append_dim_end=pd.Timestamp("2000-01-10"),
+        overwrite_chunks=True,
+        overwrite_metadata=True,
+    )
+
+    input_str = mock_run.call_args.kwargs["input"]
+    assert "--expansion" in input_str
+    # Expansion backfills run exclusively; the update-window clamp does not apply.
+    assert "--filter-end" not in input_str
+
+
+def test_operational_update_append_dim_start_is_min_job_start(
+    monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
+) -> None:
+    template_ds = _template_tree_for_end(pd.Timestamp("2000-01-06"))
+    jobs = [Mock(region=slice(3, 5)), Mock(region=slice(2, 3))]
+    monkeypatch.setattr(
+        ExampleRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: (jobs, template_ds)),
+    )
+    assert kubernetes_backfill_dataset._operational_update_append_dim_start() == (
+        pd.Timestamp("2000-01-03")
+    )
+
+
 def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
     monkeypatch: pytest.MonkeyPatch, kubernetes_backfill_dataset: ExampleDataset
 ) -> None:

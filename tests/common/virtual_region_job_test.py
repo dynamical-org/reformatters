@@ -1014,6 +1014,102 @@ def test_backfill_emits_refs_and_reads_back_values(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=4)
 
 
+def test_backfill_on_main_concedes_conflicting_chunk_to_concurrent_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit landing on main between the backfill's session creation and its
+    commit wins any chunk both wrote (the operational update wins)."""
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    # _emit_refs runs after the batch's session is created and before its commit.
+    original_emit = VirtualTestRegionJob._emit_refs
+    injected = [False]
+
+    def emit_then_inject_concurrent_commit(
+        self: VirtualTestRegionJob, stores: Sequence[Any], refs: Sequence[VirtualRef]
+    ) -> None:
+        original_emit(self, stores, refs)
+        if not injected[0]:
+            injected[0] = True
+            concurrent = repo.writable_session("main")
+            # Point (init 0, lead 0)'s chunk at the (1, 1) message instead.
+            offset, length = _message_offset_length(1, 1)
+            failed = concurrent.store.set_virtual_refs(
+                "temperature_2m",
+                [
+                    icechunk.VirtualChunkSpec(
+                        index=[0, 0, 0, 0],
+                        location=VirtualTestRegionJob.messages_url,
+                        offset=offset,
+                        length=length,
+                    )
+                ],
+                validate_containers=True,
+            )
+            assert failed is None
+            concurrent.commit("concurrent update writes (0, 0)")
+
+    monkeypatch.setattr(
+        VirtualTestRegionJob, "_emit_refs", emit_then_inject_concurrent_commit
+    )
+    VirtualTestRegionJob.backfill_batch_files = 100  # whole worker in one commit
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    _process_virtual(job, repo)
+
+    assert injected[0]
+    result = xr.open_zarr(dataset.store_factory.primary_store(), decode_timedelta=True)
+    # The concurrent commit's version of (0, 0) won; everything else is the backfill's.
+    np.testing.assert_array_equal(
+        result["temperature_2m"].isel(init_time=0, lead_time=0).values,
+        _block_values(1, 1),
+    )
+    np.testing.assert_array_equal(
+        result["temperature_2m"].isel(init_time=2, lead_time=1).values,
+        _block_values(2, 1),
+    )
+
+
+def test_backfill_on_main_retries_over_concurrent_metadata_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent commit that changed array metadata cannot be rebased over
+    (ChunksUpdatedInUpdatedArray), so the batch is re-emitted on a fresh session
+    and committed again."""
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    original_emit = VirtualTestRegionJob._emit_refs
+    emit_calls = [0]
+
+    def emit_then_inject_concurrent_commit(
+        self: VirtualTestRegionJob, stores: Sequence[Any], refs: Sequence[VirtualRef]
+    ) -> None:
+        original_emit(self, stores, refs)
+        if emit_calls[0] == 0:
+            concurrent = repo.writable_session("main")
+            array = zarr.open_array(concurrent.store, path="temperature_2m", mode="r+")
+            array.attrs["concurrent_update"] = "yes"
+            concurrent.commit("concurrent update changes metadata")
+        emit_calls[0] += 1
+
+    monkeypatch.setattr(
+        VirtualTestRegionJob, "_emit_refs", emit_then_inject_concurrent_commit
+    )
+    VirtualTestRegionJob.backfill_batch_files = 100
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    _process_virtual(job, repo)
+
+    assert emit_calls[0] == 2  # first attempt conflicted, retry re-emitted
+    result = xr.open_zarr(dataset.store_factory.primary_store(), decode_timedelta=True)
+    assert result["temperature_2m"].attrs["concurrent_update"] == "yes"
+    _assert_all_values(dataset, n_inits=4)
+
+
 def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)

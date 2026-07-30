@@ -25,7 +25,7 @@ The Cartesian product of regions and variable groups produces the full job list,
 - **Materialized** — opens stores once and writes all of the worker's jobs in a single commit.
 - **Virtual** — gathers the worker's not-already-present source files across all its jobs, then commits each batch its generator yields (a backfill yields once → one commit per worker, like materialized; an operational update yields per poll tick), because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
 
-The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which are single-writer (see below).
+The only fork outside this call is the coordination lifecycle: extent-extending jobs run the parallel temp-branch flow below, extent-preserving overwrite backfills run the cooperative publish, and virtual operational updates are single-writer (see below).
 
 ## Reader safety
 
@@ -43,15 +43,29 @@ A backfill into an existing store (`--overwrite-chunks` / `--overwrite-metadata`
 
 Data chunks can be written directly because they occupy new shard regions that readers won't access until the metadata (which defines the dataset's dimensions) is updated. The metadata write is deferred until the last worker completes, making all new data visible atomically.
 
-For fresh-store backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. `parallel_setup` writes metadata to local tmp storage and to temporary Icechunk branches, but not to final zarr v3 stores. For operational updates and overwrite backfills, metadata is deferred to finalization, so a metadata change (a new variable, an extension) appears only after all chunk data is written.
+For fresh-store backfills, metadata is written before workers start (the dataset is being created, not read). Specifically, `backfill_local` / `backfill_kubernetes` write metadata to final stores before spawning worker execution. `parallel_setup` writes metadata to local tmp storage and to temporary Icechunk branches, but not to final zarr v3 stores. For operational updates and expansion backfills, metadata is deferred to finalization, so an extension appears only after all chunk data is written. Extent-preserving overwrite backfills instead refresh metadata at setup (see "Cooperative backfill publish"): a new variable appears immediately, all-NaN, and fills in as chunks land.
 
 ### Icechunk stores
 
-All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
+Extent-extending jobs — operational updates, expansion backfills, and new-store backfills — do all metadata and chunk writes on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
 1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
+
+Extent-preserving overwrite backfills use the cooperative publish below instead, so operational updates can keep running while they do.
+
+### Cooperative backfill publish (overwrite backfills)
+
+An overwrite backfill that does not extend the store (a new variable, a re-backfill of flagged positions) writes into the live store with no temp branch and no `reset_branch`, so it can run for days while operational updates keep publishing:
+
+1. **Worker 0 setup** — refreshes every store's metadata from the template via `refresh_store_metadata`: trimmed to the store's extent at that moment (never resizing arrays the updates are growing), creating any newly added arrays. A new variable is therefore reader-visible immediately, all-NaN, and fills in as the backfill and the updates write it — the same progressive visibility an operational update gives a new variable.
+2. **All workers** — write chunk data through icechunk *fork sessions* (`Session.fork()`): chunk bytes upload to object storage as they are written, while the chunk refs accumulate in the fork's changeset. Each worker stores its serialized changeset as a coordination file (`sessions/{role}/worker-{N}`) instead of committing. Zarr v3 stores are written directly, as always.
+3. **Last worker finalization** — per repo (replicas first), merges every worker's changeset into one fresh session on `main` and commits once, rebasing over anything committed while the backfill ran. Chunk conflicts resolve in the other job's favor (`VersionSelection.UseTheirs` — the operational update wins). A commit that landed mid-flush and changed array metadata (an update extending the append dim) is unresolvable inside icechunk's rebase, so the finalizer rebuilds the session from the new tip — which then already contains that commit — re-merges, and retries. A `finalized/{role}` marker makes a finalize retry after a crash skip repos that already committed.
+
+Because the backfill's chunk refs live only in coordination files until the final commit, do not run `garbage-collect` (src/scripts/icechunk_utils.py) with a cutoff newer than the start of any in-flight backfill — the uploaded-but-unreferenced chunks would be collected.
+
+Virtual backfills follow the same shape with one difference: their refs would make impractically large changesets, so each worker commits its batches straight to `main` (whole source files per commit keeps readers safe, exactly like virtual operational updates) with the same conflict-solver + fresh-session retry.
 
 ### Virtual Icechunk operational updates (single-writer exception)
 
@@ -113,9 +127,13 @@ The entire Kubernetes job fails. The team is notified and can run a fresh job. S
 
 ### Concurrent jobs writing to the same dataset
 
-The `from_snapshot_id` check in `reset_branch` prevents two concurrent jobs from both resetting main. Icechunk can rebase only uncommitted sessions, not a committed temp branch, so a job that finds main moved past its starting snapshot cannot merge — finalize raises, leaving its temp branch and coordination files in place for inspection, and the job that moved main wins. (A finalize retry after a crash is distinguished by checking whether main's snapshot is already on the temp branch.) The losing job's work must be re-run.
+Overwrite backfills and operational updates are designed to run concurrently; where they would conflict, the update wins:
 
-Because any operational update that publishes during an overwrite backfill makes the backfill lose this way, run overwrite backfills so they complete in between update runs (a long backfill can be run as several smaller, filtered backfills).
+- **Disjoint regions by construction.** The backfill driver caps the job list at the position the update jobs currently start from (`--filter-end`, computed once so every worker sees the same list). Updates rewrite everything at or after that position — including any newly added variable — on every fire, and their start only moves forward in time, so neither job writes the other's chunks. Pass `--no-defer-to-updates` only when the update cron is suspended.
+- **Publish without displacing.** The cooperative publish above commits the backfill onto whatever `main` has become; an update publishing first is preserved (nothing is reset), and residual chunk conflicts resolve in the update's favor.
+- **The one residual collision.** A materialized update's own `reset_branch` CAS fails if the backfill's (at most two) `main` commits — the metadata refresh at setup and the merged commit at finalize — land during that update's run. That update run fails loudly with "main moved during this job", leaving its temp branch and coordination files for inspection; the next cron fire redoes its work from the new main. Expect at most a couple of these benign failures over a multi-day backfill; the orphaned `_job_*` branch can be deleted.
+
+Two *extent-extending* jobs (an update and an expansion backfill, or two updates) must still not overlap: both publish via `reset_branch`, whose `from_snapshot_id` check makes the second to finalize fail, and icechunk cannot rebase a committed temp branch. The job that moved main wins and the loser's work must be re-run.
 
 ## Replica ordering
 

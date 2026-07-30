@@ -37,7 +37,7 @@ _NO_SECRET_NAME = "no-secret"  # noqa: S105
 # max_concurrent_nodes=1), so commit latency grows with array count. Raising this
 # parallelizes those read-modify-writes across arrays (network and CPU). Needs the
 # patched icechunk that exposes the parameter (see the icechunk pin in pyproject.toml).
-_COMMIT_MAX_CONCURRENT_NODES = 16
+COMMIT_MAX_CONCURRENT_NODES = 16
 
 
 class DatasetFormat(StrEnum):
@@ -130,6 +130,47 @@ class StoreFactory(FrozenBaseModel):
             stores.append(store)
 
         return stores
+
+    def cooperative_write_stores(
+        self,
+    ) -> tuple[Store, list[Store], list[tuple[str, icechunk.ForkSession]]]:
+        """(primary_store, replica_stores, fork_sessions) for a worker writing
+        chunk data that will be published onto "main" while other jobs may also
+        be committing there.
+
+        Icechunk-format stores are backed by fork sessions: chunk bytes upload
+        as they are written, while the refs stay in the fork's changeset for a
+        finalizer to merge and commit (see "Cooperative backfill publish" in
+        docs/parallel_processing.md). Zarr v3 stores write directly. Fork
+        sessions are keyed by the same roles icechunk_repos returns.
+        """
+        repos = dict(self.icechunk_repos(sort="primary-first"))
+        forks: list[tuple[str, icechunk.ForkSession]] = []
+
+        def _store(role: str, config: StorageConfig) -> Store:
+            if config.format == DatasetFormat.ICECHUNK:
+                fork = repos[role].writable_session("main").fork()
+                forks.append((role, fork))
+                return fork.store
+            store_path = _get_store_path(self.dataset_id, self.version, config)
+            return _get_store(
+                store_path,
+                config,
+                writable=True,
+                branch="main",
+                virtual_config=self.icechunk_virtual_config,
+            )
+
+        primary = _store("primary", self.primary_storage_config)
+        replicas = (
+            []
+            if Config.is_dev
+            else [
+                _store(f"replica-{i}", config)
+                for i, config in enumerate(self.replica_storage_configs)
+            ]
+        )
+        return primary, replicas, forks
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
@@ -501,7 +542,7 @@ def commit_if_icechunk(
         icechunk_store.session.commit(
             message=message,
             rebase_with=icechunk.ConflictDetector(),
-            max_concurrent_nodes=_COMMIT_MAX_CONCURRENT_NODES,
+            max_concurrent_nodes=COMMIT_MAX_CONCURRENT_NODES,
         )
 
     for store in replica_stores:

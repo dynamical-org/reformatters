@@ -21,7 +21,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 ## The write loop
 
-`process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
+`process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for a new-store backfill, `main` for overwrite backfills and operational updates):
 
 1. `generate_source_file_coords` lists candidate source files for each of the worker's region jobs.
 2. `filter_already_present` drops files whose refs are already in the manifest; the survivors across the worker's jobs are unioned into `remaining`.
@@ -76,9 +76,9 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). `commit_if_icechunk` writes those manifests with `max_concurrent_nodes=16` so the per-array round trips overlap; the CPU side is bounded by the active split size and the pod's cores.
 
-## Backfill: parallel on a pre-sized temp branch
+## Backfill: parallel workers, one commit each
 
-Virtual backfills use the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)). Worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. Jobs partition by chunks along the append dim (virtual arrays have no shards). Workers are assigned contiguous append-dim blocks of jobs (`worker_assignment = "contiguous"`), so each flush rewrites only the manifest windows its own block covers rather than most windows of every array (see [parallel_processing.md](parallel_processing.md#append-dim-region-spreading-and-worker-assignment)).
+A new-store backfill uses the standard parallel temp-branch flow (see [parallel_processing.md](parallel_processing.md#icechunk-stores)): worker 0 pre-sizes the full template on the branch, so every worker's `sync_dims_to` is a no-op and parallel workers write disjoint refs with no resize conflicts. An overwrite backfill into an existing store instead commits each worker's batch straight to `main` (whole-file commits keep readers safe, exactly as operational updates do), so it can run while the operational update cron keeps firing — conflicts resolve in the update's favor, and a commit that can't rebase (an update resized an array mid-flush) is retried on a fresh session (see "Cooperative backfill publish" in [parallel_processing.md](parallel_processing.md)). In both flows, jobs partition by chunks along the append dim (virtual arrays have no shards). Workers are assigned contiguous append-dim blocks of jobs (`worker_assignment = "contiguous"`), so each flush rewrites only the manifest windows its own block covers rather than most windows of every array (see [parallel_processing.md](parallel_processing.md#append-dim-region-spreading-and-worker-assignment)).
 
 Commit latency ≈ `(1 + rebase_attempts) × flush cost`. A flush read-modify-writes every manifest window the session's refs touch (manifests are immutable), and every lost branch-HEAD CAS race re-runs the flush, so rebase attempts scale with parallelism. Keeping each worker's refs within its own few windows — contiguous append-dim assignment — is what bounds flush cost: measured on the HRRR-virtual backfill, commits held flat (~10–30s at parallelism 10) from empty to full archive, where scattered (spread) assignment touched most windows of every array per flush and commits grew ~40s → 1000s+ as windows filled. Icechunk stamps `rebase_attempts` into each snapshot's metadata (`repo.ancestry`) — read it to distinguish contention from flush cost when commits are slow.
 
@@ -86,7 +86,7 @@ Backfill parallelism has a low ceiling: measured on HRRR-virtual, throughput pea
 
 Two operational rules when backfilling a live virtual dataset:
 
-- **Run the backfill in between operational fires.** Finalize resets `main` to the temp branch only if `main` hasn't moved since setup; an operational fire committing to `main` mid-backfill makes finalize fail loudly and the backfill must be re-run.
+- **Overwrite backfills run concurrently with operational updates.** The driver defers the updates' active window to them (`--filter-end` capped at the update job's start) and workers commit to `main` alongside the update's commits. Only an *expansion* backfill (explicit `append_dim_end` past the store's end) still publishes by branch reset and must run between operational fires — an operational commit mid-run makes its finalize fail loudly and it must be re-run.
 - **`append_dim_end` defaults to the store's current end** — the last published position, which is what you want. Setting it past that (requires both overwrite flags) pre-sizes the branch further, so on finalize the extra positions appear as NaN-filled slots to readers until refs land.
 
 ## Manifest splitting

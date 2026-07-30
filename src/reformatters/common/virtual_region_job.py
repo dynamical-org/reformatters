@@ -330,19 +330,60 @@ class VirtualRegionJob(
         readonly_store = primary_repo.readonly_session(branch).store
         current_size = self._committed_append_dim_size(readonly_store)
 
+        # On "main", concurrent jobs (an operational update and a backfill) may
+        # both commit; a double-written chunk resolves in the update's favor.
+        # On a temp branch, workers write disjoint regions so any chunk conflict
+        # is a bug — detect, don't resolve.
+        solver: icechunk.ConflictSolver
+        if branch == "main":
+            solver = icechunk.BasicConflictSolver(
+                on_chunk_conflict=(
+                    icechunk.VersionSelection.UseOurs
+                    if self.processing_mode == "update"
+                    else icechunk.VersionSelection.UseTheirs
+                )
+            )
+        else:
+            solver = icechunk.ConflictDetector()
+
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
                 self._assert_probe_chunk_covered(coord, file_refs)
             refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
+            current_size = self._commit_batch(
+                primary_repo, replica_repos, branch, refs, current_size, solver
+            )
+
+    def _commit_batch(
+        self,
+        primary_repo: icechunk.Repository,
+        replica_repos: Sequence[icechunk.Repository],
+        branch: str,
+        refs: Sequence[VirtualRef],
+        current_size: int,
+        solver: icechunk.ConflictSolver,
+        max_attempts: int = 10,
+    ) -> int:
+        """Emit one batch of refs and commit it atomically to every repo,
+        replicas first, returning the new committed append dim size.
+
+        A commit landing concurrently that changed an array's metadata (e.g. an
+        operational update growing the append dim) is unresolvable within
+        icechunk's rebase, so on RebaseFailedError the batch is re-emitted on
+        fresh sessions based on the new tip — which includes that commit — and
+        committed again.
+        """
+        last_error: Exception | None = None
+        for _attempt in range(max_attempts):
             primary_session = primary_repo.writable_session(branch)
             replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
-            stores = [primary_session.store, *(s.store for s in replica_sessions)]
+            sessions = [*replica_sessions, primary_session]
+            stores = [s.store for s in sessions]
 
-            needed_size = self._needed_append_dim_size(refs)
+            needed_size = max(current_size, self._needed_append_dim_size(refs))
             if needed_size > current_size:
                 self.sync_dims_to(stores, needed_size)
-                current_size = needed_size
 
             emit_start = time.monotonic()
             self._emit_refs(stores, refs)
@@ -350,15 +391,24 @@ class VirtualRegionJob(
 
             now = pd.Timestamp.now(tz="UTC")
             commit_start = time.monotonic()
-            storage.commit_if_icechunk(
-                f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-                primary_session.store,
-                [s.store for s in replica_sessions],
-            )
+            try:
+                for session in sessions:
+                    session.commit(
+                        f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                        rebase_with=solver,
+                        max_concurrent_nodes=storage.COMMIT_MAX_CONCURRENT_NODES,
+                    )
+            except (icechunk.RebaseFailedError, icechunk.ConflictError) as e:
+                last_error = e
+                log.info(f"Commit conflicted with a concurrent commit, retrying: {e}")
+                continue
             log.info(
                 f"Committed {len(refs)} refs "
                 f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s)"
             )
+            return needed_size
+        assert last_error is not None
+        raise last_error
 
     def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]

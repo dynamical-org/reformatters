@@ -337,12 +337,13 @@ def refresh_store_metadata(
     tmp_store: Path,
     *,
     consolidated: bool,
+    allow_new_arrays: bool = True,
 ) -> None:
     """Rewrite attrs, encodings, and template-derived coordinate values on every
     existing store from the current template, trimmed to the store's committed extent
-    so arrays are never resized. Arrays the template adds are created (all-NaN until
-    backfilled); store-written coordinate values are preserved. Icechunk stores commit
-    only when something actually changed.
+    so arrays are never resized. With `allow_new_arrays`, arrays the template adds are
+    created (all-NaN until backfilled); store-written coordinate values are preserved.
+    Icechunk stores commit only when something actually changed.
     """
     existing = xr.open_datatree(
         store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
@@ -371,7 +372,11 @@ def refresh_store_metadata(
         }
     )
     assert_safe_overwrite(
-        trimmed, existing, append_dim, allow_new_arrays=True, allow_expansion=False
+        trimmed,
+        existing,
+        append_dim,
+        allow_new_arrays=allow_new_arrays,
+        allow_expansion=False,
     )
 
     write_metadata(trimmed, tmp_store, consolidated=consolidated)

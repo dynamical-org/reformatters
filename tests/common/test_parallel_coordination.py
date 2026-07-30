@@ -74,8 +74,21 @@ class FakeSession:
         self.repo = repo
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
         self.commit_calls: list[tuple[str, object]] = []
+        self.merged: list[object] = []
 
-    def commit(self, message: str, rebase_with: object = None) -> str:
+    def merge(self, *others: object) -> None:
+        self.merged.extend(others)
+
+    @property
+    def has_uncommitted_changes(self) -> bool:
+        return bool(self.merged)
+
+    def commit(
+        self,
+        message: str,
+        rebase_with: object = None,
+        max_concurrent_nodes: int = 1,  # noqa: ARG002
+    ) -> str:
         self.commit_calls.append((message, rebase_with))
         new_snapshot = f"snap-{self.id}-{len(self.commit_calls)}"
         self.repo._branches[self.branch] = new_snapshot
@@ -942,3 +955,138 @@ class TestFinalize:
             consolidated=True,
         )
         assert "job" not in factory.files  # cleared
+
+
+class TestCooperativeSetup:
+    def test_worker0_refreshes_metadata_and_writes_ready(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = FakeStoreFactory()
+        refresh = MagicMock(name="refresh_store_metadata")
+        monkeypatch.setattr(pc.template_utils, "refresh_store_metadata", refresh)
+
+        pc.cooperative_setup(
+            factory,  # ty: ignore[invalid-argument-type]
+            is_first=True,
+            workers_total=2,
+            reformat_job_name="job",
+            template_ds=_template(),
+            append_dim="time",
+            tmp_store=tmp_path,
+            consolidated=True,
+            allow_new_arrays=True,
+        )
+
+        refresh.assert_called_once()
+        assert refresh.call_args.kwargs["allow_new_arrays"] is True
+        assert factory.read_all_coordination_files("job", "setup") == [b"{}"]
+
+    def test_single_worker_skips_ready_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = FakeStoreFactory()
+        monkeypatch.setattr(pc.template_utils, "refresh_store_metadata", MagicMock())
+
+        pc.cooperative_setup(
+            factory,  # ty: ignore[invalid-argument-type]
+            is_first=True,
+            workers_total=1,
+            reformat_job_name="job",
+            template_ds=_template(),
+            append_dim="time",
+            tmp_store=tmp_path,
+            consolidated=True,
+            allow_new_arrays=False,
+        )
+
+        assert factory.read_all_coordination_files("job", "setup") == []
+
+    def test_later_worker_waits_for_ready_json(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = FakeStoreFactory()
+        factory.write_coordination_file("job", "setup/ready.json", b"{}")
+        refresh = MagicMock(name="refresh_store_metadata")
+        monkeypatch.setattr(pc.template_utils, "refresh_store_metadata", refresh)
+
+        pc.cooperative_setup(
+            factory,  # ty: ignore[invalid-argument-type]
+            is_first=False,
+            workers_total=2,
+            reformat_job_name="job",
+            template_ds=_template(),
+            append_dim="time",
+            tmp_store=tmp_path,
+            consolidated=True,
+            allow_new_arrays=True,
+        )
+
+        refresh.assert_not_called()
+
+
+class TestCooperativeFinalize:
+    @pytest.fixture(autouse=True)
+    def _identity_deserialize(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(pc, "deserialize_fork_session", lambda data: data)
+
+    def test_merges_worker_sessions_and_commits_replicas_first(self) -> None:
+        factory = FakeStoreFactory()
+        primary, replica = FakeRepo(), FakeRepo()
+        factory.set_icechunk_repos([("primary", primary), ("replica-0", replica)])
+        for role in ("primary", "replica-0"):
+            factory.write_coordination_file(
+                "job", f"sessions/{role}/worker-0.icechunk-session", b"w0"
+            )
+            factory.write_coordination_file(
+                "job", f"sessions/{role}/worker-1.icechunk-session", b"w1"
+            )
+
+        pc.cooperative_finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            reformat_job_name="job",
+            workers_total=1,
+        )
+
+        (replica_session,) = replica.sessions
+        (primary_session,) = primary.sessions
+        assert replica_session.merged == [b"w0", b"w1"]
+        assert primary_session.merged == [b"w0", b"w1"]
+        assert len(replica_session.commit_calls) == 1
+        assert len(primary_session.commit_calls) == 1
+        # icechunk_repos(sort="primary-last") ordering: replica committed first.
+        assert replica_session.id < primary_session.id
+        assert "job" not in factory.files  # coordination files cleared
+
+    def test_repo_already_finalized_is_skipped_on_retry(self) -> None:
+        factory = FakeStoreFactory()
+        primary, replica = FakeRepo(), FakeRepo()
+        factory.set_icechunk_repos([("primary", primary), ("replica-0", replica)])
+        for role in ("primary", "replica-0"):
+            factory.write_coordination_file(
+                "job", f"sessions/{role}/worker-0.icechunk-session", b"w0"
+            )
+        # A previous finalize attempt committed the replica then died.
+        factory.write_coordination_file("job", "finalized/replica-0/done.json", b"{}")
+
+        pc.cooperative_finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            reformat_job_name="job",
+            workers_total=1,
+        )
+
+        assert replica.sessions == []
+        (primary_session,) = primary.sessions
+        assert len(primary_session.commit_calls) == 1
+
+    def test_no_session_files_commits_nothing(self) -> None:
+        factory = FakeStoreFactory()
+        repo = FakeRepo()
+        factory.set_icechunk_repos([("primary", repo)])
+
+        pc.cooperative_finalize(
+            factory,  # ty: ignore[invalid-argument-type]
+            reformat_job_name="job",
+            workers_total=1,
+        )
+
+        assert repo.sessions == []

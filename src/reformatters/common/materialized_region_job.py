@@ -9,12 +9,13 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
 
+import icechunk
 import numpy as np
 import pandas as pd
 import xarray as xr
 from zarr.abc.store import Store
 
-from reformatters.common import storage, template_utils
+from reformatters.common import parallel_coordination, storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.download import http_status_code
 from reformatters.common.iterating import split_groups
@@ -128,12 +129,30 @@ class MaterializedRegionJob(
         branch_name: str,
         worker_index: int,
     ) -> dict[str, list[SourceFileResult]]:
-        """Write all of this worker's jobs to ``branch_name`` in a single commit."""
-        # One commit per worker; an empty job set would make an empty icechunk
-        # commit (which raises), so the caller must filter empty workers out.
+        """Write all of this worker's jobs, publishing one icechunk changeset per worker.
+
+        On a temp branch the changeset is committed directly. On "main" — where
+        other jobs (operational updates) may be committing concurrently — writes
+        go through icechunk fork sessions instead: chunk bytes upload as they
+        are written, and the serialized changeset is stored as a coordination
+        file for the last worker to merge and commit in cooperative_finalize.
+        See "Cooperative backfill publish" in docs/parallel_processing.md.
+        """
+        # An empty job set would make an empty icechunk commit (which raises),
+        # so the caller must filter empty workers out.
         assert worker_jobs, "process_worker_jobs requires at least one job"
-        primary_store = store_factory.primary_store(writable=True, branch=branch_name)
-        replica_stores = store_factory.replica_stores(writable=True, branch=branch_name)
+        forks: list[tuple[str, icechunk.ForkSession]] = []
+        if branch_name == "main":
+            primary_store, replica_stores, forks = (
+                store_factory.cooperative_write_stores()
+            )
+        else:
+            primary_store = store_factory.primary_store(
+                writable=True, branch=branch_name
+            )
+            replica_stores = store_factory.replica_stores(
+                writable=True, branch=branch_name
+            )
 
         assert all(isinstance(job, MaterializedRegionJob) for job in worker_jobs)
         jobs = cast(
@@ -157,12 +176,20 @@ class MaterializedRegionJob(
                     for c in coords
                 )
 
-        now = pd.Timestamp.now(tz="UTC")
-        storage.commit_if_icechunk(
-            f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-            primary_store,
-            replica_stores,
-        )
+        if branch_name == "main":
+            for role, fork in forks:
+                store_factory.write_coordination_file(
+                    jobs[0].reformat_job_name,
+                    f"sessions/{role}/worker-{worker_index}.icechunk-session",
+                    parallel_coordination.serialize_fork_session(fork),
+                )
+        else:
+            now = pd.Timestamp.now(tz="UTC")
+            storage.commit_if_icechunk(
+                f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                primary_store,
+                replica_stores,
+            )
         return worker_results
 
     def process(

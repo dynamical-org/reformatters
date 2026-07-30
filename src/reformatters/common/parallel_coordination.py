@@ -7,7 +7,7 @@ import json
 import time
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 import icechunk
 import pandas as pd
@@ -108,18 +108,20 @@ def parallel_setup(
 
     # Poll until worker 0 completes setup. Rely on kubernetes pod_active_deadline for timeout.
     if workers_total > 1:
+        return _poll_setup(store_factory, reformat_job_name)
+
+    return SetupInfo()
+
+
+def _poll_setup(store_factory: StoreFactory, reformat_job_name: str) -> SetupInfo:
+    setup_files = store_factory.read_all_coordination_files(reformat_job_name, "setup")
+    while not setup_files:
+        log.info("Waiting for worker 0 to complete setup...")
+        time.sleep(5)
         setup_files = store_factory.read_all_coordination_files(
             reformat_job_name, "setup"
         )
-        while not setup_files:
-            log.info("Waiting for worker 0 to complete setup...")
-            time.sleep(5)
-            setup_files = store_factory.read_all_coordination_files(
-                reformat_job_name, "setup"
-            )
-        return json.loads(setup_files[0])
-
-    return SetupInfo()
+    return json.loads(setup_files[0])
 
 
 def wait_for_workers(
@@ -256,6 +258,127 @@ def finalize(
 
     if workers_total > 1:
         store_factory.clear_coordination_files(reformat_job_name)
+
+
+def cooperative_setup(
+    store_factory: StoreFactory,
+    *,
+    is_first: bool,
+    workers_total: int,
+    reformat_job_name: str,
+    template_ds: xr.DataTree,
+    append_dim: str,
+    tmp_store: Path,
+    consolidated: bool,
+    allow_new_arrays: bool,
+) -> None:
+    """Setup for a backfill that writes into an existing store while operational
+    updates keep running: worker 0 refreshes every store's metadata from the
+    template — trimmed to the store's current extent so nothing the updates
+    manage is resized or clobbered — creating any newly added arrays (all-NaN,
+    visible to readers immediately and filled in as workers write). See
+    "Cooperative backfill publish" in docs/parallel_processing.md.
+    """
+    if is_first:
+        template_utils.refresh_store_metadata(
+            store_factory,
+            template_ds,
+            append_dim,
+            tmp_store,
+            consolidated=consolidated,
+            allow_new_arrays=allow_new_arrays,
+        )
+        if workers_total > 1:
+            store_factory.write_coordination_file(
+                reformat_job_name, "setup/ready.json", json.dumps({}).encode()
+            )
+    elif workers_total > 1:
+        _poll_setup(store_factory, reformat_job_name)
+
+
+def cooperative_finalize(
+    store_factory: StoreFactory,
+    *,
+    reformat_job_name: str,
+    workers_total: int,
+) -> None:
+    """Publish a cooperative backfill: merge every worker's serialized fork
+    session per repo and commit once onto "main", replicas first.
+
+    The commit rebases over anything committed to main while workers were
+    writing, resolving chunk conflicts in the other job's favor (an operational
+    update wins). A commit landing mid-flush that changed an array's metadata
+    (e.g. an update extending the append dim) is unresolvable within icechunk's
+    rebase, so on RebaseFailedError we rebuild the session from the current
+    main tip — which then includes that commit — and try again.
+    """
+    wait_for_workers(store_factory, reformat_job_name, workers_total)
+    now = pd.Timestamp.now(tz="UTC")
+    commit_message = (
+        f"Backfill {reformat_job_name} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+    for role, repo in store_factory.icechunk_repos(sort="primary-last"):
+        # Marker makes a finalize retry after a mid-loop crash skip repos that
+        # already committed instead of committing their changeset twice.
+        if store_factory.read_all_coordination_files(
+            reformat_job_name, f"finalized/{role}"
+        ):
+            log.info(f"{role}: already committed by a previous finalize attempt")
+            continue
+        session_files = store_factory.read_all_coordination_files(
+            reformat_job_name, f"sessions/{role}"
+        )
+        if not session_files:
+            continue
+        snapshot = _commit_merged_sessions(repo, session_files, commit_message)
+        store_factory.write_coordination_file(
+            reformat_job_name,
+            f"finalized/{role}/done.json",
+            json.dumps({"snapshot": snapshot}).encode(),
+        )
+    store_factory.clear_coordination_files(reformat_job_name)
+
+
+def _commit_merged_sessions(
+    repo: icechunk.Repository,
+    session_bytes: Sequence[bytes],
+    commit_message: str,
+    max_attempts: int = 10,
+) -> str | None:
+    last_error: Exception | None = None
+    for _attempt in range(max_attempts):
+        session = repo.writable_session("main")
+        session.merge(*[deserialize_fork_session(data) for data in session_bytes])
+        if not session.has_uncommitted_changes:
+            return None
+        try:
+            return session.commit(
+                commit_message,
+                rebase_with=icechunk.BasicConflictSolver(
+                    on_chunk_conflict=icechunk.VersionSelection.UseTheirs
+                ),
+                max_concurrent_nodes=storage.COMMIT_MAX_CONCURRENT_NODES,
+            )
+        except (icechunk.RebaseFailedError, icechunk.ConflictError) as e:
+            last_error = e
+            log.info(f"Commit conflicted with a concurrent commit, retrying: {e}")
+    assert last_error is not None
+    raise last_error
+
+
+def serialize_fork_session(fork: icechunk.ForkSession) -> bytes:
+    """Serialize a fork session's changeset — raw session bytes, not a pickle,
+    so reading it back never executes arbitrary code from the coordination bucket."""
+    state = cast("dict[str, bytes]", fork.__getstate__())
+    data = state["_session"]
+    assert isinstance(data, bytes)
+    return data
+
+
+def deserialize_fork_session(data: bytes) -> icechunk.ForkSession:
+    fork = object.__new__(icechunk.ForkSession)
+    fork.__setstate__({"_session": data})
+    return fork
 
 
 def _snapshot_is_on_branch(

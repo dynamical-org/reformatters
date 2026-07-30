@@ -34,4 +34,11 @@ For the cpu / memory / shared-memory a dataset's jobs request, see the Kubernete
 
 ## Concurrency with operational updates
 
-An operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
+Overwrite backfills that don't extend the store (new variable, re-backfill) run concurrently with operational updates — no cron suspension, no timing between fires. The driver automatically defers the span the updates currently rewrite to them (it caps `--filter-end` at the updates' start position; updates fill that span, including a new variable, on every fire), and the backfill publishes cooperatively onto `main` so an update landing mid-backfill is never displaced — where they'd conflict, the update wins. See "Cooperative backfill publish" in [parallel_processing.md](parallel_processing.md). Notes:
+
+- A new variable becomes reader-visible (all-NaN) when the backfill starts and fills in progressively.
+- Expect at most a couple of benign update-run failures ("main moved during this job") over a long backfill; the next fire recovers, and the failed run's orphan `_job_*` branch can be deleted.
+- Don't run icechunk `garbage-collect` with a cutoff newer than the start of an in-flight backfill — its chunk data is unreferenced until its final commit.
+- Pass `--no-defer-to-updates` only when the update cron is suspended and the backfill should cover through the head.
+
+**Expansion backfills** (an explicit `--append-dim-end` past the store's end, with both overwrite flags) still publish exclusively via branch reset: an update publishing mid-run makes the expansion's finalize fail loudly (the update wins; re-run). Run those between update fires — updates normally handle extension, so they are rare.

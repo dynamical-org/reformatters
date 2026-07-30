@@ -205,6 +205,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         docker_image: str | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        defer_to_updates: bool = True,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -216,7 +217,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         overwrite = overwrite_chunks or overwrite_metadata
         existing_ds = self._open_existing_store()
-        template_ds, resolved_end = self._resolve_backfill_template(
+        template_ds, resolved_end, expansion = self._resolve_backfill_template(
             existing_ds,
             append_dim_end,
             overwrite_chunks=overwrite_chunks,
@@ -268,6 +269,23 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
             template_utils.write_metadata(template_ds, self.store_factory)
 
+        # Operational updates rewrite every region at or after their current start
+        # position on each fire, so a backfill running while updates continue defers
+        # that span to them — its own writes there would be stale the moment an
+        # update rewrites the region. Resolved once here so the driver and every
+        # worker filter to the identical job list.
+        if overwrite and not expansion and defer_to_updates:
+            update_start = self._operational_update_append_dim_start()
+            if update_start is not None and (
+                filter_end is None or pd.Timestamp(filter_end) > update_start
+            ):
+                filter_end = update_start
+                log.info(
+                    f"Deferring {self.template_config.append_dim} >= {update_start} "
+                    "to operational updates, which rewrite that span on every fire. "
+                    "Pass --no-defer-to-updates only if updates are suspended."
+                )
+
         num_jobs = len(
             self.region_job_class.get_jobs(
                 tmp_store=self._tmp_store(),
@@ -286,6 +304,11 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 ),
                 filter_variable_names=filter_variable_names,
             )
+        )
+        assert num_jobs > 0, (
+            "No jobs match the requested filters. If the requested period is at or "
+            "after the operational updates' current start position, the updates "
+            "already rewrite it on every fire and a backfill there is unnecessary."
         )
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
         parallelism = min(workers_total, max_parallelism)
@@ -312,6 +335,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             command.append("--overwrite-chunks")
         if overwrite_metadata:
             command.append("--overwrite-metadata")
+        if expansion:
+            command.append("--expansion")
 
         kubernetes_job = Job(
             command=command,
@@ -383,8 +408,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names: list[str] | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        expansion: bool = False,
     ) -> None:
-        """Orchestrate running RegionJob instances."""
+        """Orchestrate running RegionJob instances.
+
+        `expansion` (the template extends the store along the append dim) is decided
+        once by the backfill_kubernetes driver and passed to every worker: a worker
+        deciding it locally would race operational updates growing the store.
+        """
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
@@ -412,6 +443,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             update_template_with_results=False,
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
+            expansion=expansion,
         )
 
     def _process_region_jobs(
@@ -426,12 +458,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         update_template_with_results: bool,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        expansion: bool = False,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
         Coordinates parallel writes across multiple workers (see docs/parallel_processing.md):
-        - Icechunk stores: uses a temp branch so readers on "main" never see partial data
-        - Zarr v3 stores: defers metadata write until all workers finish
+        - Extent-preserving overwrite backfills publish cooperatively onto "main" so
+          operational updates can run concurrently (updates win any conflict)
+        - Other icechunk jobs use a temp branch so readers on "main" never see partial data
+        - Zarr v3 stores defer the metadata write until all workers finish
         """
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
@@ -450,16 +485,26 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
-        branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
+        overwrite = overwrite_chunks or overwrite_metadata
+        # An overwrite backfill that preserves the store's extent runs cooperatively:
+        # it writes into the live store while operational updates keep publishing, and
+        # any conflict resolves in the update's favor. Extent-extending jobs (updates,
+        # expansion backfills) and new stores keep the exclusive temp-branch flow.
+        cooperative = overwrite and not expansion
+        assert not (cooperative and update_template_with_results)
+        branch_name = (
+            f"_job_{reformat_job_name}" if has_icechunk and not cooperative else "main"
+        )
 
         # 0. Guards run on worker 0 before any writes; failing here leaves the live
         # archive untouched. An operational update must not change the structure of
-        # the already-published store; an overwrite backfill must not corrupt it
-        # (structural drift, trimming, or unrequested new arrays / expansion).
-        overwrite = overwrite_chunks or overwrite_metadata
+        # the already-published store; an expansion backfill must not corrupt it.
+        # (Cooperative backfills are guarded inside cooperative_setup, against the
+        # store's extent at that moment — updates may have grown it since the driver
+        # validated.)
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
-        if is_first and overwrite:
+        if is_first and overwrite and not cooperative:
             template_utils.assert_safe_overwrite(
                 template_ds,
                 self._open_primary_datatree(),
@@ -476,18 +521,32 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         )
 
         # 1. Set up / wait for setup
-        setup_info = parallel_coordination.parallel_setup(
-            self.store_factory,
-            is_first=is_first,
-            workers_total=workers_total,
-            reformat_job_name=reformat_job_name,
-            branch_name=branch_name,
-            template_ds=template_ds,
-            tmp_store=tmp_store,
-            icechunk_repos=icechunk_repos,
-            consolidated=self.region_job_class.consolidated_metadata,
-            exclude_coord_value_chunks=exclude_coord_value_chunks,
-        )
+        if cooperative:
+            setup_info = parallel_coordination.SetupInfo()
+            parallel_coordination.cooperative_setup(
+                self.store_factory,
+                is_first=is_first,
+                workers_total=workers_total,
+                reformat_job_name=reformat_job_name,
+                template_ds=template_ds,
+                append_dim=self.template_config.append_dim,
+                tmp_store=tmp_store,
+                consolidated=self.region_job_class.consolidated_metadata,
+                allow_new_arrays=overwrite_metadata,
+            )
+        else:
+            setup_info = parallel_coordination.parallel_setup(
+                self.store_factory,
+                is_first=is_first,
+                workers_total=workers_total,
+                reformat_job_name=reformat_job_name,
+                branch_name=branch_name,
+                template_ds=template_ds,
+                tmp_store=tmp_store,
+                icechunk_repos=icechunk_repos,
+                consolidated=self.region_job_class.consolidated_metadata,
+                exclude_coord_value_chunks=exclude_coord_value_chunks,
+            )
 
         # 2. Process jobs. Each region job variant owns its own store/session
         # lifecycle and commit cadence behind this one call.
@@ -508,6 +567,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             )
 
         if is_last:
+            if cooperative:
+                parallel_coordination.cooperative_finalize(
+                    self.store_factory,
+                    reformat_job_name=reformat_job_name,
+                    workers_total=workers_total,
+                )
+                return
             if update_template_with_results:
                 if workers_total > 1:
                     merged_results = parallel_coordination.collect_results(
@@ -724,12 +790,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         *,
         overwrite_chunks: bool,
         overwrite_metadata: bool,
-    ) -> tuple[xr.DataTree, pd.Timestamp]:
+    ) -> tuple[xr.DataTree, pd.Timestamp, bool]:
         """Resolve a backfill's template and append_dim_end and validate it is safe
-        to write. The end defaults to now for a new store and to the store's current
-        end for an existing store. A store is only created when no overwrite flag is
-        passed, only written into with one, never trimmed, and only extended by an
-        explicit append_dim_end with both overwrite flags."""
+        to write, returning (template_ds, resolved_end, expansion). The end defaults
+        to now for a new store and to the store's current end for an existing store.
+        A store is only created when no overwrite flag is passed, only written into
+        with one, never trimmed, and only extended (`expansion`) by an explicit
+        append_dim_end with both overwrite flags."""
         overwrite = overwrite_chunks or overwrite_metadata
         append_dim = self.template_config.append_dim
 
@@ -744,7 +811,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 # Floored so the isoformat in the worker command parses as a CLI datetime
                 else pd.Timestamp.now(tz="UTC").tz_localize(None).floor("s")
             )
-            return self._get_template(resolved_end), resolved_end
+            return self._get_template(resolved_end), resolved_end, False
 
         assert overwrite, (
             f"A store already exists for {self.dataset_id}. Pass --overwrite-chunks "
@@ -768,7 +835,40 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             allow_new_arrays=overwrite_metadata,
             allow_expansion=overwrite_chunks and overwrite_metadata,
         )
-        return template_ds, resolved_end
+
+        def append_dim_size(tree: xr.DataTree) -> int:
+            return max(
+                node.sizes[append_dim]
+                for node in tree.subtree
+                if append_dim in node.sizes
+            )
+
+        expansion = append_dim_size(template_ds) > append_dim_size(existing_ds)
+        return template_ds, resolved_end, expansion
+
+    def _operational_update_append_dim_start(self) -> pd.Timestamp | None:
+        """The earliest append-dim position the operational update jobs would
+        process right now, or None for a dataset with no operational updates.
+        Updates rewrite whole regions from here forward on every fire, and this
+        position only moves forward in time, so data at or after it is theirs
+        to write."""
+        try:
+            jobs, template_ds = self.region_job_class.operational_update_jobs(
+                primary_store=self.store_factory.primary_store(),
+                tmp_store=self._tmp_store(),
+                get_template_fn=self._get_template,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name="operational-update-window",
+            )
+        except NotImplementedError:
+            return None
+        append_dim = self.template_config.append_dim
+        coord_values = template_ds.coords[append_dim].values
+        return min(
+            (pd.Timestamp(coord_values[job.region.start]) for job in jobs),
+            default=None,
+        )
 
     def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
         template_utils.assert_no_structural_drift_from_existing_store(

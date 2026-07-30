@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 from pydantic import computed_field
 
 from reformatters.common import (
@@ -728,6 +729,8 @@ def _run_workers(
     reformat_job_name: str = "test",
     worker_indices: Iterable[int] | None = None,
     update_template_with_results: bool = False,
+    overwrite_chunks: bool = False,
+    overwrite_metadata: bool = False,
 ) -> None:
     """Helper: run a set of worker indices sequentially against the same dataset."""
     if worker_indices is None:
@@ -741,7 +744,188 @@ def _run_workers(
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=update_template_with_results,
+            overwrite_chunks=overwrite_chunks,
+            overwrite_metadata=overwrite_metadata,
         )
+
+
+class TestCooperativeBackfill:
+    """Overwrite backfills that preserve the store's extent publish cooperatively
+    onto "main" — no temp branch, no reset — so operational updates can run
+    concurrently and win any conflict."""
+
+    def _make_dataset(self, tmp_path: Path, fmt: DatasetFormat) -> ParallelDataset:
+        return ParallelDataset(
+            primary_storage_config=StorageConfig(base_path=str(tmp_path), format=fmt),
+        )
+
+    def _jobs(
+        self,
+        dataset: ParallelDataset,
+        template_ds: xr.DataTree,
+        filter_start: pd.Timestamp | None = None,
+    ) -> Sequence[ParallelRegionJob]:
+        return ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+            filter_start=filter_start,
+        )
+
+    @pytest.mark.parametrize(
+        "fmt", [DatasetFormat.ICECHUNK, DatasetFormat.ZARR3], ids=["icechunk", "zarr3"]
+    )
+    def test_new_variable_backfill_creates_and_fills_array(
+        self, tmp_path: Path, fmt: DatasetFormat
+    ) -> None:
+        """A new-variable backfill (--overwrite-chunks --overwrite-metadata) creates
+        the missing array at setup and fills it, without a temp branch."""
+        dataset = self._make_dataset(tmp_path, fmt)
+        template_ds = _create_template_ds()
+        initial_ds = xr.DataTree.from_dict(
+            {"/": template_ds.to_dataset().drop_vars(["var3"])}
+        )
+        template_utils.write_metadata(initial_ds, dataset.store_factory)
+
+        all_jobs = self._jobs(dataset, template_ds)
+        _run_workers(
+            dataset,
+            all_jobs,
+            template_ds,
+            workers_total=2,
+            overwrite_chunks=True,
+            overwrite_metadata=True,
+        )
+
+        result = xr.open_zarr(dataset.store_factory.primary_store())
+        assert result.sizes["time"] == 4
+        for var in ["var0", "var1", "var2", "var3"]:
+            assert np.all(result[var].values == 1.0)
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
+            assert list(repo.list_branches()) == ["main"]
+        assert (
+            dataset.store_factory.read_all_coordination_files("test", "results") == []
+        )
+        assert (
+            dataset.store_factory.read_all_coordination_files("test", "sessions") == []
+        )
+
+    @pytest.mark.parametrize(
+        "fmt", [DatasetFormat.ICECHUNK, DatasetFormat.ZARR3], ids=["icechunk", "zarr3"]
+    )
+    def test_operational_update_publishing_mid_backfill_both_land(
+        self, tmp_path: Path, fmt: DatasetFormat
+    ) -> None:
+        """An operational update publishes (extending the store) between a
+        cooperative backfill's workers. The backfill still publishes — the update's
+        extension is preserved (never trimmed) alongside the backfill's rewrites."""
+        dataset = self._make_dataset(tmp_path, fmt)
+        backfill_template = _create_template_ds(num_time=4)
+        template_utils.write_metadata(backfill_template, dataset.store_factory)
+
+        backfill_jobs = self._jobs(dataset, backfill_template)
+        _run_workers(
+            dataset,
+            backfill_jobs,
+            backfill_template,
+            workers_total=2,
+            worker_indices=[0],
+            overwrite_chunks=True,
+        )
+
+        # Operational update fires mid-backfill: appends steps 4-5 with value 2.0.
+        update_template = _create_template_ds(num_time=6)
+        update_jobs = self._jobs(
+            dataset, update_template, filter_start=pd.Timestamp("2025-01-01 04:00")
+        )
+        with pytest.MonkeyPatch.context() as update_patch:
+            update_patch.setattr(
+                ParallelRegionJob,
+                "read_data",
+                lambda self, coord, data_var: np.full(
+                    (_LAT_SIZE, _LON_SIZE), 2.0, dtype=np.float32
+                ),
+            )
+            _run_workers(
+                dataset,
+                update_jobs,
+                update_template,
+                workers_total=1,
+                reformat_job_name="update",
+                update_template_with_results=True,
+            )
+
+        # The backfill's last worker processes and finalizes after the update won.
+        _run_workers(
+            dataset,
+            backfill_jobs,
+            backfill_template,
+            workers_total=2,
+            worker_indices=[1],
+            overwrite_chunks=True,
+        )
+
+        result = xr.open_zarr(dataset.store_factory.primary_store())
+        assert result.sizes["time"] == 6
+        for var in ["var0", "var1", "var2", "var3"]:
+            assert np.all(result[var].values[:4] == 1.0)
+            assert np.all(result[var].values[4:] == 2.0)
+        for _role, repo in dataset.store_factory.icechunk_repos(sort="primary-first"):
+            assert list(repo.list_branches()) == ["main"]
+
+    def test_finalize_retries_when_commit_conflicts_with_concurrent_commit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A commit that lands between the finalizer's session creation and its
+        commit — and changes array metadata, which icechunk's rebase cannot resolve
+        under a chunk changeset — is absorbed by rebuilding the session and
+        retrying. Both jobs' writes land."""
+        dataset = self._make_dataset(tmp_path, DatasetFormat.ICECHUNK)
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+
+        _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
+
+        # deserialize_fork_session runs inside _commit_merged_sessions after the
+        # finalizer's session is created and before its commit — landing a
+        # metadata-changing commit there forces the unresolvable-rebase retry.
+        original_deserialize = pc_module.deserialize_fork_session
+        injected = [False]
+
+        def deserialize_and_inject_concurrent_commit(
+            data: bytes,
+        ) -> icechunk.ForkSession:
+            if not injected[0]:
+                injected[0] = True
+                concurrent = repo.writable_session("main")
+                array = zarr.open_array(concurrent.store, path="var0", mode="r+")
+                array.attrs["concurrent_update"] = "yes"
+                concurrent.commit("concurrent update changes var0 metadata")
+            return original_deserialize(data)
+
+        monkeypatch.setattr(
+            pc_module,
+            "deserialize_fork_session",
+            deserialize_and_inject_concurrent_commit,
+        )
+
+        all_jobs = self._jobs(dataset, template_ds)
+        _run_workers(
+            dataset,
+            all_jobs,
+            template_ds,
+            workers_total=2,
+            overwrite_chunks=True,
+        )
+
+        result = xr.open_zarr(dataset.store_factory.primary_store())
+        assert injected[0]
+        # The concurrent metadata change survived alongside the backfill's data.
+        assert result["var0"].attrs["concurrent_update"] == "yes"
+        for var in ["var0", "var1", "var2", "var3"]:
+            assert np.all(result[var].values == 1.0)
 
 
 class TestWorkerRestart:
