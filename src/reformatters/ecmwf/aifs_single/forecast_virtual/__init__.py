@@ -1,1 +1,3 @@
-from .dynamical_dataset import EcmwfAifsSingleForecastVirtualSpatialDynamicalDataset as EcmwfAifsSingleForecastVirtualSpatialDynamicalDataset
+from .dynamical_dataset import (
+    EcmwfAifsSingleForecastVirtualDataset as EcmwfAifsSingleForecastVirtualDataset,
+)

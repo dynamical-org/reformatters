@@ -453,12 +453,17 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "rain_mixing_ratio",
     "snow_mixing_ratio",
     "graupel",
+    # ECMWF sub-gridscale orography statics with no CF standard name.
+    "standard_deviation_of_sub_gridscale_orography_surface",
+    "slope_of_sub_gridscale_orography_surface",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
 CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("air_temperature", "degree_Celsius"),
     ("dew_point_temperature", "degree_Celsius"),
+    ("surface_temperature", "degree_Celsius"),
+    ("soil_temperature", "degree_Celsius"),
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("vegetation_area_fraction", "percent"),
@@ -469,6 +474,9 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     # dimensionless "1" (mass of constituent per mass of dry air).
     ("cloud_ice_mixing_ratio", "kg kg-1"),
     ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
+    # ECMWF publishes accumulated radiation in J m-2, equal to CF's canonical W s m-2.
+    ("integral_wrt_time_of_surface_downwelling_shortwave_flux_in_air", "J m-2"),
+    ("integral_wrt_time_of_surface_downwelling_longwave_flux_in_air", "J m-2"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.
@@ -816,6 +824,12 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("sde", "units", "u-arizona-swann-analysis"),
     ("Snow depth", "units", "u-arizona-swann-analysis"),
     ("Snow depth water equivalent", "units", "u-arizona-swann-analysis"),
+    # ECMWF's land-sea mask is a 0-1 land fraction (land_area_fraction), while
+    # NOAA HRRR's is binary (land_binary_mask); each dataset describes its own
+    # values honestly under the shared name.
+    ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
 }
 
 
