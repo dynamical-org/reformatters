@@ -36,13 +36,20 @@ def _copy(
 def copies(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, list[str]]]:
     """Records (src, dst, file_names) per rclone invocation instead of running it."""
     recorded: list[tuple[str, str, list[str]]] = []
+    destination_sizes: dict[str, int] = {}
 
     def fake_copy(
         src_path: str, dst_path: str, file_names: Sequence[str], **_kwargs: object
     ) -> None:
         recorded.append((src_path, dst_path, list(file_names)))
+        destination_sizes.update(dict.fromkeys(file_names, 1))
 
     monkeypatch.setattr(module, "_rclone_copy", fake_copy)
+    monkeypatch.setattr(
+        module,
+        "list_file_sizes",
+        lambda _path, **_kwargs: destination_sizes.copy(),
+    )
     return recorded
 
 
@@ -108,6 +115,62 @@ def test_copies_each_file_once_across_polls(
     copied = [name for _src, _dst, names in copies for name in names]
     assert copied.count("hrrr.t12z.wrfsfcf00.grib2") == 1
     assert copied.count("hrrr.t12z.wrfsfcf01.grib2") == 1
+
+
+def test_retries_a_listed_grib_when_rclone_transfers_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    grib = "hrrr.t12z.wrfsfcf00.grib2"
+    published = {grib, f"{grib}.idx"}
+    copies: list[list[str]] = []
+    destination_polls = iter(
+        [
+            {},
+            {},
+            {},
+            {grib: 123},
+            {grib: 123, f"{grib}.idx": 45},
+        ]
+    )
+    monkeypatch.setattr(module, "_published_file_names", lambda _init: published)
+    monkeypatch.setattr(
+        module,
+        "_rclone_copy",
+        lambda _src, _dst, names, **_kwargs: copies.append(list(names)),
+    )
+    monkeypatch.setattr(
+        module,
+        "list_file_sizes",
+        lambda _path, **_kwargs: next(destination_polls),
+    )
+
+    _copy(lead_hours=(0,), max_duration=timedelta(seconds=30))
+
+    assert copies == [[grib], [grib], [f"{grib}.idx"]]
+
+
+def test_does_not_copy_index_for_a_zero_byte_grib(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    grib = "hrrr.t12z.wrfsfcf00.grib2"
+    copies: list[list[str]] = []
+    monkeypatch.setattr(
+        module, "_published_file_names", lambda _init: {grib, f"{grib}.idx"}
+    )
+    monkeypatch.setattr(
+        module,
+        "_rclone_copy",
+        lambda _src, _dst, names, **_kwargs: copies.append(list(names)),
+    )
+    monkeypatch.setattr(
+        module,
+        "list_file_sizes",
+        lambda _path, **_kwargs: {grib: 0},
+    )
+
+    _copy(lead_hours=(0,))
+
+    assert copies == [[grib]]
 
 
 def test_gives_up_on_a_file_that_never_publishes(
