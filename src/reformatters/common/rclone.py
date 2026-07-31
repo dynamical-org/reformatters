@@ -12,6 +12,45 @@ from reformatters.common.logging import get_logger
 log = get_logger(__name__)
 
 
+def list_file_sizes(
+    path: str,
+    *,
+    rclone_args: Sequence[str] = (),
+    env_vars: dict[str, Any] | None = None,
+    timeout_seconds: float = 200,
+) -> dict[str, int]:
+    """List the sizes of all files under an rclone path."""
+    cmd = (
+        "/usr/bin/rclone",
+        "lsf",
+        path,
+        "--fast-list",
+        "--recursive",
+        "--files-only",
+        "--format=sp",
+        "--separator=\t",
+        *rclone_args,
+    )
+    log.info("Running command: %s", " ".join(cmd))
+    result = subprocess.run(  # noqa: S603
+        cmd,
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env_vars,
+        timeout=timeout_seconds,
+    )
+    if result.stderr:
+        log.info("rclone stderr: %s", result.stderr)
+    files = {
+        name: int(size)
+        for line in result.stdout.splitlines()
+        for size, name in [line.split("\t", 1)]
+    }
+    log.info("Found %d files on '%s'.", len(files), path)
+    return files
+
+
 def run_command_with_concurrent_logging(
     cmd: Sequence[str],
     env_vars: dict[str, Any] | None = None,

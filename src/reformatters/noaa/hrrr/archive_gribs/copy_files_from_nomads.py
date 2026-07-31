@@ -25,7 +25,10 @@ import pandas as pd
 
 from reformatters.common.download import httpx_get_text
 from reformatters.common.logging import get_logger
-from reformatters.common.rclone import run_command_with_concurrent_logging
+from reformatters.common.rclone import (
+    list_file_sizes,
+    run_command_with_concurrent_logging,
+)
 from reformatters.noaa.noaa_utils import NOMADS_RETRY_STATUS_CODES, nomads_rate_limiter
 
 log = get_logger(__name__)
@@ -84,17 +87,58 @@ def copy_files_from_nomads(
                 continue
             src = source_dir(init_time)
             dst = destination_dir(dst_root_path, init_time)
-            for file_names in (ready, [f"{name}.idx" for name in ready]):
+            destination_sizes = list_file_sizes(
+                dst,
+                rclone_args=("--s3-no-check-bucket",),
+                env_vars=env_vars,
+            )
+            missing_gribs = [
+                name for name in ready if destination_sizes.get(name, 0) == 0
+            ]
+            if missing_gribs:
                 _rclone_copy(
                     src,
                     dst,
-                    file_names,
+                    missing_gribs,
                     stats_logging_freq=stats_logging_freq,
                     env_vars=env_vars,
                 )
-            names.difference_update(ready)
+                destination_sizes = list_file_sizes(
+                    dst,
+                    rclone_args=("--s3-no-check-bucket",),
+                    env_vars=env_vars,
+                )
+
+            complete_gribs = [
+                name for name in ready if destination_sizes.get(name, 0) > 0
+            ]
+            missing_indexes = [
+                f"{name}.idx"
+                for name in complete_gribs
+                if destination_sizes.get(f"{name}.idx", 0) == 0
+            ]
+            if missing_indexes:
+                _rclone_copy(
+                    src,
+                    dst,
+                    missing_indexes,
+                    stats_logging_freq=stats_logging_freq,
+                    env_vars=env_vars,
+                )
+                destination_sizes = list_file_sizes(
+                    dst,
+                    rclone_args=("--s3-no-check-bucket",),
+                    env_vars=env_vars,
+                )
+
+            mirrored = [
+                name
+                for name in complete_gribs
+                if destination_sizes.get(f"{name}.idx", 0) > 0
+            ]
+            names.difference_update(mirrored)
             log.info(
-                f"Mirrored {len(ready)} files for {init_time:%Y-%m-%dT%H}Z, "
+                f"Mirrored {len(mirrored)} files for {init_time:%Y-%m-%dT%H}Z, "
                 f"{len(names)} still pending"
             )
 
