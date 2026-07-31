@@ -99,8 +99,6 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
         lead_hours: int = 48,
         max_minutes: int = 75,
         poll_seconds: int = 15,
-        transfer_parallelism: int = 4,
-        checkers: int = 8,
         stats_logging_freq: str = "1m",
     ) -> None:
         """Mirror the current init's wrfsfc GRIB2 files from NOMADS into the cache bucket.
@@ -110,8 +108,6 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
             lead_hours: Mirror leads 0..lead_hours inclusive.
             max_minutes: Stop waiting for unpublished files after this long.
             poll_seconds: Interval between NOMADS directory-index checks.
-            transfer_parallelism: Passed to `rclone --transfers`.
-            checkers: Passed to `rclone --checkers`.
             stats_logging_freq: Period between stats logs, e.g. "1m".
         """
         with self._monitor(
@@ -140,8 +136,6 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
                 lead_hours=range(lead_hours + 1),
                 max_duration=timedelta(minutes=max_minutes),
                 poll_interval=timedelta(seconds=poll_seconds),
-                transfer_parallelism=transfer_parallelism,
-                checkers=checkers,
                 stats_logging_freq=stats_logging_freq,
                 env_vars=rclone_env_vars,
             )

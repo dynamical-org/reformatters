@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -26,8 +27,6 @@ def _copy(
         lead_hours=lead_hours,
         max_duration=max_duration,
         poll_interval=timedelta(seconds=0),
-        transfer_parallelism=4,
-        checkers=8,
         stats_logging_freq="1m",
         env_vars={},
     )
@@ -132,3 +131,21 @@ def test_parses_only_grib_and_index_hrefs() -> None:
         "hrrr.t12z.wrfsfcf00.grib2.idx",
         "hrrr.t12z.wrfprsf00.grib2",
     }
+
+
+def test_rclone_serializes_nomads_requests() -> None:
+    with patch.object(
+        module, "run_command_with_concurrent_logging", return_value=0
+    ) as run:
+        module._rclone_copy(
+            source_dir(INIT),
+            destination_dir(":s3:cache/", INIT),
+            [grib_file_name(INIT, 0)],
+            stats_logging_freq="1m",
+            env_vars={},
+        )
+
+    cmd = run.call_args.args[0]
+    assert "--transfers=1" in cmd
+    assert "--checkers=1" in cmd
+    assert not any(arg.startswith("--multi-thread") for arg in cmd)

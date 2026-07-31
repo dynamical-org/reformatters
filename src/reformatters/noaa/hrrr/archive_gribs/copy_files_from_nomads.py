@@ -54,8 +54,6 @@ def copy_files_from_nomads(
     lead_hours: Sequence[int],
     max_duration: timedelta,
     poll_interval: timedelta,
-    transfer_parallelism: int,
-    checkers: int,
     stats_logging_freq: str,
     env_vars: dict[str, Any] | None,
 ) -> None:
@@ -91,8 +89,6 @@ def copy_files_from_nomads(
                     src,
                     dst,
                     file_names,
-                    transfer_parallelism=transfer_parallelism,
-                    checkers=checkers,
                     stats_logging_freq=stats_logging_freq,
                     env_vars=env_vars,
                 )
@@ -137,8 +133,6 @@ def _rclone_copy(
     dst_path: str,
     file_names: Sequence[str],
     *,
-    transfer_parallelism: int,
-    checkers: int,
     stats_logging_freq: str,
     env_vars: dict[str, Any] | None,
 ) -> None:
@@ -155,11 +149,9 @@ def _rclone_copy(
             # Repairs a wrong-size object, where --ignore-existing would skip it forever.
             "--size-only",
             "--no-traverse",
-            "--multi-thread-cutoff=32M",
-            "--multi-thread-streams=4",
             "--s3-no-check-bucket",
-            f"--transfers={transfer_parallelism:d}",
-            f"--checkers={checkers:d}",
+            "--transfers=1",
+            "--checkers=1",
             f"--stats={stats_logging_freq}",
             "--stats-log-level=ERROR",
             "--quiet",
