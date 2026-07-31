@@ -112,8 +112,11 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
                 vars_in_file = [
                     var
                     for var in available_vars
-                    if lead_time == pd.Timedelta(0)
-                    or not var.internal_attrs.lead_0_only
+                    if (
+                        var.has_hour_0_values()
+                        if lead_time == pd.Timedelta(0)
+                        else not var.internal_attrs.lead_0_only
+                    )
                 ]
                 if not vars_in_file:
                     continue

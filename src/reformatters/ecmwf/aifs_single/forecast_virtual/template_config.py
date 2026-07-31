@@ -51,6 +51,8 @@ AIFS_2026_UPGRADE_DATE = pd.Timestamp("2026-05-13T00:00")
 # matching the materialized geopotential_height_* variables.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
 _GEOPOTENTIAL_TO_HEIGHT = ScaleOffset(offset=0.0, scale=9.80665).to_dict()
+# Params whose source values are Kelvin; their vars default to the K->C filter.
+_CELSIUS_PARAMS = frozenset({"2t", "2d", "skt", "sot", "t"})
 
 _STATIC_COMMENT = "Time-invariant field published at lead time 0 only."
 
@@ -359,12 +361,19 @@ def _var(
     comment: str | None,
     date_available: Timestamp | None,
     lead_0_only: bool,
-    filters: Sequence[CodecConfig],
+    filters: Sequence[CodecConfig] | None,
 ) -> EcmwfAifsSingleVirtualDataVar:
+    # Default to the K->C filter for temperature params; a var may override with
+    # explicit filters (e.g. geopotential -> height).
+    resolved_filters: Sequence[CodecConfig] = (
+        filters
+        if filters is not None
+        else ([_KELVIN_TO_CELSIUS] if param in _CELSIUS_PARAMS else ())
+    )
     return EcmwfAifsSingleVirtualDataVar(
         name=name,
         group=group,
-        encoding=_virtual_encoding(param, group, filters),
+        encoding=_virtual_encoding(param, group, resolved_filters),
         attrs=DataVarAttrs(
             short_name=short_name,
             long_name=long_name,
@@ -403,7 +412,7 @@ def _root_var(
     comment: str | None = None,
     date_available: Timestamp | None = None,
     lead_0_only: bool = False,
-    filters: Sequence[CodecConfig] = (),
+    filters: Sequence[CodecConfig] | None = None,
 ) -> EcmwfAifsSingleVirtualDataVar:
     return _var(
         name,
@@ -432,7 +441,7 @@ def _pressure_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
-    filters: Sequence[CodecConfig] = (),
+    filters: Sequence[CodecConfig] | None = None,
 ) -> EcmwfAifsSingleVirtualDataVar:
     return _var(
         name,
@@ -477,7 +486,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="2 metre temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
             "dew_point_temperature_2m",
@@ -486,7 +494,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="2 metre dewpoint temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
             "skin_temperature_surface",
@@ -495,7 +502,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Skin temperature",
             units="degree_Celsius",
             standard_name="surface_temperature",
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
             "wind_u_10m",
@@ -659,7 +665,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             standard_name="soil_temperature",
             comment="ECMWF soil level 1, the uppermost soil layer.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
             "soil_temperature_layer_2",
@@ -672,7 +677,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             standard_name="soil_temperature",
             comment="ECMWF soil level 2, the second soil layer from the surface.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
             "volumetric_soil_moisture_layer_1",
@@ -760,7 +764,6 @@ def _pressure_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         _pressure_var(
             "wind_u",
