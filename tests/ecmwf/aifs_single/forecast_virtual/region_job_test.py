@@ -318,7 +318,8 @@ def test_generate_source_file_coords_era2_includes_expanded_vars(
 def test_operational_update_jobs_single_polling_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    now = pd.Timestamp("2025-03-01T08:00")
+    # A production fire time: init+5h20m for the 2025-03-01T00 init.
+    now = pd.Timestamp("2025-03-01T05:20")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
     jobs, template_ds = EcmwfAifsSingleForecastVirtualRegionJob.operational_update_jobs(
@@ -335,5 +336,5 @@ def test_operational_update_jobs_single_polling_job(
     init_times = template_ds.to_dataset().get_index("init_time")
     assert init_times[-1] <= now
     assert now - init_times[-1] < TEMPLATE_CONFIG.append_dim_frequency
-    # 14h window at the 6h cadence = the current + 2 prior cycles.
+    # 20h window at a fire time = the just-publishing init + 2 prior cycles.
     assert job.region == slice(len(init_times) - 3, len(init_times))

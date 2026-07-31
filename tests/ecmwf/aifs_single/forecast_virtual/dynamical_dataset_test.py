@@ -143,7 +143,7 @@ def test_backfill_local_and_operational_update(
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
-    # The update window (14h before 08:00) ingests the 06z init too.
+    # The update window (20h before 08:00) ingests the 06z init too.
     assert updated.init_time.values[-1] == np.datetime64("2025-03-01T06:00")
     new_cell = updated.sel(
         latitude=_LAT,

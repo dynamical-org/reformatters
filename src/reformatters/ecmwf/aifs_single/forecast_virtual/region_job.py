@@ -87,9 +87,10 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         EcmwfAifsSingleVirtualDataVar, EcmwfAifsSingleForecastVirtualSourceFileCoord
     ]
 ):
-    # Two 6h cycles back plus slack (files publish ~25 minutes after init), so a
+    # Files publish ~init+5.5-6h, so at fire time (init+5h20m) the newest init plus
+    # the two prior cycles sit 5h20m/11h20m/17h20m back; 20h covers all three so a
     # couple of missed runs still self-heal.
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("14h")
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("20h")
 
     def generate_source_file_coords(
         self,

@@ -56,13 +56,14 @@ class EcmwfAifsSingleForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Run once per 6h cycle just before the files publish (all 61 leads land
-        # ~20-25 minutes after init). The pod exits when the window is fully
-        # ingested; the deadline bounds waiting on a file that never publishes and
-        # stays well under the 6h gap so fires never overlap.
+        # Run once per 6h cycle just before the files publish: all 61 leads land in
+        # a ~2 minute burst ~init+5h25m to init+6h03m (S3 LastModified; p99
+        # ~init+6h10m). Fire at init+5h20m and poll; the 1h deadline covers p99,
+        # bounds waiting on a cycle that never publishes, and keeps fires from
+        # overlapping.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="15 0,6,12,18 * * *",
+            schedule="20 5,11,17,23 * * *",
             pod_active_deadline=timedelta(hours=1),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -73,8 +74,8 @@ class EcmwfAifsSingleForecastVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # After each update (:15) + its 1h deadline.
-            schedule="15 1,7,13,19 * * *",
+            # After each update (init+5h20m) + its 1h deadline.
+            schedule="20 0,6,12,18 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -87,7 +88,8 @@ class EcmwfAifsSingleForecastVirtualDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        # 6h cycle + ~0.5h publication = ~7h before the latest init is current.
+        # Validation fires at init+6h20m, just after the update deadline; files
+        # publish by ~init+6h10m (p99), so 7h leaves ~40m of cron/pod start slack.
         return (
             partial(
                 validation.check_forecast_current_data,
