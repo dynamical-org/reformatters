@@ -27,7 +27,7 @@ def grib_message_byte_ranges_from_index(
     """
     byte_range_starts: list[int] = []
     byte_range_ends: list[int] = []
-    index_file_df = _parse_index_file(
+    index_file_df = parse_index_file(
         index_local_path, ensemble=ensemble_member is not None, step=step
     )
     for data_var in data_vars:
@@ -65,7 +65,7 @@ def grib_message_byte_ranges_from_index(
     return byte_range_starts, byte_range_ends
 
 
-def _parse_index_file(
+def parse_index_file(
     index_local_path: PathLike[str], *, ensemble: bool, step: int | None = None
 ) -> pd.DataFrame:
     """

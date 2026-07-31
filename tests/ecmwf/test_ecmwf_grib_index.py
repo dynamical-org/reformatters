@@ -13,8 +13,8 @@ from reformatters.common.config_models import (
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 from reformatters.ecmwf.ecmwf_grib_index import (
-    _parse_index_file,
     grib_message_byte_ranges_from_index,
+    parse_index_file,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -49,17 +49,17 @@ def index_file(tmp_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# _parse_index_file tests
+# parse_index_file tests
 # ---------------------------------------------------------------------------
 
 
 def test_parse_index_file_returns_dataframe(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     assert isinstance(df, pd.DataFrame)
 
 
 def test_parse_index_file_fills_control_member_number_with_0(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     # Reset index to inspect values easily
     df_reset = df.reset_index()
     # Control member (type=cf) has no 'number' in the JSON; it should be filled with 0
@@ -68,18 +68,18 @@ def test_parse_index_file_fills_control_member_number_with_0(index_file: Path) -
 
 
 def test_parse_index_file_has_multiindex(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     assert df.index.names == ["number", "param", "levtype", "levelist"]
 
 
 def test_parse_index_file_contains_offset_and_length_columns(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     assert "_offset" in df.columns
     assert "_length" in df.columns
 
 
 def test_parse_index_file_correct_control_member_offset(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     row = df.loc[(0, "2t", "sfc", slice(None)), ["_offset", "_length"]]
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
@@ -88,7 +88,7 @@ def test_parse_index_file_correct_control_member_offset(index_file: Path) -> Non
 
 
 def test_parse_index_file_correct_perturbed_member_offset(index_file: Path) -> None:
-    df = _parse_index_file(index_file, ensemble=True)
+    df = parse_index_file(index_file, ensemble=True)
     row = df.loc[(1, "2t", "sfc", slice(None)), ["_offset", "_length"]]
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
@@ -209,14 +209,14 @@ def test_get_byte_ranges_multiple_vars(index_file: Path) -> None:
 
 def test_parse_mars_cf_sfc_no_number_column() -> None:
     """MARS control-only indexes have no 'number' column — parser should fill with 0."""
-    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True)
+    df = parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True)
     df_reset = df.reset_index()
     assert (df_reset["number"] == 0).all()
 
 
 def test_parse_mars_index_with_step_filter() -> None:
     """Filtering by step returns only matching rows."""
-    df = _parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True, step=3)
+    df = parse_index_file(FIXTURES_DIR / "mars_cf_sfc.idx", ensemble=True, step=3)
     df_reset = df.reset_index()
     assert len(df_reset) == 2
     assert set(df_reset["param"]) == {"2t", "tp"}
@@ -267,7 +267,7 @@ def oper_fc_index_file(tmp_path: Path) -> Path:
 
 
 def test_parse_oper_fc_index_fills_number_with_0(oper_fc_index_file: Path) -> None:
-    df = _parse_index_file(oper_fc_index_file, ensemble=True)
+    df = parse_index_file(oper_fc_index_file, ensemble=True)
     df_reset = df.reset_index()
     assert (df_reset["number"] == 0).all()
     assert (df_reset["type"] == "fc").all()
