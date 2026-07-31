@@ -586,6 +586,8 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             standard_name="surface_snow_area_fraction",
             date_available=AIFS_2026_UPGRADE_DATE,
         ),
+        # tp/cp exist before AIFS_SINGLE_FORMAT_CHANGE_DATE too, but in metres;
+        # date_available serves only the unit-consistent kg m-2 era.
         _root_var(
             "total_precipitation_run_total_surface",
             param="tp",
@@ -594,8 +596,6 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Total precipitation",
             units="kg m-2",
             standard_name="precipitation_amount",
-            # Before this date the source stored tp in metres; serve only the
-            # unit-consistent kg m-2 era.
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
