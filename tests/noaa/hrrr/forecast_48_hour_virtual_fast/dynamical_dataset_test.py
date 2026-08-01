@@ -1,3 +1,5 @@
+from datetime import timedelta
+from inspect import signature
 from pathlib import Path
 
 import pytest
@@ -81,6 +83,21 @@ def test_has_a_mirror_job_the_full_dataset_lacks(
         if j.name.endswith("-update")
     )
     assert mirror.schedule.split()[0] < update.schedule.split()[0]
+
+
+def test_mirror_starts_at_init_and_covers_the_publication_window(
+    dataset: NoaaHrrrForecast48HourVirtualFastDataset,
+) -> None:
+    mirror = next(
+        job
+        for job in dataset.operational_kubernetes_resources("tag")
+        if job.name.endswith("-mirror")
+    )
+    assert mirror.schedule == "0 0,6,12,18 * * *"
+    assert mirror.pod_active_deadline == timedelta(hours=2, minutes=30)
+    assert (
+        signature(dataset.mirror_nomads_gribs).parameters["max_minutes"].default == 135
+    )
 
 
 def test_ingest_is_suspended_until_backfilled(

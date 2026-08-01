@@ -70,12 +70,11 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
             workers_total=1,
             parallelism=1,
             name=f"{self.dataset_id}-mirror",
-            # Start a few minutes before f00 publishes on NOMADS (p99 ~init+54m) and
-            # poll through f48 (p99 ~init+109m). Copying is the latency path, so the
-            # pod stays up across the cycle's publication window rather than sweeping
-            # once; the deadline stays well under the 6h gap so fires never overlap.
-            schedule="46 0,6,12,18 * * *",
-            pod_active_deadline=timedelta(hours=1, minutes=30),
+            # Start at init so pod placement and replacement happen before f00 and
+            # cannot consume the source-arrival margin. The pod polls through f48 and
+            # the deadline stays well under the 6h gap so fires never overlap.
+            schedule="0 0,6,12,18 * * *",
+            pod_active_deadline=timedelta(hours=2, minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",
@@ -97,7 +96,7 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
         dst_root_path: str = nomads_cache_rclone_root,
         lead_hours: int = 48,
-        max_minutes: int = 75,
+        max_minutes: int = 135,
         poll_seconds: int = 15,
         stats_logging_freq: str = "1m",
     ) -> None:
