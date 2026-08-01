@@ -2,11 +2,15 @@ from datetime import timedelta
 from inspect import signature
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualDataset,
+)
+from reformatters.noaa.hrrr.forecast_48_hour_virtual_fast import (
+    dynamical_dataset as dynamical_dataset_module,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual_fast.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualFastDataset,
@@ -95,9 +99,41 @@ def test_mirror_starts_at_init_and_covers_the_publication_window(
     )
     assert mirror.schedule == "0 0,6,12,18 * * *"
     assert mirror.pod_active_deadline == timedelta(hours=2, minutes=30)
-    assert (
-        signature(dataset.mirror_nomads_gribs).parameters["max_minutes"].default == 135
+    parameters = signature(dataset.mirror_nomads_gribs).parameters
+    assert parameters["poll_start_minutes"].default == 47
+    assert parameters["max_minutes"].default == 90
+    assert parameters["poll_seconds"].default == 5
+
+
+def test_mirror_waits_until_the_polling_window(
+    monkeypatch: pytest.MonkeyPatch,
+    dataset: NoaaHrrrForecast48HourVirtualFastDataset,
+) -> None:
+    now = pd.Timestamp("2026-08-01T18:45:00Z")
+    slept: list[float] = []
+    copy_kwargs: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda _cls, *args, **kwargs: now),
     )
+    monkeypatch.setattr(dynamical_dataset_module.time, "sleep", slept.append)
+    monkeypatch.setattr(
+        dynamical_dataset_module.kubernetes, "load_secret", lambda _name: {}
+    )
+    monkeypatch.setattr(
+        dynamical_dataset_module,
+        "copy_files_from_nomads",
+        lambda **kwargs: copy_kwargs.update(kwargs),
+    )
+
+    dataset.mirror_nomads_gribs("job")
+
+    assert slept == [120.0]
+    assert copy_kwargs["init_times"] == [pd.Timestamp("2026-08-01T18:00:00Z")]
+    assert copy_kwargs["max_duration"] == timedelta(minutes=90)
+    assert copy_kwargs["poll_interval"] == timedelta(seconds=5)
 
 
 def test_ingest_is_suspended_until_backfilled(

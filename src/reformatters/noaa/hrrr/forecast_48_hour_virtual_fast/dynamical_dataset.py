@@ -1,3 +1,4 @@
+import time
 from collections.abc import Sequence
 from datetime import timedelta
 from typing import Annotated, ClassVar
@@ -9,6 +10,7 @@ from pydantic import Field
 
 from reformatters.common import kubernetes
 from reformatters.common.kubernetes import CronJob
+from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
@@ -28,6 +30,8 @@ from .region_job import (
     hrrr_fast_virtual_chunk_containers,
 )
 from .template_config import NoaaHrrrForecast48HourVirtualFastTemplateConfig
+
+log = get_logger(__name__)
 
 _CACHE_SECRET_NAME = "noaa-hrrr-nomads-cache-storage-options-key"  # noqa: S105
 
@@ -96,8 +100,9 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
         dst_root_path: str = nomads_cache_rclone_root,
         lead_hours: int = 48,
-        max_minutes: int = 135,
-        poll_seconds: int = 15,
+        poll_start_minutes: int = 47,
+        max_minutes: int = 90,
+        poll_seconds: int = 5,
         stats_logging_freq: str = "1m",
     ) -> None:
         """Mirror the current init's wrfsfc GRIB2 files from NOMADS into the cache bucket.
@@ -105,6 +110,7 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
         Args:
             dst_root_path: Destination root, in rclone form e.g. ':s3:bucket/prefix/'.
             lead_hours: Mirror leads 0..lead_hours inclusive.
+            poll_start_minutes: Minutes after init before the first NOMADS request.
             max_minutes: Stop waiting for unpublished files after this long.
             poll_seconds: Interval between deterministic NOMADS file attempts.
             stats_logging_freq: Period between stats logs, e.g. "1m".
@@ -115,7 +121,15 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
             cron_job_name=f"{self.dataset_id}-mirror",
         ):
             cycle_hours = whole_hours(self.template_config.append_dim_frequency)
-            current_init_time = pd.Timestamp.now().floor(f"{cycle_hours}h")
+            now = pd.Timestamp.now(tz="UTC")
+            current_init_time = now.floor(f"{cycle_hours}h")
+            poll_start_time = current_init_time + pd.Timedelta(
+                minutes=poll_start_minutes
+            )
+            wait_seconds = max(0.0, (poll_start_time - now).total_seconds())
+            if wait_seconds:
+                log.info(f"Waiting {wait_seconds:.0f}s until NOMADS polling starts")
+                time.sleep(wait_seconds)
 
             secret = kubernetes.load_secret(_CACHE_SECRET_NAME)
             if secret:
