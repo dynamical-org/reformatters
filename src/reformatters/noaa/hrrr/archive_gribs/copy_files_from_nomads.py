@@ -7,14 +7,12 @@ days: this is a leading-edge cache, not an archive. Cache keys are byte-identica
 AWS archive's keys so a ref can later be repointed by prefix swap alone.
 
 Unlike the DWD and ECCC archivers this copy sits on the latency path, which drives three
-differences: it polls through a cycle's publication window rather than sweeping once,
-it passes an explicit `--files-from` list rather than copying directories (NOMADS limits
-request count, so per-file source stats must be avoided for files already copied), and
+differences: it polls deterministic file paths through a cycle's publication window,
+it attempts only the next pending file rather than listing or copying directories, and
 it copies each GRIB2 before its `.idx` so that an index present in the cache implies its
 data file is complete.
 """
 
-import re
 import tempfile
 import time
 from collections.abc import Sequence
@@ -23,19 +21,16 @@ from typing import Any, Final
 
 import pandas as pd
 
-from reformatters.common.download import httpx_get_text
 from reformatters.common.logging import get_logger
 from reformatters.common.rclone import (
     list_file_sizes,
     run_command_with_concurrent_logging,
 )
-from reformatters.noaa.noaa_utils import NOMADS_RETRY_STATUS_CODES, nomads_rate_limiter
 
 log = get_logger(__name__)
 
 NOMADS_HOST: Final[str] = "https://nomads.ncep.noaa.gov"
 _HRRR_PROD_PATH: Final[str] = "/pub/data/nccf/com/hrrr/prod"
-_HREF_RE: Final[re.Pattern[str]] = re.compile(r'href="([^"/?]+\.grib2(?:\.idx)?)"')
 
 
 def source_dir(init_time: pd.Timestamp) -> str:
@@ -66,24 +61,18 @@ def copy_files_from_nomads(
     never publishes is left behind rather than blocking the rest.
     """
     pending = {
-        init_time: {grib_file_name(init_time, lead) for lead in lead_hours}
+        init_time: list(
+            dict.fromkeys(grib_file_name(init_time, lead) for lead in lead_hours)
+        )
         for init_time in init_times
     }
+    expected_counts = {init_time: len(names) for init_time, names in pending.items()}
     give_up_at = time.monotonic() + max_duration.total_seconds()
 
     while any(pending.values()):
         poll_start = time.monotonic()
         for init_time, names in pending.items():
             if not names:
-                continue
-            published = _published_file_names(init_time)
-            # An index alone does not mean its data file has landed; require both.
-            ready = sorted(
-                name
-                for name in names
-                if name in published and f"{name}.idx" in published
-            )
-            if not ready:
                 continue
             src = source_dir(init_time)
             dst = destination_dir(dst_root_path, init_time)
@@ -92,53 +81,55 @@ def copy_files_from_nomads(
                 rclone_args=("--s3-no-check-bucket",),
                 env_vars=env_vars,
             )
-            missing_gribs = [
-                name for name in ready if destination_sizes.get(name, 0) == 0
-            ]
-            if missing_gribs:
-                _rclone_copy(
-                    src,
-                    dst,
-                    missing_gribs,
-                    stats_logging_freq=stats_logging_freq,
-                    env_vars=env_vars,
-                )
-                destination_sizes = list_file_sizes(
-                    dst,
-                    rclone_args=("--s3-no-check-bucket",),
-                    env_vars=env_vars,
-                )
-
-            complete_gribs = [
-                name for name in ready if destination_sizes.get(name, 0) > 0
-            ]
-            missing_indexes = [
-                f"{name}.idx"
-                for name in complete_gribs
-                if destination_sizes.get(f"{name}.idx", 0) == 0
-            ]
-            if missing_indexes:
-                _rclone_copy(
-                    src,
-                    dst,
-                    missing_indexes,
-                    stats_logging_freq=stats_logging_freq,
-                    env_vars=env_vars,
-                )
-                destination_sizes = list_file_sizes(
-                    dst,
-                    rclone_args=("--s3-no-check-bucket",),
-                    env_vars=env_vars,
-                )
-
-            mirrored = [
+            names[:] = [
                 name
-                for name in complete_gribs
-                if destination_sizes.get(f"{name}.idx", 0) > 0
+                for name in names
+                if destination_sizes.get(name, 0) == 0
+                or destination_sizes.get(f"{name}.idx", 0) == 0
             ]
-            names.difference_update(mirrored)
+            if names:
+                name = names[0]
+                if destination_sizes.get(name, 0) == 0:
+                    _rclone_copy(
+                        src,
+                        dst,
+                        [name],
+                        stats_logging_freq=stats_logging_freq,
+                        env_vars=env_vars,
+                    )
+                    destination_sizes = list_file_sizes(
+                        dst,
+                        rclone_args=("--s3-no-check-bucket",),
+                        env_vars=env_vars,
+                    )
+
+                index_name = f"{name}.idx"
+                if (
+                    destination_sizes.get(name, 0) > 0
+                    and destination_sizes.get(index_name, 0) == 0
+                ):
+                    _rclone_copy(
+                        src,
+                        dst,
+                        [index_name],
+                        stats_logging_freq=stats_logging_freq,
+                        env_vars=env_vars,
+                    )
+                    destination_sizes = list_file_sizes(
+                        dst,
+                        rclone_args=("--s3-no-check-bucket",),
+                        env_vars=env_vars,
+                    )
+
+                if (
+                    destination_sizes.get(name, 0) > 0
+                    and destination_sizes.get(index_name, 0) > 0
+                ):
+                    names.pop(0)
+
+            mirrored_count = expected_counts[init_time] - len(names)
             log.info(
-                f"Mirrored {len(mirrored)} files for {init_time:%Y-%m-%dT%H}Z, "
+                f"Mirrored {mirrored_count} files for {init_time:%Y-%m-%dT%H}Z, "
                 f"{len(names)} still pending"
             )
 
@@ -146,7 +137,7 @@ def copy_files_from_nomads(
             break
         if time.monotonic() >= give_up_at:
             unmirrored = {
-                f"{init_time:%Y-%m-%dT%H}Z": sorted(names)
+                f"{init_time:%Y-%m-%dT%H}Z": names
                 for init_time, names in pending.items()
                 if names
             }
@@ -155,21 +146,6 @@ def copy_files_from_nomads(
         time.sleep(
             max(0.0, poll_interval.total_seconds() - (time.monotonic() - poll_start))
         )
-
-
-def _published_file_names(init_time: pd.Timestamp) -> set[str]:
-    """File names listed in NOMADS' directory index for one init, empty if absent.
-
-    One request per call: NOMADS limits request count, and per-file HEAD bursts trip
-    Akamai's bot mitigation.
-    """
-    url = f"{NOMADS_HOST}{source_dir(init_time)}/"
-    html = httpx_get_text(
-        url,
-        rate_limiter=nomads_rate_limiter,
-        retry_status_codes=NOMADS_RETRY_STATUS_CODES,
-    )
-    return set(_HREF_RE.findall(html))
 
 
 def _rclone_copy(
@@ -196,6 +172,8 @@ def _rclone_copy(
             "--s3-no-check-bucket",
             "--transfers=1",
             "--checkers=1",
+            "--retries=1",
+            "--low-level-retries=1",
             f"--stats={stats_logging_freq}",
             "--stats-log-level=ERROR",
             "--quiet",
@@ -203,6 +181,7 @@ def _rclone_copy(
         )
         return_code = run_command_with_concurrent_logging(cmd, env_vars=env_vars)
     if return_code != 0:
-        raise RuntimeError(
-            f"rclone copy exited with code {return_code} for '{src_path}' -> '{dst_path}'"
+        log.warning(
+            f"rclone copy exited with code {return_code} for '{src_path}' -> "
+            f"'{dst_path}'; the deterministic source path remains pending"
         )

@@ -107,7 +107,7 @@ class NoaaHrrrForecast48HourVirtualFastDataset(NoaaHrrrForecast48HourVirtualData
             dst_root_path: Destination root, in rclone form e.g. ':s3:bucket/prefix/'.
             lead_hours: Mirror leads 0..lead_hours inclusive.
             max_minutes: Stop waiting for unpublished files after this long.
-            poll_seconds: Interval between NOMADS directory-index checks.
+            poll_seconds: Interval between deterministic NOMADS file attempts.
             stats_logging_freq: Period between stats logs, e.g. "1m".
         """
         with self._monitor(

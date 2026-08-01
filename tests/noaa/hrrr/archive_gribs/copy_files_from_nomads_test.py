@@ -63,53 +63,32 @@ def test_paths_match_the_aws_archive_layout() -> None:
 
 
 def test_copies_grib_before_its_index(
-    copies: list[tuple[str, str, list[str]]], monkeypatch: pytest.MonkeyPatch
+    copies: list[tuple[str, str, list[str]]],
 ) -> None:
     """An index present in the cache must imply its data file is complete."""
-    published = {
-        "hrrr.t12z.wrfsfcf00.grib2",
-        "hrrr.t12z.wrfsfcf00.grib2.idx",
-        "hrrr.t12z.wrfsfcf01.grib2",
-        "hrrr.t12z.wrfsfcf01.grib2.idx",
-    }
-    monkeypatch.setattr(module, "_published_file_names", lambda _init: published)
-    _copy()
+    _copy(lead_hours=(0,))
 
     assert [names for _src, _dst, names in copies] == [
-        ["hrrr.t12z.wrfsfcf00.grib2", "hrrr.t12z.wrfsfcf01.grib2"],
-        ["hrrr.t12z.wrfsfcf00.grib2.idx", "hrrr.t12z.wrfsfcf01.grib2.idx"],
+        ["hrrr.t12z.wrfsfcf00.grib2"],
+        ["hrrr.t12z.wrfsfcf00.grib2.idx"],
     ]
 
 
-def test_skips_a_grib_whose_index_has_not_published(
-    copies: list[tuple[str, str, list[str]]], monkeypatch: pytest.MonkeyPatch
+def test_attempts_only_the_next_deterministic_pair(
+    copies: list[tuple[str, str, list[str]]],
 ) -> None:
-    monkeypatch.setattr(
-        module,
-        "_published_file_names",
-        lambda _init: {"hrrr.t12z.wrfsfcf00.grib2", "hrrr.t12z.wrfsfcf01.grib2"},
-    )
     _copy()
-    assert copies == []
+    assert [names for _src, _dst, names in copies] == [
+        ["hrrr.t12z.wrfsfcf00.grib2"],
+        ["hrrr.t12z.wrfsfcf00.grib2.idx"],
+    ]
 
 
 def test_copies_each_file_once_across_polls(
-    copies: list[tuple[str, str, list[str]]], monkeypatch: pytest.MonkeyPatch
+    copies: list[tuple[str, str, list[str]]],
 ) -> None:
     """Already-copied files must not be re-passed to rclone: a source stat per file
     per poll would exhaust the NOMADS request budget."""
-    polls = iter(
-        [
-            {"hrrr.t12z.wrfsfcf00.grib2", "hrrr.t12z.wrfsfcf00.grib2.idx"},
-            {
-                "hrrr.t12z.wrfsfcf00.grib2",
-                "hrrr.t12z.wrfsfcf00.grib2.idx",
-                "hrrr.t12z.wrfsfcf01.grib2",
-                "hrrr.t12z.wrfsfcf01.grib2.idx",
-            },
-        ]
-    )
-    monkeypatch.setattr(module, "_published_file_names", lambda _init: next(polls))
     _copy(max_duration=timedelta(seconds=30))
 
     copied = [name for _src, _dst, names in copies for name in names]
@@ -117,11 +96,10 @@ def test_copies_each_file_once_across_polls(
     assert copied.count("hrrr.t12z.wrfsfcf01.grib2") == 1
 
 
-def test_retries_a_listed_grib_when_rclone_transfers_nothing(
+def test_retries_a_grib_when_rclone_transfers_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     grib = "hrrr.t12z.wrfsfcf00.grib2"
-    published = {grib, f"{grib}.idx"}
     copies: list[list[str]] = []
     destination_polls = iter(
         [
@@ -132,7 +110,6 @@ def test_retries_a_listed_grib_when_rclone_transfers_nothing(
             {grib: 123, f"{grib}.idx": 45},
         ]
     )
-    monkeypatch.setattr(module, "_published_file_names", lambda _init: published)
     monkeypatch.setattr(
         module,
         "_rclone_copy",
@@ -155,9 +132,6 @@ def test_does_not_copy_index_for_a_zero_byte_grib(
     grib = "hrrr.t12z.wrfsfcf00.grib2"
     copies: list[list[str]] = []
     monkeypatch.setattr(
-        module, "_published_file_names", lambda _init: {grib, f"{grib}.idx"}
-    )
-    monkeypatch.setattr(
         module,
         "_rclone_copy",
         lambda _src, _dst, names, **_kwargs: copies.append(list(names)),
@@ -173,27 +147,8 @@ def test_does_not_copy_index_for_a_zero_byte_grib(
     assert copies == [[grib]]
 
 
-def test_gives_up_on_a_file_that_never_publishes(
-    copies: list[tuple[str, str, list[str]]], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(module, "_published_file_names", lambda _init: set())
-    _copy()  # max_duration=0, so one sweep then return
-    assert copies == []
-
-
-def test_parses_only_grib_and_index_hrefs() -> None:
-    html = """
-    <a href="hrrr.t12z.wrfsfcf00.grib2">x</a>
-    <a href="hrrr.t12z.wrfsfcf00.grib2.idx">x</a>
-    <a href="hrrr.t12z.wrfprsf00.grib2">x</a>
-    <a href="bufrsnd.t12z/">dir</a>
-    <a href="/pub/data/nccf/com/hrrr/prod/">parent</a>
-    """
-    assert set(module._HREF_RE.findall(html)) == {
-        "hrrr.t12z.wrfsfcf00.grib2",
-        "hrrr.t12z.wrfsfcf00.grib2.idx",
-        "hrrr.t12z.wrfprsf00.grib2",
-    }
+def test_does_not_depend_on_a_nomads_directory_listing() -> None:
+    assert not hasattr(module, "_published_file_names")
 
 
 def test_rclone_serializes_nomads_requests() -> None:
@@ -211,4 +166,17 @@ def test_rclone_serializes_nomads_requests() -> None:
     cmd = run.call_args.args[0]
     assert "--transfers=1" in cmd
     assert "--checkers=1" in cmd
+    assert "--retries=1" in cmd
+    assert "--low-level-retries=1" in cmd
     assert not any(arg.startswith("--multi-thread") for arg in cmd)
+
+
+def test_rclone_failure_leaves_the_deterministic_path_pending() -> None:
+    with patch.object(module, "run_command_with_concurrent_logging", return_value=1):
+        module._rclone_copy(
+            source_dir(INIT),
+            destination_dir(":s3:cache/", INIT),
+            [grib_file_name(INIT, 0)],
+            stats_logging_freq="1m",
+            env_vars={},
+        )
