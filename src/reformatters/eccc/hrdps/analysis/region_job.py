@@ -9,10 +9,10 @@ from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
 from reformatters.eccc.hrdps.hrdps_config_models import EcccHrdpsDataVar
 from reformatters.eccc.hrdps.region_job import (
-    HRDPS_INIT_FREQUENCY,
     EcccHrdpsRegionJob,
     EcccHrdpsSourceFileCoord,
 )
+from reformatters.eccc.hrdps.template_config import HRDPS_INIT_FREQUENCY
 
 
 class EcccHrdpsAnalysisSourceFileCoord(EcccHrdpsSourceFileCoord):

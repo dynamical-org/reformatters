@@ -1,16 +1,20 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import Final
 
 import numpy as np
 import pandas as pd
 import rasterio
 import xarray as xr
-from obstore.exceptions import GenericError, PermissionDeniedError
 from zarr.abc.store import Store
 
-from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.deaccumulation import (
+    deaccumulate_to_rates_inplace_logging_errors,
+)
+from reformatters.common.download import (
+    DOWNLOAD_FALLBACK_EXCEPTIONS,
+    http_download_to_disk,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -31,10 +35,9 @@ from reformatters.eccc.hrdps.archive_gribs.copy_files_from_eccc import (
     MSC_DATAMART_HOST,
 )
 from reformatters.eccc.hrdps.hrdps_config_models import EcccHrdpsDataVar
+from reformatters.eccc.hrdps.template_config import HRDPS_INIT_FREQUENCY
 
 log = get_logger(__name__)
-
-HRDPS_INIT_FREQUENCY: Final[Timedelta] = pd.Timedelta("6h")
 
 DYNAMICAL_GRIB_ARCHIVE_URL: Final[str] = (
     "https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/dynamical/eccc-hrdps-grib"
@@ -95,7 +98,7 @@ class EcccHrdpsRegionJob(
         url = coord.get_url()
         try:
             return http_download_to_disk(url, self.dataset_id)
-        except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
+        except DOWNLOAD_FALLBACK_EXCEPTIONS as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
@@ -138,26 +141,13 @@ class EcccHrdpsRegionJob(
             reset_frequency = (
                 pd.Timedelta.max if deaccum_dim == "lead_time" else HRDPS_INIT_FREQUENCY
             )
-            log.info(
-                f"Converting {data_var.name} from accumulations to rates along {deaccum_dim}"
+            deaccumulate_to_rates_inplace_logging_errors(
+                data_array,
+                dim=deaccum_dim,
+                reset_frequency=reset_frequency,
+                invalid_below_threshold_rate=attrs.deaccumulation_invalid_below_threshold_rate,
+                expected_clamp_fraction=attrs.deaccumulation_expected_clamp_fraction,
             )
-            optional_kwargs: dict[str, Any] = {
-                "invalid_below_threshold_rate": attrs.deaccumulation_invalid_below_threshold_rate,
-                "expected_clamp_fraction": attrs.deaccumulation_expected_clamp_fraction,
-            }
-            optional_kwargs = {
-                k: v for k, v in optional_kwargs.items() if v is not None
-            }
-            try:
-                deaccumulate_to_rates_inplace(
-                    data_array,
-                    dim=deaccum_dim,
-                    reset_frequency=reset_frequency,
-                    **optional_kwargs,
-                )
-            except ValueError:
-                # Log exception so we are notified if deaccumulation errors are larger than expected.
-                log.exception(f"Error deaccumulating {data_var.name}")
 
         if (scale_factor := attrs.scale_factor) is not None:
             data_array.values *= np.float32(scale_factor)

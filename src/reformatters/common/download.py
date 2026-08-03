@@ -15,6 +15,7 @@ import httpx
 import numpy as np
 import obstore
 import requests
+from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common.logging import get_logger
 
@@ -24,6 +25,11 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
+
+# Download errors that warrant trying a fallback source: missing files, AWS 503
+# Slow Down translated by obstore to GenericError, and AWS 403s (how S3 reports
+# a missing key without list permission) which obstore raises as PermissionDeniedError.
+DOWNLOAD_FALLBACK_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
 
 """
 This module provides utilities for downloading files to disk over http,

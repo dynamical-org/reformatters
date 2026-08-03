@@ -22,7 +22,10 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.eccc.hrdps.hrdps_config_models import EcccHrdpsDataVar
-from reformatters.eccc.hrdps.template_config import EcccHrdpsCommonTemplateConfig
+from reformatters.eccc.hrdps.template_config import (
+    HRDPS_INIT_FREQUENCY,
+    EcccHrdpsCommonTemplateConfig,
+)
 
 
 class EcccHrdpsForecastTemplateConfig(EcccHrdpsCommonTemplateConfig):
@@ -30,7 +33,7 @@ class EcccHrdpsForecastTemplateConfig(EcccHrdpsCommonTemplateConfig):
     append_dim: AppendDim = "init_time"
     # Start of dynamical.org's continuous grib archive of HRDPS on Source Co-Op
     append_dim_start: Timestamp = pd.Timestamp("2026-07-09T00:00")
-    append_dim_frequency: Timedelta = pd.Timedelta("6h")
+    append_dim_frequency: Timedelta = HRDPS_INIT_FREQUENCY
 
     @computed_field
     @property

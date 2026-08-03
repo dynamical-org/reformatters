@@ -51,8 +51,10 @@ class EcccHrdpsAnalysisDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.DataValidator]:
-        # The newest analysis hour is at most ~5h old just before the next run's
-        # data arrives (6h init cadence + ~4h publication lag - 5h of lead times).
+        # Validation runs 30 minutes after each update. Just after a successful
+        # update the newest analysis hour is ~2.5h old (the update template
+        # extends only to wall-clock now, minus the trailing-hour trim), while
+        # a missed update leaves it more than 8h old, so 6h flags exactly that.
         max_expected_delay = timedelta(hours=6)
         return (
             partial(

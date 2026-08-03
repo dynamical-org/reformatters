@@ -1,17 +1,20 @@
 import bz2
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-from obstore.exceptions import GenericError, PermissionDeniedError
 from rasterio.io import MemoryFile
 from zarr.abc.store import Store
 
-from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.deaccumulation import (
+    deaccumulate_to_rates_inplace_logging_errors,
+)
+from reformatters.common.download import (
+    DOWNLOAD_FALLBACK_EXCEPTIONS,
+    http_download_to_disk,
+)
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
@@ -138,7 +141,7 @@ class DwdIconEuForecast5DayRegionJob(
         url = coord.get_url()
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
-        except (FileNotFoundError, GenericError, PermissionDeniedError) as e:
+        except DOWNLOAD_FALLBACK_EXCEPTIONS as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
@@ -176,26 +179,14 @@ class DwdIconEuForecast5DayRegionJob(
 
         if attrs.deaccumulate_to_rate:
             assert attrs.window_reset_frequency is not None
-            log.info(
-                f"Converting {data_var.name} from accumulations to rates along lead_time"
+            deaccumulate_to_rates_inplace_logging_errors(
+                data_array,
+                dim="lead_time",
+                reset_frequency=attrs.window_reset_frequency,
+                invalid_below_threshold_rate=attrs.deaccumulation_invalid_below_threshold_rate,
+                expected_clamp_fraction=attrs.deaccumulation_expected_clamp_fraction,
+                accumulation_type=attrs.deaccumulation_type,
             )
-            optional_kwargs: dict[str, Any] = {
-                "invalid_below_threshold_rate": attrs.deaccumulation_invalid_below_threshold_rate,
-                "expected_clamp_fraction": attrs.deaccumulation_expected_clamp_fraction,
-            }
-            optional_kwargs = {
-                k: v for k, v in optional_kwargs.items() if v is not None
-            }
-            try:
-                deaccumulate_to_rates_inplace(
-                    data_array,
-                    dim="lead_time",
-                    reset_frequency=attrs.window_reset_frequency,
-                    accumulation_type=attrs.deaccumulation_type,
-                    **optional_kwargs,
-                )
-            except ValueError:
-                log.exception(f"Error deaccumulating {data_var.name}")
 
         super().apply_data_transformations(data_array, data_var)
 

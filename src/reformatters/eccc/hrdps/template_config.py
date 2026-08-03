@@ -1,7 +1,9 @@
 import functools
 from collections.abc import Sequence
+from typing import Final
 
 import numpy as np
+import pandas as pd
 from pydantic import computed_field
 from pyproj import CRS, Transformer
 
@@ -14,7 +16,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.deaccumulation import RADIATION_INVALID_BELOW_THRESHOLD
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import Array1D, Array2D
+from reformatters.common.types import Array1D, Array2D, Timedelta
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -23,6 +25,11 @@ from reformatters.eccc.hrdps.hrdps_config_models import (
     EcccHrdpsDataVar,
     EcccHrdpsInternalAttrs,
 )
+
+# HRDPS runs at 00, 06, 12, and 18 UTC. The forecast dataset's
+# append_dim_frequency and the analysis dataset's deaccumulation reset both
+# follow from this.
+HRDPS_INIT_FREQUENCY: Final[Timedelta] = pd.Timedelta("6h")
 
 # Extracted from an HRDPS continental GRIB2 file by rasterio/GDAL, see
 # tests/eccc/hrdps/template_config_test.py::test_spatial_info_matches_file.
