@@ -98,13 +98,21 @@ def test_dimension_coordinates_native_quarter_degree_grid() -> None:
 
 def test_data_vars_are_s_file_vars_with_virtual_encoding() -> None:
     data_vars = TEMPLATE_CONFIG.data_vars
-    # The 35-day forecast's vars minus the three only available in the 0.5
-    # degree a/b files (geopotential_height_500hpa, wind_u_100m, wind_v_100m).
-    assert len(data_vars) == 19
+    # Every shared GEFS variable except those only available in the 0.5 degree
+    # a/b files, which can't share this dataset's 0.25 degree grid.
+    assert len(data_vars) == 20
     var_names = {v.name for v in data_vars}
     assert "temperature_2m" in var_names
     assert var_names.isdisjoint(
-        {"geopotential_height_500hpa", "wind_u_100m", "wind_v_100m"}
+        {
+            "geopotential_height_500hpa",
+            "pressure_80m",
+            "temperature_80m",
+            "wind_u_100m",
+            "wind_u_80m",
+            "wind_v_100m",
+            "wind_v_80m",
+        }
     )
 
     for var in data_vars:

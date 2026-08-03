@@ -420,7 +420,7 @@ def test_real_source_all_vars_resolve_and_decode(template_ds: xr.DataTree) -> No
     key = coord.get_url().removeprefix("s3://noaa-gefs-pds/")
     refs = job.file_refs(coord, file_size)
 
-    assert len(refs) == 19
+    assert len(refs) == 20
     for ref in refs:
         assert 0 <= ref.offset < file_size
         assert 0 < ref.length

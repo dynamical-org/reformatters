@@ -125,6 +125,25 @@ def get_shared_data_var_configs(
 
     return (
         GEFSDataVar(
+            name="wind_gust_surface",
+            encoding=encoding_float32,
+            attrs=DataVarAttrs(
+                short_name="gust",
+                long_name="Wind speed (gust)",
+                units="m s-1",
+                step_type="instant",
+                standard_name="wind_speed_of_gust",
+            ),
+            internal_attrs=GEFSInternalAttrs(
+                grib_element="GUST",
+                grib_description='0[-] SFC="Ground or water surface"',
+                grib_index_level="surface",
+                gefs_file_type="s+b",
+                index_position=2,
+                keep_mantissa_bits=6,
+            ),
+        ),
+        GEFSDataVar(
             name="pressure_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
