@@ -36,8 +36,12 @@ type SpatialResolution = Literal[
     "4 km",
     "36 km",
 ]
-# Only SPDX license identifiers (https://spdx.org/licenses/) should be added to this type.
-type License = Literal["CC-BY-4.0"]
+# Add SPDX license identifiers (https://spdx.org/licenses/) to this type, or for a
+# license without an SPDX identifier, the license's official name and version.
+type License = Literal[
+    "CC-BY-4.0",
+    "ECCC Data Servers End-use Licence v2.1",
+]
 
 
 class DatasetAttributes(FrozenBaseModel):
