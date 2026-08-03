@@ -35,8 +35,8 @@
     }
   ],
   "attributes": {
-    "long_name": "10 metre wind speed",
-    "short_name": "10si",
+    "long_name": "Time-maximum 10 metre wind speed",
+    "short_name": "max_10si",
     "standard_name": "wind_speed",
     "units": "m s-1",
     "step_type": "max",

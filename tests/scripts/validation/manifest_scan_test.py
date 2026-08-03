@@ -75,10 +75,11 @@ def _var(
     name: str,
     step_type: str = "instant",
     hour_0_values_override: bool | None = None,
+    path: str | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
-        path=name,
+        path=path or name,
         attrs=SimpleNamespace(step_type=step_type),
         internal_attrs=SimpleNamespace(hour_0_values_override=hour_0_values_override),
         has_hour_0_values=lambda: (
@@ -199,6 +200,22 @@ def test_probe_coord_respects_coord_data_vars() -> None:
     sorted_coords = _sort_coords_for_probe([sfc, prs])  # ty: ignore[invalid-argument-type]
     # prs has the smaller lead but does not carry temperature.
     assert _probe_coord_for_var(sorted_coords, temperature) is sfc  # ty: ignore[invalid-argument-type]
+
+
+def test_probe_coord_distinguishes_same_name_in_different_groups() -> None:
+    p = pd.Timestamp("2024-01-01")
+    pressure_temperature = _var("temperature", path="pressure_level/temperature")
+    model_temperature = _var("temperature", path="model_level/temperature")
+    coord = _Coord(
+        p,
+        "prs",
+        lead_time=pd.Timedelta(hours=1),
+        data_vars=[pressure_temperature],
+    )
+
+    assert (
+        _probe_coord_for_var(_sort_coords_for_probe([coord]), model_temperature) is None  # ty: ignore[invalid-argument-type]
+    )
 
 
 def _template() -> xr.Dataset:

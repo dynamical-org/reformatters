@@ -968,8 +968,8 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             element="WIND",
             level="10 m above ground",
             window="max",
-            short_name="10si",
-            long_name="10 metre wind speed",
+            short_name="max_10si",
+            long_name="Time-maximum 10 metre wind speed",
             units="m s-1",
             standard_name="wind_speed",
         ),
@@ -1227,7 +1227,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             short_name="gflux",
             long_name="Ground heat flux",
             units="W m-2",
-            standard_name="downward_heat_flux_in_soil",
+            standard_name="upward_heat_flux_at_ground_level_in_soil",
         ),
         _root_var(
             "vegetation_type_surface",
@@ -1523,7 +1523,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             level="0-1000 m above ground",
             short_name="vucsh",
             long_name="Vertical u-component shear",
-            units="s-1",
+            units="m s-1",
         ),
         _root_var(
             "vertical_v_component_shear_0_1000m",
@@ -1531,7 +1531,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             level="0-1000 m above ground",
             short_name="vvcsh",
             long_name="Vertical v-component shear",
-            units="s-1",
+            units="m s-1",
         ),
         _root_var(
             "vertical_u_component_shear_0_6000m",
@@ -1539,7 +1539,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             level="0-6000 m above ground",
             short_name="vucsh",
             long_name="Vertical u-component shear",
-            units="s-1",
+            units="m s-1",
         ),
         _root_var(
             "vertical_v_component_shear_0_6000m",
@@ -1547,7 +1547,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             level="0-6000 m above ground",
             short_name="vvcsh",
             long_name="Vertical v-component shear",
-            units="s-1",
+            units="m s-1",
         ),
         _root_var(
             "geopotential_height_0c_isotherm",

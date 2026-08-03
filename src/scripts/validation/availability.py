@@ -186,15 +186,14 @@ def write_availability_artifacts(
 
     summaries: dict[str, VarAvailabilitySummary] = {}
     for var, series in series_by_var.items():
-        probed = ~np.isnan(series.fraction)
-        complete = probed & (series.fraction >= 1.0)
-        incomplete_positions = series.positions[probed & ~complete]
+        complete = series.fraction >= 1.0
+        incomplete_positions = series.positions[~complete]
         plot_name = f"availability_{var_slug(var)}.png"
         _plot_var_availability(series, output_dir / plot_name, var)
         labels = _position_labels(incomplete_positions)
         summaries[var] = VarAvailabilitySummary(
             plot=plot_name,
-            positions_total=int(probed.sum()),
+            positions_total=len(series.positions),
             positions_complete=int(complete.sum()),
             first_incomplete=labels[0] if labels else None,
             last_incomplete=labels[-1] if labels else None,
