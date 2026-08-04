@@ -54,10 +54,6 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 log = get_logger(__name__)
 
-# stop polling before the pod active deadline
-_POLL_DEADLINE_GRACE = pd.Timedelta(seconds=30)
-assert _POLL_DEADLINE_GRACE.total_seconds() > 0
-
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
@@ -792,13 +788,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
         Anchored to the scheduled fire rather than to `now`, so a pod replacing an
         evicted one stops when the pod it replaced would have, instead of polling into
-        the next fire and being killed mid-poll.
+        the next fire and being killed mid-poll. Lands a grace period before the pod's
+        own active deadline, leaving room to exit and check in.
         """
+        poll_deadline_grace = pd.Timedelta(seconds=30)
+        assert poll_deadline_grace.total_seconds() > 0
         cron_job = self._operational_cron_job(ReformatCronJob)
         return (
             cron_job.previous_fire_time(now)
             + cron_job.pod_active_deadline
-            - _POLL_DEADLINE_GRACE
+            - poll_deadline_grace
         )
 
     def _operational_cron_job(
