@@ -25,12 +25,16 @@ _CRON_JOB = CronJob(
 def test_monitor_cron_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
     mock_capture = Mock()
+    mock_flush = Mock()
     monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+    monkeypatch.setattr(sentry_sdk, "flush", mock_flush)
 
     with monitor_cron(_CRON_JOB, "job-name"):
         pass
     statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
     assert statuses == ["in_progress", "ok"]
+    # Every check-in is flushed; an undelivered one reads as a failed run in Sentry.
+    assert mock_flush.call_count == len(statuses)
 
     call_kwargs = mock_capture.call_args_list[0].kwargs
     assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
