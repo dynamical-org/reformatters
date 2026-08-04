@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import random
+import re
 import string
 from collections.abc import Sequence
 from datetime import timedelta
@@ -13,9 +14,43 @@ import pydantic
 from kubernetes import client, config
 
 from reformatters.common.config import Config
+from reformatters.common.types import Timestamp
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
+
+# The daily `<minute> <hours> * * *` shape every operational schedule here uses, with
+# hours as `*`, `*/N`, `A-B/N`, or a comma separated list.
+_SCHEDULE_PATTERN = re.compile(
+    r"(?P<minute>\d{1,2}) (?P<hours>\*|\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) \* \* \*"
+)
+
+
+def _parse_schedule(schedule: str) -> tuple[int, frozenset[int]]:
+    """The minute and hours of day a cron schedule fires at."""
+    match = _SCHEDULE_PATTERN.fullmatch(schedule)
+    assert match is not None, (
+        f"Unsupported cron schedule {schedule!r}, expected `<minute> <hours> * * *` "
+        "with hours as `*`, `*/N`, `A-B/N`, or a comma separated list"
+    )
+    minute, hours = int(match["minute"]), _parse_hours(match["hours"])
+    assert minute <= 59, f"Cron schedule {schedule!r} has a minute above 59"
+    assert hours, f"Cron schedule {schedule!r} selects no hours"
+    assert max(hours) <= 23, f"Cron schedule {schedule!r} has an hour above 23"
+    return minute, hours
+
+
+def _parse_hours(field: str) -> frozenset[int]:
+    spec, _, step = field.partition("/")
+    if "," in spec:
+        return frozenset(int(hour) for hour in spec.split(","))
+    if spec == "*":
+        start, end = 0, 23
+    elif "-" in spec:
+        start, end = (int(bound) for bound in spec.split("-"))
+    else:
+        return frozenset({int(spec)})
+    return frozenset(range(start, end + 1, int(step) if step else 1))
 
 
 class Job(pydantic.BaseModel):
@@ -229,6 +264,20 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+
+    def previous_fire_time(self, now: Timestamp) -> Timestamp:
+        """The most recent time this schedule fired, at or before `now`.
+
+        Every pod of one fire derives the same value, including a replacement pod
+        started after an eviction, which its own start time would not give.
+        """
+        minute, hours = _parse_schedule(self.schedule)
+        fire_time = now.normalize() + timedelta(hours=now.hour, minutes=minute)
+        if fire_time > now:
+            fire_time -= timedelta(hours=1)
+        while fire_time.hour not in hours:
+            fire_time -= timedelta(hours=1)
+        return fire_time
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]

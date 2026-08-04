@@ -27,7 +27,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta
+from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
 log = get_logger(__name__)
 
@@ -70,6 +70,10 @@ class VirtualRegionJob(
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
+    # Wall clock time an update stops waiting on files the source has not published yet,
+    # leaving them to the next fire. None waits until every file is ingested.
+    poll_deadline: Timestamp | None = None
+
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
@@ -94,9 +98,9 @@ class VirtualRegionJob(
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """A single polling job over the operational_update_window of recent steps.
 
-        Polls until every expected file is ingested; filter_already_present derives
-        the remaining work from the manifest. See "Operational updates" in
-        docs/virtual_datasets.md.
+        Polls until every expected file is ingested or the caller's poll_deadline
+        passes; filter_already_present derives the remaining work from the manifest.
+        See "Operational updates" in docs/virtual_datasets.md.
         """
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
@@ -206,9 +210,9 @@ class VirtualRegionJob(
         """Drive discover_available + file_refs, yielding one commit's worth per tick.
 
         One yield per tick contains every file that became available since the last:
-        a backfill sweeps once and exits, an update polls until everything is
-        ingested. Each yield is whole source files as (coord, refs) pairs — never
-        split a file, never yield empty. Source-agnostic: it only asks
+        a backfill sweeps once and exits, an update polls until everything is ingested
+        or its poll_deadline passes. Each yield is whole source files as (coord, refs)
+        pairs — never split a file, never yield empty. Source-agnostic: it only asks
         discover_available which coords are ready. Override only for a different
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
@@ -248,6 +252,16 @@ class VirtualRegionJob(
                         )
                     return
                 if pending:
+                    if (
+                        self.poll_deadline is not None
+                        and pd.Timestamp.now() >= self.poll_deadline
+                    ):
+                        log.info(
+                            f"Poll deadline reached with {len(pending)} source files "
+                            f"not yet published, leaving them to the next update "
+                            f"(first: {pending[0].get_url()})"
+                        )
+                        return
                     elapsed = time.monotonic() - tick_start
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
