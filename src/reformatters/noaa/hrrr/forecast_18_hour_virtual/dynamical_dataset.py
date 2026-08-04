@@ -61,9 +61,9 @@ class NoaaHrrrForecast18HourVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # Just before the next update fire; a late update may still be polling,
-            # which the completeness fractions below tolerate.
-            schedule="48 * * * *",
+            # The update's fire plus its pod_active_deadline, so the run being
+            # validated has always stopped writing.
+            schedule="49 * * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -80,7 +80,8 @@ class NoaaHrrrForecast18HourVirtualDataset(
                 validation.check_forecast_current_data,
                 max_latest_init_time_age=timedelta(hours=2),
             ),
-            # The current and prior hourly cycles may still be publishing.
+            # Newest init: the next fire chases it, nothing is ingested yet. Second
+            # newest: the run that just ended may have deferred late files to that fire.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.0, 0.0, 1.0)
             ),

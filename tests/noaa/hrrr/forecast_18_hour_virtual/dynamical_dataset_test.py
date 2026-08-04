@@ -188,7 +188,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "48 * * * *"
+    assert validation_cron_job.schedule == "49 * * * *"
     assert not validation_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
 
