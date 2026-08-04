@@ -208,7 +208,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckVirtualManifestCompleteness)
     )
-    assert completeness.min_present_fraction == (0.0, 0.0, 1.0)
+    assert completeness.min_present_fraction == (0.0, 0.05, 1.0)
     assert any(
         isinstance(validator, validation.CheckVirtualDecodeHealth)
         for validator in validators

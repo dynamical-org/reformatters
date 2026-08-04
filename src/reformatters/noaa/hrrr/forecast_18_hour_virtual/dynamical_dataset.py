@@ -81,9 +81,11 @@ class NoaaHrrrForecast18HourVirtualDataset(
                 max_latest_init_time_age=timedelta(hours=2),
             ),
             # Newest init: the next fire chases it, nothing is ingested yet. Second
-            # newest: the run that just ended may have deferred late files to that fire.
+            # newest: the run that just ended may have deferred late files to that fire,
+            # but f00 lands an hour before its poll deadline, so 5% (3 of 57 files, one
+            # lead's worth) separates a deferral from a cycle that published nothing.
             validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.0, 0.0, 1.0)
+                min_present_fraction=(0.0, 0.05, 1.0)
             ),
             validation.CheckVirtualDecodeHealth(),
         )
