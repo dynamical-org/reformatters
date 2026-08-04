@@ -61,7 +61,7 @@ class ManifestScanResult:
     var_availability: dict[str, dict[pd.Timestamp, bool]]
 
 
-def _position(coord: SourceFileCoord) -> pd.Timestamp:
+def coord_position(coord: SourceFileCoord) -> pd.Timestamp:
     position = coord.append_dim_coord
     assert isinstance(position, pd.Timestamp)
     return position
@@ -82,7 +82,7 @@ def _probe_job(
     return [(coord, id(coord) not in missing_ids) for coord in candidates]
 
 
-def _probe_jobs(
+def probe_jobs(
     jobs: Sequence[VirtualRegionJob[Any, Any]],
     store: IcechunkStore,
     # 48 network-bound probe workers is the tuned value for the target run host.
@@ -106,7 +106,7 @@ def _probe_jobs(
                 yield job, future.result()
 
 
-def _expected_lead_limits(store: IcechunkStore) -> dict[pd.Timestamp, pd.Timedelta]:
+def expected_lead_limits(store: IcechunkStore) -> dict[pd.Timestamp, pd.Timedelta]:
     """Per-position maximum expected lead from the store's committed
     expected_forecast_length coordinate; {} when the dataset has none."""
     ds = xr.open_zarr(store, consolidated=False)
@@ -119,14 +119,14 @@ def _expected_lead_limits(store: IcechunkStore) -> dict[pd.Timestamp, pd.Timedel
     )
 
 
-def _coord_is_expected(
+def coord_is_expected(
     coord: SourceFileCoord, lead_limits: dict[pd.Timestamp, pd.Timedelta]
 ) -> bool:
     lead = coord.out_loc().get("lead_time")
     if lead is None or not lead_limits:
         return True
     assert isinstance(lead, pd.Timedelta)
-    limit = lead_limits.get(_position(coord))
+    limit = lead_limits.get(coord_position(coord))
     # No limit (position not yet committed) or NaT (never written) -> expected.
     return limit is None or pd.isna(limit) or lead <= limit
 
@@ -145,9 +145,9 @@ def _fold_file_availability(
     """
     present_by_file: dict[tuple[pd.Timestamp, str], bool] = {}
     for coord, is_present in coord_presence:
-        if not _coord_is_expected(coord, lead_limits):
+        if not coord_is_expected(coord, lead_limits):
             continue
-        key = (_position(coord), coord.get_url())
+        key = (coord_position(coord), coord.get_url())
         present_by_file[key] = present_by_file.get(key, False) or is_present
 
     for (position, _url), is_present in present_by_file.items():
@@ -274,7 +274,7 @@ def _var_probes(
     by_position: dict[pd.Timestamp, list[SourceFileCoord]] = {}
     for coord, is_present in coord_presence:
         if is_present:
-            by_position.setdefault(_position(coord), []).append(coord)
+            by_position.setdefault(coord_position(coord), []).append(coord)
     sorted_by_position = {
         position: _sort_coords_for_probe(coords)
         for position, coords in by_position.items()
@@ -324,7 +324,7 @@ def scan_manifest(
         build_virtual_jobs(dataset, end=end, start=start, variables=variables),
     )
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
-    lead_limits = _expected_lead_limits(store)
+    lead_limits = expected_lead_limits(store)
     group = zarr.open_group(store, mode="r")
     keys_by_var: dict[str, _VarKeys] = {}
 
@@ -334,7 +334,7 @@ def scan_manifest(
     var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
     pending_probes: list[tuple[str, pd.Timestamp, str]] = []
     progress_every = max(1, len(jobs) // 20)
-    for i, (job, coord_presence) in enumerate(_probe_jobs(jobs, store), start=1):
+    for i, (job, coord_presence) in enumerate(probe_jobs(jobs, store), start=1):
         _fold_file_availability(coord_presence, lead_limits, file_counts)
         for var in job.data_vars:
             var_availability.setdefault(var.path, {})

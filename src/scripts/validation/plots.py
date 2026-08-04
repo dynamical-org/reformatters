@@ -20,6 +20,7 @@ from scripts.validation.compare_timeseries import (
     run_compare_timeseries,
 )
 from scripts.validation.decode_scan import decode_scan, run_decode_scan
+from scripts.validation.probe_position import probe_position
 from scripts.validation.render import render_report_command
 from scripts.validation.summary import write_summary_md
 from scripts.validation.upload import upload_command
@@ -67,6 +68,10 @@ app.command(
     "decode-scan",
     help="Decode a bounded sample of a virtual store's references and check health",
 )(decode_scan)
+app.command(
+    "probe-position",
+    help="Name the source files a virtual store is missing at one append-dim position",
+)(probe_position)
 app.command(
     "value-timeseries",
     help="Full-period value time series (mean ± std), one PNG per variable",
