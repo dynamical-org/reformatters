@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 import requests
 import xarray as xr
+from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
@@ -1284,6 +1285,36 @@ class TestDownloadErrorLogging:
         job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
         levels = self._download_and_get_log_levels(
             job, _make_requests_http_error(404), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_obstore_generic_error_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job,
+            GenericError("416 Range Not Satisfiable ... ActualObjectSize: 0"),
+            monkeypatch,
+            caplog,
+        )
+        assert levels == [logging.INFO]
+
+    def test_obstore_permission_denied_recent_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job, PermissionDeniedError("denied"), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
+
+    def test_obstore_generic_error_old_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
+        levels = self._download_and_get_log_levels(
+            job, GenericError("416 Range Not Satisfiable"), monkeypatch, caplog
         )
         assert levels == [logging.ERROR]
 

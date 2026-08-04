@@ -6,6 +6,7 @@ import httpx
 import obstore.store
 import pytest
 import requests
+from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common import download as download_module
 from reformatters.common.download import (
@@ -18,6 +19,7 @@ from reformatters.common.download import (
     http_status_code,
     http_store,
     httpx_download_to_disk,
+    is_not_found,
     s3_download_to_disk,
     s3_store,
 )
@@ -53,6 +55,35 @@ def test_http_status_code_requests_without_response() -> None:
 
 def test_http_status_code_other_exception() -> None:
     assert http_status_code(FileNotFoundError("missing")) is None
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        FileNotFoundError("missing"),
+        GenericError("416 Range Not Satisfiable ... ActualObjectSize: 0"),
+        PermissionDeniedError("denied"),
+        _httpx_error(404),
+        _httpx_error(403),
+        _requests_error(404),
+        _requests_error(403),
+    ],
+)
+def test_is_not_found_true(exception: Exception) -> None:
+    assert is_not_found(exception)
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        ValueError("bad value"),
+        _httpx_error(500),
+        _requests_error(500),
+        requests.exceptions.HTTPError("no response"),
+    ],
+)
+def test_is_not_found_false(exception: Exception) -> None:
+    assert not is_not_found(exception)
 
 
 def test_get_local_path_basic() -> None:

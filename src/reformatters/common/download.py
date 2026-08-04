@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from datetime import timedelta
+from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -15,6 +16,7 @@ import httpx
 import numpy as np
 import obstore
 import requests
+from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common.logging import get_logger
 
@@ -367,3 +369,17 @@ def http_status_code(e: Exception) -> int | None:
     if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
         return e.response.status_code
     return None
+
+
+# obstore raises PermissionDeniedError for a 403 and GenericError for everything it doesn't
+# map to a specific type, including the 416 Range Not Satisfiable returned for a zero size
+# object and AWS's 503 Slow Down.
+NOT_FOUND_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
+
+
+def is_not_found(e: Exception) -> bool:
+    """Whether e indicates the source file isn't available, as opposed to an unexpected failure."""
+    return isinstance(e, NOT_FOUND_EXCEPTIONS) or http_status_code(e) in (
+        HTTPStatus.FORBIDDEN,
+        HTTPStatus.NOT_FOUND,
+    )
