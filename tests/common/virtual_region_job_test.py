@@ -1816,10 +1816,10 @@ def test_exists_many_raises_after_exhausting_attempts() -> None:
 
 
 def test_virtual_poll_deadline_anchors_to_scheduled_fire(tmp_path: Path) -> None:
-    # The fixture's update fires daily at 00:00 with a 5 minute pod deadline, leaving
-    # 2 minutes of polling after the fire.
+    # The fixture's update fires daily at 00:00 with a 5 minute pod deadline, so polling
+    # runs to 30s before that deadline.
     dataset = _make_dataset(tmp_path)
-    fire_deadline = pd.Timestamp("2026-08-02T00:02")
+    fire_deadline = pd.Timestamp("2026-08-02T00:04:30")
 
     assert dataset._virtual_poll_deadline(pd.Timestamp("2026-08-02T00:00")) == (
         fire_deadline

@@ -54,10 +54,12 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 
 log = get_logger(__name__)
 
-# Room for a virtual update's final commit and check-in after it stops polling. Any
+# Room for a virtual update's exit and final check-in after it stops polling (the last
+# tick's commit has already landed). Kept short because it is also the window in which a
+# file that would have been ingested in-run is deferred to the next fire instead. Any
 # positive value lands the poll deadline before the pod's own deadline, which runs from
 # pod start (never earlier than the scheduled fire).
-_POLL_DEADLINE_GRACE = pd.Timedelta("3min")
+_POLL_DEADLINE_GRACE = pd.Timedelta("30s")
 
 
 class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
