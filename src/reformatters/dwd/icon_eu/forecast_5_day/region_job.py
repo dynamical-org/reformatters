@@ -10,7 +10,7 @@ from rasterio.io import MemoryFile
 from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import NOT_FOUND_EXCEPTIONS, http_download_to_disk
+from reformatters.common.download import FALLBACK_EXCEPTIONS, http_download_to_disk
 from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
@@ -137,7 +137,7 @@ class DwdIconEuForecast5DayRegionJob(
         url = coord.get_url()
         try:
             bz2_file_path = http_download_to_disk(url, self.dataset_id)
-        except NOT_FOUND_EXCEPTIONS as e:
+        except FALLBACK_EXCEPTIONS as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")

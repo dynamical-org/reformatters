@@ -57,12 +57,24 @@ def test_http_status_code_other_exception() -> None:
     assert http_status_code(FileNotFoundError("missing")) is None
 
 
+def _obstore_invalid_range_error(actual_object_size: int) -> GenericError:
+    return GenericError(
+        "Generic HTTP error: Error performing GET https://example.com/file in 67.980838ms"
+        " - Server returned non-2xx status code: 416 Range Not Satisfiable:"
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Error><Code>InvalidRange</Code>"
+        "<Message>The requested range is not satisfiable</Message>"
+        "<RangeRequested>bytes=6990081-7165729</RangeRequested>"
+        f"<ActualObjectSize>{actual_object_size}</ActualObjectSize></Error>"
+    )
+
+
 @pytest.mark.parametrize(
     "exception",
     [
         FileNotFoundError("missing"),
-        GenericError("416 Range Not Satisfiable ... ActualObjectSize: 0"),
         PermissionDeniedError("denied"),
+        _obstore_invalid_range_error(actual_object_size=0),
         _httpx_error(404),
         _httpx_error(403),
         _requests_error(404),
@@ -80,6 +92,9 @@ def test_is_not_found_true(exception: Exception) -> None:
         _httpx_error(500),
         _requests_error(500),
         requests.exceptions.HTTPError("no response"),
+        # A byte range past the end of a non-empty object is our bug, not missing data
+        _obstore_invalid_range_error(actual_object_size=7165728),
+        GenericError("Server returned non-2xx status code: 503 Slow Down"),
     ],
 )
 def test_is_not_found_false(exception: Exception) -> None:

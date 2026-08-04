@@ -372,14 +372,18 @@ def http_status_code(e: Exception) -> int | None:
 
 
 # obstore raises PermissionDeniedError for a 403 and GenericError for everything it doesn't
-# map to a specific type, including the 416 Range Not Satisfiable returned for a zero size
-# object and AWS's 503 Slow Down.
-NOT_FOUND_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
+# map to a specific type, including both missing data and retry-exhausted transient errors.
+FALLBACK_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
+
+# A range request against a zero size object gets a 416 whose body reports the object's real
+# size. A 416 against a non-empty object means we asked for the wrong bytes, which is a bug.
+_EMPTY_OBJECT_RANGE_ERROR = "<ActualObjectSize>0</ActualObjectSize>"
 
 
 def is_not_found(e: Exception) -> bool:
-    """Whether e indicates the source file isn't available, as opposed to an unexpected failure."""
-    return isinstance(e, NOT_FOUND_EXCEPTIONS) or http_status_code(e) in (
-        HTTPStatus.FORBIDDEN,
-        HTTPStatus.NOT_FOUND,
-    )
+    """Whether e indicates the source file has no data, as opposed to an unexpected failure."""
+    if isinstance(e, FileNotFoundError | PermissionDeniedError):
+        return True
+    if isinstance(e, GenericError):
+        return _EMPTY_OBJECT_RANGE_ERROR in str(e)
+    return http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)

@@ -1154,6 +1154,14 @@ def _make_requests_http_error(status_code: int) -> requests.exceptions.HTTPError
     )
 
 
+def _make_empty_object_range_error() -> GenericError:
+    return GenericError(
+        "Generic HTTP error: Server returned non-2xx status code:"
+        " 416 Range Not Satisfiable: <Error><Code>InvalidRange</Code>"
+        "<ActualObjectSize>0</ActualObjectSize></Error>"
+    )
+
+
 class TestDownloadErrorLogging:
     """Test that download errors for recent files use quiet logging for expected errors."""
 
@@ -1288,15 +1296,12 @@ class TestDownloadErrorLogging:
         )
         assert levels == [logging.ERROR]
 
-    def test_obstore_generic_error_recent_logs_info(
+    def test_obstore_empty_object_range_recent_logs_info(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
         levels = self._download_and_get_log_levels(
-            job,
-            GenericError("416 Range Not Satisfiable ... ActualObjectSize: 0"),
-            monkeypatch,
-            caplog,
+            job, _make_empty_object_range_error(), monkeypatch, caplog
         )
         assert levels == [logging.INFO]
 
@@ -1309,12 +1314,24 @@ class TestDownloadErrorLogging:
         )
         assert levels == [logging.INFO]
 
-    def test_obstore_generic_error_old_logs_exception(
+    def test_obstore_empty_object_range_old_logs_exception(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
         levels = self._download_and_get_log_levels(
-            job, GenericError("416 Range Not Satisfiable"), monkeypatch, caplog
+            job, _make_empty_object_range_error(), monkeypatch, caplog
+        )
+        assert levels == [logging.ERROR]
+
+    def test_obstore_other_generic_error_recent_logs_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(hours=1))
+        levels = self._download_and_get_log_levels(
+            job,
+            GenericError("Server returned non-2xx status code: 503 Slow Down"),
+            monkeypatch,
+            caplog,
         )
         assert levels == [logging.ERROR]
 
