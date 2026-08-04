@@ -52,7 +52,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="50 * * * *",
-            pod_active_deadline=timedelta(minutes=55),
+            pod_active_deadline=timedelta(minutes=59),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -61,7 +61,8 @@ class NoaaHrrrForecast18HourVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # Three minutes after the update deadline and before the next update fire.
+            # Just before the next update fire; a late update may still be polling,
+            # which the completeness fractions below tolerate.
             schedule="48 * * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

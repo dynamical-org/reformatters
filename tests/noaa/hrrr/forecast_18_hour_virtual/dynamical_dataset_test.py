@@ -184,7 +184,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "50 * * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=55)
+    assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
