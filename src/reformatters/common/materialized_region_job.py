@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
-from http import HTTPStatus
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
@@ -16,7 +15,7 @@ from zarr.abc.store import Store
 
 from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.download import http_status_code
+from reformatters.common.download import is_not_found
 from reformatters.common.iterating import split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
@@ -310,11 +309,8 @@ class MaterializedRegionJob(
                 # else, log exception so it is caught by error reporting but doesn't stop processing
                 append_dim_coord = coord.append_dim_coord
                 two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
-                is_not_found = isinstance(e, FileNotFoundError) or (
-                    http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
-                )
                 if (
-                    is_not_found
+                    is_not_found(e)
                     and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
                     and append_dim_coord > two_days_ago
                 ):

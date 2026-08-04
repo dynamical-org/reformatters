@@ -7,6 +7,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from datetime import timedelta
+from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -15,6 +16,7 @@ import httpx
 import numpy as np
 import obstore
 import requests
+from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common.logging import get_logger
 
@@ -367,3 +369,21 @@ def http_status_code(e: Exception) -> int | None:
     if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
         return e.response.status_code
     return None
+
+
+# obstore raises PermissionDeniedError for a 403 and GenericError for everything it doesn't
+# map to a specific type, including both missing data and retry-exhausted transient errors.
+FALLBACK_EXCEPTIONS = (FileNotFoundError, GenericError, PermissionDeniedError)
+
+# A range request against a zero size object gets a 416 whose body reports the object's real
+# size. A 416 against a non-empty object means we asked for the wrong bytes, which is a bug.
+_EMPTY_OBJECT_RANGE_ERROR = "<ActualObjectSize>0</ActualObjectSize>"
+
+
+def is_not_found(e: Exception) -> bool:
+    """Whether e indicates the source file has no data, as opposed to an unexpected failure."""
+    if isinstance(e, FileNotFoundError | PermissionDeniedError):
+        return True
+    if isinstance(e, GenericError):
+        return _EMPTY_OBJECT_RANGE_ERROR in str(e)
+    return http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
