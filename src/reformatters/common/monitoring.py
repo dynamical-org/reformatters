@@ -10,8 +10,6 @@ from reformatters.common.config import Config
 from reformatters.common.iterating import digest
 from reformatters.common.kubernetes import CronJob
 
-_CHECKIN_FLUSH_TIMEOUT_SECONDS = 10.0
-
 
 @contextmanager
 def monitor_cron(
@@ -45,9 +43,6 @@ def monitor_cron(
                 "recovery_threshold": 1,
             },
         )
-        # Deliver now: relying on the at-exit flush drops a check-in when the process
-        # is killed or exits right after, which Sentry reports as a failed run.
-        sentry_sdk.flush(timeout=_CHECKIN_FLUSH_TIMEOUT_SECONDS)
 
     if send_in_progress:
         capture_checkin("in_progress")

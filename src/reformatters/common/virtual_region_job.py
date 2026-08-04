@@ -70,9 +70,8 @@ class VirtualRegionJob(
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
-    # Wall clock time an update stops waiting on files the source has not published yet,
-    # leaving them to the next fire. None waits until every file is ingested.
-    poll_deadline: Timestamp | None = None
+    # Stop polling after this time, leaving unpublished files to the next fire.
+    poll_deadline: Timestamp = pd.Timestamp.max
 
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
@@ -252,10 +251,7 @@ class VirtualRegionJob(
                         )
                     return
                 if pending:
-                    if (
-                        self.poll_deadline is not None
-                        and pd.Timestamp.now() >= self.poll_deadline
-                    ):
+                    if pd.Timestamp.now() >= self.poll_deadline:
                         log.info(
                             f"Poll deadline reached with {len(pending)} source files "
                             f"not yet published, leaving them to the next update "

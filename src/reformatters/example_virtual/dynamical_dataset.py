@@ -64,7 +64,7 @@ class ExampleSpatialDynamicalDataset(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 6 * * *",
         #     # Sets how long a fire chases its own source files (the poll deadline is
-        #     # the fire plus this, less a small grace); keep it well under the gap
+        #     # the fire plus this, less a small grace); keep it under the gap
         #     # between fires so runs never overlap.
         #     pod_active_deadline=timedelta(hours=2),
         #     image=image_tag,

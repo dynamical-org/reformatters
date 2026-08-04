@@ -1901,7 +1901,7 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     job = _make_region_job(
         _create_template_ds(4), region=slice(0, 4), processing_mode="update"
     )
-    assert job.poll_deadline is None
+    assert job.poll_deadline == pd.Timestamp.max
 
     deadline = pd.Timestamp("2026-08-02T00:02")
     monkeypatch.setattr(
