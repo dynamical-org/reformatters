@@ -1813,3 +1813,106 @@ def test_exists_many_raises_after_exhausting_attempts() -> None:
 
     with pytest.raises(RuntimeError, match="object store down"):
         _exists_many(cast("icechunk.IcechunkStore", DeadStore()), ["a"], max_attempts=2)
+
+
+def test_virtual_poll_deadline_anchors_to_scheduled_fire(tmp_path: Path) -> None:
+    # The fixture's update fires daily at 00:00 with a 5 minute pod deadline, so polling
+    # runs to 30s before that deadline.
+    dataset = _make_dataset(tmp_path)
+    fire_deadline = pd.Timestamp("2026-08-02T00:04:30")
+
+    assert dataset._virtual_poll_deadline(pd.Timestamp("2026-08-02T00:00")) == (
+        fire_deadline
+    )
+    # A pod replacing an evicted one stops when the pod it replaced would have, rather
+    # than polling on from its own later start.
+    assert dataset._virtual_poll_deadline(pd.Timestamp("2026-08-02T00:01")) == (
+        fire_deadline
+    )
+
+
+def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    full_template = _create_template_ds(4)
+
+    class PartiallyPublishedJob(VirtualTestRegionJob):
+        """Drives the base poll loop (the test job replaces it) with only the lead 0
+        files ever published."""
+
+        process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+        def discover_available(
+            self, pending: list[VirtualTestSourceFileCoord]
+        ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+            return [
+                (coord, BLOCK_NBYTES)
+                for coord in pending
+                if coord.lead_time == LEAD_TIMES[0]
+            ]
+
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            root = self.template_ds.to_dataset()
+            init_idx = int(
+                root.get_index("init_time").get_indexer(pd.Index([coord.init_time]))[0]
+            )
+            lead_idx = int(
+                root.get_index("lead_time").get_indexer(pd.Index([coord.lead_time]))[0]
+            )
+            offset, length = _message_offset_length(init_idx, lead_idx)
+            return [
+                VirtualRef(
+                    data_var=self.data_vars[0],
+                    out_loc=coord.out_loc(),
+                    location=self.messages_url,
+                    offset=offset,
+                    length=length,
+                )
+            ]
+
+    job = PartiallyPublishedJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=full_template,
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp.now() - pd.Timedelta("1s"),
+    )
+
+    # Returns instead of polling for the never-published lead 6h files.
+    batches = list(job.process_virtual_refs(job.source_file_coords()))
+
+    ingested = [coord for batch in batches for coord, _ in batch]
+    assert {coord.lead_time for coord in ingested} == {LEAD_TIMES[0]}
+    assert len(ingested) == 4  # 4 inits x lead 0
+
+
+def test_operational_update_passes_poll_deadline_to_the_write_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    job = _make_region_job(
+        _create_template_ds(4), region=slice(0, 4), processing_mode="update"
+    )
+    assert job.poll_deadline == pd.Timestamp.max
+
+    deadline = pd.Timestamp("2026-08-02T00:02")
+    monkeypatch.setattr(
+        VirtualTestDataset, "_virtual_poll_deadline", lambda self, now: deadline
+    )
+    driven: list[VirtualTestRegionJob] = []
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_worker_jobs",
+        classmethod(lambda cls, worker_jobs, *args: driven.extend(worker_jobs) or {}),
+    )
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+
+    assert [j.poll_deadline for j in driven] == [deadline]

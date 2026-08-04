@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
+import pandas as pd
 import pytest
 
 from reformatters.common.config import Config, Env
@@ -421,3 +422,51 @@ def test_update_cron_mounts_dataset_secrets() -> None:
         secret_names=["source-creds"],
     )
     assert "source-creds" in _cron_volume_names(cron)
+
+
+def _cron_job(schedule: str) -> ReformatCronJob:
+    return ReformatCronJob(
+        name="weather-data-update",
+        schedule=schedule,
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+    )
+
+
+@pytest.mark.parametrize(
+    ("schedule", "now", "expected"),
+    [
+        ("50 * * * *", "2026-08-02T23:55", "2026-08-02T23:50"),
+        ("50 * * * *", "2026-08-02T23:50", "2026-08-02T23:50"),
+        # Before this hour's fire, so the previous hour's.
+        ("50 * * * *", "2026-08-02T23:12", "2026-08-02T22:50"),
+        ("53 1,7,13,19 * * *", "2026-08-02T03:00", "2026-08-02T01:53"),
+        # Walks back into the previous day.
+        ("53 1,7,13,19 * * *", "2026-08-02T01:00", "2026-08-01T19:53"),
+        ("0 20 * * *", "2026-08-02T19:59", "2026-08-01T20:00"),
+        ("13 */6 * * *", "2026-08-02T07:00", "2026-08-02T06:13"),
+        ("17 1-23/3 * * *", "2026-08-02T01:00", "2026-08-01T22:17"),
+    ],
+)
+def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
+    assert _cron_job(schedule).previous_fire_time(pd.Timestamp(now)) == pd.Timestamp(
+        expected
+    )
+
+
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        "*/5 * * * *",  # a stepped minute field selects more than one fire an hour
+        "0 0 * * 1",  # day of week
+        "0 0 1 * *",  # day of month
+        "5 1,2/2 * * *",  # a step within a list
+        "0 24 * * *",
+        "60 0 * * *",
+    ],
+)
+def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
+    with pytest.raises(AssertionError):
+        _cron_job(schedule).previous_fire_time(pd.Timestamp("2026-08-02T12:00"))

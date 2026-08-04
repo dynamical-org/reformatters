@@ -184,11 +184,11 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "50 * * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=55)
+    assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "48 * * * *"
+    assert validation_cron_job.schedule == "49 * * * *"
     assert not validation_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
 
@@ -208,7 +208,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckVirtualManifestCompleteness)
     )
-    assert completeness.min_present_fraction == (0.0, 0.0, 1.0)
+    assert completeness.min_present_fraction == (0.0, 0.05, 1.0)
     assert any(
         isinstance(validator, validation.CheckVirtualDecodeHealth)
         for validator in validators

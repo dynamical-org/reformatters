@@ -46,7 +46,7 @@ from reformatters.common.storage import (
     get_local_tmp_store,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import DatetimeLike
+from reformatters.common.types import DatetimeLike, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
@@ -559,11 +559,14 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert job.processing_mode == "update", (
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
+        job = job.model_copy(
+            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
+        )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
         job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
-            all_jobs, self.store_factory, "main", worker_index
+            [job], self.store_factory, "main", worker_index
         )
 
     def validate_dataset(
@@ -779,6 +782,37 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         # This is a method to support testing without changing the Config.env
         return Config.is_prod
 
+    def _virtual_poll_deadline(self, now: Timestamp) -> Timestamp:
+        """When a virtual operational update stops waiting on files the source has not
+        published yet, leaving them to the next fire.
+
+        Anchored to the scheduled fire rather than to `now`, so a pod replacing an
+        evicted one stops when the pod it replaced would have, instead of polling into
+        the next fire and being killed mid-poll. Lands a grace period before the pod's
+        own active deadline, leaving room to exit and check in.
+        """
+        poll_deadline_grace = pd.Timedelta(seconds=30)
+        assert poll_deadline_grace.total_seconds() > 0
+        cron_job = self._operational_cron_job(ReformatCronJob)
+        return (
+            cron_job.previous_fire_time(now)
+            + cron_job.pod_active_deadline
+            - poll_deadline_grace
+        )
+
+    def _operational_cron_job(
+        self, cron_type: type[CronJob], cron_job_name: str | None = None
+    ) -> CronJob:
+        """The single cron job of `cron_type` (and name, when given) this dataset defines."""
+        return item(
+            cron_job
+            for cron_job in self.operational_kubernetes_resources(
+                "placeholder-image-tag"
+            )
+            if isinstance(cron_job, cron_type)
+            and (cron_job_name is None or cron_job.name == cron_job_name)
+        )
+
     @contextmanager
     def _monitor(
         self,
@@ -795,12 +829,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             yield
             return
 
-        # Find the cron job that matches the type (and name if provided). There should be exactly one.
-        cron_jobs = self.operational_kubernetes_resources("placeholder-image-tag")
-        if cron_job_name:
-            cron_jobs = (c for c in cron_jobs if c.name == cron_job_name)
-        cron_jobs = (c for c in cron_jobs if isinstance(c, cron_type))
-        cron_job = item(cron_jobs)
+        cron_job = self._operational_cron_job(cron_type, cron_job_name)
 
         with ExitStack() as stack:
             for monitor in _RUN_MONITORS:

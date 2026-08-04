@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
@@ -113,3 +114,17 @@ def test_deploy_operational_resources_dataset_id_filter(
     resources = json.loads(mock_run.call_args.kwargs["input"])
     names = [item["metadata"]["name"] for item in resources["items"]]
     assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
+
+
+def test_registered_dataset_schedules_are_parseable() -> None:
+    # Operational virtual updates derive their poll deadline from the schedule, so an
+    # unparseable one would surface as a failed update rather than a failed test.
+    for dataset in DYNAMICAL_DATASETS:
+        try:
+            cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
+        except NotImplementedError:
+            continue
+        for cron_job in cron_jobs:
+            assert cron_job.previous_fire_time(pd.Timestamp("2026-08-02T12:34")) < (
+                pd.Timestamp("2026-08-02T12:34")
+            )
