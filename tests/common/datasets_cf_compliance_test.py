@@ -173,24 +173,32 @@ def test_cf_latitude_longitude_recognized(
                 f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
             )
 
-    # For projected datasets, check x and y have correct CF attributes
+    # For projected datasets, check x and y have correct CF attributes.
+    # A projected grid uses projection_x/y_coordinate; a rotated pole grid's
+    # dimension coordinates are grid_longitude/grid_latitude in degrees per CF.
     if is_projected:
-        if "x" in ds.coords:
-            x_attrs = ds["x"].attrs
-            assert x_attrs.get("standard_name") == "projection_x_coordinate", (
-                f"x missing standard_name='projection_x_coordinate', got: {x_attrs.get('standard_name')}"
+        x_attrs = ds["x"].attrs
+        y_attrs = ds["y"].attrs
+        standard_names = (x_attrs.get("standard_name"), y_attrs.get("standard_name"))
+        assert standard_names in (
+            ("projection_x_coordinate", "projection_y_coordinate"),
+            ("grid_longitude", "grid_latitude"),
+        ), (
+            f"x/y standard_names must be a consistent projected or rotated pole pair, got: {standard_names}"
+        )
+        if standard_names == ("grid_longitude", "grid_latitude"):
+            assert x_attrs.get("units") == "degrees", (
+                f"grid_longitude x must have units='degrees', got: {x_attrs.get('units')}"
             )
-            assert x_attrs.get("axis") == "X", (
-                f"x missing axis='X', got: {x_attrs.get('axis')}"
+            assert y_attrs.get("units") == "degrees", (
+                f"grid_latitude y must have units='degrees', got: {y_attrs.get('units')}"
             )
-        if "y" in ds.coords:
-            y_attrs = ds["y"].attrs
-            assert y_attrs.get("standard_name") == "projection_y_coordinate", (
-                f"y missing standard_name='projection_y_coordinate', got: {y_attrs.get('standard_name')}"
-            )
-            assert y_attrs.get("axis") == "Y", (
-                f"y missing axis='Y', got: {y_attrs.get('axis')}"
-            )
+        assert x_attrs.get("axis") == "X", (
+            f"x missing axis='X', got: {x_attrs.get('axis')}"
+        )
+        assert y_attrs.get("axis") == "Y", (
+            f"y missing axis='Y', got: {y_attrs.get('axis')}"
+        )
 
 
 @pytest.mark.parametrize(
@@ -945,13 +953,21 @@ def test_metadata_consistency_across_datasets() -> None:
         _check_consistency(by_long_name, ["short_name", "standard_name", "units"])
     )
 
-    # Collect coordinate metadata and check consistency
+    # Collect coordinate metadata and check consistency. The y/x dims are the
+    # one place a coordinate name legitimately carries different physical
+    # coordinates per grid kind (projection coordinates in meters on a
+    # projected grid, grid_latitude/grid_longitude in degrees on a rotated pole
+    # grid), so those two names group by (name, standard_name); every other
+    # coordinate groups by name alone.
     by_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for coord_config in template_config.coords:
-            by_coord_name.setdefault(coord_config.name, {})[dataset.dataset_id] = {
+            key = coord_config.name
+            if key in ("x", "y"):
+                key = f"{key} ({coord_config.attrs.standard_name})"
+            by_coord_name.setdefault(key, {})[dataset.dataset_id] = {
                 "long_name": coord_config.attrs.long_name,
                 "standard_name": coord_config.attrs.standard_name,
                 "units": coord_config.attrs.units,

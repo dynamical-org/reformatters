@@ -5,7 +5,10 @@ import pandas as pd
 import xarray as xr
 from numba import njit, prange
 
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Array1D, ArrayFloat32
+
+log = get_logger(__name__)
 
 # OK to add units to this list if you believe they are reasonable output units to deaccumulate to.
 # We typically expect these to be per-second rates.
@@ -14,6 +17,8 @@ VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm s-1", "m s-1", "kg m-2 s-1", "W m-2
 # mm s-1, ~= 0.25 mm/h or "trace" precipitation
 PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -7e-5
 RADIATION_INVALID_BELOW_THRESHOLD = -50.0  # W/m^2 aka J/m^2/s
+
+DEFAULT_EXPECTED_CLAMP_FRACTION = 0.05
 
 # How the input values along `dim` should be interpreted:
 #   - "accumulated": values are cumulative totals (e.g. J m-2 since forecast start).
@@ -30,6 +35,42 @@ _ACCUMULATION_TYPE_ACCUMULATED = 0
 _ACCUMULATION_TYPE_RUNNING_MEAN = 1
 
 
+def deaccumulate_to_rates_inplace_logging_errors(
+    data_array: xr.DataArray,
+    *,
+    dim: str,
+    reset_frequency: pd.Timedelta,
+    invalid_below_threshold_rate: float | None = None,
+    expected_clamp_fraction: float | None = None,
+    accumulation_type: AccumulationType = "accumulated",
+) -> None:
+    """
+    Convert accumulated values to per-second rates in place, for use in a region
+    job's `apply_data_transformations`.
+
+    Unlike `deaccumulate_to_rates_inplace` this logs, rather than raises, when
+    more values are invalid or clamped than expected — the converted data is
+    still written and we are notified. A None threshold or clamp fraction uses
+    the default.
+    """
+    log.info(f"Converting {data_array.name} from accumulations to rates along {dim}")
+    if invalid_below_threshold_rate is None:
+        invalid_below_threshold_rate = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD
+    if expected_clamp_fraction is None:
+        expected_clamp_fraction = DEFAULT_EXPECTED_CLAMP_FRACTION
+    try:
+        deaccumulate_to_rates_inplace(
+            data_array,
+            dim=dim,
+            reset_frequency=reset_frequency,
+            invalid_below_threshold_rate=invalid_below_threshold_rate,
+            expected_clamp_fraction=expected_clamp_fraction,
+            accumulation_type=accumulation_type,
+        )
+    except ValueError:
+        log.exception(f"Error deaccumulating {data_array.name}")
+
+
 def deaccumulate_to_rates_inplace(
     data_array: xr.DataArray,
     *,
@@ -38,7 +79,7 @@ def deaccumulate_to_rates_inplace(
     skip_step: Array1D[np.bool] | None = None,
     invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     expected_invalid_fraction: float = 0.0,
-    expected_clamp_fraction: float = 0.05,
+    expected_clamp_fraction: float = DEFAULT_EXPECTED_CLAMP_FRACTION,
     accumulation_type: AccumulationType = "accumulated",
 ) -> xr.DataArray:
     """

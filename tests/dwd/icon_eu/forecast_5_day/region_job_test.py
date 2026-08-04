@@ -205,7 +205,7 @@ def test_region_job_apply_data_transformations_deaccumulation(
 
     mock_deaccum = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace_logging_errors",
         mock_deaccum,
     )
 
@@ -214,11 +214,13 @@ def test_region_job_apply_data_transformations_deaccumulation(
         data_array,
         dim="lead_time",
         reset_frequency=reset_freq,
+        invalid_below_threshold_rate=None,
+        expected_clamp_fraction=None,
         accumulation_type="accumulated",
     )
 
 
-def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
+def test_region_job_apply_data_transformations_deaccumulation_thresholds(
     region_job: DwdIconEuForecast5DayRegionJob,
     t_2m_data_var: DwdIconEuDataVar,
     monkeypatch: pytest.MonkeyPatch,
@@ -241,7 +243,7 @@ def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
 
     mock_deaccum = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace_logging_errors",
         mock_deaccum,
     )
 
@@ -250,9 +252,9 @@ def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
         data_array,
         dim="lead_time",
         reset_frequency=reset_freq,
-        accumulation_type="running_mean",
         invalid_below_threshold_rate=-50.0,
         expected_clamp_fraction=0.25,
+        accumulation_type="running_mean",
     )
 
 

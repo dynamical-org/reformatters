@@ -1,3 +1,1 @@
-from .dynamical_dataset import (
-    EcccHrdpsForecastTemporalDynamicalDataset as EcccHrdpsForecastTemporalDynamicalDataset,
-)
+from .dynamical_dataset import EcccHrdpsForecastDataset as EcccHrdpsForecastDataset

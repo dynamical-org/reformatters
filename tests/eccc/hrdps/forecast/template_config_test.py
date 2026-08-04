@@ -1,62 +1,61 @@
-# Example of spatial validation pattern using a downloaded GRIB slice
-# (kept commented to guide new integrations)
-# import numpy as np
-# import pandas as pd
-# import pytest
-# import rasterio
-# import xarray as xr
-# from pathlib import Path
-# from unittest.mock import Mock
-#
-# from reformatters.eccc.hrdps.forecast.region_job import EcccHrdpsForecastTemporalRegionJob, EcccHrdpsForecastTemporalSourceFileCoord
-# from reformatters.eccc.hrdps.forecast.template_config import EcccHrdpsForecastTemporalTemplateConfig
-#
-#
-# @pytest.fixture(scope="session")
-# def example_first_message_path() -> Path:
-#     cfg = EcccHrdpsForecastTemporalTemplateConfig()
-#     coord = EcccHrdpsForecastTemporalSourceFileCoord(...)  # fill in per dataset
-#     region_job = EcccHrdpsForecastTemporalRegionJob.model_construct(
-#         tmp_store=Mock(),
-#         template_ds=cfg.get_template(cfg.append_dim_start),
-#         data_vars=cfg.data_vars,
-#         append_dim=cfg.append_dim,
-#         region=slice(0, 1),
-#         reformat_job_name="test",
-#     )
-#     return region_job.download_file(coord)
-#
-#
-# @pytest.mark.slow
-# def test_spatial_ref_matches_grib(example_first_message_path: Path) -> None:
-#     cfg = EcccHrdpsForecastTemporalTemplateConfig()
-#     ds = cfg.get_template(cfg.append_dim_start)
-#     ds_raster = xr.open_dataset(example_first_message_path, engine="rasterio")
-#
-#     assert ds.rio.shape == ds_raster.rio.shape
-#     assert np.allclose(ds.rio.bounds(), ds_raster.rio.bounds())
-#     assert ds.rio.resolution() == ds_raster.rio.resolution()
-#     assert ds.rio.crs.to_proj4() == ds_raster.rio.crs.to_proj4()
-#
-#
-# @pytest.mark.slow
-# def test_lat_lon_pixel_centers_from_source_grib(
-#     example_first_message_path: Path,
-# ) -> None:
-#     cfg = EcccHrdpsForecastTemporalTemplateConfig()
-#     coords = cfg.dimension_coordinates()
-#
-#     with rasterio.open(example_first_message_path) as reader:
-#         bounds = reader.bounds
-#         pixel_size_x = reader.transform.a
-#         pixel_size_y = abs(reader.transform.e)
-#
-#     lon = coords["longitude"]
-#     lat = coords["latitude"]
-#
-#     atol = 1e-6
-#     rtol = 0.0
-#     assert np.isclose(bounds.left + pixel_size_x / 2, lon.min(), atol=atol, rtol=rtol)
-#     assert np.isclose(bounds.right - pixel_size_x / 2, lon.max(), atol=atol, rtol=rtol)
-#     assert np.isclose(bounds.top - pixel_size_y / 2, lat.max(), atol=atol, rtol=rtol)
-#     assert np.isclose(bounds.bottom + pixel_size_y / 2, lat.min(), atol=atol, rtol=rtol)
+import numpy as np
+import pandas as pd
+
+from reformatters.common.config_models import ROOT
+from reformatters.eccc.hrdps.forecast.template_config import (
+    EcccHrdpsForecastTemplateConfig,
+)
+
+
+def test_template_config_attrs() -> None:
+    config = EcccHrdpsForecastTemplateConfig()
+
+    assert config.dims[ROOT] == ("init_time", "lead_time", "y", "x")
+    assert config.append_dim == "init_time"
+    assert config.append_dim_start == pd.Timestamp("2026-07-09T00:00")
+    assert config.append_dim_frequency == pd.Timedelta("6h")
+
+    attrs = config.dataset_attributes
+    assert attrs.dataset_id == "eccc-hrdps-forecast"
+    assert attrs.license == "ECCC Data Servers End-use Licence v2.1"
+    assert "Environment and Climate Change Canada" in attrs.attribution
+
+    var_names = {v.name for v in config.data_vars}
+    assert "temperature_2m" in var_names
+    assert "wind_u_10m" in var_names
+    assert "wind_v_10m" in var_names
+    assert "precipitation_surface" in var_names
+    assert "downward_short_wave_radiation_flux_surface" in var_names
+    assert "pressure_surface" in var_names
+    assert "snow_thickness_surface" in var_names
+
+
+def test_dimension_coordinates() -> None:
+    config = EcccHrdpsForecastTemplateConfig()
+    dim_coords = config.dimension_coordinates()
+
+    assert set(dim_coords) == {"init_time", "lead_time", "y", "x"}
+
+    lead_times = dim_coords["lead_time"]
+    assert len(lead_times) == 49
+    assert lead_times[0] == pd.Timedelta("0h")
+    assert lead_times[-1] == pd.Timedelta("48h")
+
+    assert len(dim_coords["y"]) == 1290
+    assert len(dim_coords["x"]) == 2540
+
+
+def test_derive_coordinates() -> None:
+    config = EcccHrdpsForecastTemplateConfig()
+    template_ds = config.get_template(config.append_dim_start + pd.Timedelta(days=3))
+
+    assert (
+        template_ds.coords["valid_time"]
+        == (template_ds.coords["init_time"] + template_ds.coords["lead_time"])
+    ).all()
+    assert template_ds.coords["valid_time"].dims == ("init_time", "lead_time")
+    assert (
+        template_ds.coords["expected_forecast_length"].values == np.timedelta64(48, "h")
+    ).all()
+    assert template_ds.coords["latitude"].dims == ("y", "x")
+    assert template_ds.coords["longitude"].dims == ("y", "x")

@@ -10,6 +10,7 @@ from reformatters.common.deaccumulation import (
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
     deaccumulate_to_rates_inplace,
+    deaccumulate_to_rates_inplace_logging_errors,
 )
 
 SECONDS_PER_HOUR: Final[int] = 60 * 60
@@ -312,6 +313,39 @@ def test_deaccumulate_expected_clamp_fraction_still_raises_when_exceeded() -> No
             reset_frequency=reset_frequency,
             expected_clamp_fraction=0.10,
         )
+
+
+def test_deaccumulate_logging_errors_converts_without_raising() -> None:
+    """The logging variant still converts the data when a threshold is exceeded,
+    and None thresholds fall back to the defaults (5% clamp here, exceeded)."""
+    reset_frequency = pd.Timedelta(hours=6)
+
+    values = [
+        {"lt": 0, "in": 0., "out": np.nan},
+        {"lt": 3, "in": 4. , "out": 4.0 / (3 * SECONDS_PER_HOUR)},
+        {"lt": 6, "in": 3.9, "out": 0.0},  # small negative accumulation clamped to 0 (1 of 3 = 33%)
+    ]  # fmt: off
+
+    lead_times = pd.to_timedelta([step["lt"] for step in values], unit="h")
+    data = np.array([step["in"] for step in values], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        data,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "mm s-1"},
+    )
+
+    deaccumulate_to_rates_inplace_logging_errors(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        invalid_below_threshold_rate=None,
+        expected_clamp_fraction=None,
+    )
+
+    expected = np.array([step["out"] for step in values], dtype=np.float32)
+    np.testing.assert_allclose(data_array.values, expected)
 
 
 def test_deaccumulate_1d_3_and_6_hour_large_accumulation_decreases() -> None:
