@@ -716,7 +716,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         except (
             FileNotFoundError,  # zarr3 store path absent
             zarr.errors.GroupNotFoundError,  # store path exists but holds no dataset
-            icechunk.IcechunkError,  # icechunk repository not created yet
+            icechunk.NotFoundError,  # icechunk repository not created yet
         ):
             return None
 

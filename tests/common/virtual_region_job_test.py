@@ -50,7 +50,7 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     StorageConfig,
     StoreFactory,
-    _virtual_repository_config_and_credentials,
+    _repository_config_and_credentials,
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
@@ -388,7 +388,7 @@ def _make_replica_repo(
 ) -> icechunk.Repository:
     """An independent icechunk repo (the test harness collapses a dataset's own
     primary+replica to one path) registered with the same virtual container."""
-    repo_config, credentials = _virtual_repository_config_and_credentials(
+    repo_config, credentials = _repository_config_and_credentials(
         dataset.icechunk_virtual_config
     )
     return icechunk.Repository.create(

@@ -46,7 +46,7 @@ trust in the conflict solver required (also safe under `BasicConflictSolver`).
   fixes as one "make many-writer commits scale" contribution.
 - Risks: GC could collect a prior round's orphaned manifest mid-retry (same exposure
   class as uncommitted chunks; governed by GC age cutoff — document). Fork-only until
-  upstream lands, but backfills already run the fork image.
+  upstream lands.
 
 ## Option 2 — commit lease (reformatters-only)
 
@@ -93,7 +93,7 @@ memory), then resets `main`. No pickled sessions on a public bucket.
 
 1. **Productionize Option 1 first** (~1–2 days): it removes the root cause, is already
    prototyped with a passing forced-rebase test, and upstreams cleanly. Run the next
-   backfill on the fork with it; PR upstream alongside the other two icechunk changes.
+   backfill on a fork with it, then PR upstream.
 2. **Hold Option 2** unless the next backfill (with Option 1) still shows tail pain —
    then add it in the combo shape (lease around rebase+CAS only). The seam is designed
    and the primitive verified, so it's a ~day if needed.
