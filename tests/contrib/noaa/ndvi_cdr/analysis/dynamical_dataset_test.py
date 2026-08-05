@@ -10,9 +10,6 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
     NoaaNdviCdrAnalysisDataset,
 )
-from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
-    NoaaNdviCdrAnalysisRegionJob,
-)
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
@@ -26,12 +23,6 @@ noop_storage_config = StorageConfig(
 
 
 def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(
-        NoaaNdviCdrAnalysisRegionJob,
-        "_use_ncei_to_download",
-        lambda self, file_time: False,
-    )
-
     dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
 
     orig_get_template = dataset.template_config.get_template

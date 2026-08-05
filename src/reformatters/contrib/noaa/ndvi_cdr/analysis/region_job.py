@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
@@ -8,14 +7,12 @@ import numpy as np
 import obstore
 import pandas as pd
 import rasterio
-import requests
 import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.download import (
     download_to_disk,
     get_local_path,
-    http_store,
     s3_store,
 )
 from reformatters.common.iterating import item
@@ -26,7 +23,6 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
 )
-from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
     Array2D,
@@ -70,19 +66,11 @@ class NoaaNdviCdrAnalysisSourceFileCoord(SourceFileCoord):
 class NoaaNdviCdrAnalysisRegionJob(
     MaterializedRegionJob[NoaaNdviCdrDataVar, NoaaNdviCdrAnalysisSourceFileCoord]
 ):
-    # Set lower than would be needed for fetching exclusively from S3
-    # to accomodate the cases where we are downloading from NCEI.
-    download_parallelism: int = 5
-
     # We observed deadlocks when using more than 2 threads to read data into shared memory.
     read_parallelism: int = 1
 
     s3_bucket_url: str = "s3://noaa-cdr-ndvi-pds"
     s3_region: str = "us-east-1"
-
-    root_nc_url: str = (
-        "http://ncei.noaa.gov/data/land-normalized-difference-vegetation-index/access"
-    )
 
     def generate_source_file_coords(
         self,
@@ -116,12 +104,9 @@ class NoaaNdviCdrAnalysisRegionJob(
                     file_time = pd.Timestamp(date_str)
                     filename = Path(filepath).name
 
-                    if self._use_ncei_to_download(file_time):
-                        url = f"{self.root_nc_url}/{year}/{filename}"
-                    else:
-                        url = f"{self.s3_bucket_url}/data/{year}/{filename}"
-
-                    urls_by_time[file_time] = url
+                    urls_by_time[file_time] = (
+                        f"{self.s3_bucket_url}/data/{year}/{filename}"
+                    )
                 except Exception as e:  # noqa: BLE001
                     log.warning(f"Skipping file {filepath} due to error: {e}")
                     continue  # skip files that don't match the expected pattern
@@ -135,13 +120,7 @@ class NoaaNdviCdrAnalysisRegionJob(
     def download_file(self, coord: NoaaNdviCdrAnalysisSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         url = coord.get_url()
-        parsed_url = urlparse(url)
-
-        store: obstore.store.HTTPStore | obstore.store.S3Store
-        if parsed_url.netloc == "ncei.noaa.gov":
-            store = http_store(f"https://{parsed_url.netloc}")
-        else:
-            store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
+        store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
 
         remote_path = urlparse(url).path.removeprefix("/")
         local_path = get_local_path(self.dataset_id, remote_path)
@@ -230,31 +209,7 @@ class NoaaNdviCdrAnalysisRegionJob(
         ndvi_data[bad_values_mask] = np.nan
         return cast(ArrayFloat32, ndvi_data)
 
-    def _use_ncei_to_download(self, file_time: pd.Timestamp) -> bool:
-        """Returns True if we should use NCEI to download the file, False otherwise."""
-        two_weeks_ago = pd.Timestamp.now() - pd.Timedelta(days=14)
-        is_within_last_2_weeks = two_weeks_ago <= file_time
-        return is_within_last_2_weeks
-
     def _list_source_files(self, year: int) -> list[str]:
-        # We believe NCEI will have more recent files before S3 does.
-        # While this gap may only be a couple of weeks at most, we cannot enumerate
-        # files by a coarser granularity than a year. The reason we check if the requested
-        # year is the current or previous year is to be sure that we continue to check
-        # NCEI in early January of the current year. I.e., in Jan 2026, we should check
-        # NCEI for the 2025 files.
-        #
-        # We hardcode 2025 as the earliest year to check NCEI, since as of this writing,
-        # we know S3 is up to date through June 2025 and 2024 is complate.
-        # Backfills should go through S3.
-        known_complete_aws_year = 2024
-        current_year = pd.Timestamp.now().year
-        if year > known_complete_aws_year and year in (current_year, current_year - 1):
-            return self._list_ncei_source_files(year)
-        else:
-            return self._list_s3_source_files(year)
-
-    def _list_s3_source_files(self, year: int) -> list[str]:
         store = s3_store(self.s3_bucket_url, self.s3_region, skip_signature=True)
         results = list(obstore.list(store, f"data/{year}", chunk_size=366))
         if len(results) == 0:
@@ -265,56 +220,6 @@ class NoaaNdviCdrAnalysisRegionJob(
         )
 
         return [result["path"] for result in results[0]]
-
-    def _list_ncei_source_files(self, year: int) -> list[str]:
-        """List source files from NCEI.
-
-        The response text from NCEI is HTML with a table enumerating available files. Example:
-
-        <td><a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250101_c20250103153010.nc</a></td>
-        <td align="right">2025-01-05 15:40</td>
-        <td align="right">63914048</td>
-        <td></td>
-        </tr>
-        <tr>
-        <td><a href="VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc">VIIRS-Land_v001_JP113C1_NOAA-20_20250102_c20250104153009.nc</a></td>
-        ...
-        """
-        ncei_url = f"{self.root_nc_url}/{year}/"
-
-        def get_listing() -> requests.Response:
-            response = requests.get(ncei_url, timeout=15)
-            # 404 is a deterministic outcome handled below; any other non-2xx
-            # (e.g. NCEI's intermittent 500s) raises here so retry() retries it.
-            if response.status_code != 404:
-                response.raise_for_status()
-            return response
-
-        response = retry(get_listing)
-        if response.status_code == 404:
-            now = pd.Timestamp.now()
-            if now.year == year and now.month == 1:
-                return []
-            response.raise_for_status()
-
-        content = response.text
-        filenames = re.findall(r"href=\"(VIIRS-Land.+nc)\"", content)
-        filenames = list(set(filenames))
-
-        # Simple check: startswith, endswith, and only one .nc present
-        def is_valid_viirs_nc(fname: str) -> bool:
-            return (
-                fname.startswith("VIIRS-Land")
-                and fname.endswith(".nc")
-                and fname.count(".nc") == 1
-            )
-
-        assert all(is_valid_viirs_nc(fname) for fname in filenames), (
-            "Some filenames do not conform to expected structure: "
-            + str([fname for fname in filenames if not is_valid_viirs_nc(fname)])
-        )
-
-        return filenames
 
     @classmethod
     def operational_update_jobs(
