@@ -81,7 +81,7 @@ def _parse_index_file(
         Has a MultiIndex of (number, param, levtype, levelist) for ensemble data or
         (param, levtype, levelist) for deterministic data.
     """
-    df = pd.read_json(index_local_path, lines=True)
+    df = pd.read_json(index_local_path, lines=True, convert_dates=False)
 
     if step is not None:
         df = df[df["step"] == step]

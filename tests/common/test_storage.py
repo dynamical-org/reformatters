@@ -494,6 +494,21 @@ class TestIcechunkVirtualConfig:
         repo = factory.icechunk_repos(sort="primary-first")[0][1]
         assert not repo.config.virtual_chunk_containers
 
+    @pytest.mark.parametrize("virtual", [True, False])
+    def test_commit_manifest_fetches_are_concurrent(self, virtual: bool) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=_example_virtual_config() if virtual else None,
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        manifest = repo.config.manifest
+        assert manifest is not None
+        assert manifest.max_concurrent_manifest_fetches_during_commit == 16
+
 
 def _spy_save_config(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """Record each Repository.save_config call while still performing it."""

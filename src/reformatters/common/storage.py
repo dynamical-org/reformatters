@@ -33,12 +33,6 @@ _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
 
-# A commit writes one manifest per changed array, serialized by default (icechunk's
-# max_concurrent_nodes=1), so commit latency grows with array count. Raising this
-# parallelizes those read-modify-writes across arrays (network and CPU). Needs the
-# patched icechunk that exposes the parameter (see the icechunk pin in pyproject.toml).
-_COMMIT_MAX_CONCURRENT_NODES = 16
-
 
 class DatasetFormat(StrEnum):
     ZARR3 = "zarr3"
@@ -197,7 +191,7 @@ class StoreFactory(FrozenBaseModel):
         `role` uniquely identifies the repo within this StoreFactory:
         "primary" for the primary store, "replica-0", "replica-1", ... for replicas.
         """
-        repo_config, credentials = _virtual_repository_config_and_credentials(
+        repo_config, credentials = _repository_config_and_credentials(
             self.icechunk_virtual_config
         )
         repos: list[tuple[str, icechunk.Repository]] = []
@@ -232,7 +226,7 @@ class StoreFactory(FrozenBaseModel):
             container.url_prefix
             for container in self.icechunk_virtual_config.containers
         }
-        repo_config, credentials = _virtual_repository_config_and_credentials(
+        repo_config, credentials = _repository_config_and_credentials(
             self.icechunk_virtual_config
         )
         for role, store_path, ic_storage in self._icechunk_storages():
@@ -450,9 +444,7 @@ def _get_icechunk_store(
     virtual_config: IcechunkVirtualConfig | None = None,
 ) -> IcechunkStore:
     storage = _get_icechunk_storage(store_path, storage_config)
-    repo_config, credentials = _virtual_repository_config_and_credentials(
-        virtual_config
-    )
+    repo_config, credentials = _repository_config_and_credentials(virtual_config)
 
     if writable:
         log.info(
@@ -501,7 +493,6 @@ def commit_if_icechunk(
         icechunk_store.session.commit(
             message=message,
             rebase_with=icechunk.ConflictDetector(),
-            max_concurrent_nodes=_COMMIT_MAX_CONCURRENT_NODES,
         )
 
     for store in replica_stores:
@@ -565,18 +556,21 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
 
 
-def _virtual_repository_config_and_credentials(
+def _repository_config_and_credentials(
     virtual_config: IcechunkVirtualConfig | None,
-) -> tuple[icechunk.RepositoryConfig | None, dict[str, Any] | None]:
-    """Build the icechunk `RepositoryConfig` override and anonymous authorize map for a
-    virtual dataset, or `(None, None)` for a materialized one (icechunk uses defaults)."""
-    if virtual_config is None:
-        return None, None
-
+) -> tuple[icechunk.RepositoryConfig, dict[str, Any] | None]:
+    """Build the icechunk `RepositoryConfig` override for a dataset, plus the anonymous
+    authorize map for a virtual one (`None` for a materialized one)."""
     config = icechunk.RepositoryConfig.default()
+    config.manifest = icechunk.ManifestConfig(
+        splitting=virtual_config.manifest_split if virtual_config is not None else None,
+        max_concurrent_manifest_fetches_during_commit=16,
+    )
+    if virtual_config is None:
+        return config, None
+
     for container in virtual_config.containers:
         config.set_virtual_chunk_container(container)
-    config.manifest = icechunk.ManifestConfig(splitting=virtual_config.manifest_split)
     # Cap the chunk-ref cache: streaming commits each rewrite the active manifest split
     # and never read old versions, so icechunk's default 5M-entry cache fills with dead
     # manifest versions (multi-GB OOM). A virtual ref is ~180 B, so 1M refs ≈ 200 MB.
@@ -601,7 +595,9 @@ def _virtual_repository_config_and_credentials(
                 icechunk.s3_anonymous_credentials()
             )
         elif isinstance(container.store, icechunk.ObjectStoreConfig.LocalFileSystem):
-            credentials_by_prefix[container.url_prefix] = None  # local files: no creds
+            credentials_by_prefix[container.url_prefix] = (
+                icechunk.credentials.LocalFileSystemAccess  # local files: no creds
+            )
         else:
             raise AssertionError(
                 f"Virtual chunk container {container.url_prefix} uses an unsupported "
