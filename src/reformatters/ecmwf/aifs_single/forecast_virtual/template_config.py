@@ -537,6 +537,8 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             standard_name="northward_wind",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
+        # AIFS publishes cloud cover already in percent, so it needs no scaling filter
+        # (unlike IFS ENS, whose 0-1 fraction is scaled by 100).
         _root_var(
             "total_cloud_cover_atmosphere",
             param="tcc",
@@ -635,7 +637,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
-            "downward_short_wave_radiation_flux_run_total_surface",
+            "downward_short_wave_radiation_run_total_surface",
             param="ssrd",
             step_type="accum",
             short_name="ssrd",
@@ -645,7 +647,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
-            "downward_long_wave_radiation_flux_run_total_surface",
+            "downward_long_wave_radiation_run_total_surface",
             param="strd",
             step_type="accum",
             short_name="strd",

@@ -101,7 +101,7 @@ def test_era_availability() -> None:
         "total_cloud_cover_atmosphere",
         "total_precipitation_run_total_surface",
         "convective_precipitation_run_total_surface",
-        "downward_short_wave_radiation_flux_run_total_surface",
+        "downward_short_wave_radiation_run_total_surface",
         "soil_temperature_layer_1",
         "volumetric_soil_moisture_layer_2",
         "standard_deviation_of_sub_gridscale_orography_surface",

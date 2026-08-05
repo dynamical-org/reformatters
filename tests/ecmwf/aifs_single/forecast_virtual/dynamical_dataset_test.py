@@ -182,9 +182,14 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
-    assert any(
-        isinstance(v, validation.CheckVirtualManifestCompleteness) for v in validators
-    )
+    (completeness,) = [
+        v
+        for v in validators
+        if isinstance(v, validation.CheckVirtualManifestCompleteness)
+    ]
+    # The newest init_time is exempt: publication lands ~5h25m after init, so at every
+    # validation fire that position is still unpublished. Older positions must be whole.
+    assert completeness.min_present_fraction == (0.0, 1.0)
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
@@ -196,7 +201,7 @@ def test_current_data_validator_allows_7_hours(
         for v in dataset.validators()
         if isinstance(v, partial) and v.func is validation.check_forecast_current_data
     ]
-    # 6h cycle + ~0.5h publication slack.
+    # Validation fires at init+6h20m, so the threshold must exceed that.
     assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=7)}
 
 

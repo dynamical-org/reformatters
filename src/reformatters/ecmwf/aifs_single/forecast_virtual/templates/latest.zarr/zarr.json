@@ -134,7 +134,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "downward_long_wave_radiation_flux_run_total_surface": {
+      "downward_long_wave_radiation_run_total_surface": {
         "shape": [
           1,
           61,
@@ -189,7 +189,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "downward_short_wave_radiation_flux_run_total_surface": {
+      "downward_short_wave_radiation_run_total_surface": {
         "shape": [
           1,
           61,
