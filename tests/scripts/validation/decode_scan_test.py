@@ -38,8 +38,10 @@ def test_decode_summary_lines_pass(tmp_path: Path) -> None:
     lines = decode_summary_lines(ctx)
 
     assert lines == [
-        "1234 references decoded successfully, sampled across "
-        "20 of 100 append-dim regions, 5 leads and 3 levels per group variable."
+        (
+            "1234 references decoded successfully, sampled across "
+            "20 of 100 append-dim regions, 5 leads and 3 levels per group variable."
+        )
     ]
 
 

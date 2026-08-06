@@ -129,9 +129,9 @@ Data structure, file naming, variable availability, and metadata all change over
 ```python
 import rasterio
 
-with rasterio.open('path/to/file.grib2') as src:
+with rasterio.open("path/to/file.grib2") as src:
     print(src.profile)  # CRS, dimensions, dtype
-    print(src.tags())   # Metadata
+    print(src.tags())  # Metadata
     print(src.indexes)  # Band/variable indexes
 
     # Read a band

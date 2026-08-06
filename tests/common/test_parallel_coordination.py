@@ -688,8 +688,10 @@ class TestFinalize:
             r.getMessage() for r in caplog.records if r.levelno == logging.ERROR
         ]
         assert error_messages == [
-            "replica-0: main moved past this job's starting snapshot; "
-            "branch temp-branch will not be published"
+            (
+                "replica-0: main moved past this job's starting snapshot; "
+                "branch temp-branch will not be published"
+            )
         ]
 
         # The continue did not abort the loop: primary still committed and reset main.

@@ -27,7 +27,7 @@ from reformatters.common.config_models import (
     Group,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 
 _LAT = np.array([10.0, 11.0, 12.0])
 _LON = np.array([20.0, 21.0])
@@ -71,7 +71,7 @@ def _data_var(name: str, group: Group, n_dims: int) -> _DV:
 
 
 class MultiGroupConfig(TemplateConfig[_DV]):
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: ("init_time", "latitude", "longitude"),
         "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         "model_level": ("init_time", "latitude", "longitude", "model_level"),
@@ -185,7 +185,7 @@ def test_get_template_returns_reindexed_tree(config: MultiGroupConfig) -> None:
 
 
 class OnlyVerticalConfig(MultiGroupConfig):
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: ("init_time", "latitude", "longitude"),
         "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
     }
@@ -271,7 +271,7 @@ def test_validator_rejects_orphan_vertical_group() -> None:
 
 def test_validator_group_must_add_its_own_dim() -> None:
     class BadAddedDim(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {
+        dims: Dims = {
             ROOT: ("init_time", "latitude", "longitude"),
             # pressure_level group adds "model_level" instead of "pressure_level"
             "pressure_level": ("init_time", "latitude", "longitude", "model_level"),
@@ -284,7 +284,7 @@ def test_validator_group_must_add_its_own_dim() -> None:
 
 def test_validator_root_var_name_cannot_equal_group_name() -> None:
     class RootNameCollision(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {
+        dims: Dims = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }
@@ -304,7 +304,7 @@ def test_validator_root_var_name_cannot_equal_group_name() -> None:
 
 def test_validator_uniform_append_dim_chunk_size() -> None:
     class NonUniformAppendChunk(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {
+        dims: Dims = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }
@@ -335,7 +335,7 @@ def test_validator_uniform_append_dim_chunk_size() -> None:
 
 def test_validator_encoding_chunk_length_must_match_group_dims() -> None:
     class WrongChunkLength(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {
+        dims: Dims = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }
@@ -382,7 +382,7 @@ def test_validator_rejects_duplicate_group_name() -> None:
 
 def test_validator_var_group_must_be_declared_in_dims() -> None:
     class UndeclaredGroup(MultiGroupConfig):
-        dims: dict[Group, tuple[Dim, ...]] = {
+        dims: Dims = {
             ROOT: ("init_time", "latitude", "longitude"),
             "pressure_level": ("init_time", "latitude", "longitude", "pressure_level"),
         }

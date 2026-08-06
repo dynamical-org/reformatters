@@ -17,7 +17,14 @@ from reformatters.common.config_models import (
     Group,
 )
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    DatetimeLike,
+    Dim,
+    Dims,
+    Timedelta,
+    Timestamp,
+)
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 
@@ -28,7 +35,7 @@ SPATIAL_REF_COORDS = ((), np.array(0))
 class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
     """Define a subclass of this class to configure the structure of a dataset."""
 
-    dims: dict[Group, tuple[Dim, ...]]
+    dims: Dims
     append_dim: AppendDim
     append_dim_start: Timestamp
     append_dim_frequency: Timedelta
@@ -268,7 +275,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         # 10 as a minimum to ensure we have some buffer.
         num_years = max(2025 - self.append_dim_start.year + 15, 10)
         total_timedelta = pd.Timedelta(days=365 * num_years)
-        result: float = total_timedelta / self.append_dim_frequency  # ty: ignore[invalid-assignment]
+        result: float = total_timedelta / self.append_dim_frequency
         return int(result)
 
     def template_path(self) -> Path:

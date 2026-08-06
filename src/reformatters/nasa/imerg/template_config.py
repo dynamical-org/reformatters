@@ -12,13 +12,12 @@ from reformatters.common.config_models import (
     DatasetAttributes,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -58,7 +57,7 @@ class NasaImergAnalysisTemplateConfig(TemplateConfig[NasaImergDataVar]):
     Concrete subclasses set `run` (early/late); everything else is shared.
     """
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
+    dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = APPEND_DIM_START
     append_dim_frequency: Timedelta = pd.Timedelta("30min")

@@ -68,7 +68,7 @@ Integrating a dataset requires subclassing three base classes. For a step by ste
 Base class: `src/reformatters/common/template_config.py`, commented example subclasses: `src/reformatters/example_{materialized|virtual}/template_config.py`.
 
 Defines the **structure** of a dataset: dimensions, coordinates, data variables, and their attributes/encodings. Key responsibilities:
-- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group: `dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`).
+- Declare `dims`, `append_dim`, `append_dim_start`, `append_dim_frequency`. `dims` is keyed by group and annotated with the `Dims` alias: `dims: Dims = {ROOT: (...)}` for a single-level dataset, plus one entry per vertical group (e.g. `"pressure_level": (..., "pressure_level")`). Keep the annotation — pydantic rejects an unannotated override of an inherited field, and it is what makes ty check dim and group names against their `Literal` types.
 - Implement `dataset_attributes`, `coords`, `data_vars`, `dimension_coordinates()`, and optionally `derive_coordinates()`
 - Generates and persists zarr metadata to `templates/latest.zarr` via `update_template()`. The template is an `xarray.DataTree` (one node per group; a single-level dataset is a one-node tree); `get_template()` returns that DataTree.
 

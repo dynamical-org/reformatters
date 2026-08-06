@@ -121,8 +121,10 @@ def decode_summary_lines(ctx: RunContext) -> list[str]:
             *(f"- FAIL: {message}" for message in ctx.decode_failures),
         ]
     return [
-        f"{ctx.decode_checked_count} references decoded successfully, "
-        f"sampled across {ctx.decode_sample_desc}."
+        (
+            f"{ctx.decode_checked_count} references decoded successfully, "
+            f"sampled across {ctx.decode_sample_desc}."
+        )
     ]
 
 

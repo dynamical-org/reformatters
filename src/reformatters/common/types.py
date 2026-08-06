@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum, auto
 from typing import Annotated, Any, Literal, get_args
@@ -59,3 +60,6 @@ type VerticalGroup = Literal["pressure_level", "model_level"]
 # A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
 type Group = VerticalGroup | RootGroup
 assert set(get_args(VerticalGroup.__value__)) <= set(get_args(Dim.__value__))
+
+# Each group's dims, as declared by a TemplateConfig subclass.
+type Dims = Mapping[Group, tuple[Dim, ...]]

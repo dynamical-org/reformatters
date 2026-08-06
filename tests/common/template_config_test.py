@@ -13,13 +13,12 @@ from reformatters.common.config_models import (
     Coordinate,
     DatasetAttributes,
     DataVar,
-    Group,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -37,7 +36,7 @@ class ExampleDatasetAttributes(DatasetAttributes):
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
     """A minimal concrete implementation to test the happy-path logic."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time",)}
+    dims: Dims = {ROOT: ("time",)}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta(days=1)
@@ -78,7 +77,6 @@ class BadCoordsConfig(ExampleConfig):
 @pytest.fixture
 def example_config() -> ExampleConfig:
     return ExampleConfig(
-        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
@@ -114,13 +112,12 @@ def test_append_dim_coordinate_chunk_size_varies_with_start(
         append_dim_start: Timestamp = pd.Timestamp(f"{start_year}-01-01")
 
     inst = C(
-        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp(f"{start_year}-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),
     )
     # total days = 365 * expected_years, freq = 1 day
-    result: float = pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency  # ty: ignore[invalid-assignment]
+    result: float = pd.Timedelta(days=365 * expected_years) / inst.append_dim_frequency
     expected = int(result)
     assert inst.append_dim_coordinate_chunk_size() == expected
 
@@ -137,7 +134,6 @@ def test_default_derive_coordinates_returns_spatial_ref(
 
 def test_derive_coordinates_raises_if_coords_not_returned() -> None:
     bad = BadCoordsConfig(
-        dims={ROOT: ("time",)},
         append_dim="time",
         append_dim_start=pd.Timestamp("2000-01-01"),
         append_dim_frequency=pd.Timedelta(days=1),

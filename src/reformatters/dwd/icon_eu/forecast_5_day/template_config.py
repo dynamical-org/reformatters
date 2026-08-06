@@ -15,7 +15,6 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
@@ -26,7 +25,7 @@ from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -64,9 +63,7 @@ class DwdIconEuDataVar(DataVar[DwdIconEuInternalAttrs]):
 
 
 class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {
-        ROOT: ("init_time", "lead_time", "latitude", "longitude")
-    }
+    dims: Dims = {ROOT: ("init_time", "lead_time", "latitude", "longitude")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2026-02-10T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")

@@ -10,11 +10,10 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
@@ -27,7 +26,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for GEFS analysis dataset."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
+    dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("3h")
@@ -56,7 +55,7 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
         """
         # Use 50 years (instead of the default impl) to match the existing dataset
         # that existed before refactoring things to use TemplateConfig/etc.
-        result: float = pd.Timedelta(days=365 * 50) / self.append_dim_frequency  # ty: ignore[invalid-assignment]
+        result: float = pd.Timedelta(days=365 * 50) / self.append_dim_frequency
         return int(result)
 
     def dimension_coordinates(self) -> dict[str, Any]:

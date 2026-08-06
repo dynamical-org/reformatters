@@ -47,7 +47,7 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
 pytestmark = pytest.mark.slow
@@ -315,7 +315,7 @@ class MultiGroupRegionJob(
 
 
 class MultiGroupTemplateConfig(TemplateConfig[DataVar[BaseInternalAttrs]]):
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude"),
         "pressure_level": (
             "init_time",

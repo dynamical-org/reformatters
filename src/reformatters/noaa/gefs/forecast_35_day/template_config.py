@@ -12,11 +12,10 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
@@ -29,7 +28,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for GEFS 35-day forecast dataset."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: (
             "init_time",
             "ensemble_member",
@@ -75,7 +74,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         # This is a zarr format hack to allow expanding an array safely and requires
         # that new array values are written strictly before new metadata is written
         # (doing this correctly is a key benefit of icechunk).
-        result: float = pd.Timedelta(days=365 * 15) / self.append_dim_frequency  # ty: ignore[invalid-assignment]
+        result: float = pd.Timedelta(days=365 * 15) / self.append_dim_frequency
         return int(result)
 
     def dimension_coordinates(self) -> dict[str, Any]:

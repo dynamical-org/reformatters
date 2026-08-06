@@ -15,14 +15,13 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,  # noqa: F401
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_2BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -54,7 +53,7 @@ class NoaaNdviCdrDataVar(DataVar[NoaaNdviCdrInternalAttrs]):
 
 
 class NoaaNdviCdrAnalysisTemplateConfig(TemplateConfig[NoaaNdviCdrDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
+    dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("1981-06-24")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")

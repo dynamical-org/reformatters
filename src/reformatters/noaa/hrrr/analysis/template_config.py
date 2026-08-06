@@ -12,12 +12,11 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -29,7 +28,7 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 
 
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "y", "x")}
+    dims: Dims = {ROOT: ("time", "y", "x")}
     append_dim: AppendDim = "time"
     # HRRR operational start is 2014-09-30. We start at 2014-10-01 to skip the incomplete first day.
     append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")

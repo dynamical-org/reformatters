@@ -15,11 +15,10 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -50,7 +49,7 @@ class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
 
 
 class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
+    dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     # Iowa Mesonet archive for MRMS has significant data availability November 2014 onwards.
     append_dim_start: Timestamp = pd.Timestamp("2014-11-01T00:00")
