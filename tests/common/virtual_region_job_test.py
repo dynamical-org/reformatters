@@ -1369,6 +1369,18 @@ def _backfilled_store(
     return repo.readonly_session("main").store
 
 
+def _updated_store(
+    dataset: VirtualTestDataset, template_ds: xr.DataTree, *, emit: Sequence[slice]
+) -> icechunk.IcechunkStore:
+    """The store an operational update leaves: the append dim grows only as far as the
+    refs written, so its extent is where ingestion has reached."""
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    for region in emit:
+        _process_virtual(_make_region_job(template_ds, region=region), repo)
+    return repo.readonly_session("main").store
+
+
 def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
     # Default (1.0,): every position in the window must be fully present.
     dataset = _make_dataset(tmp_path)
@@ -1382,12 +1394,14 @@ def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
     assert result.passed, result.message
 
 
-def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> None:
-    # Emit inits 0-1 of a 4-init window; with the default (1.0,) the missing inits 2-3
-    # are real holes.
+def test_check_virtual_manifest_completeness_detects_hole_below_extent(
+    tmp_path: Path,
+) -> None:
+    # A gap under the store's extent is a real hole: ingest inits 0-1 and 3, leaving
+    # init 2 empty. Init 3 keeps init 2 in the expected set, so the default (1.0,) fails.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
-    store = _backfilled_store(dataset, template_ds, emit=slice(0, 2))
+    store = _updated_store(dataset, template_ds, emit=[slice(0, 2), slice(3, 4)])
     job = _make_region_job(template_ds, region=slice(0, 4))
 
     result = validation.CheckVirtualManifestCompleteness()(
@@ -1397,26 +1411,43 @@ def test_check_virtual_manifest_completeness_detects_hole(tmp_path: Path) -> Non
     assert "Incomplete" in result.message
 
 
-def test_check_virtual_manifest_completeness_tolerates_partial_newest(
+def test_check_virtual_manifest_completeness_ignores_unpublished_newest(
     tmp_path: Path,
 ) -> None:
-    # Emit inits 0-2 but not the newest (init 3). (0.0, 1.0): the newest may be absent,
-    # every older position must be complete -> passes.
+    # Ingest inits 0-2 but not the newest (init 3): the window always runs ahead of what
+    # the source has published, so the default (1.0,) passes with no tier tuning.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
-    store = _backfilled_store(dataset, template_ds, emit=slice(0, 3))
+    store = _updated_store(dataset, template_ds, emit=[slice(0, 3)])
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    result = validation.CheckVirtualManifestCompleteness()(
+        job, store, xr.open_zarr(store, decode_timedelta=True)
+    )
+    assert result.passed, result.message
+
+
+def test_check_virtual_manifest_completeness_thresholds_apply_to_ingested(
+    tmp_path: Path,
+) -> None:
+    # Tiers index the ingested positions, so the newest *ingested* init (2) takes the
+    # leading tier -- init 3 is unpublished and out of the picture entirely.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+    partial_job = _make_region_job(template_ds, region=slice(2, 3))
+    coords = partial_job.source_file_coords()
+    partial_job.process_virtual(repo, [], "main", coords[: len(coords) // 2])
+    store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 4))
     ds = xr.open_zarr(store, decode_timedelta=True)
 
-    tolerant = validation.CheckVirtualManifestCompleteness(
-        min_present_fraction=(0.0, 1.0)
-    )
-    assert tolerant(job, store, ds).passed
-    # But a fraction floor the absent newest can't meet still fails on it.
-    strict = validation.CheckVirtualManifestCompleteness(
-        min_present_fraction=(0.5, 1.0)
-    )
-    result = strict(job, store, ds)
+    assert validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.4, 1.0))(
+        job, store, ds
+    ).passed
+    result = validation.CheckVirtualManifestCompleteness()(job, store, ds)
     assert not result.passed
     assert "Incomplete" in result.message
 
@@ -1435,6 +1466,13 @@ def test_check_virtual_manifest_completeness_fails_when_window_too_short(
     )(job, store, xr.open_zarr(store, decode_timedelta=True))
     assert not result.passed
     assert "need at least 2" in result.message
+
+
+def test_check_virtual_manifest_completeness_rejects_loose_last_tier() -> None:
+    # The last tier holds for every older append-dim position, so anything under 1.0
+    # would permanently accept incomplete data rather than ever failing on it.
+    with pytest.raises(AssertionError, match=r"must be 1\.0"):
+        validation.CheckVirtualManifestCompleteness(min_present_fraction=(1.0, 0.8))
 
 
 def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
