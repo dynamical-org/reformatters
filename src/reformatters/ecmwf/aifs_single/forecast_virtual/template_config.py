@@ -25,7 +25,7 @@ from reformatters.common.template_config import (
 from reformatters.common.types import (
     AppendDim,
     CodecConfig,
-    Dim,
+    Dims,
     Timedelta,
     Timestamp,
 )
@@ -77,7 +77,7 @@ class EcmwfAifsSingleForecastVirtualTemplateConfig(
     pressure_level group. See docs/virtual_datasets.md.
     """
 
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: ("init_time", "lead_time", "latitude", "longitude"),
         "pressure_level": (
             "init_time",
