@@ -38,8 +38,6 @@ class EcmwfAifsSingleForecastTemplateConfig(
     EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar]
 ):
     dims: Dims = {ROOT: ("init_time", "lead_time", "latitude", "longitude")}
-    valid_time_statistic_max: str = "Present"
-    expected_forecast_length_statistic_min: str = "0 days 00:00:00"
 
     @computed_field
     @property

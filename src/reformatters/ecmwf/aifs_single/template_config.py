@@ -35,10 +35,6 @@ class EcmwfAifsSingleCommonTemplateConfig[DATA_VAR: EcmwfDataVar](
     append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    # Statistics the variants report differently; see each subclass.
-    valid_time_statistic_max: str
-    expected_forecast_length_statistic_min: str
-
     def dimension_coordinates(self) -> dict[str, Any]:
         return {
             self.append_dim: self.append_dim_coordinates(
@@ -172,7 +168,7 @@ class EcmwfAifsSingleCommonTemplateConfig[DATA_VAR: EcmwfDataVar](
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
-                        max=self.valid_time_statistic_max,
+                        max="Present + 15 days",
                     ),
                 ),
             ),
@@ -190,7 +186,8 @@ class EcmwfAifsSingleCommonTemplateConfig[DATA_VAR: EcmwfDataVar](
                     long_name="Expected forecast length",
                     units="seconds",
                     statistics_approximate=StatisticsApproximate(
-                        min=self.expected_forecast_length_statistic_min,
+                        # Every init is expected to reach the full forecast length.
+                        min=str(dim_coords["lead_time"].max()),
                         max=str(dim_coords["lead_time"].max()),
                     ),
                 ),

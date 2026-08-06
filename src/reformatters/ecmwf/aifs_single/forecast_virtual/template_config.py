@@ -83,8 +83,6 @@ class EcmwfAifsSingleForecastVirtualTemplateConfig(
             "pressure_level",
         ),
     }
-    valid_time_statistic_max: str = "Present + 15 days"
-    expected_forecast_length_statistic_min: str = "15 days 00:00:00"
 
     @computed_field
     @property
