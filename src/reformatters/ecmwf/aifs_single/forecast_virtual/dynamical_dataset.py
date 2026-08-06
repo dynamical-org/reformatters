@@ -95,12 +95,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
                 validation.check_forecast_current_data,
                 max_latest_init_time_age=timedelta(hours=7),
             ),
-            # Publication lands ~5h25m after init, nearly a full 6h cycle, so the newest
-            # init_time in the window is always still unpublished at validation time and
-            # nothing is ingested for it yet. Every older position, including the one the
-            # update just ingested, must be complete.
-            validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.0, 1.0)
-            ),
+            # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
+            validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

@@ -187,9 +187,9 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
         for v in validators
         if isinstance(v, validation.CheckVirtualManifestCompleteness)
     ]
-    # The newest init_time is exempt: publication lands ~5h25m after init, so at every
-    # validation fire that position is still unpublished. Older positions must be whole.
-    assert completeness.min_present_fraction == (0.0, 1.0)
+    # The source publishes all 61 leads in a ~2 minute burst, so an ingested init is
+    # never half-published and the default whole-position threshold holds.
+    assert completeness.min_present_fraction == (1.0,)
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
