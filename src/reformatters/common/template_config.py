@@ -123,7 +123,6 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         """
         on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
         new_append_coords = self.append_dim_coordinates(end_time)
-        coord_fill_values = {c.name: c.encoding.fill_value for c in self.coords}
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:
@@ -138,24 +137,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             for coordinate in ds.coords.values():
                 coordinate.load()
 
-            # Work around what appears to be a bug where fill_value is not set in encodings read from existing zarr template
-            for coord_name in ds.coords:
-                assert "fill_value" not in ds[coord_name].encoding, (
-                    "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
-                )
-                ds[coord_name].encoding["fill_value"] = coord_fill_values[
-                    str(coord_name)
-                ]
             nodes[node.path] = ds
-
-        # Same fill_value workaround for data vars, keyed off the config (which may be a
-        # subset of the on-disk template) so each var is restored at its group node.
-        for var in self.data_vars:
-            var_array = nodes[self._group_node_path(var.group)][var.name]
-            assert "fill_value" not in var_array.encoding, (
-                "Fill value round tripped. That's good but not the previous behavior and if you see this AND the fill_value is correct, you can remove the workaround."
-            )
-            var_array.encoding["fill_value"] = var.encoding.fill_value
 
         template = xr.DataTree.from_dict(nodes)
 
