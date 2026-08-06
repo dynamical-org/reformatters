@@ -444,6 +444,37 @@ class TestIcechunkVirtualConfig:
         assert caching is not None
         assert caching.num_chunk_refs == 1_000_000
 
+    def test_rejects_duplicate_container_prefixes(self) -> None:
+        # icechunk keys containers by url_prefix, so a repeat silently drops the earlier
+        # container's store config instead of registering both.
+        container = icechunk.VirtualChunkContainer(
+            "s3://noaa-gfs-bdp-pds/", icechunk.s3_store(region="us-east-1")
+        )
+        with pytest.raises(ValidationError, match="distinct url_prefixes"):
+            IcechunkVirtualConfig(
+                containers=(container, container),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            )
+
+    @pytest.mark.parametrize("virtual", [True, False])
+    def test_reads_retry_a_throttling_source(self, virtual: bool) -> None:
+        # These settings reach the virtual chunk fetchers, so they are what survives a
+        # 503 SlowDown from a source bucket; icechunk's 10-try default gives up too soon.
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=_example_virtual_config() if virtual else None,
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        storage = repo.config.storage
+        assert storage is not None
+        assert storage.retries is not None
+        assert storage.retries.max_tries == 16
+        assert storage.retries.max_backoff_ms == 16_000
+
     def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
             "gs://bucket/", icechunk.gcs_store()

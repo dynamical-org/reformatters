@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, assert_never
+from typing import Any, Literal, Self, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -15,7 +15,7 @@ import zarr
 import zarr.abc.store
 import zarr.storage
 from icechunk.store import IcechunkStore
-from pydantic import Field, InstanceOf, computed_field
+from pydantic import Field, InstanceOf, computed_field, model_validator
 from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
@@ -564,6 +564,17 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     # Per-array manifest splitting policy (see manifest_append_dim_split).
     manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
 
+    @model_validator(mode="after")
+    def _validate_distinct_container_prefixes(self) -> Self:
+        # icechunk keys containers by url_prefix, so a repeat would silently drop the
+        # earlier container's store config rather than register both.
+        prefixes = [container.url_prefix for container in self.containers]
+        if len(set(prefixes)) != len(prefixes):
+            raise ValueError(
+                f"Virtual chunk containers must have distinct url_prefixes, got {prefixes}"
+            )
+        return self
+
 
 def _repository_config_and_credentials(
     virtual_config: IcechunkVirtualConfig | None,
@@ -575,11 +586,18 @@ def _repository_config_and_credentials(
         splitting=virtual_config.manifest_split if virtual_config is not None else None,
         max_concurrent_manifest_fetches_during_commit=16,
     )
+    config.storage = icechunk.StorageSettings(
+        # These retries impact virtual and materialized reads in validators
+        retries=icechunk.StorageRetriesSettings(
+            max_tries=16, initial_backoff_ms=1_000, max_backoff_ms=16_000
+        )
+    )
     if virtual_config is None:
         return config, None
 
     for container in virtual_config.containers:
         config.set_virtual_chunk_container(container)
+
     # Cap the chunk-ref cache: streaming commits each rewrite the active manifest split
     # and never read old versions, so icechunk's default 5M-entry cache fills with dead
     # manifest versions (multi-GB OOM). A virtual ref is ~180 B, so 1M refs ≈ 200 MB.
