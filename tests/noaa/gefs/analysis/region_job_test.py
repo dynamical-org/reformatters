@@ -30,6 +30,10 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GEFSInternalAttrs,
 )
+from reformatters.noaa.noaa_utils import (
+    NOMADS_RETRY_STATUS_CODES,
+    nomads_rate_limiter,
+)
 
 
 @pytest.fixture
@@ -705,9 +709,10 @@ def test_download_file_fallback(
         "reformatters.noaa.gefs.utils.http_download_to_disk",
         Mock(side_effect=mock_primary_download),
     )
+    mock_fallback = Mock(side_effect=mock_fallback_download)
     monkeypatch.setattr(
         "reformatters.noaa.gefs.utils.httpx_download_to_disk",
-        Mock(side_effect=mock_fallback_download),
+        mock_fallback,
     )
 
     mock_grib_message_byte_ranges_from_index = Mock(
@@ -724,6 +729,11 @@ def test_download_file_fallback(
 
     # Should have called: primary index (failed) + fallback index + fallback data
     assert call_count == 3
+
+    # NOMADS rate limits, and its bot mitigation answers with a retryable 302.
+    for call in mock_fallback.call_args_list:
+        assert call.kwargs["rate_limiter"] is nomads_rate_limiter
+        assert call.kwargs["retry_status_codes"] == NOMADS_RETRY_STATUS_CODES
 
 
 def test_download_file_no_fallback_for_old_data(
