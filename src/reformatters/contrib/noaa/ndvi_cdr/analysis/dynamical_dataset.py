@@ -20,8 +20,16 @@ class NoaaNdviCdrAnalysisDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        # Suspended: the data disappeared from the source. Neither NOAA access path
+        # (s3://noaa-cdr-ndvi-pds, NCEI's HTTP archive) serves files after 2024-12-31
+        # anymore, so there is nothing to update from. We've asked NOAA's data contact
+        # what happened and are waiting to hear back; resume both cron jobs once the
+        # source serves recent files again.
+        suspend = True
+
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
+            suspend=suspend,
             schedule="0 20 * * *",
             pod_active_deadline=timedelta(minutes=30),  # runs take <24 min
             image=image_tag,
@@ -34,6 +42,7 @@ class NoaaNdviCdrAnalysisDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
+            suspend=suspend,
             schedule="30 20 * * *",  # 30m (pod_active_deadline) after reformat at :00
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
