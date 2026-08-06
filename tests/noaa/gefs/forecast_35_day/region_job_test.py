@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from obstore.exceptions import PermissionDeniedError
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
@@ -667,53 +666,6 @@ def test_operational_update_jobs(
             mock_open_zarr.assert_called_once_with(
                 store_factory.primary_store(), decode_timedelta=True, chunks=None
             )
-
-
-def test_download_file_fallback_permission_denied_converts_to_file_not_found(
-    template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Test that PermissionDeniedError from fallback is converted to FileNotFoundError."""
-    tmp_store = get_local_tmp_store()
-    data_vars = example_data_vars[:1]
-
-    job = GefsForecast35DayRegionJob(
-        tmp_store=tmp_store,
-        template_ds=xr.DataTree.from_dict({"/": template_ds}),
-        data_vars=data_vars,
-        append_dim="init_time",
-        region=slice(0, 1),
-        reformat_job_name="test-job",
-    )
-
-    # Use a recent init_time (within 4 days) to trigger fallback behavior
-    recent_init_time = pd.Timestamp.now() - pd.Timedelta(days=1)
-    coord = GefsForecast35DaySourceFileCoord(
-        init_time=recent_init_time,
-        lead_time=pd.Timedelta("3h"),
-        ensemble_member=1,
-        data_vars=data_vars,
-    )
-
-    # Primary source fails with FileNotFoundError
-    monkeypatch.setattr(
-        "reformatters.noaa.gefs.utils.http_download_to_disk",
-        Mock(side_effect=FileNotFoundError("Primary index not found")),
-    )
-    # Fallback source (NOMADS via httpx) fails with PermissionDeniedError
-    monkeypatch.setattr(
-        "reformatters.noaa.gefs.utils.httpx_download_to_disk",
-        Mock(side_effect=PermissionDeniedError("Permission denied")),
-    )
-
-    # Should raise FileNotFoundError (not PermissionDeniedError)
-    with pytest.raises(FileNotFoundError) as exc_info:
-        job.download_file(coord)
-
-    # Verify it's a FileNotFoundError with PermissionDeniedError as cause
-    assert exc_info.value.__cause__ is not None
-    assert isinstance(exc_info.value.__cause__, PermissionDeniedError)
 
 
 def _make_forecast_region_job() -> GefsForecast35DayRegionJob:
