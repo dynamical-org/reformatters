@@ -101,10 +101,12 @@ def list_files(
             log.info("Directory not found: '%s'", path)
             return []
         else:
-            try:
-                _log_error_from_called_process_error(e)
-            finally:
-                raise
+            log.exception(
+                "stderr: %s; stdout: %s",
+                _convert_called_process_error_output_to_str(e.stderr),
+                _convert_called_process_error_output_to_str(e.stdout),
+            )
+            raise
     else:
         if result.stderr:
             log.info("rclone stderr: %s", result.stderr)
@@ -152,15 +154,7 @@ def list_files_on_dst_for_all_nwp_runs_available_from_dwd(
     return existing_dst_paths_starting_with_init_dt
 
 
-def _log_error_from_called_process_error(e: subprocess.CalledProcessError) -> None:
-    log.exception(
-        "stderr: %s; stdout: %s",
-        _convert_called_process_error_output_to_str(e.stderr),
-        _convert_called_process_error_output_to_str(e.stdout),
-    )
-
-
-def _convert_called_process_error_output_to_str(output: None | str | bytes) -> str:
+def _convert_called_process_error_output_to_str(output: str | bytes | None) -> str:
     if output is None:
         return ""
     elif isinstance(output, str):

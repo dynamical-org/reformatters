@@ -75,7 +75,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         # This is a zarr format hack to allow expanding an array safely and requires
         # that new array values are written strictly before new metadata is written
         # (doing this correctly is a key benefit of icechunk).
-        result: float = pd.Timedelta(days=365 * 15) / self.append_dim_frequency  # ty: ignore[invalid-assignment]
+        result: float = pd.Timedelta(days=365 * 15) / self.append_dim_frequency
         return int(result)
 
     def dimension_coordinates(self) -> dict[str, Any]:

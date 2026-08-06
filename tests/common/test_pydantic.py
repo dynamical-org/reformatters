@@ -53,7 +53,7 @@ class TestFrozenBaseModel:
     def test_frozen(self) -> None:
         model = FrozenModel(name="a", value=1)
         with pytest.raises(pydantic.ValidationError):
-            model.name = "b"
+            model.name = "b"  # ty: ignore[invalid-assignment]
 
     def test_strict_mode_rejects_coercion(self) -> None:
         with pytest.raises(pydantic.ValidationError):

@@ -125,10 +125,14 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
         rows = [
             "| Point | min | mean | std | max |",
             "|---|---|---|---|---|",
-            f"| P1 | {_fmt_num(stats.value_min_p1)} | {_fmt_num(stats.value_mean_p1)} "
-            f"| {_fmt_num(stats.value_std_p1)} | {_fmt_num(stats.value_max_p1)} |",
-            f"| P2 | {_fmt_num(stats.value_min_p2)} | {_fmt_num(stats.value_mean_p2)} "
-            f"| {_fmt_num(stats.value_std_p2)} | {_fmt_num(stats.value_max_p2)} |",
+            (
+                f"| P1 | {_fmt_num(stats.value_min_p1)} | {_fmt_num(stats.value_mean_p1)} "
+                f"| {_fmt_num(stats.value_std_p1)} | {_fmt_num(stats.value_max_p1)} |"
+            ),
+            (
+                f"| P2 | {_fmt_num(stats.value_min_p2)} | {_fmt_num(stats.value_mean_p2)} "
+                f"| {_fmt_num(stats.value_std_p2)} | {_fmt_num(stats.value_max_p2)} |"
+            ),
         ]
     else:
         rows = [

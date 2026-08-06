@@ -47,14 +47,14 @@ dev = [
     "markdown-it-py>=4.0.0",
     "matplotlib~=3.9",
     "pandas-stubs~=3.0",
-    "prek==0.4.1",
+    "prek==0.4.11",
     "pyqt6>=6.7.1",
     "pytest~=9.0",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
     # NOTE: keep this in sync with .pre-commit-config.yaml
-    "ruff==0.15.14",
-    "ty~=0.0.39",
+    "ruff==0.16.1",
+    "ty~=0.0.65",
     "types-boto3>=1.43.5",
     "types-requests~=2.32",
 ]
@@ -109,6 +109,7 @@ ignore = [
     "UP047",   # non-pep695-generic-function - defer migration to PEP 695 generics
     "PLC0414", # import aliases to same name - we use to specifically re-export
     "PLR0913", # too many arguments
+    "PLR0917", # too many positional arguments
     "TD003",   # don't require issue link in todos
     "PTH123",  # allow `open`
     "G004",    # allow f-string in logging
