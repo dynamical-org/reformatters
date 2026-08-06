@@ -108,6 +108,15 @@ class StoreFactory(FrozenBaseModel):
             self.icechunk_virtual_config,
         )
 
+    def open_primary_datatree(self) -> xr.DataTree:
+        """The primary store's current published contents."""
+        return xr.open_datatree(
+            self.primary_store(),  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            decode_timedelta=True,
+            chunks=None,
+        )
+
     def replica_stores(
         self, writable: bool = False, branch: str = "main"
     ) -> list[Store]:

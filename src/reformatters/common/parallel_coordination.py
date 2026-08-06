@@ -174,6 +174,11 @@ def finalize(
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
+        template_utils.assert_no_append_dim_retraction(
+            updated_template,
+            store_factory.open_primary_datatree(),
+            all_jobs[0].append_dim,
+        )
     else:
         updated_template = template_ds
     # Ensure tmp_store has written metadata. Virtual workers (besides worker 0)

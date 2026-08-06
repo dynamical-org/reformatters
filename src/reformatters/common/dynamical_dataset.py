@@ -462,7 +462,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         if is_first and overwrite:
             template_utils.assert_safe_overwrite(
                 template_ds,
-                self._open_primary_datatree(),
+                self.store_factory.open_primary_datatree(),
                 self.template_config.append_dim,
                 allow_new_arrays=overwrite_metadata,
                 allow_expansion=overwrite_chunks and overwrite_metadata,
@@ -697,14 +697,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _get_template(self, append_dim_end: DatetimeLike) -> xr.DataTree:
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
-    def _open_primary_datatree(self) -> xr.DataTree:
-        return xr.open_datatree(
-            self.store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
-            engine="zarr",
-            decode_timedelta=True,
-            chunks=None,
-        )
-
     def _open_existing_store(self) -> xr.DataTree | None:
         """The primary store's current contents, or None if no dataset exists there yet.
 
@@ -712,7 +704,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         misclassifying an existing store as absent would route a backfill past the
         overwrite guards."""
         try:
-            return self._open_primary_datatree()
+            return self.store_factory.open_primary_datatree()
         except (
             FileNotFoundError,  # zarr3 store path absent
             zarr.errors.GroupNotFoundError,  # store path exists but holds no dataset
@@ -775,7 +767,9 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
 
     def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
         template_utils.assert_no_structural_drift_from_existing_store(
-            template_ds, self._open_primary_datatree(), self.template_config.append_dim
+            template_ds,
+            self.store_factory.open_primary_datatree(),
+            self.template_config.append_dim,
         )
 
     def _can_run_in_kubernetes(self) -> bool:
