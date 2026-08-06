@@ -639,46 +639,60 @@ async def _list_shards(store: Store, var: str) -> set[str]:
 
 @dataclass(frozen=True)
 class CheckVirtualManifestCompleteness(VirtualDataValidator):
-    """Assert recent append-dim positions are sufficiently ingested in the manifest.
+    """Assert each recent append-dim position is sufficiently present in the manifest.
 
-    Re-runs the operational filter (the region job's own source_file_coords +
-    filter_already_present) over the recent window and checks, per position, the fraction
+    The virtual analog of check_for_expected_shards. Re-runs the region job's own
+    source_file_coords + filter_already_present over its window (a handful of recent
+    steps; whole-archive coverage is manifest_scan) and checks, per position, the fraction
     of expected source files present against `min_present_fraction` — indexed newest-first,
-    with positions older than the tuple held to its last value. Cheap: one ref-existence
-    probe per source file, no decode. Reusing the dataset's own coord generation means
-    structural absences (hour-0 accumulated vars, etc.) are not in the expected set. The
-    virtual analog of check_for_expected_shards.
+    older positions held to its last value. Regenerating the dataset's own coords excludes
+    structural absences (hour-0 accumulated vars, etc.). One ref-existence probe per source
+    file, no decode.
 
-    Examples (validation typically runs once each recent position should be ingested):
-      (1.0,)      every position in the window must be fully ingested (default).
-      (0.5, 1.0)  the newest position may be half-published (e.g. GEFS 35-day's slow long
-                  lead times); every older position must be complete.
-      (0.0, 1.0)  ignore the newest (still publishing); require the rest complete.
-      (0.8,)      every position at least 80% present (a source that trickles in).
+    Positions past the store's append-dim extent are skipped: the window runs ahead of what
+    the source has published, and an update grows the append dim only as far as the refs it
+    writes. So a wholly un-ingested recent stretch is check_forecast_current_data's job,
+    while an interior gap still fails here.
+
+      (1.0,)      every append-dim position whole (default).
+      (0.5, 1.0)  the newest may be half-published (e.g. GEFS 35-day's slow long lead
+                  times); older append-dim positions whole.
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
 
     def __post_init__(self) -> None:
         assert self.min_present_fraction, "min_present_fraction must be non-empty"
+        # If a real source ever leaves append-dim positions permanently incomplete, add
+        # an explicit opt-out field rather than relaxing this into a soft convention.
+        assert self.min_present_fraction[-1] == 1.0, (
+            "the last min_present_fraction tier holds for every older append-dim "
+            "position, so it must be 1.0; loosen only the leading tiers, which cover "
+            f"positions the source may still be filling in (got {self.min_present_fraction})"
+        )
 
     def __call__(
         self,
         region_job: VirtualRegionJob[Any, Any],
         store: IcechunkStore,
-        ds: xr.Dataset,  # noqa: ARG002 - completeness reads the manifest, not the dataset
+        ds: xr.Dataset,
     ) -> ValidationResult:
         append_dim = region_job.append_dim
-        candidates = region_job.source_file_coords()
+        ingested_through = ds.get_index(append_dim).max()
+        candidates = [
+            coord
+            for coord in region_job.source_file_coords()
+            if coord.out_loc()[append_dim] <= ingested_through
+        ]
         expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
         positions = sorted(expected_per_position, reverse=True)  # newest first
         if len(positions) < len(self.min_present_fraction):
             return ValidationResult(
                 passed=False,
                 message=(
-                    f"Only {len(positions)} {append_dim} position(s) in the validation "
-                    f"window, need at least {len(self.min_present_fraction)} to check the "
-                    f"{self.min_present_fraction} completeness thresholds"
+                    f"Only {len(positions)} ingested {append_dim} position(s) in the "
+                    f"validation window, need at least {len(self.min_present_fraction)} "
+                    f"to check the {self.min_present_fraction} completeness thresholds"
                 ),
             )
 
@@ -707,8 +721,9 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
         return ValidationResult(
             passed=True,
             message=(
-                f"All {len(positions)} {append_dim} positions meet completeness "
-                f"thresholds {self.min_present_fraction}"
+                f"All {len(positions)} ingested {append_dim} positions (through "
+                f"{ingested_through}) meet completeness thresholds "
+                f"{self.min_present_fraction}"
             ),
         )
 
