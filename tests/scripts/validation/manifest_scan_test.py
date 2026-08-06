@@ -12,11 +12,11 @@ from scripts.validation.manifest_scan import (
     _flush_var_probes,
     _fold_file_availability,
     _probe_coord_for_var,
-    _probe_jobs,
     _sort_coords_for_probe,
     _var_chunk_key,
     _var_keys,
     _var_probes,
+    probe_jobs,
     result_availability_series,
 )
 from scripts.validation.scan_common import evenly_spaced_subset
@@ -102,7 +102,7 @@ def _fold_jobs(
     lead_limits: dict[pd.Timestamp, pd.Timedelta],
 ) -> dict[pd.Timestamp, list[int]]:
     counts: dict[pd.Timestamp, list[int]] = {}
-    for _job, coord_presence in _probe_jobs(jobs, store=None):  # ty: ignore[invalid-argument-type]
+    for _job, coord_presence in probe_jobs(jobs, store=None):  # ty: ignore[invalid-argument-type]
         _fold_file_availability(coord_presence, lead_limits, counts)
     return counts
 
