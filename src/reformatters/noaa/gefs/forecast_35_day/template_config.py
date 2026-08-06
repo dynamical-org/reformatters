@@ -12,11 +12,10 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
@@ -29,7 +28,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
 class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
     """Template configuration for GEFS 35-day forecast dataset."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: (
             "init_time",
             "ensemble_member",

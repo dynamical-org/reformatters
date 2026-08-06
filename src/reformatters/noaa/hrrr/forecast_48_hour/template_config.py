@@ -12,11 +12,10 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import SPATIAL_REF_COORDS
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -37,7 +36,7 @@ EXPECTED_FORECAST_LENGTH_BY_INIT_HOUR = pd.Series(
 
 class NoaaHrrrForecast48HourTemplateConfig(NoaaHrrrCommonTemplateConfig):
     # HRRR uses a projected coordinate system with x/y dimensions
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("init_time", "lead_time", "y", "x")}
+    dims: Dims = {ROOT: ("init_time", "lead_time", "y", "x")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
     append_dim_frequency: Timedelta = pd.Timedelta("6h")

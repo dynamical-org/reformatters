@@ -14,13 +14,12 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.template_config import (
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -37,7 +36,7 @@ class UarizonaSwannDataVar(DataVar[UarizonaSwannInternalAttrs]):
 
 
 class UarizonaSwannAnalysisTemplateConfig(TemplateConfig[UarizonaSwannDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "latitude", "longitude")}
+    dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("1981-10-01")
     append_dim_frequency: Timedelta = pd.Timedelta("1D")

@@ -3,9 +3,9 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.config_models import ROOT, DatasetAttributes, Encoding, Group
+from reformatters.common.config_models import ROOT, DatasetAttributes, Encoding
 from reformatters.common.download import http_download_to_disk
-from reformatters.common.types import Dim
+from reformatters.common.types import Dims
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.hrrr.template_config import (
     NoaaHrrrCommonTemplateConfig,
@@ -34,7 +34,7 @@ def template_config(monkeypatch: pytest.MonkeyPatch) -> NoaaHrrrCommonTemplateCo
         property(lambda self: mock_attrs),
     )
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time", "y", "x")}
+    dims: Dims = {ROOT: ("time", "y", "x")}
     config = NoaaHrrrCommonTemplateConfig(
         dims=dims,
         append_dim="time",

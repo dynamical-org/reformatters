@@ -23,7 +23,7 @@ from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     CodecConfig,
-    Dim,
+    Dims,
     Timedelta,
     Timestamp,
 )
@@ -97,7 +97,7 @@ class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
 
     forecast_length: Timedelta
 
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: ("init_time", "lead_time", "y", "x"),
         "pressure_level": ("init_time", "lead_time", "y", "x", "pressure_level"),
         "model_level": ("init_time", "lead_time", "y", "x", "model_level"),

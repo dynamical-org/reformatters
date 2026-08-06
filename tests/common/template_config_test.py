@@ -13,13 +13,12 @@ from reformatters.common.config_models import (
     Coordinate,
     DatasetAttributes,
     DataVar,
-    Group,
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 
 
 class ExampleDataVar(DataVar[BaseInternalAttrs]):
@@ -37,7 +36,7 @@ class ExampleDatasetAttributes(DatasetAttributes):
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
     """A minimal concrete implementation to test the happy-path logic."""
 
-    dims: dict[Group, tuple[Dim, ...]] = {ROOT: ("time",)}
+    dims: Dims = {ROOT: ("time",)}
     append_dim: AppendDim = "time"
     append_dim_start: Timestamp = pd.Timestamp("2000-01-01")
     append_dim_frequency: Timedelta = pd.Timedelta(days=1)

@@ -13,12 +13,11 @@ from reformatters.common.config_models import (
     CoordinateAttrs,
     DatasetAttributes,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
@@ -64,7 +63,7 @@ class GefsForecast10DaySpatialTemplateConfig(TemplateConfig[GEFSDataVar]):
     and lead times stop at 240h where the s files end. See docs/virtual_datasets.md.
     """
 
-    dims: dict[Group, tuple[Dim, ...]] = {
+    dims: Dims = {
         ROOT: (
             "init_time",
             "ensemble_member",

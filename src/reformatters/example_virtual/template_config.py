@@ -15,14 +15,13 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,  # noqa: F401
     Encoding,  # noqa: F401
-    Group,
     StatisticsApproximate,  # noqa: F401
 )
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,  # noqa: F401
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,  # noqa: F401
 )
@@ -58,9 +57,7 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
     # "<group>/<name>"); each ref then routes to its group array by var.path. E.g.:
     #   "pressure_level": ("init_time", "lead_time", "latitude", "longitude", "pressure_level"),
     # See tests/common/virtual_multi_group_test.py for a worked multi-group virtual dataset.
-    dims: dict[Group, tuple[Dim, ...]] = {
-        ROOT: ("init_time", "lead_time", "latitude", "longitude")
-    }
+    dims: Dims = {ROOT: ("init_time", "lead_time", "latitude", "longitude")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2020-01-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")

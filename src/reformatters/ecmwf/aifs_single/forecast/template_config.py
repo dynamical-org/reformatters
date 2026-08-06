@@ -13,7 +13,6 @@ from reformatters.common.config_models import (
     DatasetAttributes,
     DataVarAttrs,
     Encoding,
-    Group,
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
@@ -24,7 +23,7 @@ from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -37,9 +36,7 @@ from reformatters.ecmwf.ecmwf_config_models import (
 
 
 class EcmwfAifsSingleForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {
-        ROOT: ("init_time", "lead_time", "latitude", "longitude")
-    }
+    dims: Dims = {ROOT: ("init_time", "lead_time", "latitude", "longitude")}
     append_dim: AppendDim = "init_time"
     # Start from 2024-04-01 when PL u/v are available and the grid is regular 0.25 degree.
     # Earlier data (2024-02-29 to 2024-03-13) uses a reduced Gaussian grid.

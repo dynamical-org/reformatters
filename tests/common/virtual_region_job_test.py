@@ -36,7 +36,6 @@ from reformatters.common.config_models import (
     DataVar,
     DataVarAttrs,
     Encoding,
-    Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import get_worker_jobs
@@ -54,7 +53,7 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
     VirtualRef,
     VirtualRegionJob,
@@ -237,9 +236,7 @@ class VirtualTestRegionJob(
 
 
 class VirtualTestTemplateConfig(TemplateConfig[VirtualTestDataVar]):
-    dims: dict[Group, tuple[Dim, ...]] = {
-        ROOT: ("init_time", "lead_time", "latitude", "longitude")
-    }
+    dims: Dims = {ROOT: ("init_time", "lead_time", "latitude", "longitude")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = APPEND_DIM_START
     append_dim_frequency: Timedelta = APPEND_DIM_FREQ
