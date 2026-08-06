@@ -474,9 +474,6 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     # dimensionless "1" (mass of constituent per mass of dry air).
     ("cloud_ice_mixing_ratio", "kg kg-1"),
     ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
-    # ECMWF publishes accumulated radiation in J m-2, equal to CF's canonical W s m-2.
-    ("integral_wrt_time_of_surface_downwelling_shortwave_flux_in_air", "J m-2"),
-    ("integral_wrt_time_of_surface_downwelling_longwave_flux_in_air", "J m-2"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.

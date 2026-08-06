@@ -174,7 +174,7 @@
           "long_name": "Surface long-wave (thermal) radiation downwards",
           "short_name": "strd",
           "standard_name": "integral_wrt_time_of_surface_downwelling_longwave_flux_in_air",
-          "units": "J m-2",
+          "units": "W s m-2",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -229,7 +229,7 @@
           "long_name": "Surface short-wave (solar) radiation downwards",
           "short_name": "ssrd",
           "standard_name": "integral_wrt_time_of_surface_downwelling_shortwave_flux_in_air",
-          "units": "J m-2",
+          "units": "W s m-2",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
