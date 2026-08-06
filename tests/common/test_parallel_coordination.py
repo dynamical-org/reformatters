@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
@@ -31,6 +32,7 @@ class FakeStoreFactory:
         }
         self._primary_store: object = MagicMock(name="primary_zarr3_store")
         self._replica_stores: list[object] = []
+        self.published_tree: xr.DataTree = xr.DataTree.from_dict({"/": xr.Dataset()})
         self.persist_virtual_config_calls = 0
 
     def persist_virtual_config(self) -> None:
@@ -59,6 +61,9 @@ class FakeStoreFactory:
 
     def primary_store(self, writable: bool = False) -> object:  # noqa: ARG002
         return self._primary_store
+
+    def open_primary_datatree(self) -> xr.DataTree:
+        return self.published_tree
 
     def replica_stores(self, writable: bool = False) -> list[object]:  # noqa: ARG002
         return list(self._replica_stores)
@@ -144,6 +149,18 @@ def stub_io(monkeypatch: pytest.MonkeyPatch) -> dict[str, MagicMock]:
 def _template() -> xr.DataTree:
     # An empty dataset is enough — every real use of template_ds is stubbed.
     return xr.DataTree.from_dict({"/": xr.Dataset()})
+
+
+def _time_tree(n_time: int) -> xr.DataTree:
+    times = pd.date_range("2026-04-01", periods=n_time, freq="D")
+    return xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset(
+                {"v": xr.DataArray(np.zeros(n_time), dims=("time",))},
+                coords={"time": times},
+            )
+        }
+    )
 
 
 class TestParallelSetupFirstWorker:
@@ -906,6 +923,35 @@ class TestFinalize:
         assert copy_kwargs["zarr3_only"] is True
         assert copy_kwargs["replica_stores"] == []
         stub_io["write_metadata"].assert_called_once()
+
+    def test_update_refuses_to_publish_template_shorter_than_store(
+        self, tmp_path: Path, stub_io: dict[str, MagicMock]
+    ) -> None:
+        """A source outage trims the update template back into published data; finalize
+        must raise before any metadata write rather than un-publish those steps."""
+        factory = FakeStoreFactory()
+        factory.published_tree = _time_tree(5)
+        job = MagicMock()
+        job.append_dim = "time"
+        job.update_template_with_results.return_value = _time_tree(3)
+
+        with pytest.raises(ValueError, match="would retract already-published data"):
+            pc.finalize(
+                factory,  # ty: ignore[invalid-argument-type]
+                all_jobs=[job],
+                merged_results={},
+                reformat_job_name="job",
+                branch_name="main",
+                template_ds=_time_tree(5),
+                tmp_store=tmp_path,
+                setup_info={},
+                workers_total=1,
+                update_template_with_results=True,
+                consolidated=True,
+            )
+
+        stub_io["write_metadata"].assert_not_called()
+        stub_io["copy_zarr_metadata"].assert_not_called()
 
     def test_clear_coordination_files_only_when_multi_worker(
         self, tmp_path: Path

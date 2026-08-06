@@ -35,6 +35,12 @@ Readers must always see a consistent view — either the old data or the fully u
 
 Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
 
+### Retraction guard (operational updates)
+
+`RegionJob.update_template_with_results` trims the update template to what the run actually processed, and when nothing was processed the default trims to the start of the trailing shard — inside data readers can already see. Before publishing that template, finalization asserts it is no shorter along the append dim than the published store (`template_utils.assert_no_append_dim_retraction`), so a source outage fails the update instead of dropping whole shards from the published extent. Shrinking a store on purpose requires a backfill.
+
+This guards the published extent, not the chunks: workers write their whole region before finalization runs, and a region whose source files were all missing writes fill values over whatever those chunks held (`write_shard_to_zarr` passes `write_empty_chunks=True`, so an all-fill shard is persisted rather than skipped). A dataset's NaN-fraction validator is what catches that.
+
 ### Overwrite guard (backfills into an existing store)
 
 A backfill into an existing store (`--overwrite-chunks` / `--overwrite-metadata`) runs `template_utils.assert_safe_overwrite` — in the `backfill-kubernetes` driver before submitting, and again on worker 0 before any writes (the deployed image's template can differ from the driver's). It rejects structural drift of arrays the store already has, any template shorter than the store along the append dim (trimming an existing store is never supported), new arrays unless `--overwrite-metadata` was passed, and a longer template unless an explicit `--append-dim-end` was given with both overwrite flags. Overwrite metadata writes also exclude coordinate value chunks the template renders entirely null (`template_utils.store_written_coords`, e.g. `ingested_forecast_length`) so job-written coordinate state is never clobbered by the template's empty values.

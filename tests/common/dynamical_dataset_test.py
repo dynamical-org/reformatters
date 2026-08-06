@@ -488,6 +488,8 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
     monkeypatch.setattr(template_utils, "write_metadata", lambda *args, **kwargs: None)
 
+    monkeypatch.setattr(ExampleDataset, "_open_existing_store", lambda self: None)
+
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,

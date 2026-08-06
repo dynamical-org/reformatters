@@ -289,26 +289,19 @@ def assert_safe_overwrite(
                 "(pass --overwrite-metadata to add them)"
             )
 
-    existing_sizes = {
-        node.path: node.sizes[append_dim]
-        for node in existing_ds.subtree
-        if append_dim in node.sizes
-    }
-    for node in template_ds.subtree:
-        if append_dim not in node.sizes or node.path not in existing_sizes:
-            continue
-        template_size = node.sizes[append_dim]
-        existing_size = existing_sizes[node.path]
+    for node, template_size, existing_size in _append_dim_size_pairs(
+        template_ds, existing_ds, append_dim
+    ):
+        sizes = (
+            f"{node}: template has {template_size} {append_dim} steps but the "
+            f"store has {existing_size}"
+        )
         if template_size < existing_size:
-            problems.append(
-                f"{node.path}: template has {template_size} {append_dim} steps but the "
-                f"store has {existing_size}; trimming an existing store is never supported"
-            )
+            problems.append(f"{sizes}; trimming an existing store is never supported")
         elif template_size > existing_size and not allow_expansion:
             problems.append(
-                f"{node.path}: template has {template_size} {append_dim} steps but the "
-                f"store has {existing_size}; extending requires an explicit "
-                "--append-dim-end with both --overwrite-metadata and --overwrite-chunks"
+                f"{sizes}; extending requires an explicit --append-dim-end with both "
+                "--overwrite-metadata and --overwrite-chunks"
             )
 
     if problems:
@@ -316,6 +309,50 @@ def assert_safe_overwrite(
             "Template is not safe to write over the existing store:\n"
             + "\n".join(f"- {p}" for p in problems)
         )
+
+
+def assert_no_append_dim_retraction(
+    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
+) -> None:
+    """Fail an operational update whose template would un-publish data readers can already see.
+
+    An update's template is trimmed to what the run actually processed
+    (`RegionJob.update_template_with_results`), so a source outage that yields nothing can
+    trim back into already-published data, dropping whole shards of append-dim steps from
+    the store's metadata. Raising here runs before the metadata write, so the published
+    extent is unchanged.
+    """
+    retractions = [
+        f"{node}: template has {template_size} {append_dim} steps but the "
+        f"store has {existing_size}"
+        for node, template_size, existing_size in _append_dim_size_pairs(
+            template_ds, existing_ds, append_dim
+        )
+        if template_size < existing_size
+    ]
+    if retractions:
+        raise ValueError(
+            "Update template would retract already-published data. Operational updates "
+            "only ever extend the published store; run a backfill to shrink it. "
+            "Retractions:\n" + "\n".join(f"- {r}" for r in retractions)
+        )
+
+
+def _append_dim_size_pairs(
+    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
+) -> list[tuple[str, int, int]]:
+    """(group path, template size, existing size) for each group both trees carry along
+    `append_dim`."""
+    existing_sizes = {
+        node.path: node.sizes[append_dim]
+        for node in existing_ds.subtree
+        if append_dim in node.sizes
+    }
+    return [
+        (node.path, node.sizes[append_dim], existing_sizes[node.path])
+        for node in template_ds.subtree
+        if append_dim in node.sizes and node.path in existing_sizes
+    ]
 
 
 def store_written_coords(template_ds: xr.DataTree) -> set[str]:
@@ -344,12 +381,7 @@ def refresh_store_metadata(
     backfilled); store-written coordinate values are preserved. Icechunk stores commit
     only when something actually changed.
     """
-    existing = xr.open_datatree(
-        store_factory.primary_store(),  # ty: ignore[invalid-argument-type]
-        engine="zarr",
-        chunks=None,
-        decode_timedelta=True,
-    )
+    existing = store_factory.open_primary_datatree()
     existing_sizes = {
         node.path: node.sizes[append_dim]
         for node in existing.subtree
