@@ -18,6 +18,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
+    DIRECT_RADIATION_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
     AccumulationType,
 )
@@ -359,8 +360,9 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
-                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
-                    deaccumulation_expected_clamp_fraction=0.25,
+                    # GRIB precision jitter in the running mean clamps every dark grid cell to 0,
+                    # reaching ~28% of an init's values in February and more at midwinter.
+                    deaccumulation_expected_clamp_fraction=0.4,
                     deaccumulation_type="running_mean",
                 ),
             ),
@@ -380,9 +382,10 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
-                    deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
-                    # GRIB precision jitter in the running mean drives nighttime clamping to ~20%.
-                    deaccumulation_expected_clamp_fraction=0.25,
+                    deaccumulation_invalid_below_threshold_rate=DIRECT_RADIATION_INVALID_BELOW_THRESHOLD,
+                    # GRIB precision jitter in the running mean clamps every dark grid cell to 0,
+                    # reaching ~28% of an init's values in February and more at midwinter.
+                    deaccumulation_expected_clamp_fraction=0.4,
                     deaccumulation_type="running_mean",
                 ),
             ),
