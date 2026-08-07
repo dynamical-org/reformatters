@@ -128,6 +128,28 @@ def test_source_file_coord_url_era2_uses_aifs_single_path() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("init_time", "expected_stream_path"),
+    [
+        ("2025-02-24T00:00", "aifs/0p25/oper"),
+        ("2025-02-24T06:00", "aifs-single/0p25/experimental/oper"),
+        ("2025-02-25T00:00", "aifs-single/0p25/experimental/oper"),
+        ("2025-02-25T06:00", "aifs-single/0p25/oper"),
+    ],
+)
+def test_source_file_coord_url_spans_the_three_source_stream_paths(
+    init_time: str, expected_stream_path: str
+) -> None:
+    """The aifs-single stream is served from an experimental/ path for its first 36 hours."""
+    coord = _coord([get_var("temperature_2m")], init_time=pd.Timestamp(init_time))
+    stamp = pd.Timestamp(init_time)
+    assert coord.get_url() == (
+        f"s3://ecmwf-forecasts/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/"
+        f"{expected_stream_path}/"
+        f"{stamp.strftime('%Y%m%d%H')}0000-6h-oper-fc.grib2"
+    )
+
+
 def test_out_loc_with_root_vars_excludes_level() -> None:
     coord = _coord([get_var("temperature_2m"), get_var("pressure_level/temperature")])
     assert dict(coord.out_loc()) == {
