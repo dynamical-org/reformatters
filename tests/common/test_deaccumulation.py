@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.deaccumulation import (
+    DIRECT_RADIATION_INVALID_BELOW_THRESHOLD,
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
     deaccumulate_to_rates_inplace,
@@ -1095,6 +1096,35 @@ def test_deaccumulate_running_mean_invalid_below_threshold_raises() -> None:
             accumulation_type="running_mean",
             invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
         )
+
+
+def test_deaccumulate_running_mean_direct_radiation_threshold_clamps_instead_of_raising() -> (
+    None
+):
+    """The direct radiation threshold clamps the same drop the general one rejects."""
+    reset_frequency = pd.Timedelta.max
+    lead_times = pd.to_timedelta(["0h", "1h", "2h"])
+
+    values = np.array([0.0, 1000.0, 400.0], dtype=np.float32)
+    expected = np.array([np.nan, 1000.0, 0.0], dtype=np.float32)
+
+    data_array = xr.DataArray(
+        values,
+        coords={"lead_time": lead_times},
+        dims=["lead_time"],
+        attrs={"units": "W m-2"},
+    )
+
+    result = deaccumulate_to_rates_inplace(
+        data_array,
+        dim="lead_time",
+        reset_frequency=reset_frequency,
+        accumulation_type="running_mean",
+        invalid_below_threshold_rate=DIRECT_RADIATION_INVALID_BELOW_THRESHOLD,
+        expected_clamp_fraction=0.4,
+    )
+
+    np.testing.assert_allclose(result.values, expected, equal_nan=True)
 
 
 def test_deaccumulate_running_mean_preserves_float32_precision_at_long_lead() -> None:

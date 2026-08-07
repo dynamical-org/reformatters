@@ -14,6 +14,10 @@ VALID_OUTPUT_UNITS_FOR_DEACCUMULATION = ["mm s-1", "m s-1", "kg m-2 s-1", "W m-2
 # mm s-1, ~= 0.25 mm/h or "trace" precipitation
 PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD = -7e-5
 RADIATION_INVALID_BELOW_THRESHOLD = -50.0  # W/m^2 aka J/m^2/s
+# Direct beam short wave running means are non-monotonic enough at domain edges, high latitudes
+# and steep terrain to produce isolated step rates approaching -100 W/m^2. Only a corrupt or
+# mismatched source field, which deaccumulates to thousands of W/m^2, goes beyond this.
+DIRECT_RADIATION_INVALID_BELOW_THRESHOLD = -1000.0
 
 # How the input values along `dim` should be interpreted:
 #   - "accumulated": values are cumulative totals (e.g. J m-2 since forecast start).
