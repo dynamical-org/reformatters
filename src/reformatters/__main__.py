@@ -39,6 +39,9 @@ from reformatters.ecmwf.aifs_single.forecast_virtual import (
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
+from reformatters.google.weathernext2.forecast_virtual import (
+    GoogleWeathernext2ForecastVirtualDataset,
+)
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
@@ -160,6 +163,14 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
+class UpstreamGriddedZarrsIcechunkDatasetStorageConfig(
+    UpstreamGriddedZarrsDatasetStorageConfig
+):
+    """Icechunk storage in the Upstream gridded zarrs bucket."""
+
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 # Registry of all DynamicalDatasets.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
@@ -224,6 +235,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # ECCC
     EcccHrdpsForecastTemporalDynamicalDataset(
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+    ),
+    # Google
+    GoogleWeathernext2ForecastVirtualDataset(
+        primary_storage_config=UpstreamGriddedZarrsIcechunkDatasetStorageConfig(),
     ),
     # NASA
     NasaImergAnalysisEarlyDataset(

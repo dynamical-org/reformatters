@@ -11,6 +11,7 @@ from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
+    align_longitude_convention,
     end_date_option,
     get_two_random_points,
     is_forecast_dataset,
@@ -36,6 +37,7 @@ log = get_logger(__name__)
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
+    reference_ds = align_longitude_convention(ds, reference_ds)
     return reference_ds.sel(
         latitude=slice(ds.latitude.max(), ds.latitude.min()),
         longitude=slice(ds.longitude.min(), ds.longitude.max()),

@@ -2,8 +2,8 @@
 
 The synthetic dataset below stores its "GRIB messages" as raw little-endian
 float64 blocks in a local file and points virtual refs at byte ranges within it,
-using a local-filesystem virtual chunk container. The data var uses zarr's
-default BytesCodec (no GribberishCodec), so a real value read-back round-trip
+using a local-filesystem virtual chunk container. The data var declares a plain
+BytesCodec serializer (no GribberishCodec), so a real value read-back round-trip
 catches bad chunk keys *and* bad byte ranges without needing real GRIB. A
 separate test pins that a GribberishCodec serializer threads through dimension
 expansion without the decode-only codec ever being invoked.
@@ -26,6 +26,7 @@ import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
 from pydantic import ValidationError, computed_field
+from zarr.codecs import BloscCodec, BytesCodec
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
 
@@ -70,6 +71,9 @@ BLOCK_NBYTES = N_LAT * N_LON * 8  # one float64 message
 APPEND_DIM_START = pd.Timestamp("2024-01-01")
 APPEND_DIM_FREQ = pd.Timedelta("6h")
 DATASET_ID = "test-virtual-dataset"
+# The messages file holds raw little-endian float64, so the serializer that decodes a
+# referenced byte range is a plain BytesCodec.
+RAW_BYTES_SERIALIZER = BytesCodec(endian="little").to_dict()
 
 
 def _block_values(init_idx: int, lead_idx: int) -> np.ndarray:
@@ -168,6 +172,7 @@ class VirtualTestDataVar(DataVar[BaseInternalAttrs]):
         shards=None,
         compressors=(),
         filters=None,
+        serializer=RAW_BYTES_SERIALIZER,
     )
     attrs: DataVarAttrs = DataVarAttrs(
         units="K",
@@ -929,13 +934,35 @@ def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
         dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
 
-def _construct_dataset(
-    tmp_path: Path, dataset_cls: type[VirtualTestDataset]
+def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field passthrough
+    defaults: dict[str, Any] = {
+        "dtype": "float64",
+        "fill_value": np.nan,
+        "chunks": (1, 1, N_LAT, N_LON),
+        "shards": None,
+        "compressors": (),
+        "filters": None,
+        "serializer": RAW_BYTES_SERIALIZER,
+    }
+    return Encoding(**{**defaults, **overrides})
+
+
+def _construct_one_var_dataset(
+    tmp_path: Path, encoding: Encoding
 ) -> VirtualTestDataset:
+    class OneVarTemplateConfig(VirtualTestTemplateConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[VirtualTestDataVar]:
+            return [VirtualTestDataVar(name="temperature_2m", encoding=encoding)]
+
+    class OneVarDataset(VirtualTestDataset):
+        template_config: OneVarTemplateConfig = OneVarTemplateConfig()
+
     container = icechunk.VirtualChunkContainer(
         f"file://{tmp_path}/", icechunk.local_filesystem_store(str(tmp_path))
     )
-    return dataset_cls(
+    return OneVarDataset(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
         ),
@@ -946,53 +973,43 @@ def _construct_dataset(
     )
 
 
-def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field passthrough
-    defaults: dict[str, Any] = {
-        "dtype": "float64",
-        "fill_value": np.nan,
-        "chunks": (1, 1, N_LAT, N_LON),
-        "shards": None,
-        "compressors": (),
-        "filters": None,
-    }
-    return Encoding(**{**defaults, **overrides})
-
-
-def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
+def test_virtual_dataset_requires_serializer_xor_source_compressors(
     tmp_path: Path,
 ) -> None:
-    class ShardedTemplateConfig(VirtualTestTemplateConfig):
-        @computed_field  # type: ignore[prop-decorator]
-        @property
-        def data_vars(self) -> Sequence[VirtualTestDataVar]:
-            return [
-                VirtualTestDataVar(
-                    name="temperature_2m",
-                    encoding=_encoding(shards=(2, 2, N_LAT, N_LON)),
-                )
-            ]
+    """A referenced chunk is decoded either by a serializer over uncompressed source
+    bytes (compressors=()) or by the source's own compressor with no serializer.
+    Mixing the two hands the wrong bytes to the wrong codec and silently yields
+    garbage, so both directions must be rejected."""
+    with pytest.raises(ValidationError, match="must either decode uncompressed source"):
+        _construct_one_var_dataset(
+            tmp_path,
+            _encoding(
+                serializer=GribberishCodec(var="TMP").to_dict(),
+                compressors=(BloscCodec(cname="lz4").to_dict(),),
+            ),
+        )
 
-    class ShardedDataset(VirtualTestDataset):
-        template_config: ShardedTemplateConfig = ShardedTemplateConfig()
+    with pytest.raises(ValidationError, match="must either decode uncompressed source"):
+        _construct_one_var_dataset(tmp_path, _encoding(serializer=None, compressors=()))
 
+    # Both valid pairings construct.
+    _construct_one_var_dataset(
+        tmp_path, _encoding(serializer=GribberishCodec(var="TMP").to_dict())
+    )
+    _construct_one_var_dataset(
+        tmp_path,
+        _encoding(serializer=None, compressors=(BloscCodec(cname="lz4").to_dict(),)),
+    )
+
+
+def test_virtual_dataset_rejects_shards_and_unset_compressors(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(ValidationError, match="must not declare shards"):
-        _construct_dataset(tmp_path, ShardedDataset)
+        _construct_one_var_dataset(tmp_path, _encoding(shards=(2, 2, N_LAT, N_LON)))
 
-    class CompressedTemplateConfig(VirtualTestTemplateConfig):
-        @computed_field  # type: ignore[prop-decorator]
-        @property
-        def data_vars(self) -> Sequence[VirtualTestDataVar]:
-            return [
-                VirtualTestDataVar(
-                    name="temperature_2m", encoding=_encoding(compressors=None)
-                )
-            ]
-
-    class CompressedDataset(VirtualTestDataset):
-        template_config: CompressedTemplateConfig = CompressedTemplateConfig()
-
-    with pytest.raises(ValidationError, match="must declare compressors="):
-        _construct_dataset(tmp_path, CompressedDataset)
+    with pytest.raises(ValidationError, match="must declare compressors explicitly"):
+        _construct_one_var_dataset(tmp_path, _encoding(compressors=None))
 
 
 # --- process_virtual integration (real value read-back) ---

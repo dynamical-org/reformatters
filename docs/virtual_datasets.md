@@ -1,6 +1,6 @@
 # Virtual Datasets
 
-A virtual dataset is an Icechunk store whose chunks are references — `(location, offset, length)` pointers into source files (e.g. GRIB messages) on the provider's object store — rather than copied bytes. A per-variable zarr serializer (e.g. `GribberishCodec`) decodes the referenced bytes at read time. Virtual datasets are written by `VirtualRegionJob` subclasses (`src/reformatters/common/virtual_region_job.py`).
+A virtual dataset is an Icechunk store whose chunks are references — `(location, offset, length)` pointers into source files (e.g. GRIB messages) on the provider's object store — rather than copied bytes. The referenced bytes are decoded at read time by the codec pipeline the variable's encoding declares: for a GRIB source, a per-variable zarr serializer (`GribberishCodec`) with `compressors=()`; for a source that is already a zarr archive, the standard bytes serializer plus the source's own compressor, so a ref points at a whole source chunk object. Virtual datasets are written by `VirtualRegionJob` subclasses (`src/reformatters/common/virtual_region_job.py`).
 
 How virtual jobs plug into worker parallelism and coordination is covered in [parallel_processing.md](parallel_processing.md); this doc covers what is specific to writing and reading virtual datasets.
 
@@ -137,7 +137,7 @@ Tuning (completeness's `min_present_fraction`; decode health's `positions`, `max
 
 ## Storage and reading
 
-A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
+A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the `authorize_virtual_chunk_access` map. Credentials are derived from each container's store type: S3-compatible sources get anonymous credentials, GCS sources resolve them from the environment (`GOOGLE_APPLICATION_CREDENTIALS`, since GCS has no anonymous mode), and local-filesystem sources need none. A differently-credentialed source (requester-pays, a private S3 bucket) needs an explicit per-container credentials field on `IcechunkVirtualConfig`.
 
 ### Containers as indirection
 
@@ -146,6 +146,6 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
 - **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
 
-Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).

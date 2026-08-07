@@ -1,0 +1,69 @@
+{
+  "shape": [
+    1,
+    60,
+    721,
+    1440
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "offset": -273.15
+      }
+    },
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "blosc",
+      "configuration": {
+        "typesize": 4,
+        "cname": "lz4",
+        "clevel": 5,
+        "shuffle": "shuffle",
+        "blocksize": 0
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Sea surface temperature",
+    "short_name": "sst",
+    "standard_name": "sea_surface_temperature",
+    "units": "degree_Celsius",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
