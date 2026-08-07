@@ -5,7 +5,7 @@
     "name": "Google WeatherNext 2 forecast, virtual",
     "description": "Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
     "attribution": "Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
-    "license": "CC-BY-4.0",
+    "license": "LicenseRef-Google-WeatherNext",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
     "time_domain": "Forecasts initialized 2022-01-01 00:00:00 UTC to Present",

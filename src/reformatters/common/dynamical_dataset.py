@@ -877,12 +877,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     f"the ICECHUNK format, but found: {non_icechunk}"
                 )
         # A virtual chunk is exactly one source chunk, read back with the codec pipeline
-        # the source wrote it under: no shards (get_jobs would partition by them and
-        # zarr would shard raw source bytes) and explicit compressors — () for a source
-        # whose serializer decodes uncompressed bytes (e.g. GribberishCodec on a GRIB
-        # message), or the source's own compressor for an already-compressed source
-        # (e.g. a blosc-encoded zarr chunk). A None would serialize away and zarr would
-        # stack its default compressor on the raw source bytes.
+        # the source wrote it under. No shards: get_jobs would partition by them and zarr
+        # would shard raw source bytes.
         if issubclass(self.region_job_class, VirtualRegionJob):
             for var in self.template_config.data_vars:
                 assert var.encoding.shards is None, (
@@ -890,6 +886,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 assert var.encoding.compressors is not None, (
                     f"virtual data var {var.name} must declare compressors explicitly"
+                )
+                assert (var.encoding.serializer is None) != (
+                    var.encoding.compressors == ()
+                ), (
+                    f"virtual data var {var.name} must either decode uncompressed source "
+                    "bytes with a serializer and compressors=() (e.g. GribberishCodec on "
+                    "a GRIB message), or reference an already compressed source chunk "
+                    "with no serializer and the source's own compressors (e.g. a "
+                    "blosc-encoded zarr chunk)"
                 )
         else:
             # The materialized chunk-write path (zarr.copy_data_var, write_shards) is

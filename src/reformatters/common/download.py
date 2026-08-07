@@ -21,7 +21,7 @@ from obstore.exceptions import GenericError, PermissionDeniedError
 from reformatters.common.logging import get_logger
 
 if TYPE_CHECKING:
-    from obstore.store import ObjectStore
+    from obstore.store import ClientConfig, ObjectStore, RetryConfig
 
 log = get_logger(__name__)
 
@@ -76,29 +76,30 @@ def download_to_disk(
         raise
 
 
+# Tuned to maximize chance of success at the expense of latency, while not waiting
+# indefinitely for unresponsive servers.
+_CLIENT_OPTIONS: ClientConfig = {
+    "connect_timeout": "4 seconds",
+    "timeout": "120 seconds",
+}
+_RETRY_CONFIG: RetryConfig = {
+    "max_retries": 16,
+    "backoff": {
+        "base": 2,
+        "init_backoff": timedelta(seconds=1),
+        "max_backoff": timedelta(seconds=16),
+    },
+    # A backstop, shouldn't hit this with the above backoff settings
+    "retry_timeout": timedelta(minutes=5),
+}
+
+
 @functools.cache
 def http_store(base_url: str) -> obstore.store.HTTPStore:
-    """
-    A obstore.store.HTTPStore tuned to maximize chance of success at the expense
-    of latency, while not waiting indefinitely for unresponsive servers.
-    """
     return obstore.store.HTTPStore.from_url(
         base_url,
-        client_options={
-            "user_agent": "dynamical.org reformatters",
-            "connect_timeout": "4 seconds",
-            "timeout": "120 seconds",
-        },
-        retry_config={
-            "max_retries": 16,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=5),
-        },
+        client_options={**_CLIENT_OPTIONS, "user_agent": "dynamical.org reformatters"},
+        retry_config=_RETRY_CONFIG,
     )
 
 
@@ -110,20 +111,8 @@ def s3_store(
         bucket_url,
         region=region,
         skip_signature=skip_signature,
-        client_options={
-            "connect_timeout": "4 seconds",
-            "timeout": "120 seconds",
-        },
-        retry_config={
-            "max_retries": 16,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=5),
-        },
+        client_options=_CLIENT_OPTIONS,
+        retry_config=_RETRY_CONFIG,
     )
     assert isinstance(store, obstore.store.S3Store)
     return store
@@ -133,26 +122,14 @@ def s3_store(
 def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
     """An obstore store for `gs://bucket`, credentialed from the environment.
 
-    Tuned like `s3_store`. Credentials come from GOOGLE_APPLICATION_CREDENTIALS or the
-    other GCS environment variables object_store reads; GCS has no anonymous mode, so a
-    public bucket also needs a credential.
+    Credentials come from GOOGLE_APPLICATION_CREDENTIALS or the other GCS environment
+    variables object_store reads; GCS has no anonymous mode, so a public bucket also
+    needs a credential.
     """
     store = obstore.store.from_url(
         bucket_url,
-        client_options={
-            "connect_timeout": "4 seconds",
-            "timeout": "120 seconds",
-        },
-        retry_config={
-            "max_retries": 16,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=5),
-        },
+        client_options=_CLIENT_OPTIONS,
+        retry_config=_RETRY_CONFIG,
     )
     assert isinstance(store, obstore.store.GCSStore)
     return store

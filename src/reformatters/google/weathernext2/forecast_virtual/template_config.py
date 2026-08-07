@@ -32,9 +32,9 @@ from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 _GRID_NLAT = 721
 _GRID_NLON = 1440
 
-# Descending like ecmwf-aifs-single-forecast-virtual and HRRR's pressure_level group.
-# The source stores them ascending; each level is its own chunk, so the order is a
-# per-reference index mapping (see region_job).
+# Descending, matching our other pressure_level groups. The source stores them
+# ascending; each level is its own chunk, so the order is a per-reference index
+# mapping (see region_job).
 PRESSURE_LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 
 # The source reorganized on this date: from one store per calendar year to one store
@@ -112,7 +112,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             name="Google WeatherNext 2 forecast, virtual",
             description="Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
             attribution="Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
-            license="CC-BY-4.0",
+            license="LicenseRef-Google-WeatherNext",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",

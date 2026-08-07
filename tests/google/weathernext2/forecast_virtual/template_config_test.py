@@ -3,6 +3,7 @@ from pathlib import Path
 import numcodecs
 import numpy as np
 import pandas as pd
+import pytest
 import zarr
 import zarr.storage
 from zarr.core.metadata import ArrayV3Metadata
@@ -150,12 +151,18 @@ def test_lead_times_start_at_6h_and_append_dim() -> None:
     assert CONFIG.append_dim_frequency == pd.Timedelta("6h")
 
 
-def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path) -> None:
+@pytest.mark.parametrize("path", ["temperature_2m", "pressure_level/temperature"])
+def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path, path: str) -> None:
     """A referenced chunk is the source's own numcodecs-blosc buffer, so the variable's
     zarr v3 codec pipeline must decode those exact bytes (and apply the read-time unit
     conversion). Proving it here means the real-source integration test is confirming
-    values, not the codec chain."""
-    var = get_var("temperature_2m")
+    values, not the codec chain.
+
+    The pressure-level case additionally pins that the trailing size-1 pressure_level
+    dim leaves the chunk's memory layout identical to the source's (lat, lon) buffer."""
+    var = get_var(path)
+    chunks = var.encoding.chunks
+    assert isinstance(chunks, tuple)
     kelvin = (200 + np.arange(721 * 1440, dtype=np.float32) % 130).reshape(721, 1440)
     source_bytes = numcodecs.Blosc(
         cname="lz4", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE, blocksize=0
@@ -164,8 +171,8 @@ def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path) -> None:
     array = zarr.create_array(
         zarr.storage.LocalStore(str(tmp_path)),
         name=var.name,
-        shape=var.encoding.chunks,
-        chunks=var.encoding.chunks,
+        shape=chunks,
+        chunks=chunks,
         dtype=var.encoding.dtype,
         fill_value=var.encoding.fill_value,
         filters=var.encoding.filters,
@@ -173,12 +180,12 @@ def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path) -> None:
     )
     metadata = array.metadata
     assert isinstance(metadata, ArrayV3Metadata)
-    chunk_key = metadata.chunk_key_encoding.encode_chunk_key((0, 0, 0, 0))
+    chunk_key = metadata.chunk_key_encoding.encode_chunk_key((0,) * len(chunks))
     chunk_path = tmp_path / var.name / chunk_key
     chunk_path.parent.mkdir(parents=True, exist_ok=True)
     chunk_path.write_bytes(source_bytes)
 
-    np.testing.assert_array_equal(array[0, 0], kelvin - np.float32(273.15))
+    np.testing.assert_array_equal(np.squeeze(array[:]), kelvin - np.float32(273.15))
 
 
 def test_dataset_attributes() -> None:

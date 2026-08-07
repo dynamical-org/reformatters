@@ -110,11 +110,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
-    # Fire time is init+6h55m, so at fire the newest published init plus the three prior
+    # At the update cron's fire time the newest published init plus the three prior
     # cycles sit 6h55m to 24h55m back; 30h covers all four, so a couple of missed runs
-    # still self-heal. Publication lags the 6h cycle, so the window's newest position is
-    # always a cycle the source has not published yet; the fire polls for it until its
-    # deadline and then leaves it to the next fire.
+    # still self-heal. See the cron schedule in dynamical_dataset.py.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("30h")
 
     def generate_source_file_coords(
@@ -187,12 +185,13 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                     for level in template_var.get_index("pressure_level")
                 ]
             )
+            lead_times = template_var.get_index("lead_time")
+            var_refs = []
             # The template's lead_time axis is the source's lead axis in the same order,
             # so a lead's position is its index in the source chunk grid.
-            for lead_index, lead_time in enumerate(template_var.get_index("lead_time")):
+            for lead_index, lead_time in enumerate(lead_times):
                 for level, level_index in levels:
                     key = coord.chunk_key(var, lead_index, level_index)
-                    # An absent chunk object gets no reference and reads as fill.
                     if (size := sizes.get(key)) is None:
                         continue
                     out_loc: dict[Dim, CoordinateValue] = {
@@ -201,7 +200,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                     }
                     if level is not None:
                         out_loc["pressure_level"] = level
-                    refs.append(
+                    var_refs.append(
                         VirtualRef(
                             data_var=var,
                             out_loc=out_loc,
@@ -210,6 +209,14 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                             length=size,
                         )
                     )
+            expected_refs = len(lead_times) * len(levels)
+            assert len(var_refs) == expected_refs, (
+                f"{var.path} at {coord.init_time}: listed {len(var_refs)} of "
+                f"{expected_refs} expected source chunks under "
+                f"{store_key_prefix + coord.chunk_key_prefix(var)}. A partial listing "
+                "would commit the init while silently serving fill values."
+            )
+            refs.extend(var_refs)
         return refs
 
 
@@ -237,7 +244,9 @@ def _list_chunk_sizes(
     `<var>/<init>.` prefix is not listable on its own. The variable's directory is
     listed from an offset just below the wanted keys, which are lexicographically
     contiguous, and the scan stops at the first non-match rather than walking the rest
-    of the year.
+    of the year. That truncation assumes the store lists keys in lexicographic order,
+    which GCS guarantees but the object store API does not; a store that does not is
+    caught by the chunk count assert in file_refs.
     """
     full_prefix = store_key_prefix + chunk_key_prefix
     variable_dir = (

@@ -38,6 +38,7 @@ from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.common.virtual_region_job_test import (
+    RAW_BYTES_SERIALIZER,
     VirtualTestRegionJob,
     _create_template_ds,
     _make_dataset,
@@ -316,6 +317,7 @@ class ExampleVirtualConfig(ExampleConfig):
                     chunks=(1,),
                     shards=None,
                     compressors=(),
+                    serializer=RAW_BYTES_SERIALIZER,
                 )
             )
         ]
