@@ -55,7 +55,8 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     # Description of the param as it exists in the grib.
     grib_comment: str
 
-    grib_index_level_type: Literal["sfc", "pl"] = "sfc"  # surface or pressure level
+    # surface, pressure level, or soil level
+    grib_index_level_type: Literal["sfc", "pl", "sol"] = "sfc"
     grib_index_level_value: float = float("nan")
 
     # Grib attributes used to select correct message

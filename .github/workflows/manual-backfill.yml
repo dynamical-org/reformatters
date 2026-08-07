@@ -13,6 +13,7 @@ name: 'Manual: Backfill'
         - dwd-icon-eu-forecast-5-day
         - ecmwf-aifs-ens-forecast
         - ecmwf-aifs-single-forecast
+        - ecmwf-aifs-single-forecast-virtual
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree
         - nasa-imerg-analysis-early
         - nasa-imerg-analysis-late

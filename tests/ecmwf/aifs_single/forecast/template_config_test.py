@@ -188,9 +188,9 @@ def test_coords_property_order_and_names() -> None:
         "latitude",
         "longitude",
         "valid_time",
-        "ingested_forecast_length",
         "expected_forecast_length",
         "spatial_ref",
+        "ingested_forecast_length",
     ]
 
 

@@ -453,12 +453,17 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "rain_mixing_ratio",
     "snow_mixing_ratio",
     "graupel",
+    # ECMWF sub-gridscale orography statics with no CF standard name.
+    "standard_deviation_of_sub_gridscale_orography_surface",
+    "slope_of_sub_gridscale_orography_surface",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
 CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("air_temperature", "degree_Celsius"),
     ("dew_point_temperature", "degree_Celsius"),
+    ("surface_temperature", "degree_Celsius"),
+    ("soil_temperature", "degree_Celsius"),
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("vegetation_area_fraction", "percent"),
@@ -816,6 +821,12 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("sde", "units", "u-arizona-swann-analysis"),
     ("Snow depth", "units", "u-arizona-swann-analysis"),
     ("Snow depth water equivalent", "units", "u-arizona-swann-analysis"),
+    # ECMWF's land-sea mask is a 0-1 land fraction (land_area_fraction), while
+    # NOAA HRRR's is binary (land_binary_mask); each dataset describes its own
+    # values honestly under the shared name.
+    ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
 }
 
 
