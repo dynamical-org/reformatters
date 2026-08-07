@@ -37,12 +37,23 @@ log = get_logger(__name__)
 
 
 def select_time_period_for_comparison(
-    validation_ds: xr.Dataset, reference_ds: xr.Dataset
+    validation_ds: xr.Dataset,
+    reference_ds: xr.Dataset,
+    init_time: str | None = None,
+    time: str | None = None,
 ) -> tuple[xr.Dataset, xr.Dataset, str, str, str]:
-    """Select appropriate time periods for validation and reference datasets."""
+    """Select appropriate time periods for validation and reference datasets.
+
+    `init_time` (forecast) and `time` (analysis window start) pin the period;
+    either dimension is chosen at random when its argument is None.
+    """
     rng = np.random.default_rng()
     if is_forecast_dataset(validation_ds):
-        selected_init_time = pd.Timestamp(rng.choice(validation_ds.init_time, 1)[0])
+        selected_init_time = (
+            pd.Timestamp(init_time)
+            if init_time is not None
+            else pd.Timestamp(rng.choice(validation_ds.init_time, 1)[0])
+        )
         validation_subset = validation_ds.sel(init_time=selected_init_time)
 
         valid_time_start = validation_subset.valid_time.min().item()
@@ -57,7 +68,10 @@ def select_time_period_for_comparison(
     time_end = pd.Timestamp(validation_ds.time.max().item())
     ten_days = pd.Timedelta(days=10)
 
-    if time_end - time_start < ten_days:
+    if time is not None:
+        selected_start = pd.Timestamp(time)
+        selected_end = min(selected_start + ten_days, time_end)
+    elif time_end - time_start < ten_days:
         selected_start = time_start
         selected_end = time_end
     else:
@@ -196,7 +210,9 @@ def _fmt(v: float | None) -> str:
     return f"{v:.3g}" if v is not None else "n/a"
 
 
-def run_compare_timeseries(ctx: RunContext) -> None:
+def run_compare_timeseries(
+    ctx: RunContext, init_time: str | None = None, time: str | None = None
+) -> None:
     """Produce per-variable timeseries comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, (
         "compare-timeseries requires a reference dataset"
@@ -220,7 +236,9 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         title_suffix,
         time_coord,
         ref_time_coord,
-    ) = select_time_period_for_comparison(validation_ds, ctx.reference_ds)
+    ) = select_time_period_for_comparison(
+        validation_ds, ctx.reference_ds, init_time=init_time, time=time
+    )
 
     val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
@@ -289,6 +307,8 @@ def compare_timeseries(
     reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
+    init_time: str | None = None,
+    time: str | None = None,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
@@ -328,7 +348,7 @@ def compare_timeseries(
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
     )
-    run_compare_timeseries(ctx)
+    run_compare_timeseries(ctx, init_time=init_time, time=time)
 
     if show_plot:
         plt.show()
