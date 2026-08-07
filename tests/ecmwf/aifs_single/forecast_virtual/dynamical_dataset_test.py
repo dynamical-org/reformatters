@@ -28,21 +28,28 @@ from reformatters.ecmwf.aifs_single.forecast_virtual.template_config import (
 )
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
-# A rainy Amazon cell in the 2025-03-01T00 init (after the 2025-02-26 format change,
-# so tp is kg m-2 and the soil variables exist).
+# A rainy Amazon cell in the 2025-03-01T00 init (after the 2025-02-26 format change).
 _LAT, _LON = -5.0, -60.0
 _INIT = "2025-03-01T00:00"
 
-# Variables spanning root instant, root accumulation, soil, lead-0-only static, and
-# both pressure_level vars with read-time filters. "temperature" and
-# "geopotential_height" match the un-suffixed pressure_level group vars.
+# Every variable here costs source range requests -- one per cell asserted below, plus
+# one per variable in the decode-health validator -- and each request downloads and
+# decodes a whole global field. So this covers only what real bytes in a real store can
+# prove, and nothing that a unit test can:
+#   temperature_2m               a root var's refs decode into the right cell, with the
+#                                K->C filter applied on read
+#   temperature                  the group-var layout: a pressure_level ref lands at the
+#                                right level ("temperature" is the un-suffixed group var)
+#   geopotential_height_surface  a lead_0_only var is real data at lead 0 and reads as
+#                                fill (not stale bytes) at lead 6, and exercises the
+#                                second read-time filter, geopotential -> height
+# Message routing for every other variable -- soil levels, accumulations, absent levels,
+# stale byte ranges -- is checked against a recorded real .index, for all 35 variables
+# and with no network, by region_job_test.py.
 _FILTER_VARS = [
     "temperature_2m",
-    "total_precipitation_run_total_surface",
-    "soil_temperature_layer_1",
     "geopotential_height_surface",
     "temperature",
-    "geopotential_height",
 ]
 
 
@@ -115,25 +122,14 @@ def test_backfill_local_and_operational_update(
     # Snapshot values (decoded raw GRIB; the K->C and geopotential->height
     # ScaleOffset filters apply on read).
     np.testing.assert_allclose(f6["temperature_2m"].values, 24.408471679687523)
-    # Raw run accumulation since init (kg m-2), not the materialized deaccumulated rate.
-    np.testing.assert_allclose(
-        f6["total_precipitation_run_total_surface"].values, 1.873046875
-    )
-    np.testing.assert_allclose(f6["soil_temperature_layer_1"].values, 26.01917419433596)
     np.testing.assert_allclose(
         f6["pressure_level/temperature"].sel(pressure_level=850).values,
         18.03638610839846,
     )
-    np.testing.assert_allclose(
-        f6["pressure_level/geopotential_height"].sel(pressure_level=500).values,
-        5861.312062478013,
-    )
 
     f0 = cell.sel(lead_time=pd.Timedelta("0h"))
     np.testing.assert_allclose(f0["temperature_2m"].values, 26.940789794921898)
-    # Accumulation is present at hour 0 as an accumulation of zero.
-    np.testing.assert_allclose(f0["total_precipitation_run_total_surface"].values, 0.0)
-    # Statics are published at lead 0 only.
+    # Statics are published at lead 0 only, so lead 6 has no reference and reads as fill.
     np.testing.assert_allclose(
         f0["geopotential_height_surface"].values, 41.25282353842801
     )
@@ -166,13 +162,22 @@ def test_backfill_local_and_operational_update(
         "operational_update_jobs",
         classmethod(filtered_update_jobs),
     )
+    # Narrow the window to the 06z init alone. The production 20h window also re-walks
+    # the two prior cycles, costing four more .index downloads and ~120 more refs for
+    # nothing this test doesn't get from one init; the window arithmetic itself is
+    # covered by test_operational_update_jobs_single_polling_job in region_job_test.py.
+    monkeypatch.setattr(
+        EcmwfAifsSingleForecastVirtualRegionJob,
+        "operational_update_window",
+        pd.Timedelta("3h"),
+    )
 
     dataset.update("test-update")
 
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
-    # The update window (20h before 08:00) ingests the 06z init too.
+    # The update window (3h before 08:00) ingests the 06z init.
     assert updated.init_time.values[-1] == np.datetime64("2025-03-01T06:00")
     new_cell = updated.sel(
         latitude=_LAT,
@@ -182,13 +187,10 @@ def test_backfill_local_and_operational_update(
     )
     t6 = float(new_cell["temperature_2m"].values)
     assert -60.0 < t6 < 60.0  # plausible Celsius
-    assert not np.isnan(
-        new_cell["pressure_level/temperature"].sel(pressure_level=850).values
-    )
 
     # Sample the decode-health validator down to one lead time and one level: every
     # sampled chunk is a range request to s3://ecmwf-forecasts, which answers reads with
-    # 503 SlowDown often enough to flake CI. All six variables are still decoded, and
+    # 503 SlowDown often enough to flake CI. All three variables are still decoded, and
     # the production sampling config is asserted in test_validators below.
     orig_validators = type(dataset).validators
     monkeypatch.setattr(

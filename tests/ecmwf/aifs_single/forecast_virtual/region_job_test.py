@@ -20,6 +20,8 @@ from reformatters.ecmwf.aifs_single.forecast_virtual.template_config import (
     EcmwfAifsSingleVirtualDataVar,
 )
 
+FIXTURES_DIR = Path(__file__).parents[2] / "fixtures"
+
 TEMPLATE_CONFIG = EcmwfAifsSingleForecastVirtualTemplateConfig()
 _ERA1_INIT = pd.Timestamp("2024-06-01T00:00")
 _ERA2_INIT = pd.Timestamp("2025-03-01T00:00")
@@ -313,6 +315,55 @@ def test_generate_source_file_coords_era2_includes_expanded_vars(
         "temperature_2m",
         "total_precipitation_run_total_surface",
     }
+
+
+# --- file_refs against a real index ---
+
+
+@pytest.mark.parametrize(
+    ("lead_time", "index_fixture", "file_size"),
+    [
+        # Real sidecars for the 2025-03-01T00 init: lead 0 carries the statics, lead 6
+        # carries the accumulations. file_size is the real .grib2 Content-Length, so a
+        # byte range running past it would be rejected as a stale index.
+        (pd.Timedelta("0h"), "aifs_single_20250301_00z_0h.index", 79_888_489),
+        (pd.Timedelta("6h"), "aifs_single_20250301_00z_6h.index", 77_642_846),
+    ],
+)
+def test_file_refs_covers_every_variable_in_a_real_index(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    lead_time: pd.Timedelta,
+    index_fixture: str,
+    file_size: int,
+) -> None:
+    """Every variable a real source file carries gets a ref from that file's real index.
+
+    The file_refs tests above feed synthetic index lines, so they check our routing
+    against our *assumption* of how messages are labelled. This checks the assumption
+    itself -- that the published param / levtype / levelist match each variable's
+    grib_index_* attrs -- across every declared variable, rather than the handful the
+    slow integration test samples.
+    """
+    _fake_index(
+        monkeypatch, tmp_path, (FIXTURES_DIR / index_fixture).read_text("utf-8")
+    )
+    data_vars = TEMPLATE_CONFIG.data_vars
+    job = make_job(template_ds, data_vars=data_vars)
+    region_ds = (
+        template_ds.to_dataset()
+        .isel(init_time=slice(0, 1))
+        .sel(lead_time=[lead_time])
+        .assign_coords(init_time=[_ERA2_INIT])
+    )
+
+    (coord,) = job.generate_source_file_coords(region_ds, data_vars)
+    refs = job.file_refs(coord, file_size=file_size)
+
+    expected = {var.path for var in coord.data_vars}
+    assert expected, "the coord should carry variables at this lead time"
+    assert {ref.data_var.path for ref in refs} == expected
 
 
 def test_operational_update_jobs_single_polling_job(
