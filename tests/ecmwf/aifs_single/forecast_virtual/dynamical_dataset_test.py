@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -10,8 +11,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from reformatters.common import validation
-from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common import storage, validation
+from reformatters.common.storage import (
+    DatasetFormat,
+    IcechunkVirtualConfig,
+    StorageConfig,
+)
 from reformatters.ecmwf.aifs_single.forecast_virtual.dynamical_dataset import (
     EcmwfAifsSingleForecastVirtualDataset,
 )
@@ -59,6 +64,30 @@ def test_backfill_local_and_operational_update(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dataset = make_dataset(tmp_path)
+
+    # Give virtual reads icechunk's default retry policy. icechunk hands a repo's own
+    # storage settings to its virtual chunk fetchers, and the local filesystem backend
+    # this test writes to defaults to max_tries=1 with no backoff — so a 503 SlowDown
+    # from s3://ecmwf-forecasts fails the read outright here, where the production
+    # S3-backed store would retry it 10 times.
+    orig_repository_config = storage._repository_config_and_credentials
+
+    def repository_config_with_retries(
+        virtual_config: IcechunkVirtualConfig | None,
+    ) -> tuple[icechunk.RepositoryConfig, dict[str, Any] | None]:
+        config, credentials = orig_repository_config(virtual_config)
+        config.storage = icechunk.StorageSettings(
+            # Keep max_backoff well under icechunk's 3 minute default: a source bucket
+            # throttling every attempt should fail the test, not stall it.
+            retries=icechunk.StorageRetriesSettings(
+                max_tries=10, initial_backoff_ms=100, max_backoff_ms=5_000
+            )
+        )
+        return config, credentials
+
+    monkeypatch.setattr(
+        storage, "_repository_config_and_credentials", repository_config_with_retries
+    )
 
     # Trim to leads 0h and 6h to limit work (virtual backfill downloads only .index
     # sidecars; decode happens when the snapshot cells are read).
@@ -157,6 +186,21 @@ def test_backfill_local_and_operational_update(
         new_cell["pressure_level/temperature"].sel(pressure_level=850).values
     )
 
+    # Sample the decode-health validator down to one lead time and one level: every
+    # sampled chunk is a range request to s3://ecmwf-forecasts, which answers reads with
+    # 503 SlowDown often enough to flake CI. All six variables are still decoded, and
+    # the production sampling config is asserted in test_validators below.
+    orig_validators = type(dataset).validators
+    monkeypatch.setattr(
+        type(dataset),
+        "validators",
+        lambda self: tuple(
+            replace(validator, sampled_leads=1, sampled_levels=1)
+            if isinstance(validator, validation.CheckVirtualDecodeHealth)
+            else validator
+            for validator in orig_validators(self)
+        ),
+    )
     assert_configured_validators(dataset)
 
 
