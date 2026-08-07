@@ -464,6 +464,7 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("dew_point_temperature", "degree_Celsius"),
     ("surface_temperature", "degree_Celsius"),
     ("soil_temperature", "degree_Celsius"),
+    ("sea_surface_temperature", "degree_Celsius"),
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("vegetation_area_fraction", "percent"),

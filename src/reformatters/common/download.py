@@ -129,6 +129,35 @@ def s3_store(
     return store
 
 
+@functools.cache
+def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
+    """An obstore store for `gs://bucket`, credentialed from the environment.
+
+    Tuned like `s3_store`. Credentials come from GOOGLE_APPLICATION_CREDENTIALS or the
+    other GCS environment variables object_store reads; GCS has no anonymous mode, so a
+    public bucket also needs a credential.
+    """
+    store = obstore.store.from_url(
+        bucket_url,
+        client_options={
+            "connect_timeout": "4 seconds",
+            "timeout": "120 seconds",
+        },
+        retry_config={
+            "max_retries": 16,
+            "backoff": {
+                "base": 2,
+                "init_backoff": timedelta(seconds=1),
+                "max_backoff": timedelta(seconds=16),
+            },
+            # A backstop, shouldn't hit this with the above backoff settings
+            "retry_timeout": timedelta(minutes=5),
+        },
+    )
+    assert isinstance(store, obstore.store.GCSStore)
+    return store
+
+
 def http_download_to_disk(
     url: str,
     dataset_id: str,

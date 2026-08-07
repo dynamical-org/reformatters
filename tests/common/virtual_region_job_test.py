@@ -958,7 +958,7 @@ def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field pa
     return Encoding(**{**defaults, **overrides})
 
 
-def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
+def test_virtual_dataset_rejects_shards_and_unset_compressors(
     tmp_path: Path,
 ) -> None:
     class ShardedTemplateConfig(VirtualTestTemplateConfig):
@@ -978,7 +978,7 @@ def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
     with pytest.raises(ValidationError, match="must not declare shards"):
         _construct_dataset(tmp_path, ShardedDataset)
 
-    class CompressedTemplateConfig(VirtualTestTemplateConfig):
+    class UnsetCompressorsTemplateConfig(VirtualTestTemplateConfig):
         @computed_field  # type: ignore[prop-decorator]
         @property
         def data_vars(self) -> Sequence[VirtualTestDataVar]:
@@ -988,11 +988,13 @@ def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
                 )
             ]
 
-    class CompressedDataset(VirtualTestDataset):
-        template_config: CompressedTemplateConfig = CompressedTemplateConfig()
+    class UnsetCompressorsDataset(VirtualTestDataset):
+        template_config: UnsetCompressorsTemplateConfig = (
+            UnsetCompressorsTemplateConfig()
+        )
 
-    with pytest.raises(ValidationError, match="must declare compressors="):
-        _construct_dataset(tmp_path, CompressedDataset)
+    with pytest.raises(ValidationError, match="must declare compressors explicitly"):
+        _construct_dataset(tmp_path, UnsetCompressorsDataset)
 
 
 # --- process_virtual integration (real value read-back) ---

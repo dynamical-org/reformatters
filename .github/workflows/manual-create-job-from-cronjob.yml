@@ -22,6 +22,8 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-aifs-single-forecast-virtual-validate
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
+        - google-weathernext2-forecast-virtual-update
+        - google-weathernext2-forecast-virtual-validate
         - nasa-imerg-analysis-early-update
         - nasa-imerg-analysis-early-validate
         - nasa-imerg-analysis-late-update

@@ -1,0 +1,18 @@
+{
+  "attributes": {
+    "dataset_id": "google-weathernext2-forecast-virtual",
+    "dataset_version": "0.1.0",
+    "name": "Google WeatherNext 2 forecast, virtual",
+    "description": "Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
+    "attribution": "Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
+    "license": "CC-BY-4.0",
+    "spatial_domain": "Global",
+    "spatial_resolution": "0.25 degrees (~20km)",
+    "time_domain": "Forecasts initialized 2022-01-01 00:00:00 UTC to Present",
+    "time_resolution": "Forecasts initialized every 6 hours",
+    "forecast_domain": "Forecast lead time 6-360 hours (0.25-15 days) ahead",
+    "forecast_resolution": "6 hourly"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

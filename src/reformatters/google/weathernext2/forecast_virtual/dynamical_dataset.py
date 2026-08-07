@@ -1,128 +1,106 @@
 from collections.abc import Sequence
-from datetime import timedelta  # noqa: F401
-from functools import partial  # noqa: F401
+from datetime import timedelta
+from functools import partial
 
-import icechunk  # noqa: F401
-from pydantic import Field  # noqa: F401
+from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import (  # noqa: F401
-    CronJob,
-    ReformatCronJob,
-    ValidationCronJob,
-)
-from reformatters.common.storage import (  # noqa: F401
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
 )
 
 from .region_job import (
-    GoogleWeathernext2ForecastVirtualSpatialRegionJob,
-    GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord,
+    GoogleWeathernext2ForecastVirtualRegionJob,
+    GoogleWeathernext2ForecastVirtualSourceFileCoord,
+    weathernext2_virtual_chunk_containers,
 )
-
-# from .region_job import _SOURCE_PREFIX, _SOURCE_REGION
 from .template_config import (
     GoogleWeathernext2DataVar,
-    GoogleWeathernext2ForecastVirtualSpatialTemplateConfig,
+    GoogleWeathernext2ForecastVirtualTemplateConfig,
 )
 
 
-class GoogleWeathernext2ForecastVirtualSpatialDynamicalDataset(
+class GoogleWeathernext2ForecastVirtualDataset(
     DynamicalDataset[
-        GoogleWeathernext2DataVar,
-        GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord,
+        GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
-    template_config: GoogleWeathernext2ForecastVirtualSpatialTemplateConfig = (
-        GoogleWeathernext2ForecastVirtualSpatialTemplateConfig()
+    """Google WeatherNext 2 virtual (spatially-chunked, map-optimized icechunk) forecast dataset."""
+
+    template_config: GoogleWeathernext2ForecastVirtualTemplateConfig = (
+        GoogleWeathernext2ForecastVirtualTemplateConfig()
     )
-    region_job_class: type[GoogleWeathernext2ForecastVirtualSpatialRegionJob] = (
-        GoogleWeathernext2ForecastVirtualSpatialRegionJob
+    region_job_class: type[GoogleWeathernext2ForecastVirtualRegionJob] = (
+        GoogleWeathernext2ForecastVirtualRegionJob
     )
 
-    # A virtual dataset MUST set icechunk_virtual_config (a materialized dataset
-    # leaves it None). It declares which source buckets the refs are allowed to point
-    # into and how to split the chunk-reference manifest. Use default_factory because
-    # icechunk's container objects can't be deep-copied as a plain pydantic default.
-    #
-    # icechunk_virtual_config: IcechunkVirtualConfig = Field(
-    #     default_factory=lambda: IcechunkVirtualConfig(
-    #         containers=(
-    #             # One per source bucket; the prefix must match SourceFileCoord.get_url().
-    #             icechunk.VirtualChunkContainer(
-    #                 _SOURCE_PREFIX, icechunk.s3_store(region=_SOURCE_REGION)
-    #             ),
-    #         ),
-    #         # Every commit rewrites each touched array's manifest split(s) and readers
-    #         # download whole manifests, so split size bounds both. Size per array
-    #         # group (a single int, or a {path_regex: size} mapping for datasets whose
-    #         # groups have very different refs per append step); see "Manifest
-    #         # splitting" in docs/virtual_datasets.md.
-    #         manifest_split=manifest_append_dim_split(split_size=28, dim="init_time"),
-    #     )
-    # )
+    icechunk_virtual_config: IcechunkVirtualConfig = Field(
+        default_factory=lambda: IcechunkVirtualConfig(
+            containers=weathernext2_virtual_chunk_containers(),
+            # Sized for operational commit latency: active-window manifest bytes bound
+            # per-commit flush cost. Full-window sizes at ~16.4 bytes/ref: root
+            # 600 x 60 refs/init ~= 0.6 MiB, pressure 200 x 780 (60 leads x 13 levels)
+            # ~= 2.4 MiB; see "Manifest splitting" in docs/virtual_datasets.md for the
+            # cost model.
+            manifest_split=manifest_append_dim_split(
+                split_size={
+                    r"^/pressure_level/": 200,
+                    None: 600,
+                },
+                dim="init_time",
+            ),
+        )
+    )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron jobs that operationally update and validate this dataset.
-
-        A virtual update is SINGLE-WRITER (it commits to the icechunk branch directly),
-        so there is no workers_total/parallelism fan-out - one pod that polls through the
-        source's publication window and exits once the manifest is complete, or once its
-        poll deadline passes and the remaining files roll to the next fire.
-        """
-        # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
-        # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-update",
-        #     schedule="0 6 * * *",
-        #     # Sets how long a fire chases its own source files (the poll deadline is
-        #     # the fire plus this, less a small grace); keep it under the gap
-        #     # between fires so runs never overlap.
-        #     pod_active_deadline=timedelta(hours=2),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.7",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        #     suspend=suspend,
-        # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
-        #     # After the update's fire + its deadline.
-        #     schedule="0 8 * * *",
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        #     suspend=suspend,
-        # )
-
-        # return [operational_update_cron_job, validation_cron_job]
-        raise NotImplementedError(
-            f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
+        # Remove after backfilling to run operational updates and validation.
+        suspend = True
+        # Run once per 6h cycle just after the store publishes: all 60 leads land in a
+        # ~3-4 minute burst ~init+6h15m and the success marker follows at init+6h20m to
+        # 6h50m. Fire at init+6h55m, past the late end of that range, so the cycle is
+        # ingested on the first tick; the 30 minute deadline bounds the poll for the next
+        # cycle's slot (which publication lag puts ~6h out) and keeps fires from
+        # overlapping.
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-update",
+            schedule="55 0,6,12,18 * * *",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.7",
+            memory="7G",
+            secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend,
+        )
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validate",
+            # After each update (init+6h55m) + its 30 minute deadline.
+            schedule="55 1,7,13,19 * * *",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1.3",
+            memory="7G",
+            secret_names=self.store_factory.k8s_secret_names(),
+            suspend=suspend,
         )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return the DataValidators to run on this dataset.
+        return [operational_update_cron_job, validation_cron_job]
 
-        Mix the generic xarray validators (which read the opened dataset) with the two
-        virtual-specific ones, which need manifest/store access:
-        - CheckVirtualManifestCompleteness: re-runs the operational filter to assert
-          recent append-dim positions are sufficiently ingested (refs exist).
-        - CheckVirtualDecodeHealth: decodes a sample of the references that exist to
-          confirm the serializer and virtual-container authorization work end to end.
-        """
-        # return (
-        #     partial(
-        #         validation.check_forecast_current_data,
-        #         max_latest_init_time_age=timedelta(hours=10),
-        #     ),
-        #     validation.CheckVirtualManifestCompleteness(),
-        #     validation.CheckVirtualDecodeHealth(),
-        # )
-        raise NotImplementedError(
-            f"Implement `validators` on {self.__class__.__name__}"
+    def validators(self) -> Sequence[validation.DataValidator]:
+        # Validation fires at init+7h55m, after the update's fire and deadline; the newest
+        # ingested init is then 7h55m old, so 9h leaves an hour of cron/pod start slack.
+        return (
+            partial(
+                validation.check_forecast_current_data,
+                max_latest_init_time_age=timedelta(hours=9),
+            ),
+            # A store is published behind a success marker written last, so an ingested
+            # init is a whole one. Positions past the store's extent are skipped, which
+            # covers the window's newest, not-yet-published cycle.
+            validation.CheckVirtualManifestCompleteness(),
+            validation.CheckVirtualDecodeHealth(),
         )

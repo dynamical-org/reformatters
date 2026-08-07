@@ -1,200 +1,259 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from itertools import takewhile
 from typing import ClassVar
 
+import icechunk
+import obstore
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.download import (  # noqa: F401
-    s3_download_to_disk,
-    s3_store,
-)
+from reformatters.common.config_models import ROOT
+from reformatters.common.download import gcs_store
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import (
-    CoordinateValue,
-    SourceFileCoord,
-)
-from reformatters.common.types import (
-    Dim,
-    Timedelta,
-)
+from reformatters.common.region_job import CoordinateValue, SourceFileCoord
+from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from reformatters.common.virtual_source_listing import (
-    discover_available_by_obstore_listing,  # noqa: F401
-)
 
-from .template_config import GoogleWeathernext2DataVar
+from .template_config import (
+    PER_INIT_STORE_DATE,
+    PRESSURE_LEVELS,
+    GoogleWeathernext2DataVar,
+)
 
 log = get_logger(__name__)
 
-# The url:// prefix the source files live under. It must match a registered
-# VirtualChunkContainer in the dataset's icechunk_virtual_config (see
-# dynamical_dataset.py) so the manifest is allowed to reference these bytes.
-# _SOURCE_PREFIX = "s3://noaa-gefs-pds/"
-# _SOURCE_REGION = "us-east-1"
+SOURCE_LOCATION_PREFIX = "gs://weathernext/"
+_SOURCE_BUCKET_URL = SOURCE_LOCATION_PREFIX.removesuffix("/")
+# The ensemble-mean product; the 64 member product lives under weathernext_2_0_0/.
+_SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0_mean/zarr/"
+
+# The source stores levels ascending; our pressure_level dimension is descending, so
+# each reference maps its level label to the level's index in the source chunk grid.
+_SOURCE_LEVEL_INDEX = {
+    level: index for index, level in enumerate(sorted(PRESSURE_LEVELS))
+}
+
+# A coord is a whole zarr store, which has no single data-file length. Each reference's
+# length is the size of its own chunk object, read from the store listing in file_refs.
+_NO_SINGLE_FILE_SIZE = 0
+
+# A coord covers every lead time of one init, so out_loc names one lead for the per-file
+# manifest probe; the whole store commits atomically, so that lead's presence implies
+# the init's. See docs/virtual_datasets.md.
+_PROBE_LEAD_TIME = pd.Timedelta("6h")
 
 
-class GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file, plus the data variables it packs.
+def weathernext2_virtual_chunk_containers() -> tuple[
+    icechunk.VirtualChunkContainer, ...
+]:
+    """Fresh container objects per call; icechunk containers can't be shared
+    pydantic defaults."""
+    return (
+        icechunk.VirtualChunkContainer(SOURCE_LOCATION_PREFIX, icechunk.gcs_store()),
+    )
 
-    A virtual dataset turns each source GRIB message into one chunk reference, so a
-    coord must carry enough to (a) locate the file (`get_url`/`get_index_url`) and
-    (b) locate every output cell its messages fill (`out_loc`). `data_vars` records
-    which variables this particular file contains - the message subset `file_refs`
-    will resolve byte ranges for.
+
+class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
+    """One init time's source zarr store and the vars it contributes.
+
+    Before PER_INIT_STORE_DATE the store spans a whole calendar year and the init is a
+    position along its leading dimension; from that date each init has its own store.
     """
 
-    # init_time: Timestamp
-    # lead_time: Timedelta
-    # data_vars: Sequence[GoogleWeathernext2DataVar]
+    init_time: Timestamp
+    data_vars: Sequence[GoogleWeathernext2DataVar]
+
+    @property
+    def is_per_init_store(self) -> bool:
+        return self.init_time >= PER_INIT_STORE_DATE
 
     def get_url(self) -> str:
-        """The source file's location. Refs point here, so it must start with the
-        registered virtual chunk container prefix (e.g. ``s3://...``), not an
-        ``https://`` mirror of the same bucket."""
-        # return (
-        #     f"{_SOURCE_PREFIX}gefs.{self.init_time:%Y%m%d}/{self.init_time:%H}/atmos/"
-        #     f"pgrb2sp25/gec00.t{self.init_time:%H}z.pgrb2s.0p25."
-        #     f"f{self.lead_time.total_seconds() / 3600:03.0f}"
-        # )
-        raise NotImplementedError("Return the location of the source file.")
+        if self.is_per_init_store:
+            return (
+                f"{_SOURCE_ZARR_PREFIX}2025_to_present/"
+                f"{self.init_time:%Y%m%d}_{self.init_time:%H}hr_01_preds/predictions.zarr"
+            )
+        year = self.init_time.year
+        return f"{_SOURCE_ZARR_PREFIX}{year}_to_{year + 1}/predictions.zarr"
 
-    def get_index_url(self) -> str:
-        """The byte-range index sidecar (`.idx`) listing each message's start byte.
+    def get_success_marker_url(self) -> str:
+        """The zero-byte marker the source writes beside a store once it is complete."""
+        return self.get_url().removesuffix("predictions.zarr") + "success"
 
-        `file_refs` reads this to resolve message byte ranges without downloading the
-        whole data file. Implement only if the source publishes such an index; a source
-        without one resolves byte ranges by scanning the data file instead.
-        """
-        # return self.get_url() + ".idx"
-        raise NotImplementedError(
-            "Return the URL of the source file's byte-range index."
-        )
+    def chunk_key_prefix(self, var: GoogleWeathernext2DataVar) -> str:
+        """The store-relative key prefix shared by every chunk object this coord needs
+        of `var` — the whole variable in a per-init store, one init's slice of it in a
+        yearly store."""
+        source_name = var.internal_attrs.source_name
+        if self.is_per_init_store:
+            return f"{source_name}/"
+        year_start = pd.Timestamp(f"{self.init_time.year}-01-01")
+        store_init_index = (self.init_time - year_start) // pd.Timedelta("6h")
+        return f"{source_name}/{store_init_index}."
+
+    def chunk_key(
+        self, var: GoogleWeathernext2DataVar, lead_index: int, level_index: int | None
+    ) -> str:
+        """The store-relative key of one source chunk object."""
+        indices = [lead_index] if level_index is None else [lead_index, level_index]
+        # Latitude and longitude are single-chunk in every source array.
+        return self.chunk_key_prefix(var) + ".".join(str(i) for i in [*indices, 0, 0])
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
-        """The output cell(s) this file's messages fill, as a {dim: label} map.
-
-        The default returns every field of the coord, which here would wrongly include
-        `data_vars` (not an output dimension), so override to return just the dim
-        labels. Override is also where an analysis dataset folds init+lead into a single
-        `time` (``{"time": self.init_time + self.lead_time}``).
-        """
-        # return {"init_time": self.init_time, "lead_time": self.lead_time}
-        raise NotImplementedError(
-            "Return the {dim: label} location of this file's data."
-        )
+        return {"init_time": self.init_time, "lead_time": _PROBE_LEAD_TIME}
 
 
-class GoogleWeathernext2ForecastVirtualSpatialRegionJob(
+class GoogleWeathernext2ForecastVirtualRegionJob(
     VirtualRegionJob[
-        GoogleWeathernext2DataVar,
-        GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord,
+        GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
+    # Fire time is init+6h55m, so at fire the newest published init plus the three prior
+    # cycles sit 6h55m to 24h55m back; 30h covers all four, so a couple of missed runs
+    # still self-heal. Publication lags the 6h cycle, so the window's newest position is
+    # always a cycle the source has not published yet; the fire polls for it until its
+    # deadline and then leaves it to the next fire.
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("30h")
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[GoogleWeathernext2DataVar],
-    ) -> Sequence[GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord]:
-        """One coord per source file covering the data in processing_region_ds.
-
-        Reused by operational validation to probe the manifest, so it must list exactly
-        the files the dataset expects (drop files the source genuinely lacks, e.g.
-        accumulated variables at hour 0).
-        """
-        # return [
-        #     GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord(
-        #         init_time=pd.Timestamp(init_time),
-        #         lead_time=pd.Timedelta(lead_time),
-        #         data_vars=data_var_group,
-        #     )
-        #     for init_time in processing_region_ds["init_time"].values
-        #     for lead_time in processing_region_ds["lead_time"].values
-        # ]
-        raise NotImplementedError(
-            "Return one SourceFileCoord per source file covering processing_region_ds."
-        )
+    ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
+        coords = []
+        for init_time in pd.to_datetime(processing_region_ds["init_time"].values):
+            available_vars = [
+                var
+                for var in data_var_group
+                if (date := var.internal_attrs.date_available) is None
+                or date <= init_time
+            ]
+            if available_vars:
+                coords.append(
+                    GoogleWeathernext2ForecastVirtualSourceFileCoord(
+                        init_time=init_time, data_vars=available_vars
+                    )
+                )
+        return coords
 
     def discover_available(
-        self, pending: list[GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord]
-    ) -> list[tuple[GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord, int]]:
-        """Of the not-yet-ingested files, the subset fetchable now, each with its size.
+        self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
+    ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
+        """The pending coords whose store has its success marker.
 
-        The write loop calls this each tick (once for a backfill, repeatedly while an
-        update polls). For an object store obstore can list (S3/GCS/Azure/local) this is
-        one line; `require_index=True` also waits for each file's `.idx` sidecar to land.
-        For a source obstore can't list (an HTML directory index, a frontier to probe,
-        or "assume every coord is available"), implement it directly and return the
-        ready (coord, file_size) pairs.
+        The marker is written last, so its presence means every chunk object of the
+        store has landed. Yearly-store coords share one marker, so it is probed once.
         """
-        # return discover_available_by_obstore_listing(
-        #     pending,
-        #     store=s3_store(_SOURCE_PREFIX, region=_SOURCE_REGION),
-        #     location_prefix=_SOURCE_PREFIX,
-        #     require_index=True,
-        # )
-        raise NotImplementedError(
-            "Return the (coord, file_size) pairs ready to fetch now."
+        store = gcs_store(_SOURCE_BUCKET_URL)
+        marker_keys = sorted(
+            {_store_key(coord.get_success_marker_url()) for coord in pending}
         )
+        with ThreadPoolExecutor(self.download_concurrency) as pool:
+            landed = {
+                key
+                for key, exists in zip(
+                    marker_keys,
+                    pool.map(partial(_object_exists, store), marker_keys),
+                    strict=True,
+                )
+                if exists
+            }
+        return [
+            (coord, _NO_SINGLE_FILE_SIZE)
+            for coord in pending
+            if _store_key(coord.get_success_marker_url()) in landed
+        ]
 
     def file_refs(
         self,
-        coord: GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord,
-        file_size: int,
+        coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
+        file_size: int,  # noqa: ARG002 - a store has no single length, see _NO_SINGLE_FILE_SIZE
     ) -> list[VirtualRef]:
-        """Every virtual ref a single source file contributes (or [] to skip it).
+        store = gcs_store(_SOURCE_BUCKET_URL)
+        store_key_prefix = _store_key(coord.get_url()) + "/"
+        refs = []
+        for var in coord.data_vars:
+            sizes = _list_chunk_sizes(
+                store, store_key_prefix, coord.chunk_key_prefix(var)
+            )
+            template_var = self.template_ds[var.path]
+            levels: Sequence[tuple[int | None, int | None]] = (
+                [(None, None)]
+                if var.group is ROOT
+                else [
+                    (int(level), _SOURCE_LEVEL_INDEX[int(level)])
+                    for level in template_var.get_index("pressure_level")
+                ]
+            )
+            # The template's lead_time axis is the source's lead axis in the same order,
+            # so a lead's position is its index in the source chunk grid.
+            for lead_index, lead_time in enumerate(template_var.get_index("lead_time")):
+                for level, level_index in levels:
+                    key = coord.chunk_key(var, lead_index, level_index)
+                    # An absent chunk object gets no reference and reads as fill.
+                    if (size := sizes.get(key)) is None:
+                        continue
+                    out_loc: dict[Dim, CoordinateValue] = {
+                        "init_time": coord.init_time,
+                        "lead_time": lead_time,
+                    }
+                    if level is not None:
+                        out_loc["pressure_level"] = level
+                    refs.append(
+                        VirtualRef(
+                            data_var=var,
+                            out_loc=out_loc,
+                            location=SOURCE_LOCATION_PREFIX + store_key_prefix + key,
+                            offset=0,
+                            length=size,
+                        )
+                    )
+        return refs
 
-        Resolve each message's byte range - parse the `.idx` sidecar
-        (`coord.get_index_url()`), scan the data file, or, for one-message files, point
-        at the whole file - and return one VirtualRef per (output cell, variable). The
-        chunk index is resolved centrally later, so refs are in coordinate-label space:
-        give each `out_loc` (the cell it fills) and the source byte range. Return [] to
-        drop an unreadable or stale file. `file_size` is what discover_available
-        reported - use it to supply a final message's missing end byte.
-        """
-        # index_path = s3_download_to_disk(
-        #     coord.get_index_url(), self.dataset_id, region=_SOURCE_REGION
-        # )
-        # try:
-        #     # reformatters.noaa.noaa_grib_index.grib_message_byte_ranges_from_index
-        #     # parses a .idx into per-variable (start, end) byte ranges.
-        #     starts, ends = grib_message_byte_ranges_from_index(
-        #         index_path, coord.data_vars, coord.init_time, coord.lead_time
-        #     )
-        # finally:
-        #     index_path.unlink()
-        #
-        # out_loc = coord.out_loc()
-        # location = coord.get_url()
-        # return [
-        #     VirtualRef(
-        #         data_var=var,
-        #         out_loc=out_loc,
-        #         location=location,
-        #         offset=start,
-        #         length=end - start,
-        #     )
-        #     for var, start, end in zip(coord.data_vars, starts, ends, strict=True)
-        # ]
-        raise NotImplementedError(
-            "Return the VirtualRefs for one source file, or [] to skip it."
-        )
 
-    # filter_already_present probes one "representative" variable per file to decide
-    # whether the file is already in the manifest. The default picks the first instant
-    # variable the file carries. Override only if that variable's chunk isn't a reliable
-    # proxy for "the whole file was ingested":
-    #
-    # def representative_var(self, coord: GoogleWeathernext2ForecastVirtualSpatialSourceFileCoord) -> GoogleWeathernext2DataVar:
-    #     return next(v for v in self.data_vars if v.name == "temperature_2m")
+def _store_key(url: str) -> str:
+    return url.removeprefix(SOURCE_LOCATION_PREFIX)
 
-    # The recent append-dim window each operational update fire re-sweeps. The base
-    # VirtualRegionJob.operational_update_jobs builds a single job over this window
-    # with processing_mode="update", which makes the write loop POLL: it keeps
-    # sweeping discover_available until every expected file is ingested, committing
-    # each batch as files publish (backfills sweep once and exit). What is already
-    # ingested is derived from the icechunk manifest by filter_already_present, so
-    # size the window for late-publishing files and re-checking recent steps, and
-    # override operational_update_jobs itself only for an update shape a single
-    # windowed job can't express. See "Operational updates" in
-    # docs/virtual_datasets.md.
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+
+def _object_exists(store: obstore.store.ObjectStore, key: str) -> bool:
+    # obstore lists only *under* a prefix, so an exact object path is not listable and
+    # existence has to be a head request.
+    try:
+        obstore.head(store, key)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _list_chunk_sizes(
+    store: obstore.store.ObjectStore, store_key_prefix: str, chunk_key_prefix: str
+) -> dict[str, int]:
+    """Every source chunk object under `chunk_key_prefix`, keyed store-relative, mapped
+    to its size — a source chunk is a whole object, so its size is a reference length.
+
+    obstore matches a listing prefix by whole path component, so a yearly store's
+    `<var>/<init>.` prefix is not listable on its own. The variable's directory is
+    listed from an offset just below the wanted keys, which are lexicographically
+    contiguous, and the scan stops at the first non-match rather than walking the rest
+    of the year.
+    """
+    full_prefix = store_key_prefix + chunk_key_prefix
+    variable_dir = (
+        store_key_prefix + chunk_key_prefix[: chunk_key_prefix.index("/") + 1]
+    )
+    offset = None if full_prefix == variable_dir else full_prefix.removesuffix(".")
+    listed = takewhile(
+        lambda item: item[0].startswith(full_prefix),
+        _list_objects(store, variable_dir, offset),
+    )
+    return {key.removeprefix(store_key_prefix): size for key, size in listed}
+
+
+def _list_objects(
+    store: obstore.store.ObjectStore, prefix: str, offset: str | None
+) -> Iterator[tuple[str, int]]:
+    for batch in obstore.list(store, prefix=prefix, offset=offset, chunk_size=10_000):
+        for meta in batch:
+            yield meta["path"], meta["size"]
