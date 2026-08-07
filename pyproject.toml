@@ -104,10 +104,7 @@ select = [
 ignore = [
     "S101",    # disallow asserts
     "E501",    # line too long (ruff format will handle)
-    "W293",    # black line contains whitespace
     "UP046",   # non-pep695-generic-class - defer migration to PEP 695 generics
-    "UP047",   # non-pep695-generic-function - defer migration to PEP 695 generics
-    "PLC0414", # import aliases to same name - we use to specifically re-export
     "PLR0913", # too many arguments
     "PLR0917", # too many positional arguments
     "TD003",   # don't require issue link in todos
