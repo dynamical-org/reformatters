@@ -218,10 +218,9 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.pod_active_deadline < timedelta(hours=6)
-    # Cron jobs ship suspended until the store is backfilled.
-    assert update_cron_job.suspend is True
+    assert update_cron_job.suspend is False
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.suspend is True
+    assert validation_cron_job.suspend is False
     assert len(update_cron_job.secret_names) > 0
 
 
