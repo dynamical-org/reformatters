@@ -19,6 +19,7 @@ from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 
 from .template_config import (
     AIFS_SINGLE_FORMAT_CHANGE_DATE,
+    AIFS_SINGLE_OPERATIONAL_PATH_DATE,
     PRESSURE_LEVELS,
     EcmwfAifsSingleVirtualDataVar,
 )
@@ -53,16 +54,17 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(SourceFileCoord):
     data_vars: Sequence[EcmwfAifsSingleVirtualDataVar]
 
     def _get_base_url(self) -> str:
-        model_dir = (
-            "aifs-single"
-            if self.init_time >= AIFS_SINGLE_FORMAT_CHANGE_DATE
-            else "aifs"
-        )
+        if self.init_time < AIFS_SINGLE_FORMAT_CHANGE_DATE:
+            stream_path = "aifs/0p25/oper"
+        elif self.init_time < AIFS_SINGLE_OPERATIONAL_PATH_DATE:
+            stream_path = "aifs-single/0p25/experimental/oper"
+        else:
+            stream_path = "aifs-single/0p25/oper"
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         return (
             f"{SOURCE_LOCATION_PREFIX}{init_date_str}/{init_hour_str}z/"
-            f"{model_dir}/0p25/oper/"
+            f"{stream_path}/"
             f"{init_date_str}{init_hour_str}0000-{whole_hours(self.lead_time)}h-oper-fc"
         )
 
