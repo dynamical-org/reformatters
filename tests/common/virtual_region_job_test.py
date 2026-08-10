@@ -1582,7 +1582,7 @@ def test_validate_dataset_requires_region_job_for_virtual_validator(
     store = _backfilled_store(dataset, _create_template_ds(4), emit=slice(0, 4))
     with pytest.raises(AssertionError, match="needs a region_job"):
         validation.validate_dataset(
-            store, [validation.CheckVirtualManifestCompleteness()]
+            store, [validation.CheckVirtualManifestCompleteness()], dataset_id="test"
         )
 
 

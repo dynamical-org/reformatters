@@ -594,6 +594,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             validation.validate_dataset(
                 primary_store,
                 validators=primary_store_validators,
+                dataset_id=self.dataset_id,
                 region_job=region_job,
             )
             log.info(f"Done validating {primary_store}")
@@ -620,6 +621,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 validation.validate_dataset(
                     replica_store,
                     validators=replica_store_validators,
+                    dataset_id=self.dataset_id,
                     region_job=region_job,
                 )
                 log.info(f"Done validating {replica_store}")

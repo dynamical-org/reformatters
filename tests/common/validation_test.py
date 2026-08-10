@@ -1,10 +1,12 @@
 import warnings
 from datetime import timedelta
+from functools import partial
 
 import icechunk
 import numpy as np
 import pandas as pd
 import pytest
+import sentry_sdk
 import xarray as xr
 import zarr.core.sync
 import zarr.storage
@@ -651,11 +653,76 @@ def test_validate_dataset_raises_on_failed_validator(
     def failing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="bad thing")
 
-    with pytest.raises(ValueError, match="bad thing"):
-        validation.validate_dataset(store, validators=[passing, failing])
+    with pytest.raises(validation.ZarrValidationError, match="bad thing"):
+        validation.validate_dataset(
+            store, validators=[passing, failing], dataset_id="d"
+        )
 
     # Passing-only validators should not raise.
-    validation.validate_dataset(store, validators=[passing])
+    validation.validate_dataset(store, validators=[passing], dataset_id="d")
+
+
+def test_validate_dataset_fingerprints_by_dataset_and_check(
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+) -> None:
+    """Failures fingerprint by (dataset_id, check), not by message text, so repeated
+    failures with different per-run details (a NaN fraction, an init_time, ...) group
+    together instead of each filing a new Sentry issue."""
+    times = pd.date_range("2024-01-01", periods=4, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
+        coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
+    )
+    store = zarr.storage.MemoryStore()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        ds.to_zarr(store, mode="w")
+
+    def failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="bad thing")
+
+    per_check_fingerprints = []
+    original_error = validation.log.error
+
+    def spy_error(message: str) -> None:
+        per_check_fingerprints.append(sentry_sdk.get_current_scope()._fingerprint)
+        original_error(message)
+
+    monkeypatch.setattr(validation.log, "error", spy_error)
+
+    captured_messages = []
+
+    def fake_capture_message(message: str, level: str) -> None:
+        captured_messages.append((message, sentry_sdk.get_current_scope()._fingerprint))
+
+    monkeypatch.setattr(sentry_sdk, "capture_message", fake_capture_message)
+
+    with pytest.raises(validation.ZarrValidationError):
+        validation.validate_dataset(
+            store, validators=[failing], dataset_id="noaa-gfs-forecast"
+        )
+
+    assert per_check_fingerprints == [["noaa-gfs-forecast", "failing"]]
+    assert len(captured_messages) == 1
+    message, fingerprint = captured_messages[0]
+    assert "bad thing" in message
+    assert fingerprint == ["noaa-gfs-forecast", "zarr_validation_failed"]
+
+
+def test_validator_check_name() -> None:
+    def a_check(ds: xr.Dataset) -> validation.ValidationResult:
+        raise NotImplementedError
+
+    assert validation._validator_check_name(a_check) == "a_check"
+    assert validation._validator_check_name(partial(a_check)) == "a_check"
+    assert (
+        validation._validator_check_name(validation.CheckVirtualManifestCompleteness())
+        == "CheckVirtualManifestCompleteness"
+    )
 
 
 def test_compare_replica_and_primary_coords_divergence(
