@@ -15,11 +15,12 @@ from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
+from reformatters.ecmwf.aifs_single.template_config import (
+    aifs_single_stream_path,
+)
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 
 from .template_config import (
-    AIFS_SINGLE_FORMAT_CHANGE_DATE,
-    AIFS_SINGLE_OPERATIONAL_PATH_DATE,
     PRESSURE_LEVELS,
     EcmwfAifsSingleVirtualDataVar,
 )
@@ -54,12 +55,7 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(SourceFileCoord):
     data_vars: Sequence[EcmwfAifsSingleVirtualDataVar]
 
     def _get_base_url(self) -> str:
-        if self.init_time < AIFS_SINGLE_FORMAT_CHANGE_DATE:
-            stream_path = "aifs/0p25/oper"
-        elif self.init_time < AIFS_SINGLE_OPERATIONAL_PATH_DATE:
-            stream_path = "aifs-single/0p25/experimental/oper"
-        else:
-            stream_path = "aifs-single/0p25/oper"
+        stream_path = aifs_single_stream_path(self.init_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         return (

@@ -25,6 +25,7 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.ecmwf.aifs_single.template_config import (
+    AIFS_SINGLE_FORMAT_CHANGE_DATE,
     EcmwfAifsSingleCommonTemplateConfig,
 )
 from reformatters.ecmwf.ecmwf_config_models import (
@@ -126,9 +127,9 @@ class EcmwfAifsSingleForecastTemplateConfig(
 
         default_keep_mantissa_bits = 7
 
-        # Variables available only from 2025-02-26 are marked with date_available.
+        # Variables added at the format change are marked with date_available.
         # All variables listed here are available from 2024-04-01 (append_dim_start) unless noted.
-        expanded_vars_date = pd.Timestamp("2025-02-26T00:00")
+        expanded_vars_date = AIFS_SINGLE_FORMAT_CHANGE_DATE
 
         # Standard acceleration of gravity for geopotential → geopotential height conversion.
         g = 9.80665

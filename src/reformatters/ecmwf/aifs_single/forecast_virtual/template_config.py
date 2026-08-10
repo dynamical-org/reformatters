@@ -24,6 +24,7 @@ from reformatters.common.types import (
 )
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.ecmwf.aifs_single.template_config import (
+    AIFS_SINGLE_FORMAT_CHANGE_DATE,
     EcmwfAifsSingleCommonTemplateConfig,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
@@ -35,12 +36,6 @@ _GRID_NLON = 1440
 # AIFS_2026_UPGRADE_DATE (q never has it).
 PRESSURE_LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50, 10]
 
-# The open-data format change: the source stream switches from aifs/ to aifs-single/,
-# many variables are added, and tp/cp switch from metres to kg m-2.
-AIFS_SINGLE_FORMAT_CHANGE_DATE = pd.Timestamp("2025-02-24T06:00")
-# The aifs-single stream spends its first 36 hours under an experimental/ path
-# segment before moving to the operational one.
-AIFS_SINGLE_OPERATIONAL_PATH_DATE = pd.Timestamp("2025-02-25T06:00")
 # Model upgrade adding fscov and the 10 hPa pressure level.
 AIFS_2026_UPGRADE_DATE = pd.Timestamp("2026-05-13T00:00")
 

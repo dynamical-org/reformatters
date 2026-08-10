@@ -20,6 +20,23 @@ from reformatters.common.types import AppendDim, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
+# ECMWF's open data cutover from the aifs/ stream to aifs-single/. At this init the
+# source path changes, the added variables start, and tp/cp switch from metres to
+# kg m-2 -- one boundary, so both variants key all three off this constant.
+AIFS_SINGLE_FORMAT_CHANGE_DATE = pd.Timestamp("2025-02-24T06:00")
+# The aifs-single stream spends its first 36 hours under an experimental/ path segment
+# before moving to the operational one.
+AIFS_SINGLE_OPERATIONAL_PATH_DATE = pd.Timestamp("2025-02-25T06:00")
+
+
+def aifs_single_stream_path(init_time: Timestamp) -> str:
+    """The source path segment between the init hour directory and the file name."""
+    if init_time < AIFS_SINGLE_FORMAT_CHANGE_DATE:
+        return "aifs/0p25/oper"
+    if init_time < AIFS_SINGLE_OPERATIONAL_PATH_DATE:
+        return "aifs-single/0p25/experimental/oper"
+    return "aifs-single/0p25/oper"
+
 
 class EcmwfAifsSingleCommonTemplateConfig[DATA_VAR: EcmwfDataVar](
     TemplateConfig[DATA_VAR]
