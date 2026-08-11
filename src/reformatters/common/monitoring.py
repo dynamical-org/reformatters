@@ -10,7 +10,7 @@ import sentry_sdk.crons
 
 from reformatters.common.config import Config
 from reformatters.common.iterating import digest
-from reformatters.common.kubernetes import TERMINATION_GRACE_PERIOD, CronJob
+from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -27,9 +27,8 @@ def install_sigterm_logger() -> None:
 
     def handle_sigterm(signal_number: int, _frame: FrameType | None) -> NoReturn:
         log.error("Received SIGTERM, exiting")
-        sentry_sdk.flush(timeout=TERMINATION_GRACE_PERIOD.total_seconds())
-        # Exit without unwinding: joining the in flight downloads can outlast the grace.
-        os._exit(128 + signal_number)
+        sentry_sdk.flush()
+        raise SystemExit(128 + signal_number)
 
     signal.signal(signal.SIGTERM, handle_sigterm)
 
@@ -67,8 +66,7 @@ def monitor_cron(
             },
         )
         if status != "in_progress":
-            # The at-exit flush can drop a terminal check-in, and a run that never
-            # checks in reads as one that never finished.
+            # Make sure error / complete events reach sentry
             sentry_sdk.flush()
 
     if send_in_progress:

@@ -1,7 +1,7 @@
 import inspect
 import json
 import subprocess
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from datetime import datetime
 from functools import partial
@@ -626,7 +626,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """The jobs an operational update runs, and the template they write against."""
         operational_update_jobs = self.region_job_class.operational_update_jobs
         fire_time_kwarg: dict[str, Any] = {}
-        if _accepts_keyword(operational_update_jobs, "job_fire_time"):
+        if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
             fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
                 ReformatCronJob
             ).previous_fire_time(pd.Timestamp.now())
@@ -929,15 +929,6 @@ class RunMonitor(Protocol):
         send_in_progress: bool,
         send_result: bool,
     ) -> AbstractContextManager[None]: ...
-
-
-def _accepts_keyword(fn: Callable[..., Any], name: str) -> bool:
-    """Whether `fn` can be called with `name=`, either declaring it or taking **kwargs."""
-    parameters = inspect.signature(fn).parameters
-    return name in parameters or any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    )
 
 
 _RUN_MONITORS: list[RunMonitor] = []

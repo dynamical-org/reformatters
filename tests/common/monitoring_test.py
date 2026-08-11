@@ -1,5 +1,4 @@
 import logging
-import os
 import signal
 from datetime import timedelta
 from unittest.mock import Mock
@@ -68,14 +67,15 @@ def test_install_sigterm_logger(
 
         mock_flush = Mock()
         monkeypatch.setattr(sentry_sdk, "flush", mock_flush)
-        exit_codes: list[int] = []
-        monkeypatch.setattr(os, "_exit", exit_codes.append)
 
-        with caplog.at_level(logging.ERROR):
+        with (
+            caplog.at_level(logging.ERROR),
+            pytest.raises(SystemExit) as exit_info,
+        ):
             signal.raise_signal(signal.SIGTERM)
     finally:
         signal.signal(signal.SIGTERM, original_handler)
 
     assert "SIGTERM" in caplog.text
     assert mock_flush.call_count == 1
-    assert exit_codes == [128 + signal.SIGTERM]
+    assert exit_info.value.code == 128 + signal.SIGTERM
