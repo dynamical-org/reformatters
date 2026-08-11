@@ -70,7 +70,7 @@ class VirtualRegionJob(
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
-    # Stop polling after this time, leaving unpublished files to the next fire.
+    # Stop polling by this time, leaving unpublished files to the next fire.
     poll_deadline: Timestamp = pd.Timestamp.max
 
     # When polling, pace each discovery sweep to at most one per tick.
@@ -98,7 +98,7 @@ class VirtualRegionJob(
         """A single polling job over the operational_update_window of recent steps.
 
         Polls until every expected file is ingested or the caller's poll_deadline
-        passes; filter_already_present derives the remaining work from the manifest.
+        is reached; filter_already_present derives the remaining work from the manifest.
         See "Operational updates" in docs/virtual_datasets.md.
         """
         append_dim_end = pd.Timestamp.now()
@@ -210,12 +210,13 @@ class VirtualRegionJob(
 
         One yield per tick contains every file that became available since the last:
         a backfill sweeps once and exits, an update polls until everything is ingested
-        or its poll_deadline passes. Each yield is whole source files as (coord, refs)
+        or its poll_deadline is reached. Each yield is whole source files as (coord, refs)
         pairs — never split a file, never yield empty. Source-agnostic: it only asks
         discover_available which coords are ready. Override only for a different
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        longest_tick_s = 0.0
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 tick_start = time.monotonic()
@@ -251,14 +252,22 @@ class VirtualRegionJob(
                         )
                     return
                 if pending:
-                    if pd.Timestamp.now() >= self.poll_deadline:
+                    elapsed = time.monotonic() - tick_start
+                    longest_tick_s = max(longest_tick_s, elapsed)
+                    # A tick runs to completion once started (its commit cannot be cut
+                    # short), so honoring the deadline means not starting a tick that
+                    # would run past it. Without this the pod is killed mid-tick at its
+                    # active deadline and never sends its cron check-in.
+                    if (
+                        pd.Timestamp.now() + pd.Timedelta(seconds=longest_tick_s)
+                        >= self.poll_deadline
+                    ):
                         log.info(
-                            f"Poll deadline reached with {len(pending)} source files "
+                            f"Stopping polling with {len(pending)} source files "
                             f"not yet published, leaving them to the next update "
                             f"(first: {pending[0].get_url()})"
                         )
                         return
-                    elapsed = time.monotonic() - tick_start
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
     def _file_refs_or_skip(

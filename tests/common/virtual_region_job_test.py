@@ -11,6 +11,7 @@ expansion without the decode-only codec ever being invoked.
 
 import asyncio
 import json
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched
@@ -1926,6 +1927,39 @@ def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
     ingested = [coord for batch in batches for coord, _ in batch]
     assert {coord.lead_time for coord in ingested} == {LEAD_TIMES[0]}
     assert len(ingested) == 4  # 4 inits x lead 0
+
+
+def test_update_stops_polling_before_a_tick_would_overrun_the_deadline() -> None:
+    # A tick cannot be cut short, so a second sweep here would finish past the deadline,
+    # where the pod is killed and its cron check-in never sent.
+    tick = pd.Timedelta("0.5s")
+    sweeps = 0
+
+    class SlowSweepJob(VirtualTestRegionJob):
+        process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+        def discover_available(
+            self,
+            pending: list[VirtualTestSourceFileCoord],  # noqa: ARG002
+        ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+            nonlocal sweeps
+            sweeps += 1
+            time.sleep(tick.total_seconds())
+            return []
+
+    job = SlowSweepJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp.now() + tick * 1.5,
+    )
+
+    assert list(job.process_virtual_refs(job.source_file_coords())) == []
+    assert sweeps == 1
 
 
 def test_operational_update_passes_poll_deadline_to_the_write_loop(
