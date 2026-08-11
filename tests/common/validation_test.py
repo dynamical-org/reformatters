@@ -1,3 +1,4 @@
+import logging
 import warnings
 from datetime import timedelta
 from functools import partial
@@ -653,7 +654,7 @@ def test_validate_dataset_raises_on_failed_validator(
     def failing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="bad thing")
 
-    with pytest.raises(validation.ZarrValidationError, match="bad thing"):
+    with pytest.raises(validation.OperationalValidationError, match="bad thing"):
         validation.validate_dataset(
             store, validators=[passing, failing], dataset_id="d"
         )
@@ -663,11 +664,17 @@ def test_validate_dataset_raises_on_failed_validator(
 
 
 def test_validate_dataset_fingerprints_by_dataset_and_check(
-    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+    caplog: pytest.LogCaptureFixture, rng: np.random.Generator
 ) -> None:
-    """Failures fingerprint by (dataset_id, check), not by message text, so repeated
-    failures with different per-run details (a NaN fraction, an init_time, ...) group
-    together instead of each filing a new Sentry issue."""
+    """A failure fingerprints by (dataset_id, failed checks), not by message text, so
+    repeated failures carrying different per-run details (a NaN fraction, an init_time,
+    ...) group into one Sentry issue instead of each filing a new one. The fingerprint
+    goes on the isolation scope, which outlives validate_dataset's frame, so it is still
+    in effect when Sentry captures the raised exception at process exit — that capture
+    would otherwise group by the dataset-agnostic raise site. And no failure is logged at
+    ERROR, which the Sentry logging integration would report as a second, differently
+    grouped issue.
+    """
     times = pd.date_range("2024-01-01", periods=4, freq="1h")
     ds = xr.Dataset(
         {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
@@ -685,32 +692,25 @@ def test_validate_dataset_fingerprints_by_dataset_and_check(
     def failing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="bad thing")
 
-    per_check_fingerprints = []
-    original_error = validation.log.error
+    def also_failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="another bad thing")
 
-    def spy_error(message: str) -> None:
-        per_check_fingerprints.append(sentry_sdk.get_current_scope()._fingerprint)
-        original_error(message)
+    with sentry_sdk.isolation_scope():
+        with pytest.raises(validation.OperationalValidationError):
+            validation.validate_dataset(
+                store,
+                validators=[failing, also_failing],
+                dataset_id="noaa-gfs-forecast",
+            )
 
-    monkeypatch.setattr(validation.log, "error", spy_error)
+        assert sentry_sdk.get_isolation_scope()._fingerprint == [
+            "noaa-gfs-forecast",
+            "failing",
+            "also_failing",
+        ]
 
-    captured_messages = []
-
-    def fake_capture_message(message: str, level: str) -> None:
-        captured_messages.append((message, sentry_sdk.get_current_scope()._fingerprint))
-
-    monkeypatch.setattr(sentry_sdk, "capture_message", fake_capture_message)
-
-    with pytest.raises(validation.ZarrValidationError):
-        validation.validate_dataset(
-            store, validators=[failing], dataset_id="noaa-gfs-forecast"
-        )
-
-    assert per_check_fingerprints == [["noaa-gfs-forecast", "failing"]]
-    assert len(captured_messages) == 1
-    message, fingerprint = captured_messages[0]
-    assert "bad thing" in message
-    assert fingerprint == ["noaa-gfs-forecast", "zarr_validation_failed"]
+    failure_logs = [r for r in caplog.records if "Failed validation" in r.getMessage()]
+    assert [r.levelno for r in failure_logs] == [logging.WARNING, logging.WARNING]
 
 
 def test_validator_check_name() -> None:

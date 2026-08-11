@@ -20,7 +20,6 @@ from reformatters.common.config import Config
 from reformatters.common.dynamical_dataset import DynamicalDataset, register_run_monitor
 from reformatters.common.initialize_new_integration import initialize_new_integration
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.common.validation import ZarrValidationError
 from reformatters.contrib.nasa.smap.level3_36km_v9 import NasaSmapLevel336KmV9Dataset
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
     NoaaNdviCdrAnalysisDataset,
@@ -272,9 +271,6 @@ if Config.is_sentry_enabled:
         integrations=[
             TyperIntegration(),
         ],
-        # validate_dataset already reports failures itself, fingerprinted per dataset;
-        # this avoids a second, differently-grouped report of the same raised exception.
-        ignore_errors=[ZarrValidationError],
     )
     sentry_sdk.set_tag("env", Config.env.value)
     sentry_sdk.set_tag("cron_job_name", cron_job_name)

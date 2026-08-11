@@ -63,13 +63,8 @@ class ValidationResult(pydantic.BaseModel):
     )
 
 
-class ZarrValidationError(ValueError):
-    """Raised by validate_dataset when one or more checks fail.
-
-    Listed in the Sentry SDK's ignore_errors so the default exception-capturing
-    integration, which groups by raise-site stack trace regardless of dataset, doesn't
-    also report this alongside validate_dataset's own per-dataset fingerprinted capture.
-    """
+class OperationalValidationError(ValueError):
+    """Raised by validate_dataset when one or more checks fail."""
 
 
 @runtime_checkable
@@ -132,8 +127,8 @@ def open_flattened_dataset(
 
 def _validator_check_name(validator: DataValidator) -> str:
     """A stable per-check identifier for Sentry fingerprinting, independent of any
-    particular failure's message text (which embeds per-run details like variable
-    names, fractions, or init times)."""
+    particular failure's message text.
+    """
     if isinstance(validator, VirtualDataValidator):
         return type(validator).__name__
     if isinstance(validator, partial):
@@ -144,8 +139,8 @@ def _validator_check_name(validator: DataValidator) -> str:
 def validate_dataset(
     store: zarr.storage.StoreLike,
     validators: Sequence[DataValidator],
-    dataset_id: str,
     *,
+    dataset_id: str,
     region_job: VirtualRegionJob[Any, Any] | None = None,
 ) -> None:
     """
@@ -155,12 +150,12 @@ def validate_dataset(
         store: the zarr/icechunk store to validate.
         validators: the checks to run; XarrayDataValidators receive the opened dataset,
             VirtualDataValidators receive (region_job, store, ds).
-        dataset_id: identifies the dataset in Sentry fingerprints for failures below.
+        dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
         region_job: the operational-window job, required when any validator is a
             VirtualDataValidator (it supplies the source-file coords + manifest probe).
 
     Raises:
-        ZarrValidationError: If any validation checks fail
+        OperationalValidationError: If any validation checks fail
     """
     log.info(f"Validating zarr {store}")
 
@@ -168,6 +163,7 @@ def validate_dataset(
 
     # Run all validators
     failed_validations = []
+    failed_checks = []
     for validator in validators:
         ds = open_flattened_dataset(store, consolidated=consolidated)
 
@@ -182,14 +178,10 @@ def validate_dataset(
             result = validator(ds)
 
         if not result.passed:
-            # An explicit fingerprint keeps repeated failures of the same check on the
-            # same dataset grouped together, instead of Sentry's default message-based
-            # grouping fragmenting on a per-run detail (a NaN fraction, an init_time, ...)
-            # embedded in result.message.
-            with sentry_sdk.new_scope() as scope:
-                scope.fingerprint = [dataset_id, _validator_check_name(validator)]
-                log.error(f"Failed validation: {result.message}")
+            # Warn don't error; the raise below creates a single Sentry issue.
+            log.warning(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
+            failed_checks.append(_validator_check_name(validator))
         else:
             log.info(f"Passed validation: {result.message}")
 
@@ -200,13 +192,8 @@ def validate_dataset(
         message = "Zarr validation failed:\n" + "\n".join(
             f"- {msg}" for msg in failed_validations
         )
-        # Captured explicitly (fingerprinted per dataset) rather than relying on the
-        # default capture of the exception below, which groups by raise-site stack
-        # trace and would otherwise lump every dataset's generic failures together.
-        with sentry_sdk.new_scope() as scope:
-            scope.fingerprint = [dataset_id, "zarr_validation_failed"]
-            sentry_sdk.capture_message(message, level="error")
-        raise ZarrValidationError(message)
+        sentry_sdk.get_isolation_scope().fingerprint = [dataset_id, *failed_checks]
+        raise OperationalValidationError(message)
 
     log.info("Zarr validation passed all checks")
 
