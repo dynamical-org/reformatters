@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager, ExitStack, contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar, cast
 
 import icechunk
 import numpy as np
@@ -162,13 +162,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ):
             tmp_store = self._tmp_store()
 
-            all_jobs, template_ds = self.region_job_class.operational_update_jobs(
-                primary_store=self.store_factory.primary_store(),
-                tmp_store=tmp_store,
-                get_template_fn=self._get_template,
-                append_dim=self.template_config.append_dim,
-                all_data_vars=self.template_config.data_vars,
-                reformat_job_name=reformat_job_name,
+            all_jobs, template_ds = self._operational_update_jobs(
+                reformat_job_name, tmp_store
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
@@ -559,13 +554,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert job.processing_mode == "update", (
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
-        now = pd.Timestamp.now()
-        # Stop at the scheduled fire, not at process start, so a pod replacing an
-        # evicted one covers its predecessor's steps rather than adopting the next
-        # fire's, whose files publish after the deadline it inherits.
-        fire_time = self._operational_cron_job(ReformatCronJob).previous_fire_time(now)
-        job = job.trim_window_end(fire_time).model_copy(
-            update={"poll_deadline": self._virtual_poll_deadline(now)}
+        job = job.model_copy(
+            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
@@ -629,6 +619,42 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 log.info(f"Done validating {replica_store}")
 
+    def _operational_update_jobs(
+        self, reformat_job_name: str, tmp_store: Path
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
+        """The jobs an operational update runs, and the template they write against.
+
+        A virtual dataset's window ends at the update cron's scheduled fire rather than
+        at process start, so a pod replacing an evicted one covers its predecessor's
+        steps rather than adopting the next fire's, whose files publish after the
+        deadline it inherits. Validation builds the same window to probe what the
+        update that just ended owned.
+        """
+        region_job_class = self.region_job_class
+        if issubclass(region_job_class, VirtualRegionJob):
+            virtual_class = cast(
+                "type[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", region_job_class
+            )
+            return virtual_class.operational_update_jobs(
+                primary_store=self.store_factory.primary_store(),
+                tmp_store=tmp_store,
+                get_template_fn=self._get_template,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name=reformat_job_name,
+                append_dim_end=self._operational_cron_job(
+                    ReformatCronJob
+                ).previous_fire_time(pd.Timestamp.now()),
+            )
+        return region_job_class.operational_update_jobs(
+            primary_store=self.store_factory.primary_store(),
+            tmp_store=tmp_store,
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
+        )
+
     def _virtual_validation_region_job(
         self,
         validators: Sequence[validation.DataValidator],
@@ -639,13 +665,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         (the job is store-independent; validate_dataset passes each validator the store)."""
         if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
             return None
-        jobs, _template_ds = self.region_job_class.operational_update_jobs(
-            primary_store=self.store_factory.primary_store(),
-            tmp_store=self._tmp_store(),
-            get_template_fn=self._get_template,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name=reformat_job_name,
+        jobs, _template_ds = self._operational_update_jobs(
+            reformat_job_name, self._tmp_store()
         )
         job = item(jobs)
         assert isinstance(job, VirtualRegionJob), (

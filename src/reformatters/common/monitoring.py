@@ -27,7 +27,7 @@ def install_sigterm_logger() -> None:
     def handle_sigterm(signal_number: int, _frame: FrameType | None) -> NoReturn:
         log.error("Received SIGTERM, exiting")
         sentry_sdk.flush(timeout=TERMINATION_GRACE_PERIOD.total_seconds())
-        # Unwinding would join the in flight downloads and outlast the grace period.
+        # Exit without unwinding: joining the in flight downloads can outlast the grace.
         os._exit(128 + signal_number)
 
     signal.signal(signal.SIGTERM, handle_sigterm)

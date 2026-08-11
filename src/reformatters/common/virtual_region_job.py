@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
 from pathlib import Path
-from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, Self, cast
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
 
 import icechunk
 import numpy as np
@@ -94,14 +94,17 @@ class VirtualRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
+        append_dim_end: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """A single polling job over the operational_update_window of recent steps.
 
         Polls until every expected file is ingested or the caller's poll_deadline
         passes; filter_already_present derives the remaining work from the manifest.
+        `append_dim_end` (exclusive) bounds the window, defaulting to now.
         See "Operational updates" in docs/virtual_datasets.md.
         """
-        append_dim_end = pd.Timestamp.now()
+        if append_dim_end is None:
+            append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
         append_dim_index = template_ds.to_dataset().get_index(append_dim)
         window_start = int(
@@ -119,15 +122,6 @@ class VirtualRegionJob(
             processing_mode="update",
         )
         return [job], template_ds
-
-    def trim_window_end(self, append_dim_end: Timestamp) -> Self:
-        """This job with the steps after `append_dim_end` dropped from its region."""
-        append_dim_index = self.template_ds.to_dataset().get_index(self.append_dim)
-        stop = min(
-            self.region.stop,
-            int(append_dim_index.searchsorted(append_dim_end, side="right")),
-        )
-        return self.model_copy(update={"region": slice(self.region.start, stop)})
 
     def file_refs(self, coord: SOURCE_FILE_COORD, file_size: int) -> list[VirtualRef]:
         """Build every virtual ref a single source file contributes (or [] to skip it).
