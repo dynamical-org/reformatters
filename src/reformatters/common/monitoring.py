@@ -17,13 +17,7 @@ log = get_logger(__name__)
 
 
 def install_sigterm_logger() -> None:
-    """Log and flush telemetry when the process is signalled to stop, then exit.
-
-    Kubernetes stops a pod (eviction, pod active deadline, job replacement) with
-    SIGTERM, which python otherwise exits on silently. The handler runs between
-    bytecodes, so a run that ends without this log was either killed outright or
-    stuck in a call that never returned.
-    """
+    """Log and flush telemetry when the process is signalled to stop, then exit."""
 
     def handle_sigterm(signal_number: int, _frame: FrameType | None) -> NoReturn:
         log.error("Received SIGTERM, exiting")
@@ -66,8 +60,7 @@ def monitor_cron(
             },
         )
         if status != "in_progress":
-            # Make sure error / complete events reach sentry
-            sentry_sdk.flush()
+            sentry_sdk.flush()  # make sure final events reach sentry
 
     if send_in_progress:
         capture_checkin("in_progress")
