@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
 from pathlib import Path
-from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, Self, cast
 
 import icechunk
 import numpy as np
@@ -119,6 +119,15 @@ class VirtualRegionJob(
             processing_mode="update",
         )
         return [job], template_ds
+
+    def trim_window_end(self, append_dim_end: Timestamp) -> Self:
+        """This job with the steps after `append_dim_end` dropped from its region."""
+        append_dim_index = self.template_ds.to_dataset().get_index(self.append_dim)
+        stop = min(
+            self.region.stop,
+            int(append_dim_index.searchsorted(append_dim_end, side="right")),
+        )
+        return self.model_copy(update={"region": slice(self.region.start, stop)})
 
     def file_refs(self, coord: SOURCE_FILE_COORD, file_size: int) -> list[VirtualRef]:
         """Build every virtual ref a single source file contributes (or [] to skip it).

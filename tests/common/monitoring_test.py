@@ -1,12 +1,16 @@
+import logging
+import os
+import signal
 from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
+import sentry_sdk
 import sentry_sdk.crons
 
 from reformatters.common.config import Config
 from reformatters.common.kubernetes import CronJob
-from reformatters.common.monitoring import monitor_cron
+from reformatters.common.monitoring import install_sigterm_logger, monitor_cron
 
 _CRON_JOB = CronJob(
     command=["archive-grib-files"],
@@ -53,3 +57,26 @@ def test_monitor_cron_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     with monitor_cron(_CRON_JOB, "job-name"):
         pass
     mock_capture.assert_not_called()
+
+
+def test_install_sigterm_logger(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    original_handler = signal.getsignal(signal.SIGTERM)
+    try:
+        install_sigterm_logger()
+
+        mock_flush = Mock()
+        monkeypatch.setattr(sentry_sdk, "flush", mock_flush)
+        exit_codes: list[int] = []
+        monkeypatch.setattr(os, "_exit", exit_codes.append)
+
+        with caplog.at_level(logging.ERROR):
+            signal.raise_signal(signal.SIGTERM)
+    finally:
+        signal.signal(signal.SIGTERM, original_handler)
+
+    assert "SIGTERM" in caplog.text
+    # Flushed before exiting, so the log reaches sentry.
+    assert mock_flush.call_count == 1
+    assert exit_codes == [128 + signal.SIGTERM]

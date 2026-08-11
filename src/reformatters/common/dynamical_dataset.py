@@ -559,8 +559,13 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         assert job.processing_mode == "update", (
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
-        job = job.model_copy(
-            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
+        now = pd.Timestamp.now()
+        # Stop at the scheduled fire, not at process start, so a pod replacing an
+        # evicted one covers its predecessor's steps rather than adopting the next
+        # fire's, whose files publish after the deadline it inherits.
+        fire_time = self._operational_cron_job(ReformatCronJob).previous_fire_time(now)
+        job = job.trim_window_end(fire_time).model_copy(
+            update={"poll_deadline": self._virtual_poll_deadline(now)}
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.

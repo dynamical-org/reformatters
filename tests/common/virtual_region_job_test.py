@@ -1866,6 +1866,54 @@ def test_virtual_poll_deadline_anchors_to_scheduled_fire(tmp_path: Path) -> None
     )
 
 
+def test_trim_window_end(tmp_path: Path) -> None:
+    _make_dataset(tmp_path)
+    job = _make_region_job(
+        _create_template_ds(8), region=slice(1, 8), processing_mode="update"
+    )
+
+    assert job.trim_window_end(APPEND_DIM_START + 5 * APPEND_DIM_FREQ).region == slice(
+        1, 6
+    )
+    # An end between steps keeps through the step before it, as an update firing
+    # partway through an append dim interval does.
+    assert job.trim_window_end(
+        APPEND_DIM_START + 5 * APPEND_DIM_FREQ + pd.Timedelta("1h")
+    ).region == slice(1, 6)
+    # An end at or past the region's last step leaves the region alone.
+    assert job.trim_window_end(APPEND_DIM_START + 8 * APPEND_DIM_FREQ).region == slice(
+        1, 8
+    )
+
+
+def test_operational_update_window_ends_at_the_scheduled_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    job = _make_region_job(
+        _create_template_ds(4), region=slice(0, 4), processing_mode="update"
+    )
+
+    fire_time = APPEND_DIM_START + 2 * APPEND_DIM_FREQ
+    monkeypatch.setattr(
+        ReformatCronJob, "previous_fire_time", lambda self, now: fire_time
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset, "_virtual_poll_deadline", lambda self, now: pd.Timestamp.max
+    )
+    driven: list[VirtualTestRegionJob] = []
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_worker_jobs",
+        classmethod(lambda cls, worker_jobs, *args: driven.extend(worker_jobs) or {}),
+    )
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+
+    # The step after the fire is left to the next update, which starts once it fires.
+    assert [j.region for j in driven] == [slice(0, 3)]
+
+
 def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
     dataset = _make_dataset(tmp_path)
     template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
