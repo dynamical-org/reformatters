@@ -1,3 +1,4 @@
+import inspect
 import json
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -162,13 +163,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ):
             tmp_store = self._tmp_store()
 
-            all_jobs, template_ds = self.region_job_class.operational_update_jobs(
-                primary_store=self.store_factory.primary_store(),
-                tmp_store=tmp_store,
-                get_template_fn=self._get_template,
-                append_dim=self.template_config.append_dim,
-                all_data_vars=self.template_config.data_vars,
-                reformat_job_name=reformat_job_name,
+            all_jobs, template_ds = self._operational_update_jobs(
+                reformat_job_name, tmp_store
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
@@ -624,6 +620,27 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 )
                 log.info(f"Done validating {replica_store}")
 
+    def _operational_update_jobs(
+        self, reformat_job_name: str, tmp_store: Path
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
+        """The jobs an operational update runs, and the template they write against."""
+        operational_update_jobs = self.region_job_class.operational_update_jobs
+        fire_time_kwarg: dict[str, Any] = {}
+        if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
+            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
+                ReformatCronJob
+            ).previous_fire_time(pd.Timestamp.now())
+
+        return operational_update_jobs(
+            primary_store=self.store_factory.primary_store(),
+            tmp_store=tmp_store,
+            get_template_fn=self._get_template,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
+            **fire_time_kwarg,
+        )
+
     def _virtual_validation_region_job(
         self,
         validators: Sequence[validation.DataValidator],
@@ -634,13 +651,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         (the job is store-independent; validate_dataset passes each validator the store)."""
         if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
             return None
-        jobs, _template_ds = self.region_job_class.operational_update_jobs(
-            primary_store=self.store_factory.primary_store(),
-            tmp_store=self._tmp_store(),
-            get_template_fn=self._get_template,
-            append_dim=self.template_config.append_dim,
-            all_data_vars=self.template_config.data_vars,
-            reformat_job_name=reformat_job_name,
+        jobs, _template_ds = self._operational_update_jobs(
+            reformat_job_name, self._tmp_store()
         )
         job = item(jobs)
         assert isinstance(job, VirtualRegionJob), (

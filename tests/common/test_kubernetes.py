@@ -146,7 +146,7 @@ def test_as_kubernetes_object_comprehensive() -> None:
                 "securityContext": {
                     "fsGroup": 999,
                 },
-                "terminationGracePeriodSeconds": 5,
+                "terminationGracePeriodSeconds": 30,
                 "activeDeadlineSeconds": 21600,  # default 6 hours
                 "volumes": [
                     {

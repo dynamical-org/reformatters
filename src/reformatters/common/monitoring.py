@@ -1,7 +1,9 @@
 import os
+import signal
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Literal
+from types import FrameType
+from typing import Literal, NoReturn
 
 import sentry_sdk
 import sentry_sdk.crons
@@ -9,6 +11,20 @@ import sentry_sdk.crons
 from reformatters.common.config import Config
 from reformatters.common.iterating import digest
 from reformatters.common.kubernetes import CronJob
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
+
+
+def install_sigterm_logger() -> None:
+    """Log and flush telemetry when the process is signalled to stop, then exit."""
+
+    def handle_sigterm(signal_number: int, _frame: FrameType | None) -> NoReturn:
+        log.error("Received SIGTERM, exiting")
+        sentry_sdk.flush()
+        raise SystemExit(128 + signal_number)
+
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
 
 @contextmanager
@@ -43,6 +59,8 @@ def monitor_cron(
                 "recovery_threshold": 1,
             },
         )
+        if status != "in_progress":
+            sentry_sdk.flush()  # make sure final events reach sentry
 
     if send_in_progress:
         capture_checkin("in_progress")

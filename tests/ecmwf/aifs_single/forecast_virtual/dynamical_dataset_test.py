@@ -135,11 +135,11 @@ def test_backfill_local_and_operational_update(
     )
     assert np.isnan(f6["geopotential_height_surface"].values)
 
-    # 2. Operational update: "now" during the 06z publication window.
+    # 2. Operational update: "now" at the update cron fire that covers the 06z init.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T08:00")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T11:20")),
     )
     orig_update_jobs = (
         EcmwfAifsSingleForecastVirtualRegionJob.operational_update_jobs.__func__  # type: ignore[attr-defined]
@@ -169,7 +169,7 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         EcmwfAifsSingleForecastVirtualRegionJob,
         "operational_update_window",
-        pd.Timedelta("3h"),
+        pd.Timedelta("6h"),
     )
 
     dataset.update("test-update")
@@ -177,7 +177,7 @@ def test_backfill_local_and_operational_update(
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
-    # The update window (3h before 08:00) ingests the 06z init.
+    # The update window (6h before the 11:20 fire) ingests the 06z init.
     assert updated.init_time.values[-1] == np.datetime64("2025-03-01T06:00")
     new_cell = updated.sel(
         latitude=_LAT,

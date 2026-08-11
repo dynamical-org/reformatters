@@ -177,7 +177,7 @@ class Job(pydantic.BaseModel):
                         "securityContext": {
                             "fsGroup": 999,  # this is the `app` group our app runs under
                         },
-                        "terminationGracePeriodSeconds": 5,
+                        "terminationGracePeriodSeconds": 30,
                         "activeDeadlineSeconds": int(
                             self.pod_active_deadline.total_seconds()
                         ),

@@ -94,14 +94,16 @@ class VirtualRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """A single polling job over the operational_update_window of recent steps.
 
         Polls until every expected file is ingested or the caller's poll_deadline
         passes; filter_already_present derives the remaining work from the manifest.
+        The window ends at `job_fire_time`, or at now for a caller with no schedule.
         See "Operational updates" in docs/virtual_datasets.md.
         """
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = job_fire_time or pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
         append_dim_index = template_ds.to_dataset().get_index(append_dim)
         window_start = int(

@@ -38,7 +38,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -1864,6 +1864,50 @@ def test_virtual_poll_deadline_anchors_to_scheduled_fire(tmp_path: Path) -> None
     assert dataset._virtual_poll_deadline(pd.Timestamp("2026-08-02T00:01")) == (
         fire_deadline
     )
+
+
+def test_update_window_ends_at_the_scheduled_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(6), dataset.store_factory)
+
+    # A pod replacing an evicted one: it starts after the step following its fire has
+    # published, but covers the steps its fire was given.
+    fire_time = APPEND_DIM_START + 5 * APPEND_DIM_FREQ + pd.Timedelta("1h")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: fire_time + APPEND_DIM_FREQ),
+    )
+    monkeypatch.setattr(
+        ReformatCronJob, "previous_fire_time", lambda self, now: fire_time
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset,
+        "_get_template",
+        lambda self, end: _create_template_ds(
+            len(
+                pd.date_range(
+                    APPEND_DIM_START, end, freq=APPEND_DIM_FREQ, inclusive="left"
+                )
+            )
+        ),
+    )
+    driven: list[VirtualTestRegionJob] = []
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_worker_jobs",
+        classmethod(lambda cls, worker_jobs, *args: driven.extend(worker_jobs) or {}),
+    )
+
+    dataset.update("test-update")
+
+    job = item(driven)
+    init_times = job.template_ds.to_dataset().get_index("init_time")
+    assert init_times[-1] == APPEND_DIM_START + 5 * APPEND_DIM_FREQ
+    # The fixture's 24h window over 6h steps, ending at the fire's step.
+    assert job.region == slice(2, 6)
 
 
 def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
