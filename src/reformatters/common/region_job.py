@@ -268,11 +268,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             This is often the name of the Kubernetes job, or "local".
 
         An implementation may additionally declare `job_fire_time: Timestamp | None`,
-        which the caller passes when the signature accepts it: the scheduled fire of
-        the update cron running this job, which every pod of one fire derives
-        identically, unlike their start times. Use it in place of the wall clock to
-        bound the update, so a pod replacing an evicted one processes what the pod it
-        replaced was given rather than what has published since.
+        passed when the signature accepts it: the scheduled fire of the update cron
+        running this job. Bounding the update by it rather than by the wall clock
+        gives every pod of one fire the same work, so a pod replacing an evicted one
+        processes what the pod it replaced was given, not what has published since.
 
         Returns
         -------

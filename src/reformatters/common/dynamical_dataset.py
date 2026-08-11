@@ -623,13 +623,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     def _operational_update_jobs(
         self, reformat_job_name: str, tmp_store: Path
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
-        """The jobs an operational update runs, and the template they write against.
-
-        An operational_update_jobs implementation that accepts `job_fire_time` is given
-        the update cron's scheduled fire to bound its update by (see RegionJob.
-        operational_update_jobs); one that does not is called without it. Validation
-        builds its window the same way, so it probes what the last update owned.
-        """
+        """The jobs an operational update runs, and the template they write against."""
         operational_update_jobs = self.region_job_class.operational_update_jobs
         fire_time_kwarg: dict[str, Any] = {}
         if _accepts_keyword(operational_update_jobs, "job_fire_time"):

@@ -100,10 +100,7 @@ class VirtualRegionJob(
 
         Polls until every expected file is ingested or the caller's poll_deadline
         passes; filter_already_present derives the remaining work from the manifest.
-        The window ends at `job_fire_time`, so a pod replacing an evicted one covers
-        its predecessor's steps rather than adopting the next fire's, whose files
-        publish after the deadline it inherits; a caller with no schedule (a local
-        run) gets a window through now.
+        The window ends at `job_fire_time`, or at now for a caller with no schedule.
         See "Operational updates" in docs/virtual_datasets.md.
         """
         append_dim_end = job_fire_time or pd.Timestamp.now()

@@ -77,6 +77,5 @@ def test_install_sigterm_logger(
         signal.signal(signal.SIGTERM, original_handler)
 
     assert "SIGTERM" in caplog.text
-    # Flushed before exiting, so the log reaches sentry.
     assert mock_flush.call_count == 1
     assert exit_codes == [128 + signal.SIGTERM]

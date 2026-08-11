@@ -19,8 +19,8 @@ from reformatters.common.types import Timestamp
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 
-# How long kubernetes lets a pod exit after SIGTERM before killing it. Long enough
-# for an in flight write to land and the process to report why it stopped.
+# How long kubernetes waits after SIGTERM before killing a pod: enough for an in
+# flight write to land and the process to report why it stopped.
 TERMINATION_GRACE_PERIOD = timedelta(seconds=30)
 
 
