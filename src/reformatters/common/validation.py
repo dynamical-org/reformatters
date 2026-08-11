@@ -21,6 +21,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 import pydantic
+import sentry_sdk
 import xarray as xr
 import zarr
 import zarr.core.sync
@@ -60,6 +61,10 @@ class ValidationResult(pydantic.BaseModel):
     checked_count: int | None = (
         None  # items/references checked, when the validator tracks it
     )
+
+
+class OperationalValidationError(ValueError):
+    """Raised by validate_dataset when one or more checks fail."""
 
 
 @runtime_checkable
@@ -120,10 +125,22 @@ def open_flattened_dataset(
     return iterating.flatten_groups(tree)
 
 
+def _validator_check_name(validator: DataValidator) -> str:
+    """A stable per-check identifier for Sentry fingerprinting, independent of any
+    particular failure's message text.
+    """
+    if isinstance(validator, VirtualDataValidator):
+        return type(validator).__name__
+    if isinstance(validator, partial):
+        return validator.func.__name__  # ty: ignore[unresolved-attribute]
+    return validator.__name__  # ty: ignore[unresolved-attribute]
+
+
 def validate_dataset(
     store: zarr.storage.StoreLike,
     validators: Sequence[DataValidator],
     *,
+    dataset_id: str,
     region_job: VirtualRegionJob[Any, Any] | None = None,
 ) -> None:
     """
@@ -133,11 +150,12 @@ def validate_dataset(
         store: the zarr/icechunk store to validate.
         validators: the checks to run; XarrayDataValidators receive the opened dataset,
             VirtualDataValidators receive (region_job, store, ds).
+        dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
         region_job: the operational-window job, required when any validator is a
             VirtualDataValidator (it supplies the source-file coords + manifest probe).
 
     Raises:
-        ValueError: If any validation checks fail
+        OperationalValidationError: If any validation checks fail
     """
     log.info(f"Validating zarr {store}")
 
@@ -145,6 +163,7 @@ def validate_dataset(
 
     # Run all validators
     failed_validations = []
+    failed_checks = []
     for validator in validators:
         ds = open_flattened_dataset(store, consolidated=consolidated)
 
@@ -159,8 +178,10 @@ def validate_dataset(
             result = validator(ds)
 
         if not result.passed:
-            log.error(f"Failed validation: {result.message}")
+            # Warn don't error; the raise below creates a single Sentry issue.
+            log.warning(f"Failed validation: {result.message}")
             failed_validations.append(result.message)
+            failed_checks.append(_validator_check_name(validator))
         else:
             log.info(f"Passed validation: {result.message}")
 
@@ -168,10 +189,11 @@ def validate_dataset(
         del ds
 
     if failed_validations:
-        raise ValueError(
-            "Zarr validation failed:\n"
-            + "\n".join(f"- {msg}" for msg in failed_validations)
+        message = "Zarr validation failed:\n" + "\n".join(
+            f"- {msg}" for msg in failed_validations
         )
+        sentry_sdk.get_isolation_scope().fingerprint = [dataset_id, *failed_checks]
+        raise OperationalValidationError(message)
 
     log.info("Zarr validation passed all checks")
 

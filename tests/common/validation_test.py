@@ -1,10 +1,13 @@
+import logging
 import warnings
 from datetime import timedelta
+from functools import partial
 
 import icechunk
 import numpy as np
 import pandas as pd
 import pytest
+import sentry_sdk
 import xarray as xr
 import zarr.core.sync
 import zarr.storage
@@ -651,11 +654,75 @@ def test_validate_dataset_raises_on_failed_validator(
     def failing(ds: xr.Dataset) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="bad thing")
 
-    with pytest.raises(ValueError, match="bad thing"):
-        validation.validate_dataset(store, validators=[passing, failing])
+    with pytest.raises(validation.OperationalValidationError, match="bad thing"):
+        validation.validate_dataset(
+            store, validators=[passing, failing], dataset_id="d"
+        )
 
     # Passing-only validators should not raise.
-    validation.validate_dataset(store, validators=[passing])
+    validation.validate_dataset(store, validators=[passing], dataset_id="d")
+
+
+def test_validate_dataset_fingerprints_by_dataset_and_check(
+    caplog: pytest.LogCaptureFixture, rng: np.random.Generator
+) -> None:
+    """A failure fingerprints by (dataset_id, failed checks), not by message text, so
+    repeated failures carrying different per-run details (a NaN fraction, an init_time,
+    ...) group into one Sentry issue instead of each filing a new one. The fingerprint
+    goes on the isolation scope, which outlives validate_dataset's frame, so it is still
+    in effect when Sentry captures the raised exception at process exit — that capture
+    would otherwise group by the dataset-agnostic raise site. And no failure is logged at
+    ERROR, which the Sentry logging integration would report as a second, differently
+    grouped issue.
+    """
+    times = pd.date_range("2024-01-01", periods=4, freq="1h")
+    ds = xr.Dataset(
+        {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
+        coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
+    )
+    store = zarr.storage.MemoryStore()
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        ds.to_zarr(store, mode="w")
+
+    def failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="bad thing")
+
+    def also_failing(ds: xr.Dataset) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="another bad thing")
+
+    with sentry_sdk.isolation_scope():
+        with pytest.raises(validation.OperationalValidationError):
+            validation.validate_dataset(
+                store,
+                validators=[failing, also_failing],
+                dataset_id="noaa-gfs-forecast",
+            )
+
+        assert sentry_sdk.get_isolation_scope()._fingerprint == [
+            "noaa-gfs-forecast",
+            "failing",
+            "also_failing",
+        ]
+
+    failure_logs = [r for r in caplog.records if "Failed validation" in r.getMessage()]
+    assert [r.levelno for r in failure_logs] == [logging.WARNING, logging.WARNING]
+
+
+def test_validator_check_name() -> None:
+    def a_check(ds: xr.Dataset) -> validation.ValidationResult:
+        raise NotImplementedError
+
+    assert validation._validator_check_name(a_check) == "a_check"
+    assert validation._validator_check_name(partial(a_check)) == "a_check"
+    assert (
+        validation._validator_check_name(validation.CheckVirtualManifestCompleteness())
+        == "CheckVirtualManifestCompleteness"
+    )
 
 
 def test_compare_replica_and_primary_coords_divergence(
