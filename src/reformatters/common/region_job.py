@@ -267,6 +267,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
 
+        An implementation may additionally declare `job_fire_time: Timestamp | None`,
+        which the caller passes when the signature accepts it: the scheduled fire of
+        the update cron running this job, which every pod of one fire derives
+        identically, unlike their start times. Use it in place of the wall clock to
+        bound the update, so a pod replacing an evicted one processes what the pod it
+        replaced was given rather than what has published since.
+
         Returns
         -------
         Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]

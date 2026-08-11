@@ -1007,3 +1007,15 @@ def test_backfill_local_fails_in_wrong_environment(
             dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
     else:
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+
+
+def test_accepts_keyword() -> None:
+    # An operational_update_jobs implementation opts in to the job fire time by
+    # declaring it; a wrapper forwarding **kwargs passes it through to one that does.
+    def declares(*, job_fire_time: Timestamp | None = None) -> None: ...
+    def forwards(**kwargs: object) -> None: ...
+    def neither(*, reformat_job_name: str) -> None: ...
+
+    assert dynamical_dataset._accepts_keyword(declares, "job_fire_time")
+    assert dynamical_dataset._accepts_keyword(forwards, "job_fire_time")
+    assert not dynamical_dataset._accepts_keyword(neither, "job_fire_time")

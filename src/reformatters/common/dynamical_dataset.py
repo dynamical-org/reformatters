@@ -1,11 +1,12 @@
+import inspect
 import json
 import subprocess
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar, cast
+from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -624,35 +625,26 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """The jobs an operational update runs, and the template they write against.
 
-        A virtual dataset's window ends at the update cron's scheduled fire rather than
-        at process start, so a pod replacing an evicted one covers its predecessor's
-        steps rather than adopting the next fire's, whose files publish after the
-        deadline it inherits. Validation builds the same window to probe what the
-        update that just ended owned.
+        An operational_update_jobs implementation that accepts `job_fire_time` is given
+        the update cron's scheduled fire to bound its update by (see RegionJob.
+        operational_update_jobs); one that does not is called without it. Validation
+        builds its window the same way, so it probes what the last update owned.
         """
-        region_job_class = self.region_job_class
-        if issubclass(region_job_class, VirtualRegionJob):
-            virtual_class = cast(
-                "type[VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]]", region_job_class
-            )
-            return virtual_class.operational_update_jobs(
-                primary_store=self.store_factory.primary_store(),
-                tmp_store=tmp_store,
-                get_template_fn=self._get_template,
-                append_dim=self.template_config.append_dim,
-                all_data_vars=self.template_config.data_vars,
-                reformat_job_name=reformat_job_name,
-                append_dim_end=self._operational_cron_job(
-                    ReformatCronJob
-                ).previous_fire_time(pd.Timestamp.now()),
-            )
-        return region_job_class.operational_update_jobs(
+        operational_update_jobs = self.region_job_class.operational_update_jobs
+        fire_time_kwarg: dict[str, Any] = {}
+        if _accepts_keyword(operational_update_jobs, "job_fire_time"):
+            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
+                ReformatCronJob
+            ).previous_fire_time(pd.Timestamp.now())
+
+        return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
             tmp_store=tmp_store,
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
+            **fire_time_kwarg,
         )
 
     def _virtual_validation_region_job(
@@ -943,6 +935,15 @@ class RunMonitor(Protocol):
         send_in_progress: bool,
         send_result: bool,
     ) -> AbstractContextManager[None]: ...
+
+
+def _accepts_keyword(fn: Callable[..., Any], name: str) -> bool:
+    """Whether `fn` can be called with `name=`, either declaring it or taking **kwargs."""
+    parameters = inspect.signature(fn).parameters
+    return name in parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
 
 
 _RUN_MONITORS: list[RunMonitor] = []
