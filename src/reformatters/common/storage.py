@@ -571,9 +571,6 @@ def _repository_config_and_credentials(
     """Build the icechunk `RepositoryConfig` override for a dataset, plus the anonymous
     authorize map for a virtual one (`None` for a materialized one)."""
     config = icechunk.RepositoryConfig.default()
-    # icechunk puts no deadline on an object store request, so a stalled one blocks
-    # its caller indefinitely and silently. These bound one request to
-    # max_tries x operation_timeout_ms, after which it raises.
     config.storage = icechunk.StorageSettings(
         timeouts=icechunk.StorageTimeoutSettings(
             connect_timeout_ms=3_000,
@@ -581,10 +578,6 @@ def _repository_config_and_credentials(
             operation_attempt_timeout_ms=15_000,
             operation_timeout_ms=30_000,
         ),
-        # Tries stay generous -- icechunk gives these settings to virtual chunk
-        # fetchers too, and a throttled source bucket needs every one -- but the
-        # backoff ceiling comes down from icechunk's 3 minutes, longer than an
-        # operational update's whole tick.
         retries=icechunk.StorageRetriesSettings(max_tries=10, max_backoff_ms=5_000),
     )
     config.manifest = icechunk.ManifestConfig(
