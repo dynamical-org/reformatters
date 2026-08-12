@@ -20,7 +20,7 @@ def install_sigterm_logger() -> None:
     """Log and flush telemetry when the process is signalled to stop, then exit."""
 
     def handle_sigterm(signal_number: int, _frame: FrameType | None) -> NoReturn:
-        log.error("Received SIGTERM, exiting")
+        log.warning("Received SIGTERM, exiting")
         sentry_sdk.flush()
         raise SystemExit(128 + signal_number)
 

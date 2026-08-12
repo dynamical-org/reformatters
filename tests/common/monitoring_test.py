@@ -69,7 +69,7 @@ def test_install_sigterm_logger(
         monkeypatch.setattr(sentry_sdk, "flush", mock_flush)
 
         with (
-            caplog.at_level(logging.ERROR),
+            caplog.at_level(logging.WARNING),
             pytest.raises(SystemExit) as exit_info,
         ):
             signal.raise_signal(signal.SIGTERM)
