@@ -18,6 +18,7 @@ from reformatters.common.storage import (
     StoreFactory,
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
+    _repository_config_and_credentials,
     commit_if_icechunk,
     manifest_append_dim_split,
 )
@@ -386,6 +387,29 @@ class TestIcechunkRepos:
         assert len(repos) == 2
         assert repos[0][0] == "primary"
         assert repos[1][0] == "replica-0"
+
+
+class TestRepositoryConfigStorageSettings:
+    @pytest.mark.parametrize("virtual_config", [None, _example_virtual_config()])
+    def test_every_object_store_request_is_bounded(
+        self, virtual_config: IcechunkVirtualConfig | None
+    ) -> None:
+        config, _ = _repository_config_and_credentials(virtual_config)
+        assert config.storage is not None
+        timeouts = config.storage.timeouts
+        retries = config.storage.retries
+        assert timeouts is not None
+        assert retries is not None
+        assert timeouts.connect_timeout_ms is not None
+        assert timeouts.read_timeout_ms is not None
+        assert timeouts.operation_attempt_timeout_ms is not None
+        assert timeouts.operation_timeout_ms is not None
+        assert retries.max_tries is not None
+        # A stalled request must raise well inside an operational update's hour so the
+        # caller can retry, rather than blocking until the pod's deadline kills it.
+        assert timeouts.operation_timeout_ms * retries.max_tries <= 600_000
+        assert retries.max_backoff_ms is not None
+        assert retries.max_backoff_ms <= 10_000
 
 
 class TestIcechunkVirtualConfig:
