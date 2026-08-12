@@ -33,6 +33,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     is_v12_index,
+    source_data_available_times,
 )
 from reformatters.noaa.gefs.read_data import read_data
 from reformatters.noaa.gefs.utils import gefs_download_file
@@ -94,11 +95,13 @@ class GefsAnalysisRegionJob(
 
         times = filter_available_times(times)
 
-        available_from = item(
-            {var.internal_attrs.available_from for var in data_var_group}
+        source_available = np.logical_and.reduce(
+            [
+                source_data_available_times(times, var.internal_attrs)
+                for var in data_var_group
+            ]
         )
-        if available_from is not None:
-            times = times[times >= available_from]
+        times = times[source_available]
 
         var_has_hour_0_values = item(
             {var.has_hour_0_values() for var in data_var_group}
@@ -169,7 +172,10 @@ class GefsAnalysisRegionJob(
         Apply transformations to data array in place.
 
         """
-        expected_missing = ~is_available_time(pd.to_datetime(data_array["time"].values))
+        times = pd.to_datetime(data_array["time"].values)
+        source_available = source_data_available_times(times, data_var.internal_attrs)
+        data_array.values[~source_available] = np.nan
+        expected_missing = ~is_available_time(times)
 
         if data_var.internal_attrs.deaccumulate_to_rate:
             reset_freq = data_var.internal_attrs.window_reset_frequency

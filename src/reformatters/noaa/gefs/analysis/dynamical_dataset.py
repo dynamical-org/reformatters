@@ -1,10 +1,12 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.models import source_missing_value_var_names
 
 from .region_job import GefsAnalysisRegionJob, GefsAnalysisSourceFileCoord
 from .template_config import GefsAnalysisTemplateConfig
@@ -53,5 +55,10 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         """Return a sequence of DataValidators to run on this dataset."""
         return (
             validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            partial(
+                validation.check_analysis_recent_nans,
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
+            ),
         )

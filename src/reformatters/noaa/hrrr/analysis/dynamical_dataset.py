@@ -11,6 +11,7 @@ from reformatters.common.kubernetes import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
+from reformatters.noaa.models import source_missing_value_var_names
 
 from .region_job import NoaaHrrrAnalysisRegionJob
 from .template_config import NoaaHrrrAnalysisTemplateConfig
@@ -68,8 +69,8 @@ class NoaaHrrrAnalysisDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                # CF-masks its -50 "no precipitation" sentinel to NaN, so the field
-                # is legitimately all/mostly NaN wherever no precipitation is falling.
-                exclude_vars=("percent_frozen_precipitation_surface",),
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
             ),
         )

@@ -309,12 +309,22 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     return filename
 
 
-def _is_sentinel_masked(da: xr.DataArray) -> bool:
-    """A masked sentinel (CF missing_value, equal to the fill value) makes a value scan
-    ambiguous: an unwritten chunk and a legitimately-all-sentinel field both read NaN."""
+def _uses_semantic_missing_values(
+    da: xr.DataArray, template_var: DataVar[Any] | None
+) -> bool:
+    """Semantic NaNs cannot distinguish an unwritten value from a valid missing state."""
     return (
         da.attrs.get("missing_value") is not None
         or da.encoding.get("missing_value") is not None
+        or (
+            template_var is not None
+            and getattr(
+                getattr(template_var, "internal_attrs", None),
+                "source_missing_value",
+                None,
+            )
+            is not None
+        )
     )
 
 
@@ -331,11 +341,9 @@ def _co_ingested_availability(
 ) -> AvailabilitySeries | None:
     """Availability of `var`'s source-file group, from its value-scanned co-members.
 
-    A sentinel-masked variable can't be value-scanned (see _is_sentinel_masked), but it
-    is written from the same source files as its RegionJob source_file_var_groups
-    co-members, so the mean of their availability measures whether its data was
-    ingested. None when nothing co-ingested was scanned (unregistered store, or a
-    variable-filtered run).
+    A variable with semantic NaNs cannot be value-scanned, but it is written from the
+    same source files as its source-file-group co-members. None means no co-ingested
+    variable was scanned.
     """
     dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
     if dataset is None or var not in template_vars:
@@ -393,7 +401,9 @@ def run_value_availability(ctx: RunContext) -> None:
 
     template_vars = _template_data_vars(ctx)
     sentinel_vars = [
-        var for var in ctx.variables if _is_sentinel_masked(ctx.validation_ds[var])
+        var
+        for var in ctx.variables
+        if _uses_semantic_missing_values(ctx.validation_ds[var], template_vars.get(var))
     ]
 
     for var in ctx.variables:
@@ -549,8 +559,8 @@ def availability(
     min_fraction: float = typer.Option(
         1.0,
         "--min-fraction",
-        help="Virtual stores: exit non-zero if any position has less than this "
-        "fraction of its expected source files (the post-backfill completeness gate)",
+        help="Exit non-zero if any measured position has less than this availability "
+        "fraction (the post-backfill completeness gate)",
     ),
 ) -> None:
     """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
@@ -576,3 +586,28 @@ def availability(
         )
     else:
         run_value_availability(ctx)
+        unmeasured = sorted(set(ctx.variables) - set(ctx.availability))
+        if unmeasured:
+            log.error(
+                f"Materialized availability could not measure variables: {unmeasured}"
+            )
+            raise typer.Exit(1)
+        below = {}
+        for var, series in ctx.availability.items():
+            incomplete = ~np.isfinite(series.fraction) | (
+                series.fraction < min_fraction
+            )
+            if incomplete.any():
+                below[var] = series.positions[incomplete]
+        if below:
+            positions_below = sum(len(positions) for positions in below.values())
+            log.error(
+                f"Materialized availability incomplete: {positions_below} "
+                f"variable-positions across {len(below)} variables below "
+                f"{min_fraction:.0%}"
+            )
+            raise typer.Exit(1)
+        log.info(
+            f"Materialized availability complete: all measured positions "
+            f"≥ {min_fraction:.0%}"
+        )

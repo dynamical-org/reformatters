@@ -1,4 +1,5 @@
 from datetime import timedelta
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -51,6 +52,12 @@ def test_validators(dataset: GefsForecast35DayDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
     assert validation.check_forecast_current_data in validators
+    for validator in validators[1:]:
+        assert isinstance(validator, partial)
+        assert validator.keywords["exclude_vars"] == (
+            "percent_frozen_precipitation_surface",
+            "geopotential_height_cloud_ceiling",
+        )
     assert all(isinstance(v, validation.DataValidator) for v in validators)
 
 

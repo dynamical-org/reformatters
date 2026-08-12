@@ -1,11 +1,12 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
-from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.models import NoaaDataVar, source_missing_value_var_names
 
 from .region_job import NoaaGfsForecastRegionJob
 from .template_config import NoaaGfsForecastTemplateConfig
@@ -51,5 +52,10 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         """The sequence of DataValidators to run on this dataset."""
         return (
             validation.check_forecast_current_data,
-            validation.check_forecast_recent_nans,
+            partial(
+                validation.check_forecast_recent_nans,
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
+            ),
         )

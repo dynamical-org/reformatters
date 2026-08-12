@@ -1,4 +1,5 @@
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -228,3 +229,8 @@ def test_validators() -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
+    assert isinstance(validators[1], partial)
+    assert validators[1].keywords["exclude_vars"] == (
+        "percent_frozen_precipitation_surface",
+        "geopotential_height_cloud_ceiling",
+    )

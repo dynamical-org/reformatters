@@ -357,6 +357,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     grib_index_level="surface",
                     index_position=590,
                     keep_mantissa_bits=default_keep_mantissa_bits,
+                    source_missing_value=-50.0,
+                    source_missing_value_atol=0.01,
                 ),
             ),
             NoaaDataVar(
@@ -518,6 +520,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     grib_index_level="cloud ceiling",
                     index_position=637,
                     keep_mantissa_bits=8,
+                    source_missing_value=20_000.0,
+                    source_missing_value_atol=1.0,
                 ),
             ),
             NoaaDataVar(

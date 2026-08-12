@@ -6,6 +6,7 @@ from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.models import source_missing_value_var_names
 
 from .region_job import GefsForecast35DayRegionJob, GefsForecast35DaySourceFileCoord
 from .template_config import GefsForecast35DayTemplateConfig
@@ -57,11 +58,23 @@ class GefsForecast35DayDataset(
         return (
             validation.check_forecast_current_data,
             # 2nd-to-last init_time is fully populated; expect no NaNs.
-            partial(validation.check_forecast_recent_nans, init_time_offset=-2),
+            partial(
+                validation.check_forecast_recent_nans,
+                init_time_offset=-2,
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
+            ),
             # Latest init_time is only filled out to ~day 15 of 35,
             # so ~42% of lead_times at any spatial point are legitimately NaN.
             # Observed max 0.420789 in prod; keep small headroom.
             # The strict offset=-2 check above covers correctness of the
             # fully-populated previous init.
-            partial(validation.check_forecast_recent_nans, max_nan_fraction=0.45),
+            partial(
+                validation.check_forecast_recent_nans,
+                max_nan_fraction=0.45,
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
+            ),
         )

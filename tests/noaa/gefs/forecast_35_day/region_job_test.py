@@ -707,8 +707,21 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         for data_var in group:
             data = region_job.read_data(coord, data_var)
-            assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
-            if lead_time > GEFS_S_FILE_MAX:
+            if data_var.internal_attrs.source_missing_value is None:
+                assert np.all(np.isfinite(data)), (
+                    f"Non-finite values for {data_var.name}"
+                )
+            else:
+                assert not np.any(np.isinf(data)), (
+                    f"Infinite values for {data_var.name}"
+                )
+                assert np.any(np.isnan(data)), (
+                    f"No source missing values for {data_var.name}"
+                )
+            if (
+                lead_time > GEFS_S_FILE_MAX
+                and data_var.internal_attrs.source_missing_value is None
+            ):
                 # a/b files are 0.5° upsampled to 0.25°. The easternmost column (179.75°)
                 # must wrap across the antimeridian, interpolating halfway between the
                 # 179.5° column and the -180° column. A bug in longitude wrapping instead
@@ -721,6 +734,7 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
                     wrap_interpolation,
                     rtol=1e-4,
                     atol=1e-2,
+                    equal_nan=True,
                     err_msg=f"Eastern column not longitude-wrapped for {data_var.name}",
                 )
 

@@ -10,7 +10,7 @@ from reformatters.common.kubernetes import (
     ValidationCronJob,
 )
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
-from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.models import NoaaDataVar, source_missing_value_var_names
 
 from .region_job import NoaaGfsAnalysisRegionJob
 from .template_config import NoaaGfsAnalysisTemplateConfig
@@ -64,5 +64,8 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
+                exclude_vars=source_missing_value_var_names(
+                    self.template_config.data_vars
+                ),
             ),
         )
