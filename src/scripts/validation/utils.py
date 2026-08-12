@@ -327,6 +327,19 @@ def load_retried(da: xr.DataArray) -> xr.DataArray:
 
 
 def load_zarr_dataset(url: str) -> xr.Dataset:
+    store, consolidated = open_readonly_store(url)
+
+    # open_flattened_dataset exposes every vertical group's vars (e.g.
+    # pressure_level/temperature) keyed by store path, not just the root group.
+    ds = open_flattened_dataset(store, consolidated=consolidated)
+    if "longitude" in ds.coords and "latitude" in ds.coords:
+        ds.longitude.load()
+        ds.latitude.load()
+    return ds
+
+
+def open_readonly_store(url: str) -> tuple[StoreLike, bool]:
+    """Open a validation URL and return its store plus consolidated-metadata mode."""
     url = url.removesuffix("/")
     if url.startswith("s3://") and url.endswith(".icechunk"):
         store: StoreLike = open_icechunk_readonly(url)
@@ -353,14 +366,7 @@ def load_zarr_dataset(url: str) -> xr.Dataset:
     else:
         store = url
         consolidated = True
-
-    # open_flattened_dataset exposes every vertical group's vars (e.g.
-    # pressure_level/temperature) keyed by store path, not just the root group.
-    ds = open_flattened_dataset(store, consolidated=consolidated)
-    if "longitude" in ds.coords and "latitude" in ds.coords:
-        ds.longitude.load()
-        ds.latitude.load()
-    return ds
+    return store, consolidated
 
 
 def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:

@@ -11,6 +11,7 @@ from scripts.validation.availability import (
     run_manifest_scan,
     run_value_availability,
 )
+from scripts.validation.chunk_census import chunk_census
 from scripts.validation.compare_spatial import (
     compare_spatial,
     run_compare_spatial,
@@ -64,6 +65,10 @@ app.command(
     "availability",
     help="Per-variable availability over the append dim (manifest-probed for virtual stores)",
 )(availability)
+app.command(
+    "chunk-census",
+    help="Exhaustively count physically present chunks, including inside shards",
+)(chunk_census)
 app.command(
     "decode-scan",
     help="Decode a bounded sample of a virtual store's references and check health",
