@@ -256,4 +256,4 @@ repo = icechunk.Repository.open(
 )
 ```
 
-For a dataset not yet in the production or staging catalog, run `uv run main <dataset-id> dataset-urls` and open an `s3://` URL with `icechunk.s3_storage(bucket="<bucket>", prefix="<prefix>", anonymous=True)` instead of `icechunk.http_storage`. For a virtual dataset without STAC metadata, get its container prefixes from `icechunk.Repository.fetch_config(storage).virtual_chunk_containers` and authorize anonymous access as above.
+For a dataset not yet in the production or staging catalog, run `uv run main <dataset-id> dataset-urls` and open an `s3://` URL with `icechunk.s3_storage(bucket="<bucket>", prefix="<prefix>", anonymous=True)` instead of `icechunk.http_storage`. For a virtual dataset without STAC metadata, get its container prefixes from its `dynamical_dataset.py` or from `icechunk.Repository.fetch_config(storage).virtual_chunk_containers` and authorize anonymous access as above.
