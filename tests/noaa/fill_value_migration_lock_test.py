@@ -30,12 +30,12 @@ def _same_fill(actual: float, expected: float) -> bool:
 @pytest.mark.parametrize(
     ("template_config", "default_fill", "fill_overrides"),
     [
-        (NoaaGfsForecastTemplateConfig(), 0.0, {}),
-        (GefsAnalysisTemplateConfig(), 0.0, {}),
-        (GefsForecast35DayTemplateConfig(), 0.0, {}),
+        (NoaaGfsForecastTemplateConfig(), np.nan, {}),
+        (GefsAnalysisTemplateConfig(), np.nan, {}),
+        (GefsForecast35DayTemplateConfig(), np.nan, {}),
         (
             NoaaHrrrForecast48HourTemplateConfig(),
-            0.0,
+            np.nan,
             {"percent_frozen_precipitation_surface": -50.0},
         ),
         (
