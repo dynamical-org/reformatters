@@ -358,7 +358,8 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     index_position=590,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     source_fill_value=-50.0,
-                    source_fill_value_atol=0.01,
+                    # The source encodes no precipitation from -50 through -0.1.
+                    source_fill_value_atol=49.9,
                 ),
             ),
             NoaaDataVar(

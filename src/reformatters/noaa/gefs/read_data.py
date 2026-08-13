@@ -9,6 +9,7 @@ import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
 from reformatters.common.config import Config
+from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_HOURS,
@@ -17,7 +18,6 @@ from reformatters.noaa.gefs.gefs_config_models import (
     get_grib_element,
     is_v12,
 )
-from reformatters.noaa.models import mask_noaa_source_fill_values_inplace
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
@@ -92,7 +92,7 @@ def read_rasterio(
             assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
             rasterio_band_index = matching_bands[0]
             raw = reader.read(rasterio_band_index, out_dtype=np.float32)
-            mask_noaa_source_fill_values_inplace(raw, data_var)
+            mask_source_fill_value_inplace(raw, data_var.internal_attrs)
 
             result: Array2D[np.float32]
             match true_gefs_file_type:

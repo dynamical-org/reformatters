@@ -1,11 +1,8 @@
-import numpy as np
-
 from reformatters.common.config_models import (
     BaseInternalAttrs,
     DataVar,
-    mask_source_fill_value_inplace,
 )
-from reformatters.common.types import ArrayFloat32, Timedelta
+from reformatters.common.types import Timedelta
 
 
 class NoaaInternalAttrs(BaseInternalAttrs):
@@ -22,11 +19,3 @@ class NoaaInternalAttrs(BaseInternalAttrs):
 
 class NoaaDataVar(DataVar[NoaaInternalAttrs]):
     pass
-
-
-def mask_noaa_source_fill_values_inplace(
-    values: ArrayFloat32, data_var: DataVar[NoaaInternalAttrs]
-) -> None:
-    mask_source_fill_value_inplace(values, data_var.internal_attrs)
-    if data_var.name == "percent_frozen_precipitation_surface":
-        values[values < 0] = np.nan

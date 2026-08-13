@@ -415,7 +415,8 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
                 available_from=GEFS_REFORECAST_END,
                 source_fill_value=-50.0,
-                source_fill_value_atol=0.01,
+                # The source encodes no precipitation from -50 through -0.1.
+                source_fill_value_atol=49.9,
             ),
         ),
         GEFSDataVar(

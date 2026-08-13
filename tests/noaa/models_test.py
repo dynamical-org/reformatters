@@ -17,7 +17,6 @@ from reformatters.noaa.hrrr.analysis.template_config import (
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
-from reformatters.noaa.models import mask_noaa_source_fill_values_inplace
 
 type MaterializedNoaaTemplateConfig = (
     NoaaGfsForecastTemplateConfig
@@ -30,18 +29,19 @@ type MaterializedNoaaTemplateConfig = (
 
 
 @pytest.mark.parametrize(
-    ("template_config", "expected_cloud_ceiling"),
+    ("template_config", "expected_frozen_atol", "expected_cloud_ceiling"),
     [
-        (NoaaGfsForecastTemplateConfig(), (20_000.0, 1.0)),
-        (NoaaGfsAnalysisTemplateConfig(), (20_000.0, 1.0)),
-        (GefsAnalysisTemplateConfig(), (20_000.0, 1.0)),
-        (GefsForecast35DayTemplateConfig(), (20_000.0, 1.0)),
-        (NoaaHrrrForecast48HourTemplateConfig(), (9_999.0, 0.01)),
-        (NoaaHrrrAnalysisTemplateConfig(), (9_999.0, 0.01)),
+        (NoaaGfsForecastTemplateConfig(), 49.9, (20_000.0, 1.0)),
+        (NoaaGfsAnalysisTemplateConfig(), 49.9, (20_000.0, 1.0)),
+        (GefsAnalysisTemplateConfig(), 49.9, (20_000.0, 1.0)),
+        (GefsForecast35DayTemplateConfig(), 49.9, (20_000.0, 1.0)),
+        (NoaaHrrrForecast48HourTemplateConfig(), 0.01, (9_999.0, 0.01)),
+        (NoaaHrrrAnalysisTemplateConfig(), 0.01, (9_999.0, 0.01)),
     ],
 )
 def test_materialized_source_fill_values(
     template_config: MaterializedNoaaTemplateConfig,
+    expected_frozen_atol: float,
     expected_cloud_ceiling: tuple[float, float],
 ) -> None:
     data_vars = template_config.data_vars
@@ -51,7 +51,7 @@ def test_materialized_source_fill_values(
 
     assert (frozen.source_fill_value, frozen.source_fill_value_atol) == (
         -50.0,
-        0.01,
+        expected_frozen_atol,
     )
     assert (
         ceiling.source_fill_value,
@@ -69,27 +69,14 @@ def test_mask_source_fill_value_uses_packing_tolerance() -> None:
         for var in NoaaGfsForecastTemplateConfig().data_vars
         if var.name == "percent_frozen_precipitation_surface"
     )
-    values = np.array([-50.000008, -49.98, 0.0, 50.0], dtype=np.float32)
+    values = np.array(
+        [-50.000008, -49.9, -0.1000061, -0.0000061, 0.0, 50.0],
+        dtype=np.float32,
+    )
 
     mask_source_fill_value_inplace(values, var.internal_attrs)
 
     np.testing.assert_array_equal(
         values,
-        np.array([np.nan, -49.98, 0.0, 50.0], dtype=np.float32),
-    )
-
-
-def test_percent_frozen_masks_all_negative_values() -> None:
-    var = next(
-        var
-        for var in NoaaGfsForecastTemplateConfig().data_vars
-        if var.name == "percent_frozen_precipitation_surface"
-    )
-    values = np.array([-50.000008, -49.9, -0.000006, 0.0, 50.0], dtype=np.float32)
-
-    mask_noaa_source_fill_values_inplace(values, var)
-
-    np.testing.assert_array_equal(
-        values,
-        np.array([np.nan, np.nan, np.nan, 0.0, 50.0], dtype=np.float32),
+        np.array([np.nan, np.nan, np.nan, -0.0000061, 0.0, 50.0], dtype=np.float32),
     )
