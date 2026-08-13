@@ -191,4 +191,5 @@ def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     assert (
         validators[3].keywords["include_vars"] == validators[2].keywords["exclude_vars"]
     )
-    assert validators[3].keywords["max_nan_fraction"] == 0.999
+    assert validators[3].keywords["max_nan_fraction"] == 0.9999
+    assert validators[3].keywords["spatial_sampling"] == "quarter"

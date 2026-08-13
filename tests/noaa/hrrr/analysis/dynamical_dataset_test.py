@@ -148,7 +148,8 @@ def test_validators(dataset: NoaaHrrrAnalysisDataset) -> None:
     assert (
         validators[2].keywords["include_vars"] == validators[1].keywords["exclude_vars"]
     )
-    assert validators[2].keywords["max_nan_fraction"] == 0.999
+    assert validators[2].keywords["max_nan_fraction"] == 0.9999
+    assert validators[2].keywords["spatial_sampling"] == "quarter"
 
 
 @pytest.mark.slow

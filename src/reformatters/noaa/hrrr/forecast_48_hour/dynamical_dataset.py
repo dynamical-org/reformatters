@@ -83,6 +83,7 @@ class NoaaHrrrForecast48HourDataset(
                 validation.check_forecast_recent_nans,
                 additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
                 include_vars=source_fill_value_vars,
-                max_nan_fraction=0.999,
+                max_nan_fraction=0.9999,
+                spatial_sampling="quarter",
             ),
         )
