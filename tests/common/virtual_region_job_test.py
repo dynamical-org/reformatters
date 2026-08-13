@@ -11,9 +11,10 @@ expansion without the decode-only codec ever being invoked.
 
 import asyncio
 import json
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
-from itertools import batched
+from itertools import batched, count
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
 
@@ -1984,7 +1985,7 @@ class _NothingPublishedJob(VirtualTestRegionJob):
         return []
 
 
-def _polling_job() -> _NothingPublishedJob:
+def _polling_job(poll_for: str) -> _NothingPublishedJob:
     return _NothingPublishedJob(
         tmp_store=Path("unused-tmp.zarr"),
         template_ds=_create_template_ds(4),
@@ -1993,15 +1994,21 @@ def _polling_job() -> _NothingPublishedJob:
         region=slice(0, 4),
         reformat_job_name="test",
         processing_mode="update",
-        poll_deadline=pd.Timestamp.now() + pd.Timedelta("1.2s"),
+        poll_deadline=pd.Timestamp.now() + pd.Timedelta(poll_for),
     )
 
 
 def test_polling_heartbeats_while_waiting(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_NothingPublishedJob, "heartbeat_interval", pd.Timedelta(0))
-    job = _polling_job()
+    # Hand the loop a clock that jumps a minute per reading, so it crosses the four
+    # minute heartbeat threshold without the test waiting for it, and pace its ticks
+    # so a handful run before the (wall clock) poll deadline.
+    clock = count(0, 60)
+    sleep = time.sleep
+    monkeypatch.setattr(time, "monotonic", lambda: float(next(clock)))
+    monkeypatch.setattr(time, "sleep", lambda _seconds: sleep(0.05))
+    job = _polling_job("0.2s")
 
     with caplog.at_level("INFO"):
         assert list(job.process_virtual_refs(job.source_file_coords())) == []
@@ -2012,7 +2019,7 @@ def test_polling_heartbeats_while_waiting(
 def test_polling_is_quiet_within_the_heartbeat_interval(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    job = _polling_job()
+    job = _polling_job("1.2s")
 
     with caplog.at_level("INFO"):
         assert list(job.process_virtual_refs(job.source_file_coords())) == []

@@ -75,9 +75,6 @@ class VirtualRegionJob(
 
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
-    # Log at least this often while polling. Kept under the 350s AWS idle timeout so
-    # the telemetry connection does not go idle and drop the run's final check-in.
-    heartbeat_interval: ClassVar[Timedelta] = pd.Timedelta("4m")
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
     download_concurrency: ClassVar[int] = 64
 
@@ -265,10 +262,8 @@ class VirtualRegionJob(
                             f"(first: {pending[0].get_url()})"
                         )
                         return
-                    if (
-                        time.monotonic() - last_log
-                        >= self.heartbeat_interval.total_seconds()
-                    ):
+                    # Break the silence under the 350s network idle timeout.
+                    if time.monotonic() - last_log >= 4 * 60:
                         log.info(f"Waiting on {len(pending)} source files")
                         last_log = time.monotonic()
                     elapsed = time.monotonic() - tick_start

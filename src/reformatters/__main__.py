@@ -268,8 +268,7 @@ if Config.is_sentry_enabled:
         in_app_include=["reformatters"],
         default_integrations=True,
         enable_logs=True,
-        # A quiet stretch mid-run otherwise lets the connection idle out, losing
-        # every event after it, including the run's terminal cron check-in.
+        # Hypothesis: connection idles are causing us to loose events after quiet periods
         keep_alive=True,
         before_send_log=before_log,
         integrations=[
