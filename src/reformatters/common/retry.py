@@ -3,6 +3,10 @@ from collections.abc import Callable
 
 import numpy as np
 
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
+
 
 def retry[T](
     func: Callable[[], T],
@@ -17,6 +21,10 @@ def retry[T](
         except retryable_exceptions as e:
             last_exception = e
             if attempt < max_attempts - 1:  # sleep unless we're out of attempts
+                log.warning(
+                    f"Attempt {attempt + 1}/{max_attempts} failed, retrying: "
+                    f"{type(e).__name__}: {str(e)[:1000]}"
+                )
                 rng = np.random.default_rng()
                 time.sleep(attempt * rng.uniform(0.8, 1.2) + 0.1)
 
