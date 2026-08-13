@@ -33,7 +33,7 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.noaa.models import NoaaDataVar, mask_source_missing_values_inplace
+from reformatters.noaa.models import NoaaDataVar, mask_noaa_source_fill_values_inplace
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
@@ -168,7 +168,7 @@ class NoaaGfsCommonRegionJob(
         self, data_array: xr.DataArray, data_var: NoaaDataVar
     ) -> None:
         """Apply in-place data transformations to the output data array for a given data variable."""
-        mask_source_missing_values_inplace(data_array.values, data_var.internal_attrs)
+        mask_noaa_source_fill_values_inplace(data_array.values, data_var)
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
             deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"

@@ -324,102 +324,6 @@ def test_generate_source_file_coords_skips_times_before_available_from(
     assert all(coord.init_time >= GEFS_REFORECAST_END for coord in coords)
 
 
-@pytest.mark.parametrize(
-    ("variable_name", "expected_times"),
-    [
-        (
-            "percent_frozen_precipitation_surface",
-            [
-                pd.Timestamp("2020-01-01T00:00"),
-                pd.Timestamp("2020-09-23T06:00"),
-                pd.Timestamp("2020-09-23T12:00"),
-            ],
-        ),
-        (
-            "geopotential_height_cloud_ceiling",
-            [pd.Timestamp("2019-12-31T18:00"), pd.Timestamp("2020-09-23T12:00")],
-        ),
-    ],
-)
-def test_generate_source_file_coords_skips_variable_source_gaps(
-    template_ds: xr.Dataset,
-    variable_name: str,
-    expected_times: list[pd.Timestamp],
-) -> None:
-    data_var = next(
-        var
-        for var in GefsAnalysisTemplateConfig().data_vars
-        if var.name == variable_name
-    )
-    times = pd.DatetimeIndex(
-        [
-            "2019-12-31T18:00",
-            "2020-01-01T00:00",
-            "2020-09-23T06:00",
-            "2020-09-23T12:00",
-        ]
-    )
-    processing_ds = template_ds.isel(time=slice(0, len(times))).assign_coords(
-        time=times
-    )
-    job = GefsAnalysisRegionJob(
-        tmp_store=get_local_tmp_store(),
-        template_ds=xr.DataTree.from_dict({"/": processing_ds}),
-        data_vars=[data_var],
-        append_dim="time",
-        region=slice(0, len(times)),
-        reformat_job_name="test-job",
-    )
-
-    coords = job.generate_source_file_coords(processing_ds, [data_var])
-
-    assert [coord.append_dim_coord for coord in coords] == expected_times
-
-
-@pytest.mark.parametrize(
-    ("variable_name", "expected_nan"),
-    [
-        ("percent_frozen_precipitation_surface", [True, False, False, False]),
-        ("geopotential_height_cloud_ceiling", [False, True, True, False]),
-    ],
-)
-def test_apply_data_transformations_marks_variable_source_gaps_nan(
-    template_ds: xr.Dataset,
-    variable_name: str,
-    expected_nan: list[bool],
-) -> None:
-    data_var = next(
-        var
-        for var in GefsAnalysisTemplateConfig().data_vars
-        if var.name == variable_name
-    )
-    times = pd.DatetimeIndex(
-        [
-            "2019-12-31T18:00",
-            "2020-01-01T00:00",
-            "2020-09-23T06:00",
-            "2020-09-23T12:00",
-        ]
-    )
-    data_array = xr.DataArray(
-        np.arange(1, len(times) + 1, dtype=np.float32),
-        dims=["time"],
-        coords={"time": times},
-    )
-    job = GefsAnalysisRegionJob(
-        tmp_store=get_local_tmp_store(),
-        template_ds=xr.DataTree.from_dict({"/": template_ds}),
-        data_vars=[data_var],
-        append_dim="time",
-        region=slice(0, len(times)),
-        reformat_job_name="test-job",
-    )
-
-    job.apply_data_transformations(data_array, data_var)
-
-    np.testing.assert_array_equal(np.isnan(data_array.values), expected_nan)
-
-
 def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
     """Test URL generation for source file coordinates."""
     coord = GefsAnalysisSourceFileCoord(
@@ -890,7 +794,7 @@ def _make_analysis_region_job() -> GefsAnalysisRegionJob:
 
 
 def _assert_expected_source_values(data: np.ndarray, data_var: GEFSDataVar) -> None:
-    if data_var.internal_attrs.source_missing_value is None:
+    if data_var.internal_attrs.source_fill_value is None:
         assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
     else:
         assert not np.any(np.isinf(data)), f"Infinite values for {data_var.name}"

@@ -707,7 +707,7 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         for data_var in group:
             data = region_job.read_data(coord, data_var)
-            if data_var.internal_attrs.source_missing_value is None:
+            if data_var.internal_attrs.source_fill_value is None:
                 assert np.all(np.isfinite(data)), (
                     f"Non-finite values for {data_var.name}"
                 )
@@ -720,7 +720,7 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
                 )
             if (
                 lead_time > GEFS_S_FILE_MAX
-                and data_var.internal_attrs.source_missing_value is None
+                and data_var.internal_attrs.source_fill_value is None
             ):
                 # a/b files are 0.5° upsampled to 0.25°. The easternmost column (179.75°)
                 # must wrap across the antimeridian, interpolating halfway between the

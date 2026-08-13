@@ -13,12 +13,11 @@ from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_HOURS,
     GEFSDataVar,
-    GEFSInternalAttrs,
     GefsSourceFileCoord,
     get_grib_element,
     is_v12,
 )
-from reformatters.noaa.models import mask_source_missing_values_inplace
+from reformatters.noaa.models import mask_noaa_source_fill_values_inplace
 
 
 def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
@@ -61,7 +60,7 @@ def read_data(
         template.rio.crs,
         coord,
         coord.gefs_file_type,
-        data_var.internal_attrs,
+        data_var,
     )
 
 
@@ -74,7 +73,7 @@ def read_rasterio(
     out_crs: rasterio.crs.CRS,
     coord: GefsSourceFileCoord,
     true_gefs_file_type: Literal["a", "b", "s", "reforecast"],
-    internal_attrs: GEFSInternalAttrs,
+    data_var: GEFSDataVar,
 ) -> Array2D[np.float32]:
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -93,7 +92,7 @@ def read_rasterio(
             assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
             rasterio_band_index = matching_bands[0]
             raw = reader.read(rasterio_band_index, out_dtype=np.float32)
-            mask_source_missing_values_inplace(raw, internal_attrs)
+            mask_noaa_source_fill_values_inplace(raw, data_var)
 
             result: Array2D[np.float32]
             match true_gefs_file_type:
@@ -156,6 +155,7 @@ def _reproject_bilinear_longitude_wrap(
     wrapped = np.concatenate([raw[:, -1:], raw, raw[:, :1]], axis=1)
     wrapped_transform = src_transform * rasterio.transform.Affine.translation(-1, 0)
     result: Array2D[np.float32]
+    # NaN source fills make interpolation borders around missing regions NaN.
     result, _ = rasterio.warp.reproject(
         wrapped,
         np.full(out_spatial_shape, np.nan, dtype=np.float32),

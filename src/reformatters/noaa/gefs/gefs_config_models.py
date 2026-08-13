@@ -22,7 +22,6 @@ GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 class GEFSInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
     available_from: Timestamp | None = None
-    unavailable_ranges: tuple[tuple[Timestamp, Timestamp], ...] = ()
 
 
 class GEFSDataVar(DataVar[GEFSInternalAttrs]):
@@ -80,18 +79,6 @@ def is_v12(init_time: pd.Timestamp) -> bool:
 
 def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
     return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
-
-
-def source_data_available_times(
-    times: pd.DatetimeIndex, internal_attrs: GEFSInternalAttrs
-) -> np.ndarray[Any, np.dtype[np.bool]]:
-    available = np.ones(len(times), dtype=np.bool)
-    if internal_attrs.available_from is not None:
-        available &= times >= internal_attrs.available_from
-    for start, end in internal_attrs.unavailable_ranges:
-        assert start < end
-        available &= (times < start) | (times >= end)
-    return available
 
 
 def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:

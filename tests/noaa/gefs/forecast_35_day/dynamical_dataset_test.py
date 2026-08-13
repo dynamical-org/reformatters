@@ -50,14 +50,20 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 def test_validators(dataset: GefsForecast35DayDataset) -> None:
     """Test that validators are properly configured."""
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 4
     assert validation.check_forecast_current_data in validators
-    for validator in validators[1:]:
-        assert isinstance(validator, partial)
-        assert validator.keywords["exclude_vars"] == (
-            "percent_frozen_precipitation_surface",
-            "geopotential_height_cloud_ceiling",
-        )
+    assert all(isinstance(validator, partial) for validator in validators[1:])
+    source_fill_value_vars = (
+        "percent_frozen_precipitation_surface",
+        "geopotential_height_cloud_ceiling",
+    )
+    assert isinstance(validators[1], partial)
+    assert validators[1].keywords["exclude_vars"] == source_fill_value_vars
+    assert isinstance(validators[2], partial)
+    assert validators[2].keywords["include_vars"] == source_fill_value_vars
+    assert validators[2].keywords["max_nan_fraction"] == 0.999
+    assert isinstance(validators[3], partial)
+    assert validators[3].keywords["exclude_vars"] == source_fill_value_vars
     assert all(isinstance(v, validation.DataValidator) for v in validators)
 
 

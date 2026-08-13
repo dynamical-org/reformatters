@@ -320,7 +320,7 @@ def _uses_semantic_missing_values(
             template_var is not None
             and getattr(
                 getattr(template_var, "internal_attrs", None),
-                "source_missing_value",
+                "source_fill_value",
                 None,
             )
             is not None

@@ -185,13 +185,13 @@ def _stub_registry(
 
 
 def _stub_var(
-    name: str, has_hour_0: bool, source_missing_value: float | None = None
+    name: str, has_hour_0: bool, source_fill_value: float | None = None
 ) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
         path=name,
         has_hour_0_values=lambda: has_hour_0,
-        internal_attrs=SimpleNamespace(source_missing_value=source_missing_value),
+        internal_attrs=SimpleNamespace(source_fill_value=source_fill_value),
     )
 
 
@@ -296,7 +296,7 @@ def test_run_value_availability_source_mask_uses_co_ingested(
         [
             _stub_var("temperature_2m", has_hour_0=True),
             _stub_var("precipitation_surface", has_hour_0=False),
-            _stub_var("cloud_ceiling", has_hour_0=True, source_missing_value=20_000.0),
+            _stub_var("cloud_ceiling", has_hour_0=True, source_fill_value=20_000.0),
         ],
     )
     ctx = _ctx(ds, tmp_path)

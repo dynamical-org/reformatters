@@ -48,7 +48,7 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
 def test_validators(dataset: GefsAnalysisDataset) -> None:
     """Test that validators are properly configured."""
     validators = tuple(dataset.validators())
-    assert len(validators) == 2
+    assert len(validators) == 3
     assert validation.check_analysis_current_data in validators
     assert isinstance(validators[1], partial)
     assert validators[1].func is validation.check_analysis_recent_nans
@@ -56,6 +56,11 @@ def test_validators(dataset: GefsAnalysisDataset) -> None:
         "percent_frozen_precipitation_surface",
         "geopotential_height_cloud_ceiling",
     )
+    assert isinstance(validators[2], partial)
+    assert (
+        validators[2].keywords["include_vars"] == validators[1].keywords["exclude_vars"]
+    )
+    assert validators[2].keywords["max_nan_fraction"] == 0.999
     assert all(isinstance(v, validation.DataValidator) for v in validators)
 
 

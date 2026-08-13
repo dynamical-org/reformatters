@@ -3,6 +3,7 @@ from datetime import timedelta
 from functools import partial
 
 from reformatters.common import validation
+from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
@@ -11,7 +12,6 @@ from reformatters.common.kubernetes import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
-from reformatters.noaa.models import source_missing_value_var_names
 
 from .region_job import NoaaHrrrAnalysisRegionJob
 from .template_config import NoaaHrrrAnalysisTemplateConfig
@@ -61,6 +61,9 @@ class NoaaHrrrAnalysisDataset(
 
     def validators(self) -> Sequence[validation.DataValidator]:
         max_expected_delay = timedelta(hours=4)
+        source_fill_value_vars = source_fill_value_var_names(
+            self.template_config.data_vars
+        )
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -69,8 +72,12 @@ class NoaaHrrrAnalysisDataset(
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                exclude_vars=source_missing_value_var_names(
-                    self.template_config.data_vars
-                ),
+                exclude_vars=source_fill_value_vars,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                include_vars=source_fill_value_vars,
+                max_nan_fraction=0.999,
             ),
         )

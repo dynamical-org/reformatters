@@ -42,7 +42,7 @@ def test_reproject_bilinear_longitude_wrap_fills_eastern_edge(src_deg: float) ->
     np.testing.assert_allclose(result[:, -1], expected_east, rtol=0, atol=1e-4)
 
 
-def test_reproject_preserves_source_missing_value_at_aligned_pixel() -> None:
+def test_reproject_preserves_source_fill_value_at_aligned_pixel() -> None:
     src_deg = 1.0
     n_lon = round(360 / src_deg)
     n_lat = round(180 / src_deg) + 1

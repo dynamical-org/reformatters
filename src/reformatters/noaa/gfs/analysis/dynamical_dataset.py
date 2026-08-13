@@ -3,6 +3,7 @@ from datetime import timedelta
 from functools import partial
 
 from reformatters.common import validation
+from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
@@ -10,7 +11,7 @@ from reformatters.common.kubernetes import (
     ValidationCronJob,
 )
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
-from reformatters.noaa.models import NoaaDataVar, source_missing_value_var_names
+from reformatters.noaa.models import NoaaDataVar
 
 from .region_job import NoaaGfsAnalysisRegionJob
 from .template_config import NoaaGfsAnalysisTemplateConfig
@@ -56,6 +57,9 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
     def validators(self) -> Sequence[validation.DataValidator]:
         max_expected_delay = timedelta(hours=7)
+        source_fill_value_vars = source_fill_value_var_names(
+            self.template_config.data_vars
+        )
         return (
             partial(
                 validation.check_analysis_current_data,
@@ -64,8 +68,12 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             partial(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
-                exclude_vars=source_missing_value_var_names(
-                    self.template_config.data_vars
-                ),
+                exclude_vars=source_fill_value_vars,
+            ),
+            partial(
+                validation.check_analysis_recent_nans,
+                max_expected_delay=max_expected_delay,
+                include_vars=source_fill_value_vars,
+                max_nan_fraction=0.999,
             ),
         )

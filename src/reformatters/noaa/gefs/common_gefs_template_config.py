@@ -16,7 +16,6 @@ from reformatters.common.zarr import (
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_CURRENT_ARCHIVE_START,
     GEFS_REFORECAST_END,
     GEFSDataVar,
     GEFSInternalAttrs,
@@ -415,8 +414,8 @@ def get_shared_data_var_configs(
                 index_position=17,
                 keep_mantissa_bits=keep_mantissa_bits_default,
                 available_from=GEFS_REFORECAST_END,
-                source_missing_value=-50.0,
-                source_missing_value_atol=0.01,
+                source_fill_value=-50.0,
+                source_fill_value_atol=0.01,
             ),
         ),
         GEFSDataVar(
@@ -587,9 +586,8 @@ def get_shared_data_var_configs(
                 gefs_file_type="s+b-b22",
                 index_position=29,
                 keep_mantissa_bits=8,
-                unavailable_ranges=((GEFS_REFORECAST_END, GEFS_CURRENT_ARCHIVE_START),),
-                source_missing_value=20_000.0,
-                source_missing_value_atol=1.0,
+                source_fill_value=20_000.0,
+                source_fill_value_atol=1.0,
             ),
         ),
         GEFSDataVar(

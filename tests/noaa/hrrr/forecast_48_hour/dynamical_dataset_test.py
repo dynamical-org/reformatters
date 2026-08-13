@@ -180,10 +180,15 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 4
     assert all(isinstance(v, validation.DataValidator) for v in validators)
     assert isinstance(validators[2], partial)
     assert validators[2].keywords["exclude_vars"] == (
         "percent_frozen_precipitation_surface",
         "geopotential_height_cloud_ceiling",
     )
+    assert isinstance(validators[3], partial)
+    assert (
+        validators[3].keywords["include_vars"] == validators[2].keywords["exclude_vars"]
+    )
+    assert validators[3].keywords["max_nan_fraction"] == 0.999
