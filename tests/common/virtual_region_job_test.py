@@ -1972,6 +1972,54 @@ def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
     assert len(ingested) == 4  # 4 inits x lead 0
 
 
+class _NothingPublishedJob(VirtualTestRegionJob):
+    """Drives the base poll loop with no file ever available."""
+
+    process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+    def discover_available(
+        self,
+        pending: list[VirtualTestSourceFileCoord],  # noqa: ARG002
+    ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+        return []
+
+
+def _polling_job() -> _NothingPublishedJob:
+    return _NothingPublishedJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp.now() + pd.Timedelta("1.2s"),
+    )
+
+
+def test_polling_heartbeats_while_waiting(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_NothingPublishedJob, "heartbeat_interval", pd.Timedelta(0))
+    job = _polling_job()
+
+    with caplog.at_level("INFO"):
+        assert list(job.process_virtual_refs(job.source_file_coords())) == []
+
+    assert "Waiting on 8 source files" in caplog.text
+
+
+def test_polling_is_quiet_within_the_heartbeat_interval(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job = _polling_job()
+
+    with caplog.at_level("INFO"):
+        assert list(job.process_virtual_refs(job.source_file_coords())) == []
+
+    assert "Waiting on" not in caplog.text
+
+
 def test_operational_update_passes_poll_deadline_to_the_write_loop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
