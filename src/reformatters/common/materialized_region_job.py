@@ -16,7 +16,7 @@ from zarr.abc.store import Store
 from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.download import is_not_found
-from reformatters.common.iterating import split_groups
+from reformatters.common.iterating import flatten_groups, split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
@@ -185,7 +185,7 @@ class MaterializedRegionJob(
         Returns
         -------
         Mapping[str, Sequence[SOURCE_FILE_COORD]]
-            Mapping from variable names to their source file coordinates with final processing status.
+            Mapping from variable paths to their source file coordinates with final processing status.
         """
         processing_region_ds, output_region_ds = self._get_region_datasets()
 
@@ -231,7 +231,7 @@ class MaterializedRegionJob(
                     data_var_source_file_coords = deepcopy(source_file_coords)
                     data_array, data_array_template = create_data_array_and_template(
                         processing_region_ds,
-                        data_var.name,
+                        data_var.path,
                         shared_buffer,
                         fill_value=data_var.encoding.fill_value,
                     )
@@ -255,7 +255,7 @@ class MaterializedRegionJob(
                     upload_futures.append(
                         upload_executor.submit(
                             copy_data_var,
-                            data_var.name,
+                            data_var.path,
                             self.region,
                             output_region_ds,
                             self.append_dim,
@@ -265,7 +265,7 @@ class MaterializedRegionJob(
                         )
                     )
 
-                    results[data_var.name] = data_var_source_file_coords
+                    results[data_var.path] = data_var_source_file_coords
 
                 self._cleanup_local_files(source_file_coords)  # after _group_ is done
 
@@ -276,9 +276,10 @@ class MaterializedRegionJob(
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        # Materialized datasets are single-level (DynamicalDataset enforces it), so the
-        # root node holds every var; subset it to this job's vars by name.
-        ds: xr.Dataset = self.template_ds.to_dataset()[[v.name for v in self.data_vars]]  # ty: ignore[invalid-assignment]
+        # Keyed by var path so a job spanning vertical groups keeps vars with the same
+        # bare name (e.g. pressure_level/temperature, model_level/temperature) distinct.
+        var_paths = [v.path for v in self.data_vars]
+        ds: xr.Dataset = flatten_groups(self.template_ds)[var_paths]  # ty: ignore[invalid-assignment]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})

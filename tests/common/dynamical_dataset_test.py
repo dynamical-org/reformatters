@@ -297,11 +297,11 @@ class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
         return ()
 
 
-def test_materialized_dataset_rejects_vertical_group_var() -> None:
-    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
-    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
-    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
-        GroupedVarDataset()
+def test_materialized_dataset_accepts_vertical_group_var() -> None:
+    dataset = GroupedVarDataset()
+    assert [v.path for v in dataset.template_config.data_vars] == [
+        "pressure_level/temperature"
+    ]
 
 
 class ExampleVirtualConfig(ExampleConfig):

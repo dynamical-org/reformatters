@@ -24,6 +24,12 @@ def var_path(group: Group, name: str) -> str:
     return f"{group}/{name}"
 
 
+def split_var_path(path: str) -> tuple[str | None, str]:
+    """Inverse of `var_path`: the zarr group (None at root) and the bare variable name."""
+    group, _, name = path.rpartition("/")
+    return group or None, name
+
+
 type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
 type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
 type SpatialResolution = Literal[
