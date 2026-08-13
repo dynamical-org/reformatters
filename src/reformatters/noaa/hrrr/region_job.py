@@ -10,6 +10,7 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
@@ -218,6 +219,7 @@ class NoaaHrrrRegionJob(
         self, data_array: xr.DataArray, data_var: NoaaHrrrDataVar
     ) -> None:
         """Apply in-place data transformations to the output data array for a given data variable."""
+        mask_source_fill_value_inplace(data_array.values, data_var.internal_attrs)
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
             deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"

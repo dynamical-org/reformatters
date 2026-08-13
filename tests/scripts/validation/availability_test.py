@@ -182,8 +182,15 @@ def _stub_registry(
     )
 
 
-def _stub_var(name: str, has_hour_0: bool) -> SimpleNamespace:
-    return SimpleNamespace(name=name, path=name, has_hour_0_values=lambda: has_hour_0)
+def _stub_var(
+    name: str, has_hour_0: bool, source_fill_value: float | None = None
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        name=name,
+        path=name,
+        has_hour_0_values=lambda: has_hour_0,
+        internal_attrs=SimpleNamespace(source_fill_value=source_fill_value),
+    )
 
 
 def test_run_value_availability_exempts_hour_0_override_vars(
@@ -271,6 +278,34 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
     stats = ctx.stats["percent_frozen_precipitation_surface"]
     assert stats.positions_total is None
     assert "percent_frozen_precipitation_surface" not in ctx.availability
+
+
+def test_run_value_availability_source_mask_uses_co_ingested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ds = _forecast_dataset()
+    ds["cloud_ceiling"] = (
+        ds["temperature_2m"].dims,
+        np.full(ds["temperature_2m"].shape, np.nan),
+    )
+    ds["cloud_ceiling"].attrs["step_type"] = "instant"
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var("temperature_2m", has_hour_0=True),
+            _stub_var("precipitation_surface", has_hour_0=False),
+            _stub_var("cloud_ceiling", has_hour_0=True, source_fill_value=9_999.0),
+        ],
+    )
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = [*ctx.variables, "cloud_ceiling"]
+
+    run_value_availability(ctx)
+
+    np.testing.assert_allclose(
+        ctx.availability["cloud_ceiling"].fraction,
+        [1, 1, 0.5, 1, 1, 1],
+    )
 
 
 def test_heatmap_xticks_thins_long_archive() -> None:

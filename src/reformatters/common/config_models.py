@@ -3,11 +3,13 @@ from typing import Annotated, Generic, Literal, TypeVar
 
 import numcodecs
 import numcodecs.abc
+import numpy as np
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import (
     ROOT,
+    ArrayFloat32,
     CodecConfig,
     Group,
     TimedeltaUnits,
@@ -216,6 +218,7 @@ class BaseInternalAttrs(FrozenBaseModel):
     # If None, defers to attrs.step_type. Useful when an instantaneous variable does not have hour 0 values.
     # Access via data_var.has_hour_0_values(), not directly.
     hour_0_values_override: bool | None = None
+    source_fill_value: float | None = None
 
 
 INTERNAL_ATTRS_co = TypeVar(
@@ -253,3 +256,22 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
                 "_FillValue and missing_value to agree when both are set"
             )
         return self
+
+
+def source_fill_value_var_names(
+    data_vars: Sequence[DataVar[BaseInternalAttrs]],
+) -> tuple[str, ...]:
+    return tuple(
+        data_var.name
+        for data_var in data_vars
+        if data_var.internal_attrs.source_fill_value is not None
+    )
+
+
+def mask_source_fill_value_inplace(
+    values: ArrayFloat32, internal_attrs: BaseInternalAttrs
+) -> None:
+    source_fill_value = internal_attrs.source_fill_value
+    if source_fill_value is None:
+        return
+    values[values == np.float32(source_fill_value)] = np.nan

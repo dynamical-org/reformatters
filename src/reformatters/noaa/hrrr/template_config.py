@@ -386,6 +386,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
                     hour_0_values_override=False,
+                    source_fill_value=-50.0,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -531,6 +532,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=117,
                     keep_mantissa_bits=8,
                     hrrr_file_type="sfc",
+                    source_fill_value=9_999.0,
                 ),
             ),
             # HRRR provides 80m but not 100m winds

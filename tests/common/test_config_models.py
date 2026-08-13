@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
@@ -12,6 +13,7 @@ from reformatters.common.config_models import (
     Encoding,
     Group,
     codecs_to_dicts,
+    mask_source_fill_value_inplace,
     var_path,
 )
 
@@ -132,6 +134,18 @@ class TestEncodingValidation:
             serializer=serializer,
         )
         assert enc.serializer == serializer
+
+
+def test_mask_source_fill_value_requires_exact_float32_match() -> None:
+    attrs = BaseInternalAttrs(keep_mantissa_bits="no-rounding", source_fill_value=-50.0)
+    values = np.array([-50.0, -50.000008, -49.9, 0.0], dtype=np.float32)
+
+    mask_source_fill_value_inplace(values, attrs)
+
+    np.testing.assert_array_equal(
+        values,
+        np.array([np.nan, -50.000008, -49.9, 0.0], dtype=np.float32),
+    )
 
 
 class TestDatasetAttributes:
