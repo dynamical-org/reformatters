@@ -6,7 +6,6 @@ from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplate
 from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
-from reformatters.noaa.gfs.analysis.template_config import NoaaGfsAnalysisTemplateConfig
 from reformatters.noaa.gfs.forecast.template_config import NoaaGfsForecastTemplateConfig
 from reformatters.noaa.hrrr.analysis.template_config import (
     NoaaHrrrAnalysisTemplateConfig,
@@ -17,7 +16,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 
 type MaterializedNoaaTemplateConfig = (
     NoaaGfsForecastTemplateConfig
-    | NoaaGfsAnalysisTemplateConfig
     | GefsAnalysisTemplateConfig
     | GefsForecast35DayTemplateConfig
     | NoaaHrrrForecast48HourTemplateConfig
@@ -33,7 +31,6 @@ def _same_fill(actual: float, expected: float) -> bool:
     ("template_config", "default_fill", "fill_overrides"),
     [
         (NoaaGfsForecastTemplateConfig(), 0.0, {}),
-        (NoaaGfsAnalysisTemplateConfig(), np.nan, {}),
         (GefsAnalysisTemplateConfig(), 0.0, {}),
         (GefsForecast35DayTemplateConfig(), 0.0, {}),
         (

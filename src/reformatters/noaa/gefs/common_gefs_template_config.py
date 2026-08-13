@@ -413,10 +413,6 @@ def get_shared_data_var_configs(
                 gefs_file_type="s+b-b22",
                 index_position=17,
                 keep_mantissa_bits=keep_mantissa_bits_default,
-                available_from=GEFS_REFORECAST_END,
-                source_fill_value=-50.0,
-                # The source encodes no precipitation from -50 through -0.1.
-                source_fill_value_atol=49.9,
             ),
         ),
         GEFSDataVar(
@@ -587,8 +583,6 @@ def get_shared_data_var_configs(
                 gefs_file_type="s+b-b22",
                 index_position=29,
                 keep_mantissa_bits=8,
-                source_fill_value=20_000.0,
-                source_fill_value_atol=1.0,
             ),
         ),
         GEFSDataVar(

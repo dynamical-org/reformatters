@@ -40,8 +40,6 @@ class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     # For deaccumulation: MRMS hourly QPE is a 1-hour fixed window accumulation
     window_reset_frequency: Timedelta | None = None
     expected_invalid_fraction: float = 0.07
-    # Source files use this value instead of NaN for missing/out-of-coverage pixels
-    nodata_sentinel: float | None = None
 
 
 class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
@@ -338,7 +336,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     available_from=MRMS_V12_START,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     expected_invalid_fraction=0.65,
-                    nodata_sentinel=-999.0,
+                    source_fill_value=-999.0,
                 ),
             ),
         ]

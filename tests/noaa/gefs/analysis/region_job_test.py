@@ -793,14 +793,6 @@ def _make_analysis_region_job() -> GefsAnalysisRegionJob:
     )
 
 
-def _assert_expected_source_values(data: np.ndarray, data_var: GEFSDataVar) -> None:
-    if data_var.internal_attrs.source_fill_value is None:
-        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
-    else:
-        assert not np.any(np.isinf(data)), f"Infinite values for {data_var.name}"
-        assert np.any(np.isnan(data)), f"No source missing values for {data_var.name}"
-
-
 # Variables not present in the GEFSv12 reforecast archive (file doesn't exist or not in GRIB index)
 _REFORECAST_MISSING_VARS = frozenset(
     {
@@ -854,7 +846,7 @@ def test_download_and_read_all_vars_reforecast() -> None:
         )
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
-        _assert_expected_source_values(data, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
     with ThreadPoolExecutor() as pool:
         list(pool.map(_download_and_check, data_vars))
@@ -884,7 +876,7 @@ def test_download_and_read_all_vars_pre_v12() -> None:
         )
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
-        _assert_expected_source_values(data, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
     with ThreadPoolExecutor() as pool:
         list(pool.map(_download_and_check, data_vars))
@@ -911,7 +903,7 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
         )
         coord = replace(coord, downloaded_path=region_job.download_file(coord))
         data = region_job.read_data(coord, data_var)
-        _assert_expected_source_values(data, data_var)
+        assert np.all(np.isfinite(data)), f"Non-finite values for {data_var.name}"
 
     with ThreadPoolExecutor() as pool:
         list(pool.map(_download_and_check, template_config.data_vars))

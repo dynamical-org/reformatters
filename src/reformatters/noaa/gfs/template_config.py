@@ -357,9 +357,6 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     grib_index_level="surface",
                     index_position=590,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    source_fill_value=-50.0,
-                    # The source encodes no precipitation from -50 through -0.1.
-                    source_fill_value_atol=49.9,
                 ),
             ),
             NoaaDataVar(
@@ -521,8 +518,6 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     grib_index_level="cloud ceiling",
                     index_position=637,
                     keep_mantissa_bits=8,
-                    source_fill_value=20_000.0,
-                    source_fill_value_atol=1.0,
                 ),
             ),
             NoaaDataVar(

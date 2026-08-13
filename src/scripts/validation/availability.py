@@ -318,12 +318,7 @@ def _uses_semantic_missing_values(
         or da.encoding.get("missing_value") is not None
         or (
             template_var is not None
-            and getattr(
-                getattr(template_var, "internal_attrs", None),
-                "source_fill_value",
-                None,
-            )
-            is not None
+            and template_var.internal_attrs.source_fill_value is not None
         )
     )
 
@@ -371,14 +366,16 @@ def _co_ingested_availability(
     )
 
 
-def _apply_sentinel_availability(
-    ctx: RunContext, sentinel_vars: list[str], template_vars: dict[str, DataVar[Any]]
+def _apply_semantic_missing_availability(
+    ctx: RunContext,
+    semantic_missing_vars: list[str],
+    template_vars: dict[str, DataVar[Any]],
 ) -> None:
-    for var in sentinel_vars:
+    for var in semantic_missing_vars:
         series = _co_ingested_availability(ctx, var, template_vars)
         if series is None:
             log.info(
-                f"  nulls {var}: not measured (masked sentinel, "
+                f"  nulls {var}: not measured (semantic missing values, "
                 "nothing co-ingested scanned)"
             )
             continue
@@ -400,7 +397,7 @@ def run_value_availability(ctx: RunContext) -> None:
     log.info(f"availability: {len(ctx.variables)} variables at {p1_label} / {p2_label}")
 
     template_vars = _template_data_vars(ctx)
-    sentinel_vars = [
+    semantic_missing_vars = [
         var
         for var in ctx.variables
         if _uses_semantic_missing_values(ctx.validation_ds[var], template_vars.get(var))
@@ -421,7 +418,7 @@ def run_value_availability(ctx: RunContext) -> None:
         da_p2 = load_retried(da_p2)
         ctx.loaded_point_data[var] = (da_p1, da_p2)
 
-        if var in sentinel_vars:
+        if var in semantic_missing_vars:
             continue
 
         template_var = template_vars.get(var)
@@ -454,7 +451,7 @@ def run_value_availability(ctx: RunContext) -> None:
         p2_fmt = _format_unavailable_summary(unavailable_p2)
         log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
 
-    _apply_sentinel_availability(ctx, sentinel_vars, template_vars)
+    _apply_semantic_missing_availability(ctx, semantic_missing_vars, template_vars)
 
     # Heatmap rows render in scan order.
     ctx.availability = {
@@ -559,8 +556,8 @@ def availability(
     min_fraction: float = typer.Option(
         1.0,
         "--min-fraction",
-        help="Exit non-zero if any measured position has less than this availability "
-        "fraction (the post-backfill completeness gate)",
+        help="Virtual stores: exit non-zero if any position has less than this "
+        "fraction of its expected source files (the post-backfill completeness gate)",
     ),
 ) -> None:
     """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
@@ -586,28 +583,3 @@ def availability(
         )
     else:
         run_value_availability(ctx)
-        unmeasured = sorted(set(ctx.variables) - set(ctx.availability))
-        if unmeasured:
-            log.error(
-                f"Materialized availability could not measure variables: {unmeasured}"
-            )
-            raise typer.Exit(1)
-        below = {}
-        for var, series in ctx.availability.items():
-            incomplete = ~np.isfinite(series.fraction) | (
-                series.fraction < min_fraction
-            )
-            if incomplete.any():
-                below[var] = series.positions[incomplete]
-        if below:
-            positions_below = sum(len(positions) for positions in below.values())
-            log.error(
-                f"Materialized availability incomplete: {positions_below} "
-                f"variable-positions across {len(below)} variables below "
-                f"{min_fraction:.0%}"
-            )
-            raise typer.Exit(1)
-        log.info(
-            f"Materialized availability complete: all measured positions "
-            f"≥ {min_fraction:.0%}"
-        )

@@ -9,7 +9,6 @@ import rioxarray  # noqa: F401  # Registers .rio accessor on xarray objects
 import xarray as xr
 
 from reformatters.common.config import Config
-from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_HOURS,
@@ -60,7 +59,6 @@ def read_data(
         template.rio.crs,
         coord,
         coord.gefs_file_type,
-        data_var,
     )
 
 
@@ -73,7 +71,6 @@ def read_rasterio(
     out_crs: rasterio.crs.CRS,
     coord: GefsSourceFileCoord,
     true_gefs_file_type: Literal["a", "b", "s", "reforecast"],
-    data_var: GEFSDataVar,
 ) -> Array2D[np.float32]:
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -91,8 +88,6 @@ def read_rasterio(
 
             assert len(matching_bands) == 1, f"Expected exactly 1 matching band, found {matching_bands}. {grib_element=}, {grib_description=}, {path=}"  # fmt: skip
             rasterio_band_index = matching_bands[0]
-            raw = reader.read(rasterio_band_index, out_dtype=np.float32)
-            mask_source_fill_value_inplace(raw, data_var.internal_attrs)
 
             result: Array2D[np.float32]
             match true_gefs_file_type:
@@ -102,7 +97,7 @@ def read_rasterio(
                     assert reader.shape == out_spatial_shape
                     assert reader.transform == out_transform
                     assert reader.crs.to_dict() == out_crs
-                    return raw
+                    return reader.read(rasterio_band_index, out_dtype=np.float32)
                 case "a" | "b" | "reforecast":
                     # Interpolate 1.0/0.5 degree data to the 0.25 degree grid.
                     # Every 2nd (0.5 deg) or every 4th (1.0 deg) 0.25 degree pixel's center aligns exactly
@@ -113,6 +108,7 @@ def read_rasterio(
                     # Diagram: https://github.com/dynamical-org/reformatters/pull/44#issuecomment-2683799073
                     # Note: having the .read() call interpolate gives very slightly shifted results
                     # so we pay for an extra memory allocation and use reproject to do the interpolation instead.
+                    raw = reader.read(rasterio_band_index, out_dtype=np.float32)
                     if reader.shape == out_spatial_shape:
                         # Some reforecast files are already 0.25° - no reprojection needed.
                         assert reader.transform == out_transform
@@ -129,9 +125,7 @@ def read_rasterio(
                     if not Config.is_prod:
                         # Because the pixel centers are aligned we exactly retain the source data
                         step = 2 if is_v12(coord.init_time) else 4
-                        assert np.array_equal(
-                            raw, result[::step, ::step], equal_nan=True
-                        )
+                        assert np.array_equal(raw, result[::step, ::step])
                     return result
                 case _ as unreachable:
                     assert_never(unreachable)
@@ -155,7 +149,6 @@ def _reproject_bilinear_longitude_wrap(
     wrapped = np.concatenate([raw[:, -1:], raw, raw[:, :1]], axis=1)
     wrapped_transform = src_transform * rasterio.transform.Affine.translation(-1, 0)
     result: Array2D[np.float32]
-    # NaN source fills make interpolation borders around missing regions NaN.
     result, _ = rasterio.warp.reproject(
         wrapped,
         np.full(out_spatial_shape, np.nan, dtype=np.float32),
@@ -163,8 +156,6 @@ def _reproject_bilinear_longitude_wrap(
         src_crs=src_crs,
         dst_transform=out_transform,
         dst_crs=out_crs,
-        src_nodata=np.nan,
-        dst_nodata=np.nan,
         resampling=rasterio.warp.Resampling.bilinear,
     )
     return result

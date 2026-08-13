@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Annotated, Any, Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
 import numcodecs
 import numcodecs.abc
@@ -219,7 +219,6 @@ class BaseInternalAttrs(FrozenBaseModel):
     # Access via data_var.has_hour_0_values(), not directly.
     hour_0_values_override: bool | None = None
     source_fill_value: float | None = None
-    source_fill_value_atol: float = 0.0
 
 
 INTERNAL_ATTRS_co = TypeVar(
@@ -260,7 +259,7 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
 
 
 def source_fill_value_var_names(
-    data_vars: Sequence[DataVar[Any]],
+    data_vars: Sequence[DataVar[BaseInternalAttrs]],
 ) -> tuple[str, ...]:
     return tuple(
         data_var.name
@@ -275,11 +274,4 @@ def mask_source_fill_value_inplace(
     source_fill_value = internal_attrs.source_fill_value
     if source_fill_value is None:
         return
-    values[
-        np.isclose(
-            values,
-            source_fill_value,
-            rtol=0,
-            atol=internal_attrs.source_fill_value_atol,
-        )
-    ] = np.nan
+    values[values == np.float32(source_fill_value)] = np.nan

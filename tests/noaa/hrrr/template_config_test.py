@@ -3,7 +3,12 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.config_models import ROOT, DatasetAttributes, Encoding
+from reformatters.common.config_models import (
+    ROOT,
+    DatasetAttributes,
+    Encoding,
+    source_fill_value_var_names,
+)
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.types import Dims
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
@@ -92,6 +97,29 @@ def test_latitude_longitude_coordinates(
     lon_diff_x = np.diff(lons, axis=1)
     assert np.isclose(lon_diff_x.min(), 0.02666473)
     assert np.isclose(lon_diff_x.max(), 0.04299164)
+
+
+def test_materialized_source_fill_values(
+    template_config: NoaaHrrrCommonTemplateConfig,
+) -> None:
+    encoding = Encoding(
+        dtype="float32", fill_value=np.nan, chunks=(1, 1, 1), shards=None
+    )
+    data_vars = template_config.get_data_vars(encoding)
+    by_name = {var.name: var for var in data_vars}
+
+    assert (
+        by_name["percent_frozen_precipitation_surface"].internal_attrs.source_fill_value
+        == -50.0
+    )
+    assert (
+        by_name["geopotential_height_cloud_ceiling"].internal_attrs.source_fill_value
+        == 9_999.0
+    )
+    assert source_fill_value_var_names(data_vars) == (
+        "percent_frozen_precipitation_surface",
+        "geopotential_height_cloud_ceiling",
+    )
 
 
 def test_spatial_info_matches_file(

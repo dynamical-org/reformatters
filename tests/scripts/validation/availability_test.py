@@ -4,13 +4,11 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-import typer
 import xarray as xr
 
 from scripts.validation.availability import (
     HEATMAP_FILENAME,
     _heatmap_xticks,
-    availability,
     run_value_availability,
     write_availability_artifacts,
 )
@@ -296,7 +294,7 @@ def test_run_value_availability_source_mask_uses_co_ingested(
         [
             _stub_var("temperature_2m", has_hour_0=True),
             _stub_var("precipitation_surface", has_hour_0=False),
-            _stub_var("cloud_ceiling", has_hour_0=True, source_fill_value=20_000.0),
+            _stub_var("cloud_ceiling", has_hour_0=True, source_fill_value=9_999.0),
         ],
     )
     ctx = _ctx(ds, tmp_path)
@@ -308,40 +306,6 @@ def test_run_value_availability_source_mask_uses_co_ingested(
         ctx.availability["cloud_ceiling"].fraction,
         [1, 1, 0.5, 1, 1, 1],
     )
-
-
-def test_materialized_availability_min_fraction_exits_nonzero(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ctx = _ctx(_forecast_dataset(), tmp_path)
-    monkeypatch.setattr(
-        "scripts.validation.availability.build_run_context",
-        lambda *args, **kwargs: ctx,
-    )
-
-    with pytest.raises(typer.Exit) as exc_info:
-        availability("s3://bucket/noaa-test/v1.zarr", min_fraction=1.0)
-
-    assert exc_info.value.exit_code == 1
-
-
-def test_materialized_availability_unmeasured_variable_exits_nonzero(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ctx = _ctx(_forecast_dataset(), tmp_path)
-    ctx.variables = ["missing"]
-    monkeypatch.setattr(
-        "scripts.validation.availability.build_run_context",
-        lambda *args, **kwargs: ctx,
-    )
-    monkeypatch.setattr(
-        "scripts.validation.availability.run_value_availability", lambda ctx: None
-    )
-
-    with pytest.raises(typer.Exit) as exc_info:
-        availability("s3://bucket/noaa-test/v1.zarr", min_fraction=1.0)
-
-    assert exc_info.value.exit_code == 1
 
 
 def test_heatmap_xticks_thins_long_archive() -> None:

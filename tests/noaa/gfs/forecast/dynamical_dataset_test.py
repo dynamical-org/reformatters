@@ -1,5 +1,4 @@
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -227,15 +226,5 @@ def test_operational_kubernetes_resources() -> None:
 def test_validators() -> None:
     dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 2
     assert all(isinstance(v, validation.DataValidator) for v in validators)
-    assert isinstance(validators[1], partial)
-    assert validators[1].keywords["exclude_vars"] == (
-        "percent_frozen_precipitation_surface",
-        "geopotential_height_cloud_ceiling",
-    )
-    assert isinstance(validators[2], partial)
-    assert (
-        validators[2].keywords["include_vars"] == validators[1].keywords["exclude_vars"]
-    )
-    assert validators[2].keywords["max_nan_fraction"] == 0.999

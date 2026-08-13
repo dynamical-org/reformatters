@@ -12,6 +12,7 @@ from obstore.exceptions import PermissionDeniedError
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.grib import grib_decimal_scale_factors
@@ -221,9 +222,7 @@ class NoaaMrmsRegionJob(
         np.round(raw, decimal_scale, out=raw)
         result: ArrayFloat32 = raw
 
-        nodata_sentinel = data_var.internal_attrs.nodata_sentinel
-        if nodata_sentinel is not None:
-            result[result == nodata_sentinel] = np.nan
+        mask_source_fill_value_inplace(result, data_var.internal_attrs)
 
         return result
 

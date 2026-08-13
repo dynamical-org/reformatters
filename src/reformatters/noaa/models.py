@@ -1,7 +1,4 @@
-from reformatters.common.config_models import (
-    BaseInternalAttrs,
-    DataVar,
-)
+from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.types import Timedelta
 
 

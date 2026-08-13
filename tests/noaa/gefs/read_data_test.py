@@ -40,20 +40,3 @@ def test_reproject_bilinear_longitude_wrap_fills_eastern_edge(src_deg: float) ->
     fraction = (179.75 - lons[-1]) / src_deg
     expected_east = (1 - fraction) * lons[-1] + fraction * (-180)
     np.testing.assert_allclose(result[:, -1], expected_east, rtol=0, atol=1e-4)
-
-
-def test_reproject_preserves_source_fill_value_at_aligned_pixel() -> None:
-    src_deg = 1.0
-    n_lon = round(360 / src_deg)
-    n_lat = round(180 / src_deg) + 1
-    src_transform = Affine(
-        src_deg, 0, -180 - src_deg / 2, 0, -src_deg, 90 + src_deg / 2
-    )
-    raw = np.ones((n_lat, n_lon), dtype=np.float32)
-    raw[90, 180] = np.nan
-
-    result = _reproject_bilinear_longitude_wrap(
-        raw, src_transform, _CRS, _OUT_SHAPE, _OUT_TRANSFORM, _CRS
-    )
-
-    assert np.isnan(result[360, 720])
