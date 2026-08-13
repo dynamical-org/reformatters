@@ -268,6 +268,8 @@ if Config.is_sentry_enabled:
         in_app_include=["reformatters"],
         default_integrations=True,
         enable_logs=True,
+        # Hypothesis: connection idles are causing us to loose events after quiet periods
+        keep_alive=True,
         before_send_log=before_log,
         integrations=[
             TyperIntegration(),

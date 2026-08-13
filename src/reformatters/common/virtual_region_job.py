@@ -218,6 +218,7 @@ class VirtualRegionJob(
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 tick_start = time.monotonic()
@@ -243,6 +244,7 @@ class VirtualRegionJob(
                         f"{len(pending)} still pending "
                         f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
                     )
+                    last_log = time.monotonic()
                     if batch:
                         yield batch
                 if self.processing_mode == "backfill":
@@ -260,6 +262,10 @@ class VirtualRegionJob(
                             f"(first: {pending[0].get_url()})"
                         )
                         return
+                    # Break the silence under the 350s network idle timeout.
+                    if time.monotonic() - last_log >= 4 * 60:
+                        log.info(f"Waiting on {len(pending)} source files")
+                        last_log = time.monotonic()
                     elapsed = time.monotonic() - tick_start
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
