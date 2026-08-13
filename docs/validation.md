@@ -67,12 +67,6 @@ uv run src/scripts/validation/plots.py probe-position <DATASET_URL> <POSITION>
 
 For a materialized store, variables with semantic NaNs use the availability of variables co-ingested from the same source files because their own missing values cannot distinguish unavailable data from a valid missing state.
 
-For a materialized store, `chunk-census` exhaustively reads only the fixed-size index from every shard and counts physically present inner chunks. This detects omitted all-fill chunks that a shard-level key listing cannot see. Run it independently on every primary and replica URL when proving a fill-value metadata change safe; the JSON report is written to the validation output directory.
-
-```bash
-uv run src/scripts/validation/plots.py chunk-census <DATASET_URL> [-v <variable>]
-```
-
 - **position probe** (`probe-position`) — the specific source file URLs a store has no reference for at one append-dim position. `unavailable_timestamps.txt` gives only present/expected counts, so this is how you get from "110/111 present" to the one file to check upstream when classifying a gap per [3e](#3e-update-validation_summarymd).
 - **decode scan** (`decode-scan`) — sampled decode health. Samples evenly spaced append-dim regions (every variable group at each sampled region), decodes a bounded sample of present references — across lead times, members, and levels — and fails if any sampled chunk errors or decodes entirely NaN. Results render as the "Decode health (sampled)" section of `validation_summary.md` (the standalone command also writes `decode_scan_summary.md`). **This is a sample, not an exhaustive sweep**: a reference that decodes to garbage outside the sample is not caught (a literal every-chunk decode across all leads × members × levels is hours).
 
