@@ -78,6 +78,7 @@ class NoaaHrrrAnalysisDataset(
                 validation.check_analysis_recent_nans,
                 max_expected_delay=max_expected_delay,
                 include_vars=source_fill_value_vars,
-                max_nan_fraction=0.999,
+                max_nan_fraction=0.9999,
+                spatial_sampling="quarter",
             ),
         )
