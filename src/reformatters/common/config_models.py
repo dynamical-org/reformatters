@@ -66,6 +66,7 @@ type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
 
 
 class DataVarAttrs(FrozenBaseModel):
+    # CF _FillValue is set from Encoding.fill_value by assign_var_metadata
     # Use ECMWF parameter `name` if one is applicable
     long_name: Annotated[str, pydantic.Field(min_length=1)]
     # Use ECMWF parameter `shortname` if one is applicable
