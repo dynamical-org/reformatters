@@ -459,18 +459,35 @@ def _check_nan_fractions(
             fractions[var_name] = fraction
             log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
 
+    # An empty selection means the check measured nothing. Its NaN fraction is NaN,
+    # which is not > any threshold, so without this it reports a pass.
+    unmeasured_vars = sorted(
+        var_name
+        for var_name, fraction in fractions.items()
+        if not np.isfinite(fraction)
+    )
     problem_vars = {
         var_name: fraction
         for var_name, fraction in fractions.items()
-        if fraction > max_nan_fraction
+        if np.isfinite(fraction) and fraction > max_nan_fraction
     }
 
-    if problem_vars:
-        message = f"Excessive NaN fraction (> {max_nan_fraction}):\n" + "\n".join(
-            f"- {var}: {fraction:.6f} NaN fraction"
-            for var, fraction in sorted(problem_vars.items())
+    messages = []
+    if unmeasured_vars:
+        messages.append(
+            "No values selected to compute a NaN fraction for: "
+            + ", ".join(unmeasured_vars)
         )
-        return ValidationResult(passed=False, message=message)
+    if problem_vars:
+        messages.append(
+            f"Excessive NaN fraction (> {max_nan_fraction}):\n"
+            + "\n".join(
+                f"- {var}: {fraction:.6f} NaN fraction"
+                for var, fraction in sorted(problem_vars.items())
+            )
+        )
+    if messages:
+        return ValidationResult(passed=False, message="\n".join(messages))
 
     return ValidationResult(
         passed=True,
