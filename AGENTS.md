@@ -2,25 +2,6 @@ This project contains code to reformat weather data into the Zarr v3 / Icechunk 
 
 To add a new dataset/data product, or add variable(s) to an existing dataset, follow [docs/dataset_development_guide.md](docs/dataset_development_guide.md).
 
-## Public catalog and backward compatibility
-
-Zarr datasets created by the canonical deployment of this repository are published by dynamical.org. The production catalog at `https://stac.dynamical.org/catalog.json` is the source of truth. The staging catalog at `https://stac-staging.dynamical.org/catalog.json` is a superset that includes datasets that may be published soon. Only datasets in the production catalog are subject to this backward-compatibility policy. Datasets under `contrib/` are not published in these catalogs.
-
-We do not control downstream readers of published datasets. Do not make a potentially breaking change without extremely explicit user approval and discussion of a migration and communication plan.
-
-Breaking changes include:
-
-- Renaming or removing existing variables, coordinates, Zarr groups, or dimensions.
-- Changing dimension names or lengths.
-- Changing existing coordinate values, labels, ordering, dtype, or encoding. The only routine exception is appending new values to the end of the append dimension (`time` or `init_time`).
-- Removing or changing dataset, group, variable, or coordinate attributes, including `dataset_id`, `standard_name`, and `units`.
-- Changing dtype, chunk or shard layout, dimension metadata, compression codecs or settings, `fill_value`, or `_FillValue`. The only exception is adjusting lossy rounding while preserving the variable's meaning and maintaining a precision level explicitly accepted by the user.
-- Changing the interpretation of retrieved values, including their units, scaling, aggregation, sign convention, missing-data behavior, or physical meaning.
-
-Additions are allowed, including new variables, coordinates, Zarr groups, and attributes. Adding a coordinate must not change existing dimensions or coordinates.
-
-Published data values are not immutable and may be updated to reflect source corrections. Demonstrably incorrect data, metadata, or encodings may also be corrected, including incorrect units or missing fill-value metadata. The error must be established by inspecting real data. These corrections remain subject to the approval, migration, and communication rule above. When in doubt about any aspect of the compatibility rules, discuss the change with the user.
-
 ## Approach overview
 
 Datasets are created in 3 phases:
@@ -230,6 +211,25 @@ Mechanics, when a comment does earn its place:
 * An assert or validator with a clear message documents itself; don't add a comment restating it.
 
 The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is accumulation: individually-reasonable "helpful" notes compounding across changes into a codebase readers must wade through and learn to distrust. An agent's in-the-moment helpfulness is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited, apply the bolded test to each sentence, and delete what fails — expect that to be most of it.
+
+## Public catalog and backward compatibility
+
+Zarr datasets created by the canonical deployment of this repository are published by dynamical.org. The production catalog at `https://stac.dynamical.org/catalog.json` is the source of truth. The staging catalog at `https://stac-staging.dynamical.org/catalog.json` is a superset that includes datasets that may be published soon. Only datasets in the production catalog are subject to this backward-compatibility policy. Datasets under `contrib/` are not published in these catalogs.
+
+We do not control downstream readers of published datasets. Do not make a potentially breaking change without extremely explicit user approval and discussion of a migration and communication plan.
+
+Breaking changes include:
+
+- Renaming or removing existing variables, coordinates, Zarr groups, or dimensions.
+- Changing dimension names or lengths.
+- Changing existing coordinate values, labels, ordering, dtype, or encoding. The only routine exception is appending new values to the end of the append dimension (`time` or `init_time`).
+- Removing or changing dataset, group, variable, or coordinate attributes, including `dataset_id`, `standard_name`, and `units`.
+- Changing dtype, chunk or shard layout, dimension metadata, compression codecs or settings, `fill_value`, or `_FillValue`. The only exception is adjusting lossy rounding while preserving the variable's meaning and maintaining a precision level explicitly accepted by the user.
+- Changing the interpretation of retrieved values, including their units, scaling, aggregation, sign convention, missing-data behavior, or physical meaning.
+
+Additions are allowed, including new variables, coordinates, Zarr groups, and attributes. Adding a coordinate must not change existing dimensions or coordinates.
+
+Published data values are not immutable and may be updated to reflect source corrections. Demonstrably incorrect data, metadata, or encodings may also be corrected, including incorrect units or missing fill-value metadata. The error must be established by inspecting real data. These corrections remain subject to the approval, migration, and communication rule above. When in doubt about any aspect of the compatibility rules, discuss the change with the user.
 
 ## Inspecting a published dataset
 
