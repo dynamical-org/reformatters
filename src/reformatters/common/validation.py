@@ -326,21 +326,17 @@ def check_analysis_recent_nans(
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Checks `num_recent_times` timesteps ending at `time_offset` (inclusive), newest
-    first, and fails if any of them exceeds `max_nan_fraction`. Each timestep is
-    checked independently, so a timestep that is entirely NaN cannot be averaged away
-    by healthy neighbours. Selecting by position rather than by clock also means an
-    off-schedule run still checks real data; whether the newest timestep is recent
-    enough is `check_analysis_current_data`'s question.
+    Checks `num_recent_times` timesteps ending at `time_offset` (`-1` = newest), each
+    independently, failing if any exceeds `max_nan_fraction`. Positional selection
+    means an off-schedule run still checks real data; recency is
+    `check_analysis_current_data`'s question.
 
-    `time_offset` selects the newest timestep to check, counted from the end (`-1` =
-    newest, `-2` = the one before). Use `-2` where the newest timestep is structurally
-    incomplete by design, so its expected emptiness does not have to be absorbed into
-    `max_nan_fraction` (e.g. MRMS gauge-collection latency leaves it entirely NaN).
+    For a variable that fills in over several timesteps, separate calls with different
+    `time_offset` / `num_recent_times` / `max_nan_fraction` check each stage against
+    what is complete by then, instead of one threshold loose enough for all of them.
 
-    Default `spatial_sampling="random_points"` reads 2 random spatial points — cheap
-    and covers independent locations. Use `"quarter"` for structural-NaN datasets and
-    `"all"` only when small.
+    Default `spatial_sampling="random_points"` reads 2 random spatial points. Use
+    `"quarter"` for structural-NaN datasets and `"all"` only when small.
     """
     assert num_recent_times >= 1, "num_recent_times must be >= 1"
 
@@ -495,8 +491,7 @@ def _check_nan_fractions(
         for future in as_completed(future_to_var):
             fractions[future_to_var[future]] = future.result()
 
-    # Combine: many info level log records emitted within the same second are dropped
-    # before reaching Sentry.
+    # Combine: many info records in the same second are dropped before reaching Sentry.
     summary = ", ".join(f"{var}={fractions[var]:.6f}" for var in sorted(fractions))
     log.info(f"NaN fractions: {summary}")
 
