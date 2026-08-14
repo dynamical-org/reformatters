@@ -460,9 +460,8 @@ def _check_nan_fractions(
         for future in as_completed(future_to_var):
             fractions[future_to_var[future]] = future.result()
 
-    # One record rather than one per variable: many log records emitted within the same
-    # second are dropped before reaching Sentry, and the per-variable fractions are what
-    # inspecting a past run needs.
+    # Combine: many info level log records emitted within the same second are dropped
+    # before reaching Sentry.
     summary = ", ".join(f"{var}={fractions[var]:.6f}" for var in sorted(fractions))
     log.info(f"NaN fractions: {summary}")
 
