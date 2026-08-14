@@ -361,8 +361,18 @@ class MaterializedRegionJob(
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
                     )
-                except Exception:
-                    log.exception(f"Read failed {coord.downloaded_path}")
+                except Exception as e:
+                    append_dim_coord = coord.append_dim_coord
+                    two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
+                    # Old archived source files are sometimes corrupted or unavailable;
+                    # keep full exception visibility for recent, operationally-relevant reads.
+                    if (
+                        isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+                        and append_dim_coord < two_days_ago
+                    ):
+                        log.warning(f"Read failed {coord.downloaded_path}: {e}")
+                    else:
+                        log.exception(f"Read failed {coord.downloaded_path}")
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.ReadFailed
                     )
