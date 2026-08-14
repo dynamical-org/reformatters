@@ -250,6 +250,74 @@ def test_check_forecast_recent_nans_window_all_clean_passes(
     assert "All 3 recent init_times" in result.message
 
 
+def test_check_forecast_recent_nans_empty_selection_fails(
+    rng: np.random.Generator,
+) -> None:
+    """A variable left with no values to check must fail, not vacuously pass.
+
+    A non-instant variable's lead_time=0 slice is dropped, so a single-lead
+    dataset leaves it empty. An empty selection yields a NaN fraction of NaN,
+    which no threshold comparison can catch.
+    """
+    lats = np.linspace(-90, 90, 10)
+    lons = np.linspace(-180, 180, 20)
+    ds = xr.Dataset(
+        {
+            "precipitation": (
+                ["init_time", "lead_time", "latitude", "longitude"],
+                rng.standard_normal((2, 1, len(lats), len(lons))),
+                {"step_type": "accum"},
+            ),
+        },
+        coords={
+            "init_time": pd.date_range("2024-01-01", periods=2, freq="6h"),
+            "lead_time": pd.timedelta_range(start="0h", periods=1, freq="6h"),
+            "latitude": lats,
+            "longitude": lons,
+        },
+    )
+
+    result = validation.check_forecast_recent_nans(ds)
+
+    assert not result.passed
+    assert "precipitation" in result.message
+
+
+def test_check_analysis_recent_nans_empty_window_fails(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """An empty recency window must fail, not vacuously pass.
+
+    Running off-schedule, or before a late update publishes, selects no times.
+    Every variable's NaN fraction is then NaN, which passes every threshold.
+    """
+    now = pd.Timestamp("2024-01-10")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, max_expected_delay=timedelta(hours=4)
+    )
+
+    assert not result.passed
+    assert "temperature" in result.message
+
+
+def test_check_analysis_recent_nans_empty_window_fails_with_loose_threshold(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """An empty window fails even where a high NaN fraction would be tolerated."""
+    now = pd.Timestamp("2024-01-10")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset,
+        max_expected_delay=timedelta(hours=4),
+        max_nan_fraction=0.9999,
+    )
+
+    assert not result.passed
+
+
 def test_check_analysis_current_data_passes(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
