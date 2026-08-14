@@ -183,7 +183,9 @@ def _stub_registry(
 
 
 def _stub_var(
-    name: str, has_hour_0: bool, source_fill_value: float | None = None
+    name: str,
+    has_hour_0: bool,
+    source_fill_value: float | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
@@ -223,7 +225,7 @@ def test_run_value_availability_exempts_hour_0_override_vars(
 def test_run_value_availability_sentinel_masked_uses_co_ingested(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A masked-sentinel var (missing_value) can't be value-scanned — NaN is ambiguous
+    """A masked-sentinel var can't be value-scanned — NaN is ambiguous
     between not-ingested and legitimately-no-data — so its availability is the mean of
     its source-file group co-members'."""
     ds = _forecast_dataset()
@@ -233,13 +235,16 @@ def test_run_value_availability_sentinel_masked_uses_co_ingested(
         sentinel,
     )
     ds["percent_frozen_precipitation_surface"].attrs["step_type"] = "instant"
-    ds["percent_frozen_precipitation_surface"].attrs["missing_value"] = -50.0
     _stub_registry(
         monkeypatch,
         [
             _stub_var("temperature_2m", has_hour_0=True),
             _stub_var("precipitation_surface", has_hour_0=False),
-            _stub_var("percent_frozen_precipitation_surface", has_hour_0=False),
+            _stub_var(
+                "percent_frozen_precipitation_surface",
+                has_hour_0=False,
+                source_fill_value=-50.0,
+            ),
         ],
     )
     ctx = _ctx(ds, tmp_path)
@@ -269,7 +274,7 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
         ds["temperature_2m"].dims,
         np.full(ds["temperature_2m"].shape, np.nan),
     )
-    ds["percent_frozen_precipitation_surface"].attrs["missing_value"] = -50.0
+    ds["percent_frozen_precipitation_surface"].encoding["_FillValue"] = -50.0
     ctx = _ctx(ds, tmp_path)
     ctx.variables = [*ctx.variables, "percent_frozen_precipitation_surface"]
 

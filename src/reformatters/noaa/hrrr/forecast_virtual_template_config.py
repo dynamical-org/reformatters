@@ -369,7 +369,7 @@ def _data_var(
     units: str,
     standard_name: str | None,
     comment: str | None,
-    missing_value: float | None = None,
+    fill_value: float = np.nan,
     hour_0: bool | None,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
@@ -390,7 +390,7 @@ def _data_var(
             element,
             group,
             resolved_filters,
-            fill_value=missing_value if missing_value is not None else np.nan,
+            fill_value=fill_value,
         ),
         attrs=DataVarAttrs(
             short_name=short_name,
@@ -399,7 +399,6 @@ def _data_var(
             standard_name=standard_name,
             step_type=step_type,  # ty: ignore[invalid-argument-type]
             comment=comment,
-            missing_value=missing_value,
             flag_values=flag_values,
             flag_meanings=flag_meanings,
         ),
@@ -433,7 +432,7 @@ def _root_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
-    missing_value: float | None = None,
+    fill_value: float = np.nan,
     hour_0: bool | None = None,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
@@ -452,7 +451,7 @@ def _root_var(
         units=units,
         standard_name=standard_name,
         comment=comment,
-        missing_value=missing_value,
+        fill_value=fill_value,
         hour_0=hour_0,
         filters=filters,
         flag_values=flag_values,
@@ -470,7 +469,7 @@ def _pressure_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
-    missing_value: float | None = None,
+    fill_value: float = np.nan,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -485,7 +484,7 @@ def _pressure_var(
         units=units,
         standard_name=standard_name,
         comment=comment,
-        missing_value=missing_value,
+        fill_value=fill_value,
         hour_0=None,
     )
 
@@ -537,7 +536,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Echo top",
             units="m",
             comment="-999 encodes no echo; CF-aware readers mask it to NaN.",
-            missing_value=-999.0,
+            fill_value=-999.0,
         ),
         _root_var(
             "vertically_integrated_liquid_atmosphere",
@@ -999,7 +998,7 @@ def _root_data_vars() -> list[NoaaHrrrDataVar]:
             long_name="Percent frozen precipitation",
             units="percent",
             comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
-            missing_value=-50.0,
+            fill_value=-50.0,
             hour_0=False,
         ),
         _root_var(
@@ -1876,7 +1875,7 @@ def _pressure_data_vars() -> list[NoaaHrrrDataVar]:
             # HRRR omits dew point at the highest isobaric levels (always 50 hPa, and
             # 75 hPa in some cycles); those GRIB cells decode to 0 K, which the
             # Kelvin->Celsius filter turns into -273.15, masked to NaN by CF-aware readers.
-            missing_value=-273.15,
+            fill_value=-273.15,
         ),
         _pressure_var(
             "graupel",

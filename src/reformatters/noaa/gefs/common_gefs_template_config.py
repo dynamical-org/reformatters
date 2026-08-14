@@ -110,9 +110,7 @@ def get_shared_data_var_configs(
 
     encoding_float32 = Encoding(
         dtype="float32",
-        # While in general we use nan as a fill_value, these datasets were backfilled
-        # with fill_value = 0 and write_missing_chunks defaulting to false so we retain the 0 fill value
-        fill_value=0,
+        fill_value=np.nan,
         chunks=chunks,
         shards=shards,
         compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],

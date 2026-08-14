@@ -66,6 +66,7 @@ type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
 
 
 class DataVarAttrs(FrozenBaseModel):
+    # CF _FillValue is set from Encoding.fill_value by assign_var_metadata
     # Use ECMWF parameter `name` if one is applicable
     long_name: Annotated[str, pydantic.Field(min_length=1)]
     # Use ECMWF parameter `shortname` if one is applicable
@@ -75,9 +76,6 @@ class DataVarAttrs(FrozenBaseModel):
     # Must follow CF Conventions if CF defines a standard name for this variable
     units: Annotated[str, pydantic.Field(min_length=1)]
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
-    # CF missing_value: a sentinel the source stores in the data which CF-aware
-    # readers such as xarray mask to NaN on read.
-    missing_value: float | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
     # CF flag attributes for categorical variables, see CF Conventions section 3.5.
@@ -246,16 +244,6 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
         if self.internal_attrs.hour_0_values_override is not None:
             return self.internal_attrs.hour_0_values_override
         return self.attrs.step_type == "instant"
-
-    @pydantic.model_validator(mode="after")
-    def validate_missing_value_matches_fill_value(self) -> DataVar[INTERNAL_ATTRS_co]:
-        if self.attrs.missing_value is not None:
-            assert self.attrs.missing_value == self.encoding.fill_value, (
-                f"{self.name}: missing_value ({self.attrs.missing_value}) must equal "
-                f"encoding.fill_value ({self.encoding.fill_value}) — xarray requires "
-                "_FillValue and missing_value to agree when both are set"
-            )
-        return self
 
 
 def source_fill_value_var_names(

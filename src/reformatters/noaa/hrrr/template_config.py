@@ -376,7 +376,6 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     units="percent",
                     step_type="instant",
                     comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
-                    missing_value=-50.0,
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",

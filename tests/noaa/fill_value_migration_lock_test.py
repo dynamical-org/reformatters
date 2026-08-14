@@ -30,12 +30,12 @@ def _same_fill(actual: float, expected: float) -> bool:
 @pytest.mark.parametrize(
     ("template_config", "default_fill", "fill_overrides"),
     [
-        (NoaaGfsForecastTemplateConfig(), 0.0, {}),
-        (GefsAnalysisTemplateConfig(), 0.0, {}),
-        (GefsForecast35DayTemplateConfig(), 0.0, {}),
+        (NoaaGfsForecastTemplateConfig(), np.nan, {}),
+        (GefsAnalysisTemplateConfig(), np.nan, {}),
+        (GefsForecast35DayTemplateConfig(), np.nan, {}),
         (
             NoaaHrrrForecast48HourTemplateConfig(),
-            0.0,
+            np.nan,
             {"percent_frozen_precipitation_surface": -50.0},
         ),
         (
@@ -69,13 +69,6 @@ def test_materialized_fill_value_migration_lock(
         assert _same_fill(
             raw_template[var.name].attrs["_FillValue"], expected_cf_fill
         ), var.name
-        expected_missing_value = (
-            -50.0
-            if var.name == "percent_frozen_precipitation_surface" and expected == -50.0
-            else None
-        )
-        assert (
-            raw_template[var.name].attrs.get("missing_value") == expected_missing_value
-        )
+        assert "missing_value" not in raw_template[var.name].attrs
 
     raw_template.close()
