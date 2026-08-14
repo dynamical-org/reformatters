@@ -325,13 +325,17 @@ def check_analysis_recent_nans(
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
+    The window spans `max_expected_delay` back from the dataset's newest timestamp,
+    not from now, so it always selects data. Whether that newest timestamp is itself
+    recent enough is `check_analysis_current_data`'s question.
+
     Default `spatial_sampling="random_points"` reads 2 random spatial points
     (across all timesteps in the window) — cheap and covers independent
     locations. Use `"quarter"` for structural-NaN datasets and `"all"` only
     when small.
     """
-    now = pd.Timestamp.now()
-    sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
+    latest_time = pd.Timestamp(ds["time"].values[-1])
+    sample_ds = ds.sel(time=slice(latest_time - max_expected_delay, None))
     sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
 
     return _check_nan_fractions(
@@ -454,10 +458,13 @@ def _check_nan_fractions(
             for var_name in var_names
         }
         for future in as_completed(future_to_var):
-            var_name = future_to_var[future]
-            fraction = future.result()
-            fractions[var_name] = fraction
-            log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
+            fractions[future_to_var[future]] = future.result()
+
+    # One record rather than one per variable: many log records emitted within the same
+    # second are dropped before reaching Sentry, and the per-variable fractions are what
+    # inspecting a past run needs.
+    summary = ", ".join(f"{var}={fractions[var]:.6f}" for var in sorted(fractions))
+    log.info(f"NaN fractions: {summary}")
 
     # An empty selection means the check measured nothing. Its NaN fraction is NaN,
     # which is not > any threshold, so without this it reports a pass.

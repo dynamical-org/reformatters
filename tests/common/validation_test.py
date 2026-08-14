@@ -283,39 +283,50 @@ def test_check_forecast_recent_nans_empty_selection_fails(
     assert "precipitation" in result.message
 
 
-def test_check_analysis_recent_nans_empty_window_fails(
+def test_check_analysis_recent_nans_window_anchors_to_newest_time(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """An empty recency window must fail, not vacuously pass.
+    """The window is measured back from the newest timestamp, not from now.
 
-    Running off-schedule, or before a late update publishes, selects no times.
-    Every variable's NaN fraction is then NaN, which passes every threshold.
+    A clock far past the data — an off-schedule run, or one before a late update
+    publishes — still selects the newest timesteps and checks them.
     """
-    now = pd.Timestamp("2024-01-10")
+    now = pd.Timestamp("2024-01-10")  # dataset ends 2024-01-02 23:00
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset, max_expected_delay=timedelta(hours=4)
     )
+    assert result.passed
 
+    # Proves the window selected real values rather than passing vacuously.
+    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02 22:00", None)}] = (
+        np.nan
+    )
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, max_expected_delay=timedelta(hours=4)
+    )
     assert not result.passed
     assert "temperature" in result.message
 
 
-def test_check_analysis_recent_nans_empty_window_fails_with_loose_threshold(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+def test_check_nan_fractions_logs_one_record_for_all_variables(
+    caplog: pytest.LogCaptureFixture, analysis_dataset: xr.Dataset
 ) -> None:
-    """An empty window fails even where a high NaN fraction would be tolerated."""
-    now = pd.Timestamp("2024-01-10")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+    """Per-variable fractions arrive in a single log record.
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_expected_delay=timedelta(hours=4),
-        max_nan_fraction=0.9999,
-    )
+    Sentry drops log records emitted in bursts within the same second, so a line
+    per variable loses exactly the detail a later inspection needs.
+    """
+    with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
+        assert validation.check_analysis_recent_nans(analysis_dataset).passed
 
-    assert not result.passed
+    fraction_records = [
+        r.getMessage() for r in caplog.records if "NaN fractions:" in r.getMessage()
+    ]
+    assert len(fraction_records) == 1
+    assert "temperature=0.000000" in fraction_records[0]
+    assert "humidity=0.000000" in fraction_records[0]
 
 
 def test_check_analysis_current_data_passes(
