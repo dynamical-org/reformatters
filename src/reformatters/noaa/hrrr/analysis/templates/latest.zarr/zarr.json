@@ -931,7 +931,7 @@
             "separator": "/"
           }
         },
-        "fill_value": -50.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -978,10 +978,10 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
+          "comment": "The source's -50 no/undefined marker is exposed as NaN.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
-          "_FillValue": "AAAAAAAAScA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "time",

@@ -23,32 +23,18 @@ type MaterializedNoaaTemplateConfig = (
 )
 
 
-def _same_fill(actual: float, expected: float) -> bool:
-    return bool((np.isnan(actual) and np.isnan(expected)) or actual == expected)
-
-
 @pytest.mark.parametrize(
-    ("template_config", "default_fill", "fill_overrides"),
+    "template_config",
     [
-        (NoaaGfsForecastTemplateConfig(), np.nan, {}),
-        (GefsAnalysisTemplateConfig(), np.nan, {}),
-        (GefsForecast35DayTemplateConfig(), np.nan, {}),
-        (
-            NoaaHrrrForecast48HourTemplateConfig(),
-            np.nan,
-            {"percent_frozen_precipitation_surface": -50.0},
-        ),
-        (
-            NoaaHrrrAnalysisTemplateConfig(),
-            np.nan,
-            {"percent_frozen_precipitation_surface": -50.0},
-        ),
+        NoaaGfsForecastTemplateConfig(),
+        GefsAnalysisTemplateConfig(),
+        GefsForecast35DayTemplateConfig(),
+        NoaaHrrrForecast48HourTemplateConfig(),
+        NoaaHrrrAnalysisTemplateConfig(),
     ],
 )
 def test_materialized_fill_value_migration_lock(
     template_config: MaterializedNoaaTemplateConfig,
-    default_fill: float,
-    fill_overrides: dict[str, float],
 ) -> None:
     float_vars = [
         var
@@ -60,15 +46,9 @@ def test_materialized_fill_value_migration_lock(
     )
 
     for var in float_vars:
-        expected = fill_overrides.get(var.name, default_fill)
-        assert _same_fill(var.encoding.fill_value, expected), var.name
-        assert _same_fill(raw_template[var.name].encoding["fill_value"], expected), (
-            var.name
-        )
-        expected_cf_fill = -50.0 if expected == -50.0 else np.nan
-        assert _same_fill(
-            raw_template[var.name].attrs["_FillValue"], expected_cf_fill
-        ), var.name
+        assert np.isnan(var.encoding.fill_value), var.name
+        assert np.isnan(raw_template[var.name].encoding["fill_value"]), var.name
+        assert np.isnan(raw_template[var.name].attrs["_FillValue"]), var.name
         assert "missing_value" not in raw_template[var.name].attrs
 
     raw_template.close()

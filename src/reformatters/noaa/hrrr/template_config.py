@@ -13,7 +13,6 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import (
     Array1D,
@@ -369,13 +368,13 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
             ),
             NoaaHrrrDataVar(
                 name="percent_frozen_precipitation_surface",
-                encoding=replace(encoding, fill_value=-50.0),
+                encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="cpofp",
                     long_name="Percent frozen precipitation",
                     units="percent",
                     step_type="instant",
-                    comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
+                    comment="The source's -50 no/undefined marker is exposed as NaN.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",
