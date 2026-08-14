@@ -315,7 +315,8 @@ def check_forecast_recent_nans(
 def check_analysis_recent_nans(
     ds: xr.Dataset,
     *,
-    max_expected_delay: timedelta = timedelta(hours=12),
+    time_offset: int = -1,
+    num_recent_times: int = 2,
     max_nan_fraction: float = 0.0,
     include_vars: Sequence[str] | Literal["all"] = "all",
     exclude_vars: Sequence[str] = (),
@@ -325,22 +326,56 @@ def check_analysis_recent_nans(
     """
     Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Default `spatial_sampling="random_points"` reads 2 random spatial points
-    (across all timesteps in the window) — cheap and covers independent
-    locations. Use `"quarter"` for structural-NaN datasets and `"all"` only
-    when small.
-    """
-    now = pd.Timestamp.now()
-    sample_ds = ds.sel(time=slice(now - max_expected_delay, None))
-    sample_ds = _apply_spatial_sampling(sample_ds, spatial_sampling)
+    Checks `num_recent_times` timesteps ending at `time_offset` (`-1` = newest), each
+    independently, failing if any exceeds `max_nan_fraction`. Positional selection
+    means an off-schedule run still checks real data; recency is
+    `check_analysis_current_data`'s question.
 
-    return _check_nan_fractions(
-        sample_ds,
-        max_nan_fraction=max_nan_fraction,
-        include_vars=include_vars,
-        exclude_vars=exclude_vars,
-        additional_skip_lead_time_0_vars=(),
-        max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+    For a variable that fills in over several timesteps, separate calls with different
+    `time_offset` / `num_recent_times` / `max_nan_fraction` check each stage against
+    what is complete by then, instead of one threshold loose enough for all of them.
+
+    Default `spatial_sampling="random_points"` reads 2 random spatial points. Use
+    `"quarter"` for structural-NaN datasets and `"all"` only when small.
+    """
+    assert num_recent_times >= 1, "num_recent_times must be >= 1"
+
+    newest = time_offset % ds.sizes["time"]  # positive index
+    oldest = max(0, newest - num_recent_times + 1)
+
+    results = [
+        (
+            index,
+            _check_nan_fractions(
+                _apply_spatial_sampling(ds.isel(time=[index]), spatial_sampling),
+                max_nan_fraction=max_nan_fraction,
+                include_vars=include_vars,
+                exclude_vars=exclude_vars,
+                additional_skip_lead_time_0_vars=(),
+                max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
+            ),
+        )
+        for index in range(newest, oldest - 1, -1)
+    ]
+
+    if len(results) == 1:
+        return results[0][1]
+
+    failures = [
+        f"time={_format_coord_value(ds['time'].values[index])}: {result.message}"
+        for index, result in results
+        if not result.passed
+    ]
+    if failures:
+        return ValidationResult(
+            passed=False,
+            message=f"Excessive NaN fraction in {len(failures)} of {len(results)} "
+            "recent times:\n" + "\n".join(failures),
+        )
+    return ValidationResult(
+        passed=True,
+        message=f"All {len(results)} recent times have NaN fraction "
+        f"<= {max_nan_fraction}",
     )
 
 
@@ -454,10 +489,11 @@ def _check_nan_fractions(
             for var_name in var_names
         }
         for future in as_completed(future_to_var):
-            var_name = future_to_var[future]
-            fraction = future.result()
-            fractions[var_name] = fraction
-            log.info(f"NaN fraction for {var_name}: {fraction:.6f}")
+            fractions[future_to_var[future]] = future.result()
+
+    # Combine: many info records in the same second are dropped before reaching Sentry.
+    summary = ", ".join(f"{var}={fractions[var]:.6f}" for var in sorted(fractions))
+    log.info(f"NaN fractions: {summary}")
 
     # An empty selection means the check measured nothing. Its NaN fraction is NaN,
     # which is not > any threshold, so without this it reports a pass.
