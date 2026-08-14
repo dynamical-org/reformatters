@@ -64,7 +64,6 @@ class NasaSmapLevel336KmV9Dataset(
             ),
             partial(
                 validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
                 # Oceans and about half of land (due to swaths) are expected to be NaNs
                 # This value sounds very loose but has been tuned based on real values
                 max_nan_fraction=0.995,

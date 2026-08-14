@@ -63,6 +63,5 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             ),
             partial(
                 validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
             ),
         )

@@ -283,31 +283,56 @@ def test_check_forecast_recent_nans_empty_selection_fails(
     assert "precipitation" in result.message
 
 
-def test_check_analysis_recent_nans_window_anchors_to_newest_time(
+def test_check_analysis_recent_nans_selects_by_position_not_clock(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
-    """The window is measured back from the newest timestamp, not from now.
+    """Timesteps are chosen by position, so a clock far past the data still checks it.
 
-    A clock far past the data — an off-schedule run, or one before a late update
-    publishes — still selects the newest timesteps and checks them.
+    An off-schedule run, or one before a late update publishes, used to select no
+    times at all.
     """
     now = pd.Timestamp("2024-01-10")  # dataset ends 2024-01-02 23:00
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_expected_delay=timedelta(hours=4)
-    )
-    assert result.passed
+    assert validation.check_analysis_recent_nans(analysis_dataset).passed
 
-    # Proves the window selected real values rather than passing vacuously.
+    # Proves it selected real values rather than passing vacuously.
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02 22:00", None)}] = (
         np.nan
     )
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset, max_expected_delay=timedelta(hours=4)
-    )
+    result = validation.check_analysis_recent_nans(analysis_dataset)
     assert not result.passed
     assert "temperature" in result.message
+
+
+def test_check_analysis_recent_nans_checks_each_time_independently(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """One ruined timestep fails even when its neighbours are clean.
+
+    A single fraction over the whole window would average it away, which is what
+    forced structural thresholds to encode expected emptiness.
+    """
+    analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
+
+    result = validation.check_analysis_recent_nans(
+        analysis_dataset, num_recent_times=2, max_nan_fraction=0.4
+    )
+
+    assert not result.passed
+    assert "1 of 2 recent times" in result.message
+
+
+def test_check_analysis_recent_nans_time_offset_skips_newest(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """time_offset excludes a newest timestep that is empty by design."""
+    analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
+
+    assert not validation.check_analysis_recent_nans(analysis_dataset).passed
+    assert validation.check_analysis_recent_nans(
+        analysis_dataset, time_offset=-2, num_recent_times=2
+    ).passed
 
 
 def test_check_nan_fractions_logs_one_record_for_all_variables(
@@ -319,7 +344,9 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
     per variable loses exactly the detail a later inspection needs.
     """
     with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
-        assert validation.check_analysis_recent_nans(analysis_dataset).passed
+        assert validation.check_analysis_recent_nans(
+            analysis_dataset, num_recent_times=1
+        ).passed
 
     fraction_records = [
         r.getMessage() for r in caplog.records if "NaN fractions:" in r.getMessage()
@@ -400,7 +427,6 @@ def test_check_analysis_recent_nans_fails(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
     )
 
@@ -422,7 +448,6 @@ def test_check_analysis_recent_nans_custom_parameters(
     # Should fail with 0.05 threshold
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
     )
     assert not result.passed
@@ -430,7 +455,6 @@ def test_check_analysis_recent_nans_custom_parameters(
     # Should pass with 1.0 threshold
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=1.0,
     )
     assert result.passed
@@ -461,7 +485,6 @@ def test_check_analysis_recent_nans_quarter_sampling_fails(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
@@ -503,7 +526,6 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
@@ -524,7 +546,6 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
 
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
         spatial_sampling="quarter",
     )
@@ -548,7 +569,6 @@ def test_check_analysis_recent_nans_random_points_sampling(
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
     result = validation.check_analysis_recent_nans(
         analysis_dataset,
-        max_expected_delay=timedelta(hours=12),
         max_nan_fraction=0.05,
         spatial_sampling="random_points",
     )

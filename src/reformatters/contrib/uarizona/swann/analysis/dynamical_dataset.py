@@ -35,7 +35,6 @@ class UarizonaSwannAnalysisDataset(
             ),
             partial(
                 validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
