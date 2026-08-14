@@ -47,7 +47,6 @@
     "short_name": "dpt",
     "standard_name": "dew_point_temperature",
     "units": "degree_Celsius",
-    "missing_value": -273.15,
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "ZmZmZmYSccA="

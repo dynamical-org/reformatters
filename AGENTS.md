@@ -101,11 +101,24 @@ The `standard_name` and `units` fields must match CF definitions if one exists f
 Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  `long_name`, `short_name`, `standard_name` and `units` all describe the quantity as a reader of our archive sees it, after any transformation we apply (scaling, unit conversion, deaccumulation) — not the raw source quantity.  When adding a variable, search to see if another dataset already has an equivalent variable (e.g. `temperature_2m`), match those names and metadata exactly.
 Categorical / flag variables set `flag_values` (the coded values) and `flag_meanings` (a blank separated label per value) per CF Conventions section 3.5. Verify the codes against the authoritative source table for that product (e.g. GRIB2 code table 4.201/4.222, the NSSL MRMS flag tables) rather than guessing.
 
-For floating-point data variables, Zarr `fill_value` and CF `_FillValue` are equal. Materialized datasets use NaN for both and may physically replace one exact value produced by their source decoder, declared in `internal_attrs.source_fill_value`, with NaN before writing. A corresponding virtual product must expose the same missing cells: either its decoder already returns NaN or its own exact decoded sentinel is used for both metadata fields. Verify this with representative source messages through both decoders across every supported source era. If the complete missing set is not one stable exact decoded value in either path, preserve the source-derived values in both products and document their meaning in the variable `comment`. A published `missing_value` attribute is retained for backward compatibility where it remains truthful, but it is not a second source of truth for the encoding. Materialized scaling is applied before values are saved; virtual pointwise scaling uses Zarr's `ScaleOffset` filter, whose decoded value is `encoded / scale + offset`.
-
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
 
 Set each data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) by convention: use 7 unless the variable is wind (6), a precipitation flux/rate (8), or a pressure variable with `units="Pa"` (11); match an existing equivalent variable rather than re-deriving.
+
+#### Missing values
+
+For floating-point data variables Zarr `fill_value` equals CF `_FillValue`. When read with a CF-aware library, the materialized and virtual products built from one source must return NaN at the same cells.
+
+Whether a variable's missing values can be normalized is a test on real source messages: read them through the library materialized `read_data` uses (e.g. rasterio) and through the virtual codec (gribberish), and check whether each decoder represents the complete missing-cell set with one stable output — NaN or one exact value — across all supported source eras. The two may return different values — rasterio a sentinel where gribberish already returns NaN — but both must call the same cells missing.
+
+When one value covers every missing cell in both reads:
+
+- Materialized either already receives NaN from rasterio or records rasterio's exact non-NaN value in `internal_attrs.source_fill_value` and replaces it with NaN. It writes physical NaN and uses NaN for both metadata fields.
+- Virtual sets `fill_value` and `_FillValue` to gribberish's value, or leaves both NaN when gribberish already returns NaN.
+
+When no single value does, neither product changes any value and the variable's `comment` records what the raw values mean. Never normalize part of a variable's invalid set — masking some invalid values claims the rest are good. Treat an equivalent variable the same way across models where you can, but the single-value test overrides.
+
+Materialized scaling is applied before values are written. Virtual scaling uses Zarr's `ScaleOffset` filter, which decodes as `encoded / scale + offset`.
 
 
 ### RegionJob

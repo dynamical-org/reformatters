@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common import template_utils, validation
+from reformatters.common import iterating, template_utils, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
@@ -16,6 +16,13 @@ from tests.dataset_helpers import IMPLEMENTED_DATASETS
 _VIRTUAL_DATASETS = [
     d for d in IMPLEMENTED_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
 ]
+
+_LEGACY_MATERIALIZED_FILL_VALUE_EXCEPTIONS = {
+    ("u-arizona-swann-analysis", "snow_depth"),
+    ("u-arizona-swann-analysis", "snow_water_equivalent"),
+    ("noaa-ndvi-cdr-analysis", "ndvi_raw"),
+    ("noaa-ndvi-cdr-analysis", "ndvi_usable"),
+}
 
 
 @dataclass
@@ -144,15 +151,35 @@ def test_update_template_fill_values_are_correct(
     ds = validation.open_flattened_dataset(
         template_setup.roundtrip_template_path, consolidated=False
     )
+    raw_ds = iterating.flatten_groups(
+        xr.open_datatree(
+            template_setup.roundtrip_template_path,
+            engine="zarr",
+            chunks=None,
+            consolidated=False,
+            decode_cf=False,
+        )
+    )
     for var in template_config.data_vars:
         var_da = ds[var.path]
-        # A missing_value sentinel equals the fill value and is masked to NaN on read.
-        expected = (
-            np.nan if var.attrs.missing_value is not None else var.encoding.fill_value
-        )
+        raw_var_da = raw_ds[var.path]
+        is_float = np.issubdtype(np.dtype(var.encoding.dtype), np.floating)
+        is_legacy_exception = (
+            template_setup.dataset.dataset_id,
+            var.path,
+        ) in _LEGACY_MATERIALIZED_FILL_VALUE_EXCEPTIONS
+        expected = var.encoding.fill_value if is_legacy_exception else np.nan
+        if not is_float:
+            expected = var.encoding.fill_value
         np.testing.assert_array_equal(
             var_da.isel(dict.fromkeys(var_da.dims, 0)).values, expected
         )
+        if is_float:
+            expected_cf_fill = (
+                np.nan if is_legacy_exception else var.encoding.fill_value
+            )
+            np.testing.assert_equal(raw_var_da.attrs["_FillValue"], expected_cf_fill)
+            assert "missing_value" not in raw_var_da.attrs
 
 
 @pytest.mark.parametrize(

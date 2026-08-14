@@ -313,14 +313,11 @@ def _uses_semantic_missing_values(
     da: xr.DataArray, template_var: DataVar[Any] | None
 ) -> bool:
     """Semantic NaNs cannot distinguish an unwritten value from a valid missing state."""
+    fill_value = da.encoding.get("_FillValue")
     return (
-        da.attrs.get("missing_value") is not None
-        or da.encoding.get("missing_value") is not None
-        or (
-            template_var is not None
-            and template_var.internal_attrs.source_fill_value is not None
-        )
-    )
+        template_var is not None
+        and template_var.internal_attrs.source_fill_value is not None
+    ) or (fill_value is not None and not np.isnan(fill_value))
 
 
 def _template_data_vars(ctx: RunContext) -> dict[str, DataVar[Any]]:
