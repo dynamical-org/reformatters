@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -91,12 +91,9 @@ class NoaaHrrrVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
     Chunks are references to GRIB messages in NOAA's HRRR archive decoded at read
     time, so the grid is the native Lambert Conformal y/x grid with one chunk per
     message. Covers every wrfsfc/wrfprs/wrfnat variable plus pressure_level and
-    model_level vertical groups. A forecast or analysis subclass declares its
-    dims and time structure. See docs/virtual_datasets.md.
+    model_level vertical groups. A subclass declares its dims and time structure.
+    See docs/virtual_datasets.md.
     """
-
-    # HRRR v3 (2018-07-13T12Z) is the earliest era the virtual read path supports.
-    HRRR_V3_START: ClassVar[Timestamp] = pd.Timestamp("2018-07-13T12:00")
 
     def _vertical_dimension_coordinates(self) -> dict[str, Any]:
         # A variant may declare only a subset of the vertical groups (dimension
@@ -194,7 +191,7 @@ class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
         "model_level": ("init_time", "lead_time", "y", "x", "model_level"),
     }
     append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = NoaaHrrrVirtualTemplateConfig.HRRR_V3_START
+    append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
 
     def _dataset_attributes(
         self, *, dataset_id: str, dataset_version: str, name: str
@@ -357,9 +354,8 @@ def _virtual_encoding(
     fill_value: float = np.nan,
 ) -> Encoding:
     """No shards, no compressors; GribberishCodec decodes the raw message and any
-    array->array filters (K->C, unit scaling) are chained on read. Chunks are a
-    placeholder the template config sizes to its dims (one chunk per message,
-    see NoaaHrrrVirtualTemplateConfig._one_chunk_per_message)."""
+    array->array filters (K->C, unit scaling) are chained on read. The chunk shape is a
+    placeholder, sized to the dims of whichever template config serves the variable."""
     return Encoding(
         # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
         dtype="float64",
