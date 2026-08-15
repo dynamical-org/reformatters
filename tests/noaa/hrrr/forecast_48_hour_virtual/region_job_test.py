@@ -93,12 +93,18 @@ def test_out_loc_root_file_excludes_level() -> None:
     }
 
 
-def test_out_loc_group_file_carries_representative_level() -> None:
-    # A prs/nat file holds only group vars, so the per-file probe needs a concrete level.
+def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> None:
+    # A prs/nat file holds only group vars, so the per-file manifest probe supplements
+    # a concrete level to resolve to a single chunk; out_loc itself stays the file's slab.
     prs = _coord("prs", [get_var("pressure_level/temperature")])
-    assert dict(prs.out_loc())["pressure_level"] == 1000
+    assert "pressure_level" not in prs.out_loc()
+    job = make_job(template_ds, data_vars=prs.data_vars)
+    prs_probe = job.representative_probe_loc(prs, job.representative_var(prs))
+    assert prs_probe["pressure_level"] == 1000
+
     nat = _coord("nat", [get_var("model_level/temperature")])
-    assert dict(nat.out_loc())["model_level"] == 1
+    nat_probe = job.representative_probe_loc(nat, job.representative_var(nat))
+    assert nat_probe["model_level"] == 1
 
 
 # --- message-driven file_refs ---

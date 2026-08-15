@@ -169,6 +169,24 @@ class VirtualRegionJob(
             file_vars[0],
         )
 
+    def representative_probe_loc(
+        self, coord: SOURCE_FILE_COORD, var: DataVar[Any]
+    ) -> Mapping[Dim, CoordinateValue]:
+        """The single output cell whose presence in the manifest means `coord`'s file
+        is fully ingested: the file's out_loc, plus the first coordinate label along
+        each of `var`'s multi-chunk dims the file spans wholly (e.g. a vertical level
+        of a file that carries every level). Like representative_var, this leans on
+        per-file commit atomicity: any one cell a file covers implies the rest.
+        """
+        loc = dict(coord.out_loc())
+        template_var = self.template_ds[var.path]
+        chunks = tuple(template_var.encoding["chunks"])
+        for dim_name, chunk_size in zip(template_var.dims, chunks, strict=True):
+            dim = cast("Dim", str(dim_name))
+            if dim not in loc and chunk_size < int(template_var.sizes[dim]):
+                loc[dim] = template_var.get_index(dim)[0]
+        return loc
+
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -183,7 +201,7 @@ class VirtualRegionJob(
         rep_vars = [self.representative_var(coord) for coord in candidates]
         indices = self._resolve_chunk_keys(
             [
-                (coord.out_loc(), var)
+                (self.representative_probe_loc(coord, var), var)
                 for coord, var in zip(candidates, rep_vars, strict=True)
             ]
         )
@@ -382,16 +400,17 @@ class VirtualRegionJob(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
     ) -> None:
         """A file's refs must cover the chunk filter_already_present probes
-        (representative_var at the file's out_loc)."""
+        (representative_var at the file's representative_probe_loc)."""
         assert file_refs, f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
-        probe = self.chunk_key(coord.out_loc(), rep)
+        probe_loc = self.representative_probe_loc(coord, rep)
+        probe = self.chunk_key(probe_loc, rep)
         assert any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
         ), (
             f"refs for {coord} do not cover representative chunk "
-            f"({rep.name}, {dict(coord.out_loc())}); the filter would re-ingest "
+            f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
             "this file forever. Override representative_var to pick a variable "
             "the file actually contains."
         )

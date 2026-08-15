@@ -17,10 +17,6 @@ from reformatters.common.virtual_source_listing import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
-from reformatters.noaa.hrrr.virtual_template_config import (
-    MODEL_LEVELS,
-    PRESSURE_LEVELS,
-)
 from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines
 
 log = get_logger(__name__)
@@ -28,15 +24,6 @@ log = get_logger(__name__)
 S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
 S3_BUCKET_REGION = "us-east-1"
 _S3_HTTPS_PREFIX = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
-
-# A representative vertical level per group-sourced product file. A prs/nat file
-# carries only vertical-group variables (no root chunk), so the per-file manifest
-# probe needs one concrete level to resolve to a single chunk; commits are atomic
-# per file, so this level being present means the whole file is present.
-_REPRESENTATIVE_LEVEL: dict[str, tuple[Dim, int]] = {
-    "prs": ("pressure_level", PRESSURE_LEVELS[0]),
-    "nat": ("model_level", MODEL_LEVELS[0]),
-}
 
 
 def hrrr_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
@@ -60,12 +47,6 @@ class NoaaHrrrVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
 
     def get_index_url(self) -> str:
         return self.get_url() + ".idx"
-
-    def _vertical_probe_loc(self) -> dict[Dim, CoordinateValue]:
-        if (rep := _REPRESENTATIVE_LEVEL.get(self.file_type)) is not None:
-            dim, level = rep
-            return {dim: level}
-        return {}
 
 
 HRRR_VIRTUAL_COORD = TypeVar("HRRR_VIRTUAL_COORD", bound=NoaaHrrrVirtualSourceFileCoord)
@@ -172,11 +153,7 @@ class NoaaHrrrVirtualRegionJob(
 
 class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrVirtualSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
-        return {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-            **self._vertical_probe_loc(),
-        }
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
 class NoaaHrrrForecastVirtualRegionJob(
