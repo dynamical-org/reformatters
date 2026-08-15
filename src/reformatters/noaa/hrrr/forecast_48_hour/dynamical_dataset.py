@@ -14,7 +14,6 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
-from .validators import CheckForecastCompleteness
 
 
 class NoaaHrrrForecast48HourDataset(
@@ -72,8 +71,9 @@ class NoaaHrrrForecast48HourDataset(
         )
         return (
             validation.CheckCurrentData(max_age=timedelta(hours=7)),
-            CheckForecastCompleteness(),
-            validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
+            # window=4 covers a day of 6-hourly cycles, so a truncated or missing
+            # forecast is caught even after newer cycles land.
+            validation.CheckRecentNans(exclude_vars=source_fill_value_vars, window=4),
             validation.CheckRecentNans(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.9999,

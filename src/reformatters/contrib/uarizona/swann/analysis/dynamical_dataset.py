@@ -10,7 +10,12 @@ from .region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 from .template_config import UarizonaSwannAnalysisTemplateConfig, UarizonaSwannDataVar
-from .validators import MAX_NAN_FRACTION, CheckRandomTimeWithinLastYearNans
+
+# For regions outside of CONUS, the values in this dataset are expected
+# to be NaNs. We sampled various times across the dataset and determined
+# the expected fraction of NaNs to be ~0.46425.
+EXPECTED_NAN_FRACTION = 0.46425
+MAX_NAN_FRACTION = EXPECTED_NAN_FRACTION + 0.00001
 
 
 class UarizonaSwannAnalysisDataset(
@@ -34,7 +39,15 @@ class UarizonaSwannAnalysisDataset(
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
             ),
-            CheckRandomTimeWithinLastYearNans(),
+            validation.CheckRecentNans(
+                # The operational update rewrites a year of data, so spot-check one
+                # random position in that window each run to verify older timesteps
+                # remain healthy.
+                max_nan_fraction=MAX_NAN_FRACTION,
+                spatial_sampling="all",
+                window=365,
+                sampled_positions=1,
+            ),
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

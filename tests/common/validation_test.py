@@ -494,6 +494,35 @@ def test_check_recent_nans_checks_each_position_independently(
     assert "1 of 2 recent positions" in result.message
 
 
+def test_check_recent_nans_sampled_positions(analysis_dataset: xr.Dataset) -> None:
+    """sampled_positions spot-checks randomly chosen positions within the window."""
+    context = _context(analysis_dataset, "time")
+    assert (
+        validation.CheckRecentNans(window=48, sampled_positions=1).check(context).passed
+    )
+
+    # Ruin a deep position the default newest-positions check would never see.
+    analysis_dataset["temperature"].loc[{"time": "2024-01-01 12:00"}] = np.nan
+    assert validation.CheckRecentNans().check(context).passed
+
+    # Sampling every position in the window is deterministic and catches it.
+    result = validation.CheckRecentNans(window=48, sampled_positions=48).check(context)
+    assert not result.passed
+    assert "2024-01-01T12:00:00" in result.message
+
+
+def test_check_recent_nans_sampled_positions_config_validation() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(window=10, sampled_positions=11)
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(window=10, sampled_positions=0)
+    # Sampled positions are randomly chosen, so per-recency tiers do not apply.
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(
+            window=10, sampled_positions=1, max_nan_fraction=(1.0, 0.0)
+        )
+
+
 def test_check_recent_nans_config_validation() -> None:
     """Misconfiguration is rejected at construction, not at the first cron fire."""
     # Unknown field name
@@ -710,54 +739,6 @@ def test_summarize_coords_multidimensional() -> None:
     assert "lead_time=[0 days 00:00:00..8 days 16:00:00] (n=209)" in summary
 
 
-def test_check_expected_shards_skips_non_nan_fill_value_vars(
-    rng: np.random.Generator,
-) -> None:
-    """A var whose fill value is a valid data value may have unwritten all-fill shards.
-
-    E.g. HRRR categorical vars with fill_value 0 and write_empty_chunks false.
-    """
-    times = pd.date_range("2024-01-01", periods=8, freq="1h")
-    x = np.arange(6)
-    y = np.arange(4)
-
-    ds = xr.Dataset(
-        {
-            "categorical_rain_surface": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "temperature_2m": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-        attrs={"dataset_id": "test-dataset"},
-    )
-    chunk_sizes = (4, 2, 3)
-    shard_sizes = (4, 2, 3)
-    for var in ds.data_vars.values():
-        var.encoding["chunks"] = chunk_sizes
-        var.encoding["shards"] = shard_sizes
-    ds["categorical_rain_surface"].encoding["_FillValue"] = 0.0
-    ds["temperature_2m"].encoding["_FillValue"] = np.nan
-
-    store = zarr.storage.MemoryStore()
-    ds.to_zarr(store, mode="w", consolidated=False)
-
-    # Delete one shard from each variable
-    zarr.core.sync.sync(store.delete("categorical_rain_surface/c/0/0/0"))
-    zarr.core.sync.sync(store.delete("temperature_2m/c/0/0/0"))
-
-    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
-
-    # Should fail only on temperature_2m; the non-NaN-fill categorical is skipped
-    assert not result.passed
-    assert "temperature_2m" in result.message
-    assert "categorical_rain_surface" not in result.message
-
-
 class PassingCheck(validation.Validator):
     def check(
         self,
@@ -886,6 +867,10 @@ def test_validator_name() -> None:
     assert (
         validation.CheckVirtualManifestCompleteness().name
         == "CheckVirtualManifestCompleteness"
+    )
+    assert (
+        validation.CheckRecentNans(window=365, sampled_positions=1).name
+        == "CheckRecentNans(sampled_positions=1, window=365)"
     )
 
 

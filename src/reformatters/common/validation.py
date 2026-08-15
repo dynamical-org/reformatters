@@ -323,6 +323,13 @@ class CheckRecentNans(VariableSelection, Validator):
     chunked along the append dim. Use `"quarter"` for structural-NaN datasets (random
     points are bimodal/unstable) and `"all"` only for small datasets.
 
+    When the operational update rewrites a deep window (e.g. a year of positions each
+    run), set `window` to that depth and `sampled_positions` to a small count: each
+    validation then checks that many randomly chosen positions within the window
+    instead of every one, so older rewritten positions get eventual coverage at
+    bounded cost. Sampled positions are chosen randomly, so per-recency tiers do not
+    apply — a sampled check takes a single max_nan_fraction.
+
     A variable without hour-0 values (`step_type != "instant"`, or the template's
     `has_hour_0_values()` is false) has its lead_time=0 slice dropped before computing
     the NaN fraction.
@@ -330,6 +337,7 @@ class CheckRecentNans(VariableSelection, Validator):
 
     max_nan_fraction: float | tuple[float, ...] = 0.0
     window: int = 2
+    sampled_positions: int | None = None
     spatial_sampling: SpatialSamplingStrategy = "random_points"
     max_workers: int | None = None
 
@@ -347,7 +355,25 @@ class CheckRecentNans(VariableSelection, Validator):
             "every max_nan_fraction tier is 1.0, which no NaN fraction can exceed — "
             "this check would test nothing"
         )
+        if self.sampled_positions is not None:
+            assert 1 <= self.sampled_positions <= self.window, (
+                f"sampled_positions ({self.sampled_positions}) must be within "
+                f"[1, window={self.window}]"
+            )
+            assert len(tiers) == 1, (
+                "sampled positions are randomly chosen, so per-recency max_nan_fraction "
+                "tiers do not apply; use a single threshold"
+            )
         return self
+
+    @property
+    def name(self) -> str:
+        if self.sampled_positions is None:
+            return super().name
+        parts = [f"sampled_positions={self.sampled_positions}", f"window={self.window}"]
+        if label := self.selection_label():
+            parts.insert(0, label)
+        return f"{type(self).__name__}({', '.join(parts)})"
 
     @property
     def _tiers(self) -> tuple[float, ...]:
@@ -381,9 +407,18 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
+        recencies: Sequence[int] = range(min(self.window, size))
+        if self.sampled_positions is not None and self.sampled_positions < len(
+            recencies
+        ):
+            rng = np.random.default_rng()
+            recencies = sorted(
+                rng.choice(len(recencies), size=self.sampled_positions, replace=False)
+            )
+
         failures = []
         checked = 0
-        for recency in range(min(self.window, size)):
+        for recency in recencies:
             threshold = tiers[min(recency, len(tiers) - 1)]
             if threshold >= 1.0:
                 continue  # no NaN fraction can exceed 1.0; skip the read
@@ -671,9 +706,8 @@ class CheckReplicaMatchesPrimary(Validator):
 class CheckExpectedShards(Validator):
     """Check that every shard the store's metadata declares is present.
 
-    A variable whose fill value is a valid data value (non-NaN) is excused from
-    missing shards: zarr may leave an all-fill shard unwritten, so absence is not
-    evidence of a failed write for such a variable.
+    The write path passes write_empty_chunks=True, so even an all-fill shard is
+    written and a missing shard always means a failed write.
     """
 
     def check(self, context: ValidationContext) -> ValidationResult:
@@ -711,15 +745,6 @@ class CheckExpectedShards(Validator):
             # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
             missing_shard_indexes = expected_shard_indexes - actual_var_shard_indexes
             if len(missing_shard_indexes) > 0:
-                fill_value = ds[var].encoding.get("_FillValue")
-                if fill_value is not None and not np.isnan(fill_value):
-                    log.info(
-                        f"Skipping missing shards for {var}: its fill value "
-                        f"({fill_value}) is a valid data value, so all-fill shards "
-                        "may legitimately be unwritten"
-                    )
-                    continue
-
                 problem_vars.append(var)
                 var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
 
