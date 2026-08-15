@@ -1379,6 +1379,22 @@ def _updated_store(
     return repo.readonly_session("main").store
 
 
+def test_representative_probe_loc_supplements_only_unpinned_multi_chunk_dims() -> None:
+    """The probe cell adds a label only where out_loc leaves a multi-chunk dim free.
+
+    This cell decides whether an already-ingested file is recognised as present, so a
+    change to it re-ingests an archive.
+    """
+    template_ds = _create_template_ds(4)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    coord = job.source_file_coords()[0]
+    var = job.representative_var(coord)
+
+    # init_time and lead_time are multi-chunk but out_loc pins both, and the spatial
+    # dims are single-chunk, so nothing is supplemented.
+    assert dict(job.representative_probe_loc(coord, var)) == dict(coord.out_loc())
+
+
 def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
     # Default (1.0,): every position in the window must be fully present.
     dataset = _make_dataset(tmp_path)

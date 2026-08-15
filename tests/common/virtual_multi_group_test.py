@@ -901,3 +901,25 @@ def test_completeness_variable_filter_requires_disjoint_source_files(
     assert validation.CheckVirtualManifestCompleteness(
         include_vars=["temperature_2m", "pressure_level/temperature"]
     )(job, store, ds).passed
+
+
+def test_representative_probe_loc_supplements_the_group_level() -> None:
+    """A file spanning every level of a vertical group is probed at its first level.
+
+    out_loc leaves pressure_level unpinned because the file fills the whole slab; the
+    probe needs one concrete level to resolve to a single chunk, and per-file commit
+    atomicity makes that level's presence imply the rest.
+    """
+    template_ds = _create_template_ds(2)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    coord = job.source_file_coords()[0]
+    group_var = next(var for var in job.data_vars if var.group == "pressure_level")
+
+    assert "pressure_level" not in coord.out_loc()
+    assert dict(job.representative_probe_loc(coord, group_var)) == {
+        **dict(coord.out_loc()),
+        "pressure_level": PRESSURE_LEVELS[0],
+    }
+    # A root variable has no vertical dim, so its probe is just the file's slab.
+    root_var = next(var for var in job.data_vars if var.group is ROOT)
+    assert dict(job.representative_probe_loc(coord, root_var)) == dict(coord.out_loc())

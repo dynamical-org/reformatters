@@ -174,9 +174,10 @@ class VirtualRegionJob(
     ) -> Mapping[Dim, CoordinateValue]:
         """The single output cell whose presence in the manifest means `coord`'s file
         is fully ingested: the file's out_loc, plus the first coordinate label along
-        each of `var`'s multi-chunk dims the file spans wholly (e.g. a vertical level
-        of a file that carries every level). Like representative_var, this leans on
-        per-file commit atomicity: any one cell a file covers implies the rest.
+        each of `var`'s multi-chunk dims out_loc leaves unpinned (e.g. a vertical
+        level). Like representative_var, this leans on per-file commit atomicity: any
+        one cell a file covers implies the rest. Override when a file covers only part
+        of an unpinned dim, so the probe names a cell the file actually carries.
         """
         loc = dict(coord.out_loc())
         template_var = self.template_ds[var.path]
@@ -411,8 +412,8 @@ class VirtualRegionJob(
         ), (
             f"refs for {coord} do not cover representative chunk "
             f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
-            "this file forever. Override representative_var to pick a variable "
-            "the file actually contains."
+            "this file forever. Override representative_var or "
+            "representative_probe_loc to name a cell the file actually contains."
         )
 
     def _emit_refs(
