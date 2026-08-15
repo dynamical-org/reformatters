@@ -737,8 +737,11 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
     `include_vars` / `exclude_vars` narrow the check to the source files carrying those
     variables — a file is expected when it carries any of them — so variables publishing
     on different schedules can be checked separately. Variables are named by path
-    (`<group>/<name>`, or the bare name at the root). Choosing tiers and partitions:
-    see docs/virtual_datasets.md.
+    (`<group>/<name>`, or the bare name at the root), and must divide along source-file
+    boundaries (asserted): presence is probed through each file's representative
+    variable, so a file carrying both checked and unchecked variables could pass on a
+    variable this instance does not cover. Choosing tiers and partitions: see
+    docs/virtual_datasets.md.
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
@@ -769,12 +772,12 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             if coord.out_loc()[append_dim] <= ingested_through
             and self._carries_checked_var(coord, region_job)
         ]
-        if not candidates:
+        if not candidates and self._filters_variables():
             return ValidationResult(
                 passed=False,
                 message=(
                     f"No source files carry the variables being checked "
-                    f"(include_vars={self.include_vars}, exclude_vars={self.exclude_vars})"
+                    f"({self._variable_selection()})"
                 ),
             )
         expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
@@ -805,10 +808,15 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
                     f"{append_dim}={position}: {present}/{expected} present "
                     f"({present / expected:.1%} < required {required:.0%})"
                 )
+        # A dataset may run several instances over different variables, so every
+        # message names the one it came from.
+        selection = (
+            f" ({self._variable_selection()})" if self._filters_variables() else ""
+        )
         if problems:
             return ValidationResult(
                 passed=False,
-                message="Incomplete manifest:\n"
+                message=f"Incomplete manifest{selection}:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
         return ValidationResult(
@@ -816,21 +824,35 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             message=(
                 f"All {len(positions)} ingested {append_dim} positions (through "
                 f"{ingested_through}) meet completeness thresholds "
-                f"{self.min_present_fraction}"
+                f"{self.min_present_fraction}{selection}"
             ),
         )
+
+    def _filters_variables(self) -> bool:
+        return self.include_vars != "all" or bool(self.exclude_vars)
+
+    def _variable_selection(self) -> str:
+        return f"include_vars={self.include_vars}, exclude_vars={self.exclude_vars}"
 
     def _carries_checked_var(
         self, coord: SourceFileCoord, region_job: VirtualRegionJob[Any, Any]
     ) -> bool:
-        if self.include_vars == "all" and not self.exclude_vars:
+        if not self._filters_variables():
             return True
         file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
-        return any(
+        checked = [
             (self.include_vars == "all" or var.path in self.include_vars)
             and var.path not in self.exclude_vars
             for var in file_vars
+        ]
+        assert all(checked) or not any(checked), (
+            f"{coord.get_url()} carries both checked and unchecked variables "
+            f"({self._variable_selection()}). Presence is probed through the file's "
+            "representative variable, which may be one this instance does not cover, "
+            "so a partially-checked file could pass while a checked variable has no "
+            "references. Split checks along source-file boundaries."
         )
+        return any(checked)
 
 
 @dataclass(frozen=True)

@@ -183,14 +183,17 @@ class NoaaHrrrVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
 
     def _message_chunks(self, group: Group) -> tuple[int, ...]:
         """One chunk per GRIB message: full y/x, size 1 along every other dim."""
-        return tuple(
-            {"y": _GRID_NY, "x": _GRID_NX}.get(dim, 1) for dim in self.dims[group]
+        dims = self.dims[group]
+        assert {"y", "x"} <= set(dims), (
+            f"{group} dims {dims} do not span the HRRR y/x grid, so a chunk would not "
+            "hold one whole GRIB message"
         )
+        return tuple({"y": _GRID_NY, "x": _GRID_NX}.get(dim, 1) for dim in dims)
 
 
 class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
-    """A forecast-length subclass declares forecast_length, append_dim_frequency,
-    and dataset_attributes."""
+    """Virtual HRRR forecast on init_time x lead_time; a forecast-length subclass
+    declares forecast_length, append_dim_frequency, and dataset_attributes."""
 
     forecast_length: Timedelta
 

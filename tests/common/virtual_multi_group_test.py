@@ -872,3 +872,32 @@ def test_refresh_metadata_preserves_store_written_coord_values(tmp_path: Path) -
     runtime_state = tree["runtime_state"]
     assert isinstance(runtime_state, xr.DataArray)
     np.testing.assert_array_equal(runtime_state.values, [1.5, 2.5])
+
+
+def test_completeness_variable_filter_requires_disjoint_source_files(
+    tmp_path: Path,
+) -> None:
+    """A source file carrying both a checked and an unchecked variable is rejected.
+
+    Presence is probed through the file's representative variable, so counting a
+    partially-checked file would let an instance pass on a variable it does not cover.
+    Here one file carries both `temperature_2m` and `pressure_level/temperature`.
+    """
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    _process_virtual(job, repo)
+    store = repo.readonly_session("main").store
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    with pytest.raises(AssertionError, match="carries both checked and unchecked"):
+        validation.CheckVirtualManifestCompleteness(
+            include_vars=["pressure_level/temperature"]
+        )(job, store, ds)
+
+    # Covering every variable the files carry is the supported case.
+    assert validation.CheckVirtualManifestCompleteness(
+        include_vars=["temperature_2m", "pressure_level/temperature"]
+    )(job, store, ds).passed
