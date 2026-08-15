@@ -121,9 +121,7 @@ class Validator(FrozenBaseModel, abc.ABC):
         """Identifies this check in log lines, failure messages, and the Sentry
         fingerprint. Includes the variable selection so multiple instances of one
         class are distinguishable."""
-        label = (
-            self.selection_label() if isinstance(self, VariableSelection) else None
-        )
+        label = self.selection_label() if isinstance(self, VariableSelection) else None
         return f"{type(self).__name__}({label})" if label else type(self).__name__
 
     @abc.abstractmethod
@@ -362,9 +360,7 @@ class CheckRecentNans(VariableSelection, Validator):
         append_dim = context.append_dim
         self.validate_var_names(context.known_var_paths())
         # A partially backfilled store (e2e tests) may carry a subset of the template.
-        var_paths = [
-            str(name) for name in ds.data_vars if self.selects(str(name))
-        ]
+        var_paths = [str(name) for name in ds.data_vars if self.selects(str(name))]
         if not var_paths:
             return ValidationResult(
                 passed=False,
@@ -1007,7 +1003,9 @@ class CheckVirtualDecodeHealth(Validator):
                 "positions — reference existence is reported by the "
                 "availability/manifest check)"
             )
-        return ValidationResult(passed=True, message=message, checked_count=decoded_refs)
+        return ValidationResult(
+            passed=True, message=message, checked_count=decoded_refs
+        )
 
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
         if isinstance(self.positions, int):
