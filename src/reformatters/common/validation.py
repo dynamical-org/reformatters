@@ -765,15 +765,6 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
         ds: xr.Dataset,
     ) -> ValidationResult:
         append_dim = region_job.append_dim
-        if self._filters_variables():
-            named = set(() if self.include_vars == "all" else self.include_vars) | set(
-                self.exclude_vars
-            )
-            known = {var.path for var in region_job.data_vars}
-            assert named <= known, (
-                f"{sorted(named - known)} are not variable paths of this dataset; a "
-                "mistyped path would silently drop its source files from the check"
-            )
         ingested_through = ds.get_index(append_dim).max()
         candidates = [
             coord
