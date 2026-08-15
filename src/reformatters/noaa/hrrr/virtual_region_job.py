@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from typing import Generic, TypeVar
 
 import icechunk
 import pandas as pd
@@ -14,12 +15,12 @@ from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
-from reformatters.noaa.hrrr.forecast_virtual_template_config import (
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
+from reformatters.noaa.hrrr.virtual_template_config import (
     MODEL_LEVELS,
     PRESSURE_LEVELS,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
 from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines
 
 log = get_logger(__name__)
@@ -48,7 +49,7 @@ def hrrr_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...
     )
 
 
-class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
+class NoaaHrrrVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
     """One HRRR product file (init_time, lead_time, file_type) and the vars it packs."""
 
     def get_url(self, source: DownloadSource = "s3") -> str:
@@ -60,60 +61,27 @@ class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrSourceFileCoord):
     def get_index_url(self) -> str:
         return self.get_url() + ".idx"
 
-    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
-        loc: dict[Dim, CoordinateValue] = {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-        }
+    def _vertical_probe_loc(self) -> dict[Dim, CoordinateValue]:
         if (rep := _REPRESENTATIVE_LEVEL.get(self.file_type)) is not None:
             dim, level = rep
-            loc[dim] = level
-        return loc
+            return {dim: level}
+        return {}
 
 
-class NoaaHrrrForecastVirtualRegionJob(
-    VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord]
+HRRR_VIRTUAL_COORD = TypeVar("HRRR_VIRTUAL_COORD", bound=NoaaHrrrVirtualSourceFileCoord)
+
+
+class NoaaHrrrVirtualRegionJob(
+    VirtualRegionJob[NoaaHrrrDataVar, HRRR_VIRTUAL_COORD],
+    Generic[HRRR_VIRTUAL_COORD],
 ):
-    """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
-    subclass declares operational_update_window."""
-
-    def generate_source_file_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[NoaaHrrrDataVar],
-    ) -> Sequence[NoaaHrrrForecastVirtualSourceFileCoord]:
-        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
-        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        file_types = sorted({v.internal_attrs.hrrr_file_type for v in data_var_group})
-
-        coords = []
-        for init_time in init_times:
-            for lead_time in lead_times:
-                for file_type in file_types:
-                    # Accumulated/categorical vars have no valid hour-0 data, so drop
-                    # them at lead 0 (keeps the completeness validator consistent).
-                    vars_in_file = [
-                        var
-                        for var in data_var_group
-                        if var.internal_attrs.hrrr_file_type == file_type
-                        and (lead_time > pd.Timedelta(0) or var.has_hour_0_values())
-                    ]
-                    if not vars_in_file:
-                        continue
-                    coords.append(
-                        NoaaHrrrForecastVirtualSourceFileCoord(
-                            init_time=init_time,
-                            lead_time=lead_time,
-                            domain="conus",
-                            file_type=file_type,
-                            data_vars=vars_in_file,
-                        )
-                    )
-        return coords
+    """RegionJob shared by the HRRR virtual datasets: source-file discovery on NODD S3
+    and ref building from GRIB indexes. A subclass declares its source file coords
+    (generate_source_file_coords) and operational_update_window."""
 
     def discover_available(
-        self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
-    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
+        self, pending: list[HRRR_VIRTUAL_COORD]
+    ) -> list[tuple[HRRR_VIRTUAL_COORD, int]]:
         return discover_available_by_obstore_listing(
             pending,
             store=s3_store(S3_LOCATION_PREFIX, region=S3_BUCKET_REGION),
@@ -121,9 +89,7 @@ class NoaaHrrrForecastVirtualRegionJob(
             require_index=True,
         )
 
-    def file_refs(
-        self, coord: NoaaHrrrForecastVirtualSourceFileCoord, file_size: int
-    ) -> list[VirtualRef]:
+    def file_refs(self, coord: HRRR_VIRTUAL_COORD, file_size: int) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
             coord.get_index_url(), self.dataset_id, region=S3_BUCKET_REGION
         )
@@ -202,3 +168,53 @@ class NoaaHrrrForecastVirtualRegionJob(
                         key = (element, level_format.format(level=level), window)
                         lookup.setdefault(key, []).append((var, {dim: int(level)}))
         return lookup
+
+
+class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrVirtualSourceFileCoord):
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
+        return {
+            "init_time": self.init_time,
+            "lead_time": self.lead_time,
+            **self._vertical_probe_loc(),
+        }
+
+
+class NoaaHrrrForecastVirtualRegionJob(
+    NoaaHrrrVirtualRegionJob[NoaaHrrrForecastVirtualSourceFileCoord]
+):
+    """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
+    subclass declares operational_update_window."""
+
+    def generate_source_file_coords(
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[NoaaHrrrDataVar],
+    ) -> Sequence[NoaaHrrrForecastVirtualSourceFileCoord]:
+        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        file_types = sorted({v.internal_attrs.hrrr_file_type for v in data_var_group})
+
+        coords = []
+        for init_time in init_times:
+            for lead_time in lead_times:
+                for file_type in file_types:
+                    # Accumulated/categorical vars have no valid hour-0 data, so drop
+                    # them at lead 0 (keeps the completeness validator consistent).
+                    vars_in_file = [
+                        var
+                        for var in data_var_group
+                        if var.internal_attrs.hrrr_file_type == file_type
+                        and (lead_time > pd.Timedelta(0) or var.has_hour_0_values())
+                    ]
+                    if not vars_in_file:
+                        continue
+                    coords.append(
+                        NoaaHrrrForecastVirtualSourceFileCoord(
+                            init_time=init_time,
+                            lead_time=lead_time,
+                            domain="conus",
+                            file_type=file_type,
+                            data_vars=vars_in_file,
+                        )
+                    )
+        return coords

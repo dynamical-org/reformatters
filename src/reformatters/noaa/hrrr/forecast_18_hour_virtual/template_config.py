@@ -3,7 +3,7 @@ from pydantic import computed_field
 
 from reformatters.common.config_models import DatasetAttributes
 from reformatters.common.types import Timedelta
-from reformatters.noaa.hrrr.forecast_virtual_template_config import (
+from reformatters.noaa.hrrr.virtual_template_config import (
     NoaaHrrrForecastVirtualTemplateConfig,
 )
 

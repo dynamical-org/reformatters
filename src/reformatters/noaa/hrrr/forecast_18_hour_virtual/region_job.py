@@ -3,7 +3,7 @@ from typing import ClassVar
 import pandas as pd
 
 from reformatters.common.types import Timedelta
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualRegionJob,
 )
 

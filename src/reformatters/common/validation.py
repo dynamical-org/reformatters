@@ -732,9 +732,21 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
       (1.0,)      every append-dim position whole (default).
       (0.5, 1.0)  the newest may be half-published (e.g. GEFS 35-day's slow long lead
                   times); older append-dim positions whole.
+      (0.0, 1.0)  the newest carries none of these variables' files yet; every older
+                  append-dim position whole.
+
+    `include_vars` / `exclude_vars` restrict the check to the source files carrying
+    those variables (a file counts as expected when it carries any of them). When
+    groups of variables become available on different schedules, one instance per
+    group — each held to 1.0 from the position where that group is expected — is
+    tighter than one instance with a fractional leading tier covering them all,
+    because a fraction that tolerates the not-yet-published group also tolerates a
+    genuine gap in the group that has published.
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
+    include_vars: Sequence[str] | Literal["all"] = "all"
+    exclude_vars: Sequence[str] = ()
 
     def __post_init__(self) -> None:
         assert self.min_present_fraction, "min_present_fraction must be non-empty"
@@ -758,7 +770,16 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             coord
             for coord in region_job.source_file_coords()
             if coord.out_loc()[append_dim] <= ingested_through
+            and self._carries_checked_var(coord, region_job)
         ]
+        if not candidates:
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"No source files carry the variables being checked "
+                    f"(include_vars={self.include_vars}, exclude_vars={self.exclude_vars})"
+                ),
+            )
         expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
         positions = sorted(expected_per_position, reverse=True)  # newest first
         if len(positions) < len(self.min_present_fraction):
@@ -802,6 +823,23 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             ),
         )
 
+    def _carries_checked_var(
+        self, coord: SourceFileCoord, region_job: VirtualRegionJob[Any, Any]
+    ) -> bool:
+        """Whether this source file carries any variable the check covers.
+
+        Variables are named by path, so a vertical group's variable is
+        "<group>/<name>" and a root variable is just its name.
+        """
+        if self.include_vars == "all" and not self.exclude_vars:
+            return True
+        file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
+        return any(
+            (self.include_vars == "all" or var.path in self.include_vars)
+            and var.path not in self.exclude_vars
+            for var in file_vars
+        )
+
 
 @dataclass(frozen=True)
 class CheckVirtualDecodeHealth(VirtualDataValidator):
@@ -813,14 +851,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     present in the manifest (filter_already_present), so a not-yet-published ref is never
     mistaken for a decode failure, then decodes a bounded sample of them. `positions`
     selects which append-dim positions to check: "latest" (default) targets the newest
-    position with data — so a broken newest reference is caught at the next validation, not
-    a cycle later — while "all" covers the whole window. Within a position it samples
+    positions with data — so a broken reference is caught at the next validation, not
+    a cycle later — while "all" spreads over the whole window. Within a position it samples
     `sampled_leads` lead times (first + last + evenly spaced interior) across every member,
     and `sampled_levels` levels of any vertical dim (e.g. pressure_level) so a group var is
-    decode-checked at a bounded set of levels rather than every one. `max_positions`
-    optionally caps "all" to an evenly spaced subset of positions for a whole-archive
-    offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks
-    decode entirely NaN. Fails — never silently passes — when no references are present.
+    decode-checked at a bounded set of levels rather than every one. `max_positions` bounds
+    how many positions are checked: under "latest" it takes that many newest positions
+    (default 1), under "all" it takes an evenly spaced subset for a whole-archive offline
+    sweep. Take more than one newest position when a single position does not carry every
+    variable — e.g. an analysis whose newest position holds only the source file that has
+    published so far — otherwise the variables missing from it are never decode-checked
+    until they age across the window. A variable fails if any sampled chunk errors or all
+    of its sampled chunks decode entirely NaN. Fails — never silently passes — when no
+    references are present.
     """
 
     positions: Literal["latest", "all"] = "latest"
@@ -914,7 +957,7 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
 
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
         if self.positions == "latest":
-            return {present_positions[-1]}
+            return set(present_positions[-(self.max_positions or 1) :])
         if self.max_positions and len(present_positions) > self.max_positions:
             return {
                 present_positions[i]

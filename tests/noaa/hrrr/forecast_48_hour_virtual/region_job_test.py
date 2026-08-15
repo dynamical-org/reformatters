@@ -8,7 +8,7 @@ import pytest
 import xarray as xr
 
 from reformatters.noaa.hrrr import (
-    forecast_virtual_region_job as region_job_module,
+    virtual_region_job as region_job_module,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
     NoaaHrrrForecast48HourVirtualRegionJob,
@@ -16,10 +16,10 @@ from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
     NoaaHrrrForecast48HourVirtualTemplateConfig,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 _LEAD_6H = pd.Timedelta("6h")

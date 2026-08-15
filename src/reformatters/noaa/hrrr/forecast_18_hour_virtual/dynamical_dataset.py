@@ -11,11 +11,11 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
     hrrr_virtual_chunk_containers,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
 from .region_job import NoaaHrrrForecast18HourVirtualRegionJob
 from .template_config import NoaaHrrrForecast18HourVirtualTemplateConfig

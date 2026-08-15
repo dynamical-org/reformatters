@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,7 @@ from reformatters.common.config_models import (
     Group,
     StatisticsApproximate,
 )
+from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -84,102 +85,31 @@ def _raw_idx_element(discipline: int, category: int, parameter: int) -> str:
     return f"var discipline={discipline} center=7 local_table=1 parmcat={category} parm={parameter}"
 
 
-class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
-    """Virtual, spatially-chunked (map-optimized) HRRR forecast template.
+class NoaaHrrrVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
+    """Virtual, spatially-chunked (map-optimized) HRRR template.
 
     Chunks are references to GRIB messages in NOAA's HRRR archive decoded at read
     time, so the grid is the native Lambert Conformal y/x grid with one chunk per
     message. Covers every wrfsfc/wrfprs/wrfnat variable plus pressure_level and
-    model_level vertical groups. A forecast-length subclass declares
-    forecast_length, append_dim_frequency, and dataset_attributes. See
-    docs/virtual_datasets.md.
+    model_level vertical groups. A forecast or analysis subclass declares its
+    dims and time structure. See docs/virtual_datasets.md.
     """
 
-    forecast_length: Timedelta
+    # HRRR v3 (2018-07-13T12Z) is the earliest era the virtual read path supports.
+    HRRR_V3_START: ClassVar[Timestamp] = pd.Timestamp("2018-07-13T12:00")
 
-    dims: Dims = {
-        ROOT: ("init_time", "lead_time", "y", "x"),
-        "pressure_level": ("init_time", "lead_time", "y", "x", "pressure_level"),
-        "model_level": ("init_time", "lead_time", "y", "x", "model_level"),
-    }
-    append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = pd.Timestamp("2018-07-13T12:00")  # start of HRRR v3
-
-    def _dataset_attributes(
-        self, *, dataset_id: str, dataset_version: str, name: str
-    ) -> DatasetAttributes:
-        frequency_hours = whole_hours(self.append_dim_frequency)
-        return DatasetAttributes(
-            dataset_id=dataset_id,
-            dataset_version=dataset_version,
-            name=name,
-            description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
-            attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
-            license="CC-BY-4.0",
-            spatial_domain="Continental United States",
-            spatial_resolution="3 km",
-            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution=(
-                "Forecasts initialized every hour"
-                if frequency_hours == 1
-                else f"Forecasts initialized every {frequency_hours} hours"
-            ),
-            forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
-            forecast_resolution="Hourly",
-        )
-
-    def _expected_forecast_length_values(self, ds: xr.Dataset) -> np.ndarray[Any, Any]:
-        """Per-init expected forecast length; a constant forecast_length unless overridden."""
-        return np.full(ds[self.append_dim].size, self.forecast_length.to_timedelta64())
-
-    def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
-        return StatisticsApproximate(
-            min=str(self.forecast_length), max=str(self.forecast_length)
-        )
-
-    def dimension_coordinates(self) -> dict[str, Any]:
-        y_coords, x_coords = self._y_x_coordinates()
-        dim_coords: dict[str, Any] = {
-            "init_time": self.append_dim_coordinates(
-                self.append_dim_start + self.append_dim_frequency
-            ),
-            "lead_time": pd.timedelta_range(
-                "0h", self.forecast_length, freq=pd.Timedelta("1h")
-            ),
-            "y": y_coords,
-            "x": x_coords,
-        }
+    def _vertical_dimension_coordinates(self) -> dict[str, Any]:
         # A variant may declare only a subset of the vertical groups (dimension
         # coordinates must cover exactly the declared dims).
+        dim_coords: dict[str, Any] = {}
         if "pressure_level" in self.all_dims:
             dim_coords["pressure_level"] = np.array(PRESSURE_LEVELS, dtype=np.int64)
         if "model_level" in self.all_dims:
             dim_coords["model_level"] = np.array(MODEL_LEVELS, dtype=np.int64)
         return dim_coords
 
-    def derive_coordinates(
-        self, ds: xr.Dataset
-    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        latitudes, longitudes = self._latitude_longitude_coordinates(
-            ds["x"].values, ds["y"].values
-        )
-        return {
-            "valid_time": ds["init_time"] + ds["lead_time"],
-            "expected_forecast_length": (
-                ("init_time",),
-                self._expected_forecast_length_values(ds),
-            ),
-            "latitude": (("y", "x"), latitudes),
-            "longitude": (("y", "x"), longitudes),
-            "spatial_ref": SPATIAL_REF_COORDS,
-        }
-
-    @computed_field
-    @property
-    def coords(self) -> Sequence[Coordinate]:
-        dim_coords = self.dimension_coordinates()
-        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
-
+    def _vertical_coords(self) -> list[Coordinate]:
+        dim_coords = self._vertical_dimension_coordinates()
         vertical_coords: list[Coordinate] = []
         if "pressure_level" in dim_coords:
             vertical_coords.append(
@@ -229,6 +159,111 @@ class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     ),
                 )
             )
+        return vertical_coords
+
+    @computed_field
+    @property
+    def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
+        assert self._spatial_info()[0] == (_GRID_NY, _GRID_NX), (
+            "grid shape drifted from _GRID_NY/_GRID_NX used in the virtual encoding"
+        )
+        return [self._one_chunk_per_message(var) for var in self._catalog_data_vars()]
+
+    def _catalog_data_vars(self) -> list[NoaaHrrrDataVar]:
+        """The variable catalog; a subclass may filter it to serve a subset."""
+        return [*_root_data_vars(), *_pressure_data_vars(), *_model_data_vars()]
+
+    def _one_chunk_per_message(self, var: NoaaHrrrDataVar) -> NoaaHrrrDataVar:
+        """Size the catalog's placeholder chunks to this config's dims: one chunk per
+        GRIB message, so full y/x and size 1 along every other dim."""
+        chunks = tuple(
+            {"y": _GRID_NY, "x": _GRID_NX}.get(dim, 1) for dim in self.dims[var.group]
+        )
+        return replace(var, encoding=replace(var.encoding, chunks=chunks))
+
+
+class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
+    """A forecast-length subclass declares forecast_length, append_dim_frequency,
+    and dataset_attributes."""
+
+    forecast_length: Timedelta
+
+    dims: Dims = {
+        ROOT: ("init_time", "lead_time", "y", "x"),
+        "pressure_level": ("init_time", "lead_time", "y", "x", "pressure_level"),
+        "model_level": ("init_time", "lead_time", "y", "x", "model_level"),
+    }
+    append_dim: AppendDim = "init_time"
+    append_dim_start: Timestamp = NoaaHrrrVirtualTemplateConfig.HRRR_V3_START
+
+    def _dataset_attributes(
+        self, *, dataset_id: str, dataset_version: str, name: str
+    ) -> DatasetAttributes:
+        frequency_hours = whole_hours(self.append_dim_frequency)
+        return DatasetAttributes(
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            name=name,
+            description="Weather forecasts from the High-Resolution Rapid Refresh (HRRR) model operated by NOAA NWS NCEP.",
+            attribution="NOAA NWS NCEP HRRR data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+            license="CC-BY-4.0",
+            spatial_domain="Continental United States",
+            spatial_resolution="3 km",
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=(
+                "Forecasts initialized every hour"
+                if frequency_hours == 1
+                else f"Forecasts initialized every {frequency_hours} hours"
+            ),
+            forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
+            forecast_resolution="Hourly",
+        )
+
+    def _expected_forecast_length_values(self, ds: xr.Dataset) -> np.ndarray[Any, Any]:
+        """Per-init expected forecast length; a constant forecast_length unless overridden."""
+        return np.full(ds[self.append_dim].size, self.forecast_length.to_timedelta64())
+
+    def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
+        return StatisticsApproximate(
+            min=str(self.forecast_length), max=str(self.forecast_length)
+        )
+
+    def dimension_coordinates(self) -> dict[str, Any]:
+        y_coords, x_coords = self._y_x_coordinates()
+        return {
+            "init_time": self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "lead_time": pd.timedelta_range(
+                "0h", self.forecast_length, freq=pd.Timedelta("1h")
+            ),
+            "y": y_coords,
+            "x": x_coords,
+            **self._vertical_dimension_coordinates(),
+        }
+
+    def derive_coordinates(
+        self, ds: xr.Dataset
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+        latitudes, longitudes = self._latitude_longitude_coordinates(
+            ds["x"].values, ds["y"].values
+        )
+        return {
+            "valid_time": ds["init_time"] + ds["lead_time"],
+            "expected_forecast_length": (
+                ("init_time",),
+                self._expected_forecast_length_values(ds),
+            ),
+            "latitude": (("y", "x"), latitudes),
+            "longitude": (("y", "x"), longitudes),
+            "spatial_ref": SPATIAL_REF_COORDS,
+        }
+
+    @computed_field
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        dim_coords = self.dimension_coordinates()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
         return [
             *super().coords,
@@ -272,7 +307,7 @@ class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
                     ),
                 ),
             ),
-            *vertical_coords,
+            *self._vertical_coords(),
             Coordinate(
                 name="valid_time",
                 encoding=Encoding(
@@ -315,37 +350,21 @@ class NoaaHrrrForecastVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
             ),
         ]
 
-    @computed_field
-    @property
-    def data_vars(self) -> Sequence[NoaaHrrrDataVar]:
-        assert self._spatial_info()[0] == (_GRID_NY, _GRID_NX), (
-            "grid shape drifted from _GRID_NY/_GRID_NX used in the virtual encoding"
-        )
-        return self._catalog_data_vars()
-
-    def _catalog_data_vars(self) -> list[NoaaHrrrDataVar]:
-        """The variable catalog; a subclass may filter it to serve a subset."""
-        return [*_root_data_vars(), *_pressure_data_vars(), *_model_data_vars()]
-
 
 def _virtual_encoding(
     element: str,
-    group: Group,
     filters: Sequence[CodecConfig],
     fill_value: float = np.nan,
 ) -> Encoding:
-    """One chunk per GRIB message: chunk 1 along init_time/lead_time/vertical, full
-    y/x, no shards, no compressors. GribberishCodec decodes the raw message and any
-    array->array filters (K->C, unit scaling) are chained on read."""
-    if group is ROOT:
-        chunks: tuple[int, ...] = (1, 1, _GRID_NY, _GRID_NX)
-    else:
-        chunks = (1, 1, _GRID_NY, _GRID_NX, 1)
+    """No shards, no compressors; GribberishCodec decodes the raw message and any
+    array->array filters (K->C, unit scaling) are chained on read. Chunks are a
+    placeholder the template config sizes to its dims (one chunk per message,
+    see NoaaHrrrVirtualTemplateConfig._one_chunk_per_message)."""
     return Encoding(
         # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
         dtype="float64",
         fill_value=fill_value,
-        chunks=chunks,
+        chunks=(),
         shards=None,
         compressors=(),
         filters=filters,
@@ -388,7 +407,6 @@ def _data_var(
         group=group,
         encoding=_virtual_encoding(
             element,
-            group,
             resolved_filters,
             fill_value=fill_value,
         ),
