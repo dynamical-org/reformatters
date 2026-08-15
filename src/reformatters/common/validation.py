@@ -864,15 +864,15 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     authorization, end to end. Over the recent window it keeps only the source files
     present in the manifest (filter_already_present), so a not-yet-published ref is never
     mistaken for a decode failure, then decodes a bounded sample of them. `positions`
-    selects which append-dim positions to check: "latest" (default) takes the newest
-    positions with data, "all" spreads evenly over the whole window; `max_positions`
-    bounds how many either takes (default 1 for "latest", unbounded for "all"). Within a
-    position it samples `sampled_leads` lead times (first + last + evenly spaced interior)
-    across every member, and `sampled_levels` levels of any vertical dim (e.g.
-    pressure_level) so a group var is decode-checked at a bounded set of levels rather
-    than every one. A variable fails if any sampled chunk errors or all of its sampled
-    chunks decode entirely NaN. Fails — never silently passes — when no references are
-    present. Choosing positions: see docs/virtual_datasets.md.
+    selects which append-dim positions to check: "latest" (default) targets the newest
+    position with data — so a broken newest reference is caught at the next validation, not
+    a cycle later — while "all" covers the whole window. Within a position it samples
+    `sampled_leads` lead times (first + last + evenly spaced interior) across every member,
+    and `sampled_levels` levels of any vertical dim (e.g. pressure_level) so a group var is
+    decode-checked at a bounded set of levels rather than every one. `max_positions`
+    optionally caps "all" to an evenly spaced subset of positions for a whole-archive
+    offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks
+    decode entirely NaN. Fails — never silently passes — when no references are present.
     """
 
     positions: Literal["latest", "all"] = "latest"
@@ -966,7 +966,7 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
 
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
         if self.positions == "latest":
-            return set(present_positions[-(self.max_positions or 1) :])
+            return {present_positions[-1]}
         if self.max_positions and len(present_positions) > self.max_positions:
             return {
                 present_positions[i]

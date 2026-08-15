@@ -1536,28 +1536,6 @@ def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
     assert str(ds.get_index("init_time")[-1]) in result.message
 
 
-def test_check_virtual_decode_health_latest_takes_newest_max_positions(
-    tmp_path: Path,
-) -> None:
-    # A dataset whose newest position does not carry every variable needs more than one
-    # newest position checked, or the rest go unchecked until they age across the window.
-    dataset = _make_dataset(tmp_path)
-    template_ds = _create_template_ds(4)
-    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
-    job = _make_region_job(template_ds, region=slice(0, 4))
-    ds = xr.open_zarr(store, decode_timedelta=True)
-    init_times = ds.get_index("init_time")
-
-    result = validation.CheckVirtualDecodeHealth(positions="latest", max_positions=3)(
-        job, store, ds
-    )
-    assert result.passed, result.message
-    # The newest three, and not the oldest.
-    for init_time in init_times[-3:]:
-        assert str(init_time) in result.message
-    assert str(init_times[0]) not in result.message
-
-
 def test_check_virtual_decode_health_only_decodes_present_refs(tmp_path: Path) -> None:
     # Emit inits 0-1 of a 4-init window. The absent inits 2-3 must NOT be decoded (which
     # would read fill-value NaN and false-fail); decode-health checks the latest *present*
