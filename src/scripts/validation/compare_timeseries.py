@@ -41,8 +41,16 @@ def select_time_period_for_comparison(
 ) -> tuple[xr.Dataset, xr.Dataset, str, str, str]:
     """Select appropriate time periods for validation and reference datasets."""
     rng = np.random.default_rng()
+    # A period the reference doesn't cover plots the validation series alone, losing every
+    # cross-dataset check, so draw from the overlap whenever the two archives have one.
+    ref_start = pd.Timestamp(reference_ds.time.min().item())
+    ref_end = pd.Timestamp(reference_ds.time.max().item())
+
     if is_forecast_dataset(validation_ds):
-        selected_init_time = pd.Timestamp(rng.choice(validation_ds.init_time, 1)[0])
+        init_times = pd.DatetimeIndex(validation_ds.init_time.values)
+        covered = init_times[(init_times >= ref_start) & (init_times <= ref_end)]
+        candidate_init_times = covered if len(covered) > 0 else init_times
+        selected_init_time = pd.Timestamp(rng.choice(candidate_init_times, 1)[0])
         validation_subset = validation_ds.sel(init_time=selected_init_time)
 
         valid_time_start = validation_subset.valid_time.min().item()
@@ -55,6 +63,9 @@ def select_time_period_for_comparison(
 
     time_start = pd.Timestamp(validation_ds.time.min().item())
     time_end = pd.Timestamp(validation_ds.time.max().item())
+    if ref_start <= time_end and time_start <= ref_end:
+        time_start = max(time_start, ref_start)
+        time_end = min(time_end, ref_end)
     ten_days = pd.Timedelta(days=10)
 
     if time_end - time_start < ten_days:
