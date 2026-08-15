@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from pydantic import Field
 
@@ -85,14 +84,11 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         # Validation fires at init+6h20m, just after the update deadline; files
         # publish by ~init+6h10m (p99), so 7h leaves ~40m of cron/pod start slack.
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=7),
-            ),
+            validation.CheckCurrentData(max_age=timedelta(hours=7)),
             # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

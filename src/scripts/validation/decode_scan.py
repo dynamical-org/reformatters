@@ -79,14 +79,21 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     )
 
     checker = validation.CheckVirtualDecodeHealth(
-        positions="latest",
+        positions=1,
         sampled_leads=SAMPLED_LEADS,
         sampled_levels=SAMPLED_LEVELS,
         reference_exists=reference_exists,
     )
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
-        return checker(cast("VirtualRegionJob[Any, Any]", job), store, ds)
+        return checker.check(
+            validation.ValidationContext(
+                store=store,
+                ds=ds,
+                append_dim=dataset.template_config.append_dim,
+                region_job=cast("VirtualRegionJob[Any, Any]", job),
+            )
+        )
 
     failures = []
     decoded_refs = 0

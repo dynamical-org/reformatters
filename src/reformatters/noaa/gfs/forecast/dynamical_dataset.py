@@ -47,9 +47,8 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """The sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.check_forecast_current_data,
-            validation.check_forecast_recent_nans,
+            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            validation.CheckRecentNans(),
         )

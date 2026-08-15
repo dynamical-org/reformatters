@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 import icechunk
 from pydantic import Field
@@ -82,13 +81,10 @@ class GefsForecast10DaySpatialDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         # 6h cycle + ~3h48m = 9h48m plus a little buffer = 10h
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=10),
-            ),
+            validation.CheckCurrentData(max_age=timedelta(hours=10)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

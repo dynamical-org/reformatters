@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from pydantic import Field
 
@@ -81,13 +80,10 @@ class NoaaHrrrForecast48HourVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         # 6h cycle + ~2h publication = ~8h before the latest init is current.
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=8),
-            ),
+            validation.CheckCurrentData(max_age=timedelta(hours=8)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

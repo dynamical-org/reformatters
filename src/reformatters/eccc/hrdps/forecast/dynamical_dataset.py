@@ -59,8 +59,8 @@ class EcccHrdpsForecastTemporalDynamicalDataset(
 
         return [archive_grib_files_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
+        """Return the operational validation checks to run on this dataset."""
         raise NotImplementedError(
             f"Implement `validators` on {self.__class__.__name__}"
         )

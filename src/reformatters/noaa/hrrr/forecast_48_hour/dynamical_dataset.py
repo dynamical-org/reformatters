@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.config_models import source_fill_value_var_names
@@ -15,7 +14,7 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
-from .validators import HRRR_EXPECTED_HOUR_0_NAN_VARS, check_forecast_completeness
+from .validators import CheckForecastCompleteness
 
 
 class NoaaHrrrForecast48HourDataset(
@@ -64,24 +63,18 @@ class NoaaHrrrForecast48HourDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
+        # Source-fill-value vars are NaN wherever the source's missing state applies
+        # (e.g. percent frozen precipitation where nothing is falling), so they get a
+        # looser check: not entirely NaN.
         source_fill_value_vars = source_fill_value_var_names(
             self.template_config.data_vars
         )
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=7),
-            ),
-            check_forecast_completeness,
-            partial(
-                validation.check_forecast_recent_nans,
-                additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
-                exclude_vars=source_fill_value_vars,
-            ),
-            partial(
-                validation.check_forecast_recent_nans,
-                additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
+            validation.CheckCurrentData(max_age=timedelta(hours=7)),
+            CheckForecastCompleteness(),
+            validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
+            validation.CheckRecentNans(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.9999,
                 spatial_sampling="quarter",

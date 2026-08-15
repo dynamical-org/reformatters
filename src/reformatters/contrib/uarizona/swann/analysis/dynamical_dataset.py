@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -11,7 +10,7 @@ from .region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 from .template_config import UarizonaSwannAnalysisTemplateConfig, UarizonaSwannDataVar
-from .validators import MAX_NAN_FRACTION, check_random_time_within_last_year_nans
+from .validators import MAX_NAN_FRACTION, CheckRandomTimeWithinLastYearNans
 
 
 class UarizonaSwannAnalysisDataset(
@@ -24,22 +23,18 @@ class UarizonaSwannAnalysisDataset(
         UarizonaSwannAnalysisRegionJob
     )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        # SWANN data is usually published daily with just over a day lag.
-        # There are occasional longer lags, allow them without alerting because this is a contrib dataset.
-        max_expected_delay = timedelta(days=5)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
+            # SWANN data is usually published daily with just over a day lag.
+            # There are occasional longer lags, allow them without alerting because
+            # this is a contrib dataset.
+            validation.CheckCurrentData(max_age=timedelta(days=5)),
+            validation.CheckRecentNans(
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
             ),
-            check_random_time_within_last_year_nans,
+            CheckRandomTimeWithinLastYearNans(),
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

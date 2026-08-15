@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -45,17 +44,12 @@ class NoaaNdviCdrAnalysisDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
-        # There's usually a ~3 day lag for this data's availability, occasionally much longer.
-        max_expected_delay = timedelta(days=30)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
+            # There's usually a ~3 day lag for this data's availability, occasionally
+            # much longer.
+            validation.CheckCurrentData(max_age=timedelta(days=30)),
+            validation.CheckRecentNans(
                 # Large NaN fraction is expected: oceans and water bodies are always NaN
                 # (~93% baseline, observed up to ~96%). Use full-grid sampling because
                 # structural NaN makes random_points bimodal/unstable.

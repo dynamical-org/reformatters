@@ -96,10 +96,10 @@ class DwdIconEuForecast5DayDataset(
             validation_cron_job,
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.check_forecast_current_data,
-            validation.check_forecast_recent_nans,
+            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            validation.CheckRecentNans(),
         )
 
     def archive_grib_files(
