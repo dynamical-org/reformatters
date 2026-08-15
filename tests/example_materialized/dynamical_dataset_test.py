@@ -78,4 +78,4 @@
 # def test_validators(dataset: ExampleTemporalDynamicalDataset) -> None:
 #     validators = tuple(dataset.validators())
 #     assert len(validators) == 2
-#     assert all(isinstance(v, validation.DataValidator) for v in validators)
+#     assert all(isinstance(v, validation.Validator) for v in validators)

@@ -99,8 +99,8 @@
 
 # def test_validators_include_virtual_checks(dataset: ExampleSpatialDynamicalDataset) -> None:
 #     validators = tuple(dataset.validators())
-#     # The two virtual-specific validators need manifest/store access, so they are
-#     # VirtualDataValidator instances (not plain xarray validator functions).
+#     # The two virtual-specific validators need manifest/store access
+#     # (requires_virtual_dataset).
 #     assert any(
 #         isinstance(v, validation.CheckVirtualManifestCompleteness) for v in validators
 #     )

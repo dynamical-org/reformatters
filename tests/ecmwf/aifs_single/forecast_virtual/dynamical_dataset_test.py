@@ -1,8 +1,6 @@
 import re
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +10,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import validation
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     DatasetFormat,
     StorageConfig,
@@ -217,12 +216,10 @@ def test_current_data_validator_allows_7_hours(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
-        v
-        for v in dataset.validators()
-        if isinstance(v, partial) and v.func is validation.check_forecast_current_data
+        v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
     # Validation fires at init+6h20m, so the threshold must exceed that.
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=7)}
+    assert current_data.max_age == timedelta(hours=7)
 
 
 def _resolved_split_size(

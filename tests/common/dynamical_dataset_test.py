@@ -2,7 +2,6 @@ import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from functools import partial
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -109,8 +108,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
             )
             if isinstance(validator, validation.CheckCurrentData):
                 assert result.passed, (
-                    f"{validator.name} should pass with now={latest}: "
-                    f"{result.message}"
+                    f"{validator.name} should pass with now={latest}: {result.message}"
                 )
 
 
@@ -518,14 +516,16 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
 class StubCheckA(validation.Validator):
     def check(
-        self, context: validation.ValidationContext
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
     ) -> validation.ValidationResult:
         return validation.ValidationResult(passed=True, message="ok")
 
 
 class StubCheckB(validation.Validator):
     def check(
-        self, context: validation.ValidationContext
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
     ) -> validation.ValidationResult:
         return validation.ValidationResult(passed=True, message="ok")
 
@@ -580,7 +580,10 @@ def test_validate_dataset_calls_validators(
     assert primary_call.kwargs["append_dim"] == dataset.template_config.append_dim
     assert primary_call.kwargs["dataset_id"] == dataset.dataset_id
     assert primary_call.kwargs["region_job"] is None
-    assert primary_validators == [*configured_validators, validation.CheckExpectedShards()]
+    assert primary_validators == [
+        *configured_validators,
+        validation.CheckExpectedShards(),
+    ]
 
     # Check the second call (replica store): the same checks plus the replica compare,
     # with the primary's dataset to compare against.

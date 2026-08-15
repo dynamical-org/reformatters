@@ -172,8 +172,14 @@ def test_check_current_data_analysis_dim(
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
     context = _context(analysis_dataset, "time")
-    assert not validation.CheckCurrentData(max_age=timedelta(hours=12)).check(context).passed
-    assert validation.CheckCurrentData(max_age=timedelta(hours=48)).check(context).passed
+    assert (
+        not validation.CheckCurrentData(max_age=timedelta(hours=12))
+        .check(context)
+        .passed
+    )
+    assert (
+        validation.CheckCurrentData(max_age=timedelta(hours=48)).check(context).passed
+    )
 
 
 def test_check_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:
@@ -278,7 +284,7 @@ def test_check_recent_nans_include_exclude_vars(
 
 def test_check_recent_nans_unknown_var_raises(forecast_dataset: xr.Dataset) -> None:
     """A typo'd variable name raises instead of silently checking nothing."""
-    with pytest.raises(ValueError, match="unknown variables.*not_a_var"):
+    with pytest.raises(ValueError, match=r"unknown variables.*not_a_var"):
         validation.CheckRecentNans(include_vars=["not_a_var"]).check(
             _context(forecast_dataset, "init_time")
         )
@@ -432,7 +438,12 @@ def test_check_recent_nans_fewer_positions_than_tiers_fails(
     The strict older-position tiers would otherwise never run.
     """
     ds = xr.Dataset(
-        {"temperature": (["time", "latitude", "longitude"], rng.standard_normal((1, 3, 4)))},
+        {
+            "temperature": (
+                ["time", "latitude", "longitude"],
+                rng.standard_normal((1, 3, 4)),
+            )
+        },
         coords={
             "time": pd.date_range("2024-01-01", periods=1, freq="1h"),
             "latitude": np.linspace(90, -90, 3),
@@ -749,21 +760,24 @@ def test_check_expected_shards_skips_non_nan_fill_value_vars(
 
 class PassingCheck(validation.Validator):
     def check(
-        self, context: validation.ValidationContext
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
     ) -> validation.ValidationResult:
         return validation.ValidationResult(passed=True, message="ok")
 
 
 class FailingCheck(validation.Validator):
     def check(
-        self, context: validation.ValidationContext
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
     ) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="bad thing")
 
 
 class AlsoFailingCheck(validation.Validator):
     def check(
-        self, context: validation.ValidationContext
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
     ) -> validation.ValidationResult:
         return validation.ValidationResult(passed=False, message="another bad thing")
 
