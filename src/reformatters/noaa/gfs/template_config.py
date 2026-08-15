@@ -350,6 +350,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Percent frozen precipitation",
                     units="percent",
                     step_type="instant",
+                    comment="Negative values are not percentages. The source marks cells with no precipitation as -50 and its interpolation onto this grid spreads values between -50 and 0 along the boundary with precipitating cells, so no single value identifies the marker and none of it is converted to a missing value.",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CPOFP",
@@ -511,6 +512,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="m",
                     step_type="instant",
                     standard_name="geopotential_height",
+                    comment="The source marks cells with no cloud ceiling as 19968m and its interpolation onto this grid spreads values between that marker and real ceiling heights along the boundary with cells that have a ceiling, so no single value identifies the marker and none of it is converted to a missing value.",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="HGT",

@@ -697,6 +697,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "The source marks cells with no cloud ceiling as 19968m and its interpolation onto this grid spreads values between that marker and real ceiling heights along the boundary with cells that have a ceiling, so no single value identifies the marker and none of it is converted to a missing value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1240,6 +1241,7 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
+          "comment": "Negative values are not percentages. The source marks cells with no precipitation as -50 and its interpolation onto this grid spreads values between -50 and 0 along the boundary with precipitating cells, so no single value identifies the marker and none of it is converted to a missing value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
