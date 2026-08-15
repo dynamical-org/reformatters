@@ -109,7 +109,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Implementations should look similar to this:
         ```
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=12)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=2)),
             validation.CheckRecentNans(),
         )
         ```
@@ -589,6 +589,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 validators,
                 store=primary_store,
                 append_dim=self.template_config.append_dim,
+                append_dim_frequency=self.template_config.append_dim_frequency,
                 data_vars=self.template_config.data_vars,
                 dataset_id=self.dataset_id,
                 region_job=region_job,
@@ -612,6 +613,7 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     replica_validators,
                     store=replica_store,
                     append_dim=self.template_config.append_dim,
+                    append_dim_frequency=self.template_config.append_dim_frequency,
                     data_vars=self.template_config.data_vars,
                     dataset_id=self.dataset_id,
                     region_job=region_job,

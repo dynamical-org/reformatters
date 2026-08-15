@@ -59,7 +59,7 @@ class NasaImergAnalysisMaterializedDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=self.max_expected_delay),
+            validation.CheckCurrentData(max_delay=self.max_expected_delay),
             validation.CheckRecentNans(
                 # IMERG is globally complete (precip is 0, not NaN, where it is dry);
                 # only sparse polar gaps are NaN. On-disk granules measure <=0.8% NaN

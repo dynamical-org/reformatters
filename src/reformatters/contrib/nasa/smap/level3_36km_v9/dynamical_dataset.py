@@ -56,7 +56,7 @@ class NasaSmapLevel336KmV9Dataset(
         return (
             # We've seen < 5 days, giving a little buffer to suppress inactionable
             # alert noise
-            validation.CheckCurrentData(max_age=timedelta(days=6)),
+            validation.CheckCurrentData(max_delay=timedelta(days=6)),
             validation.CheckRecentNans(
                 # Oceans and about half of land (due to swaths) are expected to be NaNs
                 # This value sounds very loose but has been tuned based on real values

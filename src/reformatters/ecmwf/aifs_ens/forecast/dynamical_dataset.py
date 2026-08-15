@@ -59,6 +59,8 @@ class EcmwfAifsEnsForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            # The update's append_dim_end is now-5.5h, so each init is ingested by the
+            # first update fired after init+5.5h, at init+7h; validation fires at init+7h30m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=30)),
             validation.CheckRecentNans(window=3),
         )

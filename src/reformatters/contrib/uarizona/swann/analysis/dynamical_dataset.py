@@ -33,7 +33,7 @@ class UarizonaSwannAnalysisDataset(
             # SWANN data is usually published daily with just over a day lag.
             # There are occasional longer lags, allow them without alerting because
             # this is a contrib dataset.
-            validation.CheckCurrentData(max_age=timedelta(days=5)),
+            validation.CheckCurrentData(max_delay=timedelta(days=5)),
             validation.CheckRecentNans(
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,

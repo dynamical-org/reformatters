@@ -200,7 +200,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     ]
-    assert current_data.max_age == timedelta(hours=2)
+    assert current_data.max_delay == timedelta(hours=1, minutes=49)
     completeness = next(
         validator
         for validator in validators

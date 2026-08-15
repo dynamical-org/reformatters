@@ -70,7 +70,9 @@ class NoaaHrrrForecast48HourDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=7)),
+            # The update ingests each init at init+1h53m (f048 publishes ~init+1h50m);
+            # validation fires at init+2h03m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=3)),
             # window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(exclude_vars=source_fill_value_vars, window=4),

@@ -103,7 +103,7 @@ class ExampleSpatialDynamicalDataset(
           confirm the serializer and virtual-container authorization work end to end.
         """
         # return (
-        #     validation.CheckCurrentData(max_age=timedelta(hours=10)),
+        #     validation.CheckCurrentData(max_delay=timedelta(hours=4)),
         #     validation.CheckVirtualManifestCompleteness(),
         #     validation.CheckVirtualDecodeHealth(),
         # )

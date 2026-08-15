@@ -218,8 +218,8 @@ def test_current_data_validator_allows_7_hours(
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    # Validation fires at init+6h20m, so the threshold must exceed that.
-    assert current_data.max_age == timedelta(hours=7)
+    # Each init is due when its validation fires, at init+6h20m.
+    assert current_data.max_delay == timedelta(hours=6, minutes=20)
 
 
 def _resolved_split_size(

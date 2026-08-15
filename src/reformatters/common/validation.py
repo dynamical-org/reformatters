@@ -77,6 +77,8 @@ class ValidationContext:
     # (see open_flattened_dataset); variables are keyed by store path.
     ds: xr.Dataset
     append_dim: str
+    # The template config's append_dim_frequency; None when no template is in play.
+    append_dim_frequency: pd.Timedelta | None = None
     # The template config's declared variables; empty when no template is in play
     # (offline scripts, tests). Lets a check consult config that is not written to
     # the store (has_hour_0_values, internal attrs) and validate variable names.
@@ -200,6 +202,7 @@ def validate_dataset(
     store: zarr.storage.StoreLike,
     append_dim: str,
     dataset_id: str,
+    append_dim_frequency: pd.Timedelta | None = None,
     data_vars: Sequence[DataVar[Any]] = (),
     region_job: VirtualRegionJob[Any, Any] | None = None,
     primary_ds: xr.Dataset | None = None,
@@ -212,6 +215,7 @@ def validate_dataset(
         store: the zarr/icechunk store to validate.
         append_dim: the dataset's append dimension.
         dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
+        append_dim_frequency: the template config's append-dim frequency.
         data_vars: the template config's declared variables (see ValidationContext).
         region_job: the operational-window job, required when any validator sets
             requires_virtual_dataset.
@@ -238,6 +242,7 @@ def validate_dataset(
             store=store,
             ds=ds,
             append_dim=append_dim,
+            append_dim_frequency=append_dim_frequency,
             data_vars=tuple(data_vars),
             region_job=region_job,
             primary_ds=primary_ds,
@@ -270,32 +275,55 @@ def validate_dataset(
 
 
 class CheckCurrentData(Validator):
-    """Fail when the newest append-dim position is older than `max_age`.
+    """Fail when an append-dim position that is due has not been ingested.
 
-    `max_age` is dataset-specific — the update cadence plus the source's publication
-    delay plus operational slack — so it is required, not defaulted.
+    A position is due `max_delay` after its own timestamp: the source's publication
+    delay plus our update duration plus slack — typically the validation cron's
+    offset after the cycle it validates. Deadlines attach to grid positions (the
+    template's append_dim_frequency, anchored to the dataset's own positions), not
+    to the moment the check runs, so a tight deadline holds at any wall-clock time
+    and an off-schedule run never alerts on a gap that is merely the normal wait
+    for the next cycle.
     """
 
-    max_age: timedelta
+    max_delay: timedelta
 
     def check(self, context: ValidationContext) -> ValidationResult:
         append_dim = context.append_dim
-        if context.ds.sizes[append_dim] == 0:
+        frequency = context.append_dim_frequency
+        assert frequency is not None, (
+            "CheckCurrentData requires the template's append_dim_frequency on the context"
+        )
+        index = context.ds.get_index(append_dim)
+        if len(index) == 0:
             return ValidationResult(
                 passed=False, message=f"Dataset has no {append_dim} positions"
             )
-        latest = pd.Timestamp(context.ds.get_index(append_dim).max())
-        age = pd.Timestamp.now() - latest
-        if age > self.max_age:
+        first = pd.Timestamp(index.min())
+        latest = pd.Timestamp(index.max())
+        # The newest grid position whose deadline has passed.
+        due = (
+            first
+            + ((pd.Timestamp.now() - self.max_delay - first) // frequency) * frequency
+        )
+        if due < first:
+            return ValidationResult(
+                passed=True,
+                message=f"No {append_dim} position is due yet (positions are due "
+                f"{self.max_delay} after their timestamp)",
+            )
+        if latest < due:
             return ValidationResult(
                 passed=False,
-                message=f"No data found within {self.max_age} of now "
-                f"(latest {append_dim} is {latest.isoformat()})",
+                message=f"Missing {append_dim}={due.isoformat()}, which was due "
+                f"{self.max_delay} after its timestamp "
+                f"(latest present is {latest.isoformat()})",
             )
         return ValidationResult(
             passed=True,
-            message=f"Data found within {self.max_age} of now "
-            f"(latest {append_dim} is {latest.isoformat()})",
+            message=f"{append_dim}={due.isoformat()}, the newest position due "
+            f"{self.max_delay} after its timestamp, is present "
+            f"(latest is {latest.isoformat()})",
         )
 
 

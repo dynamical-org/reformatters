@@ -96,6 +96,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
         store=store,
         ds=ds,
         append_dim=dataset.template_config.append_dim,
+        append_dim_frequency=dataset.template_config.append_dim_frequency,
         data_vars=tuple(dataset.template_config.data_vars),
         region_job=region_job,
     )

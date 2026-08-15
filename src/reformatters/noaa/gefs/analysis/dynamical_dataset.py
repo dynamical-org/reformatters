@@ -51,6 +51,6 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=12)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckRecentNans(),
         )

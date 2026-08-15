@@ -111,56 +111,80 @@ def analysis_dataset(rng: np.random.Generator) -> xr.Dataset:
     return ds
 
 
-def test_check_current_data_passes(
+def test_check_current_data_passes_and_fails(
     monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
 ) -> None:
-    """CheckCurrentData passes when recent data exists."""
-    now = pd.Timestamp("2024-01-01 18:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    result = validation.CheckCurrentData(max_age=timedelta(days=1)).check(
-        _context(forecast_dataset, "init_time")
+    """A position missing past its deadline fails; present positions pass."""
+    # Dataset has 6-hourly init_times through 2024-01-02 00:00.
+    context = _context(
+        forecast_dataset, "init_time", append_dim_frequency=pd.Timedelta("6h")
     )
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2))
 
-    assert result.passed
-    assert "Data found within" in result.message
-
-
-def test_check_current_data_fails(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
-) -> None:
-    """CheckCurrentData fails when no recent data exists."""
-    now = pd.Timestamp("2024-01-10")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    result = validation.CheckCurrentData(max_age=timedelta(days=1)).check(
-        _context(forecast_dataset, "init_time")
+    # 2024-01-02 00:00 was due at 02:00 and is present.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 03:00")
     )
+    assert check.check(context).passed
 
+    # 2024-01-02 06:00 was due at 08:00 and is missing.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 08:01")
+    )
+    result = check.check(context)
     assert not result.passed
-    assert "No data found within" in result.message
+    assert "Missing init_time=2024-01-02T06:00:00" in result.message
 
 
-def test_check_current_data_custom_age(
+def test_check_current_data_tight_deadline_holds_off_schedule(
     monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
 ) -> None:
-    """A smaller max_age tightens the threshold."""
-    # Dataset latest init_time is 2024-01-02 00:00 (5 * 6h after 2024-01-01)
-    now = pd.Timestamp("2024-01-02 10:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    # 1 day allows it
-    assert (
-        validation.CheckCurrentData(max_age=timedelta(days=1))
-        .check(_context(forecast_dataset, "init_time"))
-        .passed
+    """Deadlines attach to grid positions, so a tight max_delay does not false-alarm
+    when the check runs mid-cycle, long after the newest position's timestamp."""
+    context = _context(
+        forecast_dataset, "init_time", append_dim_frequency=pd.Timedelta("6h")
     )
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=31))
 
-    # 6 hour age threshold should fail (latest init is 10 hours ago)
-    result = validation.CheckCurrentData(max_age=timedelta(hours=6)).check(
-        _context(forecast_dataset, "init_time")
+    # Latest present init is 2024-01-02 00:00; mid-cycle its age is ~5h59m but the
+    # next init (06:00) is not yet due, so this passes.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 05:59")
     )
-    assert not result.passed
+    assert check.check(context).passed
+
+    # One minute past 06:00's deadline it fails.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 08:32")
+    )
+    assert not check.check(context).passed
+
+
+def test_check_current_data_grid_anchored_to_dataset_positions(
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+) -> None:
+    """Deadlines fall on the dataset's own grid, not epoch-aligned multiples."""
+    # 6-hourly grid offset from midnight: 03:00, 09:00, 15:00, 21:00.
+    init_times = pd.date_range("2024-01-01 03:00", periods=3, freq="6h")
+    ds = xr.Dataset(
+        {"temperature": (["init_time"], rng.standard_normal(len(init_times)))},
+        coords={"init_time": init_times},
+    )
+    context = _context(ds, "init_time", append_dim_frequency=pd.Timedelta("6h"))
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2))
+
+    # Latest present is 15:00. At 17:00 an epoch-aligned floor would demand a
+    # nonexistent 12:00 position; the newest due grid position is 15:00, present.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-01 17:00")
+    )
+    assert check.check(context).passed
+
+    # 21:00 is due at 23:00 and missing.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-01 23:01")
+    )
+    assert not check.check(context).passed
 
 
 def test_check_current_data_analysis_dim(
@@ -171,15 +195,26 @@ def test_check_current_data_analysis_dim(
     now = pd.Timestamp("2024-01-03 12:00:00")
     monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
 
-    context = _context(analysis_dataset, "time")
+    context = _context(
+        analysis_dataset, "time", append_dim_frequency=pd.Timedelta("1h")
+    )
     assert (
-        not validation.CheckCurrentData(max_age=timedelta(hours=12))
+        not validation.CheckCurrentData(max_delay=timedelta(hours=12))
         .check(context)
         .passed
     )
     assert (
-        validation.CheckCurrentData(max_age=timedelta(hours=48)).check(context).passed
+        validation.CheckCurrentData(max_delay=timedelta(hours=14)).check(context).passed
     )
+
+
+def test_check_current_data_requires_append_dim_frequency(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    with pytest.raises(AssertionError, match="append_dim_frequency"):
+        validation.CheckCurrentData(max_delay=timedelta(hours=2)).check(
+            _context(forecast_dataset, "init_time")
+        )
 
 
 def test_check_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:

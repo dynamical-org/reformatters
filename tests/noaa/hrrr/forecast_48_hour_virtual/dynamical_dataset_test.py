@@ -272,7 +272,7 @@ def test_current_data_validator_allows_8_hours(
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
     # 6h cycle + ~2h publication slack.
-    assert current_data.max_age == timedelta(hours=8)
+    assert current_data.max_delay == timedelta(hours=2, minutes=40)
 
 
 def _resolved_split_size(

@@ -85,10 +85,10 @@ class EcmwfAifsSingleForecastVirtualDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
-        # Validation fires at init+6h20m, just after the update deadline; files
-        # publish by ~init+6h10m (p99), so 7h leaves ~40m of cron/pod start slack.
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=7)),
+            # Files publish by ~init+6h10m (p99); validation fires at init+6h20m,
+            # just after the update deadline.
+            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=20)),
             # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

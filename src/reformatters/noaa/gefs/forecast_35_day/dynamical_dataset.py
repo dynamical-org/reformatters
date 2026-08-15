@@ -53,7 +53,8 @@ class GefsForecast35DayDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            # The update ingests each init at init+6h33m; validation fires at init+7h03m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=3)),
             # Latest init_time is only filled out to ~day 15 of 35, so ~42% of
             # lead_times at any spatial point are legitimately NaN (observed max
             # 0.420789 in prod; keep small headroom). Older init_times are fully

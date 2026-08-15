@@ -48,7 +48,7 @@ def test_validators(dataset: GefsAnalysisDataset) -> None:
     """Test that validators are properly configured."""
     current_data, recent_nans = dataset.validators()
     assert isinstance(current_data, validation.CheckCurrentData)
-    assert current_data.max_age == timedelta(hours=12)
+    assert current_data.max_delay == timedelta(hours=12)
     assert isinstance(recent_nans, validation.CheckRecentNans)
 
 

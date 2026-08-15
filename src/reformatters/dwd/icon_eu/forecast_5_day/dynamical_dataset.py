@@ -98,7 +98,8 @@ class DwdIconEuForecast5DayDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            # The update ingests each init at init+3h52m; validation fires at init+4h02m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=2)),
             validation.CheckRecentNans(),
         )
 

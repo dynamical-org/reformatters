@@ -48,7 +48,7 @@ class NoaaNdviCdrAnalysisDataset(
         return (
             # There's usually a ~3 day lag for this data's availability, occasionally
             # much longer.
-            validation.CheckCurrentData(max_age=timedelta(days=30)),
+            validation.CheckCurrentData(max_delay=timedelta(days=30)),
             validation.CheckRecentNans(
                 # Large NaN fraction is expected: oceans and water bodies are always NaN
                 # (~93% baseline, observed up to ~96%). Use full-grid sampling because

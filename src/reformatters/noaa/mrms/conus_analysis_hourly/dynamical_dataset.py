@@ -51,7 +51,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=3, minutes=30)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=30)),
             validation.CheckRecentNans(
                 # Gauge-corrected values arrive an hour late, leaving the newest
                 # timestamp entirely NaN (excused by the leading 1.0). Measured

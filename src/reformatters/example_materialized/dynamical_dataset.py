@@ -58,7 +58,7 @@ class ExampleTemporalDynamicalDataset(
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
         # return (
-        #     validation.CheckCurrentData(max_age=timedelta(hours=12)),
+        #     validation.CheckCurrentData(max_delay=timedelta(hours=2)),
         #     validation.CheckRecentNans(),
         # )
         raise NotImplementedError(

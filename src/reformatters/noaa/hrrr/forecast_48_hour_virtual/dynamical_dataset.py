@@ -81,9 +81,10 @@ class NoaaHrrrForecast48HourVirtualDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
-        # 6h cycle + ~2h publication = ~8h before the latest init is current.
         return (
-            validation.CheckCurrentData(max_age=timedelta(hours=8)),
+            # The update polls each init from init+50m (f48 publishes ~init+1h50m);
+            # validation fires at init+2h40m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=40)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

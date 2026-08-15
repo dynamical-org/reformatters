@@ -49,6 +49,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            # The update ingests each init at init+5h38m; validation fires at init+5h48m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=48)),
             validation.CheckRecentNans(),
         )

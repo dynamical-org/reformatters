@@ -61,6 +61,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_age=timedelta(days=1)),
+            # The update ingests each init at init+8h05m; validation fires at init+8h40m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=40)),
             validation.CheckRecentNans(window=3),
         )
