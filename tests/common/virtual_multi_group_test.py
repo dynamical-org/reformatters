@@ -376,7 +376,7 @@ class MultiGroupDataset(
             ),
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return ()
 
 
@@ -525,8 +525,8 @@ def test_open_flattened_dataset_includes_group_vars(tmp_path: Path) -> None:
 
 def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     # The most safety-critical case: a NaN/coverage validator must evaluate group vars,
-    # not silently drop to root-only. Running it over the flat dataset with the group var
-    # explicitly included reports "1 variable" (it was found and checked), not "0".
+    # not silently drop to root-only. Selecting the group var by path must find and
+    # check it (an unknown name raises; a selection missing from the store fails).
     dataset = _make_dataset(tmp_path, n_inits=2)
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
@@ -535,13 +535,12 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     store = repo.readonly_session("main").store
 
     flat = validation.open_flattened_dataset(store, consolidated=False)
-    result = validation.check_forecast_recent_nans(
-        flat,
+    result = validation.CheckRecentNans(
         include_vars=["pressure_level/temperature"],
         spatial_sampling="all",
-    )
+    ).check(validation.ValidationContext(store=store, ds=flat, append_dim="init_time"))
     assert result.passed, result.message
-    assert "All 1 variables" in result.message
+    assert "All 2 checked recent init_time positions" in result.message
 
 
 def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
@@ -558,7 +557,11 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
 
     ds = validation.open_flattened_dataset(store, consolidated=False)
     assert "pressure_level/temperature" in ds.data_vars
-    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    result = validation.CheckVirtualDecodeHealth().check(
+        validation.ValidationContext(
+            store=store, ds=ds, append_dim=job.append_dim, region_job=job
+        )
+    )
     assert result.passed, result.message
 
 
@@ -573,15 +576,18 @@ def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 2))
     ds = validation.open_flattened_dataset(store, consolidated=False)
+    context = validation.ValidationContext(
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
+    )
 
     # Sampling one of the two pressure levels still exercises the group var and passes.
-    sampled = validation.CheckVirtualDecodeHealth(sampled_levels=1)(job, store, ds)
+    sampled = validation.CheckVirtualDecodeHealth(sampled_levels=1).check(context)
     assert sampled.passed, sampled.message
 
     # positions="all" capped to a single position decode-checks just one init.
-    capped = validation.CheckVirtualDecodeHealth(positions="all", max_positions=1)(
-        job, store, ds
-    )
+    capped = validation.CheckVirtualDecodeHealth(
+        positions="all", max_positions=1
+    ).check(context)
     assert capped.passed, capped.message
     assert capped.message.count("init_time=") == 1
 

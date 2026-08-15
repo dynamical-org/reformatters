@@ -226,7 +226,7 @@ class FailDataset(DynamicalDataset[FailDataVar, FailSourceFileCoord]):
             ),
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return ()
 
 
@@ -352,8 +352,10 @@ def test_transient_mid_region_failure_leaves_permanent_hole(tmp_path: Path) -> N
 
     # Shard-presence validation does NOT catch the hole: the shard covering step 5
     # was written (step 4 succeeded in the same shard), it is just NaN-filled.
-    shard_result = validation.check_for_expected_shards(
-        dataset.store_factory.primary_store(), resumed
+    shard_result = validation.CheckExpectedShards().check(
+        validation.ValidationContext(
+            store=dataset.store_factory.primary_store(), ds=resumed, append_dim="time"
+        )
     )
     assert shard_result.passed, shard_result.message
 
@@ -381,7 +383,9 @@ def test_lagging_variable_publishes_ragged_nan_hole(tmp_path: Path) -> None:
     assert bool(np.isnan(updated["var1"].sel(time=_time(7)).values).all())
 
     # Again, shard-presence validation passes despite the ragged hole.
-    shard_result = validation.check_for_expected_shards(
-        dataset.store_factory.primary_store(), updated
+    shard_result = validation.CheckExpectedShards().check(
+        validation.ValidationContext(
+            store=dataset.store_factory.primary_store(), ds=updated, append_dim="time"
+        )
     )
     assert shard_result.passed, shard_result.message
