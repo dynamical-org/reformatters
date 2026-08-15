@@ -1345,7 +1345,7 @@ def test_virtual_operational_rejects_multiple_jobs(tmp_path: Path) -> None:
 
 def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     # Virtual stores have shards=None and intentionally-missing chunks for
-    # partially-published inits, so check_for_expected_shards must be skipped.
+    # partially-published inits, so CheckExpectedShards must be skipped.
     dataset = _make_dataset(tmp_path)
     template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)

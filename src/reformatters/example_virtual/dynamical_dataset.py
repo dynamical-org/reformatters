@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta  # noqa: F401
-from functools import partial  # noqa: F401
 
 import icechunk  # noqa: F401
 from pydantic import Field  # noqa: F401
