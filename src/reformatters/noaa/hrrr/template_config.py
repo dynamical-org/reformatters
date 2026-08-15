@@ -365,7 +365,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="MSLMA",
-                    # PRMSL in HRRRv1/v2 (before 2018-07-12), MSLMA in HRRRv3+
+                    # PRMSL through the 2016-08-23 cycles, MSLMA from 2016-08-24 on
                     grib_element_alternatives=("PRMSL",),
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_index_level="mean sea level",
