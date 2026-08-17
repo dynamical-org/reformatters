@@ -1176,19 +1176,19 @@ def _grouped_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
     return store
 
 
-def test_check_for_expected_shards_passes_with_vertical_group(
+def test_check_expected_shards_passes_with_vertical_group(
     rng: np.random.Generator,
 ) -> None:
     store = _grouped_store(rng)
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert result.passed
     assert "All variables have expected shards" in result.message
 
 
-def test_check_for_expected_shards_fails_missing_group_shards(
+def test_check_expected_shards_fails_missing_group_shards(
     rng: np.random.Generator,
 ) -> None:
     store = _grouped_store(rng)
@@ -1196,7 +1196,7 @@ def test_check_for_expected_shards_fails_missing_group_shards(
 
     zarr.core.sync.sync(store.delete("pressure_level/temperature/c/0/1/0/0"))
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert not result.passed
     assert result.message == (
@@ -1205,14 +1205,16 @@ def test_check_for_expected_shards_fails_missing_group_shards(
     )
 
 
-def test_compare_replica_and_primary_passes_with_vertical_group(
+def test_check_replica_matches_primary_passes_with_vertical_group(
     rng: np.random.Generator,
 ) -> None:
     store = _grouped_store(rng)
     primary_ds = validation.open_flattened_dataset(store, consolidated=False)
     replica_ds = primary_ds.copy(deep=True)
 
-    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+    result = validation.CheckReplicaMatchesPrimary().check(
+        _context(replica_ds, "time", primary_ds=primary_ds)
+    )
 
     assert result.passed
     assert "replica and primary stores is the same" in result.message
