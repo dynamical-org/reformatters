@@ -46,7 +46,7 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
 
 
 def copy_data_var(
-    data_var_name: str,
+    data_var_path: str,
     i_slice: slice,
     template_ds: xr.Dataset,
     append_dim: str,
@@ -54,11 +54,16 @@ def copy_data_var(
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
 ) -> None:
-    dim_index = template_ds[data_var_name].dims.index(append_dim)
-    append_dim_shard_size = template_ds[data_var_name].encoding["shards"][dim_index]
+    """Copy one shard's chunk files from `tmp_store` to the output stores.
+
+    `data_var_path` is the variable's zarr path (`group/name`, or `name` at root),
+    which is both its store-relative directory and its key in `template_ds`.
+    """
+    dim_index = template_ds[data_var_path].dims.index(append_dim)
+    append_dim_shard_size = template_ds[data_var_path].encoding["shards"][dim_index]
     shard_index = i_slice.start // append_dim_shard_size
     assert dim_index == 0  # relative_dir format below assumes append dim is first
-    relative_dir = f"{data_var_name}/c/{shard_index}/"
+    relative_dir = f"{data_var_path}/c/{shard_index}/"
 
     for replica_store in replica_stores:
         log.info(

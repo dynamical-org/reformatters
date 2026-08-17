@@ -199,7 +199,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         Parameters
         ----------
         process_results : Mapping[str, Sequence[SourceFileResult]]
-            Mapping from variable names to their SourceFileResult with final processing status.
+            Mapping from variable paths to their SourceFileResult with final processing status.
 
         Returns
         -------

@@ -14,6 +14,7 @@ from reformatters.common.config_models import (
     Group,
     codecs_to_dicts,
     mask_source_fill_value_inplace,
+    split_var_path,
     var_path,
 )
 
@@ -24,6 +25,21 @@ class TestGroupAndVarPath:
 
     def test_vertical_group_var_path_is_group_slash_name(self) -> None:
         assert var_path("pressure_level", "temperature") == "pressure_level/temperature"
+
+    def test_split_root_var_path_has_no_group(self) -> None:
+        assert split_var_path("temperature_2m") == (None, "temperature_2m")
+
+    def test_split_vertical_group_var_path(self) -> None:
+        assert split_var_path("pressure_level/temperature") == (
+            "pressure_level",
+            "temperature",
+        )
+
+    def test_split_nested_var_path_keeps_full_group(self) -> None:
+        assert split_var_path("foo/bar/baz/temperature") == (
+            "foo/bar/baz",
+            "temperature",
+        )
 
     def _data_var(self, group: Group = ROOT) -> DataVar:  # type: ignore[type-arg]
         attrs = DataVarAttrs(

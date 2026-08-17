@@ -297,11 +297,11 @@ class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
         return ()
 
 
-def test_materialized_dataset_rejects_vertical_group_var() -> None:
-    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
-    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
-    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
-        GroupedVarDataset()
+def test_materialized_dataset_accepts_vertical_group_var() -> None:
+    dataset = GroupedVarDataset()
+    assert [v.path for v in dataset.template_config.data_vars] == [
+        "pressure_level/temperature"
+    ]
 
 
 class ExampleVirtualConfig(ExampleConfig):
@@ -597,19 +597,23 @@ def test_validate_dataset_calls_validators(
     )
 
 
-def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
+def test_validate_dataset_virtual_replica_compares_but_skips_shard_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # check_for_expected_shards and compare_replica_and_primary are
-    # materialized-only; a virtual dataset's replica gets the base validators.
+    # check_for_expected_shards is materialized-only; compare_replica_and_primary
+    # applies to every dataset with a replica.
     configured_validators = [Mock(), Mock()]
     monkeypatch.setattr(
         ExampleVirtualDataset, "validators", lambda self: configured_validators
     )
     mock_validate = Mock()
     monkeypatch.setattr(validation, "validate_dataset", mock_validate)
-    mock_open = Mock()
-    monkeypatch.setattr(validation, "open_flattened_dataset", mock_open)
+    mock_replica_store_ds = Mock()
+    monkeypatch.setattr(
+        validation,
+        "open_flattened_dataset",
+        lambda store, *, consolidated: mock_replica_store_ds,
+    )
 
     dataset = ExampleVirtualDataset(
         replica_storage_configs=[
@@ -634,12 +638,16 @@ def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
     assert primary_call.args == (mock_store,)
     assert primary_call.kwargs["validators"] == configured_validators
     assert replica_call.args == (mock_replica_store,)
-    assert replica_call.kwargs["validators"] == configured_validators
+    replica_validators = replica_call.kwargs["validators"]
+    assert replica_validators[:-1] == configured_validators
+    assert replica_validators[-1].func == validation.compare_replica_and_primary
+    assert replica_validators[-1].args == (
+        dataset.template_config.append_dim,
+        mock_replica_store_ds,
+    )
     # No VirtualDataValidator configured, so no operational-window job is built.
     assert primary_call.kwargs["region_job"] is None
     assert replica_call.kwargs["region_job"] is None
-    # compare_replica_and_primary's replica dataset is never opened.
-    mock_open.assert_not_called()
 
 
 def test_run_virtual_operational_update_asserts_single_writer() -> None:

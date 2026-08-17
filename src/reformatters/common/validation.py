@@ -587,7 +587,7 @@ def compare_replica_and_primary(
                     start + window_size,
                 )
             )
-            for dim_name, dim_size in replica_ds.sizes.items()
+            for dim_name, dim_size in replica_ds[var].sizes.items()
             if dim_name != append_dim
         }
 
@@ -635,11 +635,11 @@ def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
     var_missing_shard_indexes = {}
 
     for var in map(str, ds.data_vars):  # our keys are strs, xr types as Hashable
-        ordered_dims = ds[var].dims
-
         shard_counts_per_dim = [
-            len(iterating.dimension_slices(ds, str(dim), "shards"))
-            for dim in ordered_dims
+            len(iterating.chunk_slices(size, shard_size))
+            for size, shard_size in zip(
+                ds[var].shape, ds[var].encoding["shards"], strict=True
+            )
         ]
         ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
         expected_shard_indexes = {
