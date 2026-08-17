@@ -97,12 +97,12 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "uses": "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -110,7 +110,7 @@ def generate_create_job_workflow(cronjob_names: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "uses": "azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d",
                         "with": {"version": "latest"},
                     },
                     {
@@ -271,11 +271,11 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                     },
                     {
                         "name": "Install uv",
-                        "uses": "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+                        "uses": "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9",
                         "with": {
                             "enable-cache": True,
                             "cache-dependency-glob": "uv.lock",
@@ -283,7 +283,7 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Set up Python",
-                        "uses": "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405",
+                        "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
                         "with": {"python-version-file": ".python-version"},
                     },
                     {
@@ -292,7 +292,7 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "uses": "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -300,7 +300,7 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "uses": "azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d",
                         "with": {"version": "latest"},
                     },
                     {
@@ -452,12 +452,12 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "uses": "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -465,7 +465,7 @@ def generate_get_jobs_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "uses": "azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d",
                         "with": {"version": "latest"},
                     },
                     {
@@ -524,12 +524,12 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                 "environment": MANUAL_K8S_GITHUB_ENVIRONMENT,
                 "steps": [
                     {
-                        "uses": "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+                        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                         "with": {"sparse-checkout": "."},
                     },
                     {
                         "name": "Configure AWS Credentials",
-                        "uses": "aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37",
+                        "uses": "aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c",
                         "with": {
                             "role-to-assume": "${{ secrets.AWS_ROLE_TO_ASSUME }}",
                             "aws-region": "${{ secrets.AWS_REGION }}",
@@ -537,7 +537,7 @@ def generate_get_pods_workflow() -> dict[str, Any]:
                     },
                     {
                         "name": "Install kubectl",
-                        "uses": "azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b",
+                        "uses": "azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d",
                         "with": {"version": "latest"},
                     },
                     {
