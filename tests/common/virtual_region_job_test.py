@@ -1504,35 +1504,41 @@ def test_check_virtual_manifest_completeness_zero_tier_excuses_newest(
     job = _make_region_job(template_ds, region=slice(0, 4))
     ds = xr.open_zarr(store, decode_timedelta=True)
 
-    assert validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.0, 1.0))(
-        job, store, ds
-    ).passed
-    assert not validation.CheckVirtualManifestCompleteness()(job, store, ds).passed
+    context = _virtual_context(job, store, ds)
+    assert (
+        validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.0, 1.0))
+        .check(context)
+        .passed
+    )
+    assert not validation.CheckVirtualManifestCompleteness().check(context).passed
 
 
 def test_check_virtual_manifest_completeness_selects_files_by_variable(
     tmp_path: Path,
 ) -> None:
     # An instance checks only the files carrying its own variables, and a filter
-    # matching nothing fails rather than vacuously passing.
+    # matching nothing raises as a config error rather than vacuously passing.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
     job = _make_region_job(template_ds, region=slice(0, 4))
-    ds = xr.open_zarr(store, decode_timedelta=True)
+    context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     (var_path,) = [var.path for var in job.data_vars]
 
-    assert validation.CheckVirtualManifestCompleteness(include_vars=[var_path])(
-        job, store, ds
-    ).passed
+    assert (
+        validation.CheckVirtualManifestCompleteness(include_vars=[var_path])
+        .check(context)
+        .passed
+    )
 
-    for check in (
-        validation.CheckVirtualManifestCompleteness(exclude_vars=[var_path]),
-        validation.CheckVirtualManifestCompleteness(include_vars=["not_a_var"]),
-    ):
-        result = check(job, store, ds)
-        assert not result.passed
-        assert "No source files carry the variables being checked" in result.message
+    with pytest.raises(ValueError, match="selects no variables"):
+        validation.CheckVirtualManifestCompleteness(exclude_vars=[var_path]).check(
+            context
+        )
+    with pytest.raises(ValueError, match="unknown variables"):
+        validation.CheckVirtualManifestCompleteness(include_vars=["not_a_var"]).check(
+            context
+        )
 
 
 def test_check_virtual_manifest_completeness_rejects_loose_last_tier() -> None:

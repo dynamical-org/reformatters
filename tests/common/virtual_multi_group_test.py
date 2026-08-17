@@ -896,15 +896,22 @@ def test_completeness_variable_filter_requires_disjoint_source_files(
     store = repo.readonly_session("main").store
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
-    with pytest.raises(AssertionError, match="carries both checked and unchecked"):
+    context = validation.ValidationContext(
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
+    )
+    with pytest.raises(AssertionError, match="carries both selected and unselected"):
         validation.CheckVirtualManifestCompleteness(
             include_vars=["pressure_level/temperature"]
-        )(job, store, ds)
+        ).check(context)
 
     # Covering every variable the files carry is the supported case.
-    assert validation.CheckVirtualManifestCompleteness(
-        include_vars=["temperature_2m", "pressure_level/temperature"]
-    )(job, store, ds).passed
+    assert (
+        validation.CheckVirtualManifestCompleteness(
+            include_vars=["temperature_2m", "pressure_level/temperature"]
+        )
+        .check(context)
+        .passed
+    )
 
 
 def test_representative_probe_loc_supplements_the_group_level() -> None:
