@@ -56,9 +56,9 @@ class NoaaHrrrVirtualRegionJob(
     VirtualRegionJob[NoaaHrrrDataVar, HRRR_VIRTUAL_COORD],
     Generic[HRRR_VIRTUAL_COORD],
 ):
-    """RegionJob shared by the HRRR virtual datasets: source-file discovery on NODD S3
-    and ref building from GRIB indexes. A subclass declares its source file coords
-    (generate_source_file_coords) and operational_update_window."""
+    """Source-file discovery on NODD S3 and ref building from GRIB indexes, shared by
+    the HRRR virtual datasets. A subclass adds generate_source_file_coords and
+    operational_update_window."""
 
     def discover_available(
         self, pending: list[HRRR_VIRTUAL_COORD]

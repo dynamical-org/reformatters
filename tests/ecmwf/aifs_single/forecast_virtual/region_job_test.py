@@ -156,8 +156,7 @@ def test_out_loc_pins_init_and_lead_only(template_ds: xr.DataTree) -> None:
         "init_time": _ERA2_INIT,
         "lead_time": _LEAD_6H,
     }
-    # A group-only coord's manifest probe supplements the first level so it resolves
-    # to a single chunk.
+    # A group-only coord's manifest probe supplements the first level.
     group_only = _coord([get_var("pressure_level/temperature")])
     job = make_job(template_ds, data_vars=group_only.data_vars)
     probe_loc = job.representative_probe_loc(

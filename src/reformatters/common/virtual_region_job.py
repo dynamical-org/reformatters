@@ -172,12 +172,9 @@ class VirtualRegionJob(
     def representative_probe_loc(
         self, coord: SOURCE_FILE_COORD, var: DataVar[Any]
     ) -> Mapping[Dim, CoordinateValue]:
-        """The single output cell whose presence in the manifest means `coord`'s file
-        is fully ingested: the file's out_loc, plus the first coordinate label along
-        each of `var`'s multi-chunk dims out_loc leaves unpinned (e.g. a vertical
-        level). Like representative_var, this leans on per-file commit atomicity: any
-        one cell a file covers implies the rest. Override when a file covers only part
-        of an unpinned dim, so the probe names a cell the file actually carries.
+        """The cell whose manifest presence means `coord`'s file is ingested: its
+        out_loc plus the first label along each multi-chunk dim of `var` that out_loc
+        leaves unpinned. Override when a file covers only part of such a dim.
         """
         loc = dict(coord.out_loc())
         template_var = self.template_ds[var.path]

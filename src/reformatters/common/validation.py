@@ -735,13 +735,9 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
       (0.0, 1.0)  the newest is excused entirely; every older position whole.
 
     `include_vars` / `exclude_vars` narrow the check to the source files carrying those
-    variables — a file is expected when it carries any of them — so variables publishing
-    on different schedules can be checked separately. Variables are named by path
-    (`<group>/<name>`, or the bare name at the root), and must divide along source-file
-    boundaries (asserted): presence is probed through each file's representative
-    variable, so a file carrying both checked and unchecked variables could pass on a
-    variable this instance does not cover. Choosing tiers and partitions: see
-    docs/virtual_datasets.md.
+    variables, named by path (`<group>/<name>`, or the bare name at the root). A file
+    counts when it carries any of them, and the split must fall on source-file
+    boundaries (asserted).
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
@@ -808,8 +804,6 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
                     f"{append_dim}={position}: {present}/{expected} present "
                     f"({present / expected:.1%} < required {required:.0%})"
                 )
-        # A dataset may run several instances over different variables, so every
-        # message names the one it came from.
         selection = (
             f" ({self._variable_selection()})" if self._filters_variables() else ""
         )

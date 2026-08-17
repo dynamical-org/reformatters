@@ -94,8 +94,7 @@ def test_out_loc_root_file_excludes_level() -> None:
 
 
 def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> None:
-    # A prs/nat file holds only group vars, so the per-file manifest probe supplements
-    # a concrete level to resolve to a single chunk; out_loc itself stays the file's slab.
+    # out_loc stays the file's slab; the manifest probe supplements a concrete level.
     prs = _coord("prs", [get_var("pressure_level/temperature")])
     assert "pressure_level" not in prs.out_loc()
     job = make_job(template_ds, data_vars=prs.data_vars)

@@ -86,13 +86,9 @@ def _raw_idx_element(discipline: int, category: int, parameter: int) -> str:
 
 
 class NoaaHrrrVirtualTemplateConfig(NoaaHrrrCommonTemplateConfig):
-    """Virtual, spatially-chunked (map-optimized) HRRR template.
-
-    Chunks are references to GRIB messages in NOAA's HRRR archive decoded at read
-    time, so the grid is the native Lambert Conformal y/x grid with one chunk per
-    message. Covers every wrfsfc/wrfprs/wrfnat variable plus pressure_level and
-    model_level vertical groups. A subclass declares its dims and time structure.
-    See docs/virtual_datasets.md.
+    """Virtual HRRR template: one chunk per GRIB message on the native Lambert
+    Conformal y/x grid, covering every wrfsfc/wrfprs/wrfnat variable plus the
+    pressure_level and model_level groups. A subclass declares dims and time structure.
     """
 
     def _vertical_dimension_coordinates(self) -> dict[str, Any]:

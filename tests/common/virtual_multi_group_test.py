@@ -879,9 +879,7 @@ def test_completeness_variable_filter_requires_disjoint_source_files(
 ) -> None:
     """A source file carrying both a checked and an unchecked variable is rejected.
 
-    Presence is probed through the file's representative variable, so counting a
-    partially-checked file would let an instance pass on a variable it does not cover.
-    Here one file carries both `temperature_2m` and `pressure_level/temperature`.
+    This fixture's files carry both `temperature_2m` and `pressure_level/temperature`.
     """
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(2)
@@ -904,12 +902,7 @@ def test_completeness_variable_filter_requires_disjoint_source_files(
 
 
 def test_representative_probe_loc_supplements_the_group_level() -> None:
-    """A file spanning every level of a vertical group is probed at its first level.
-
-    out_loc leaves pressure_level unpinned because the file fills the whole slab; the
-    probe needs one concrete level to resolve to a single chunk, and per-file commit
-    atomicity makes that level's presence imply the rest.
-    """
+    """A file spanning every level of a vertical group is probed at its first level."""
     template_ds = _create_template_ds(2)
     job = _make_region_job(template_ds, region=slice(0, 2))
     coord = job.source_file_coords()[0]
