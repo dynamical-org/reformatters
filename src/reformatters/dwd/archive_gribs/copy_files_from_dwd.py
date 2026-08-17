@@ -47,7 +47,6 @@ to destination path, using `rclone copyurl --urls <csv_file>`.
 1. https://www.dwd.de/DE/leistungen/opendata/neuigkeiten/opendata_april2025_1.html
 """
 
-import os
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 from typing import Any
@@ -95,7 +94,8 @@ def copy_files_from_dwd_https(
             For more info, see the rclone docs: https://rclone.org/docs/#checkers-int
         stats_logging_freq: The period between each stats log. e.g. "1m" to log stats every minute.
             See https://rclone.org/docs/#stats-duration
-        env_vars: Additional environment variables to give to `rclone`. For example:
+        env_vars: Environment variables to add to this process's environment for `rclone`.
+            For example:
             {
                 "RCLONE_S3_PROVIDER": "AWS",
                 "RCLONE_S3_ACCESS_KEY_ID": "key",
@@ -113,19 +113,12 @@ def copy_files_from_dwd_https(
             "src_root_path '%s' must start with a forward slash.", src_root_path
         )
 
-    # Set full_env variables:
-    if env_vars:
-        full_env = os.environ.copy()
-        full_env.update(env_vars)
-    else:
-        full_env = None
-
     src_paths_starting_with_nwp_var = retry(
         lambda: list_grib_files_on_dwd_https(
             http_url=src_host,
             path=src_root_path,
             checkers=checkers,
-            env_vars=full_env,
+            env_vars=env_vars,
         ),
         max_attempts=3,
     )
@@ -136,7 +129,7 @@ def copy_files_from_dwd_https(
             src_root_path_ending_with_init_hour=src_root_path,
             dst_root_path_without_init_dt=dst_root_path,
             checkers=checkers,
-            env_vars=full_env,
+            env_vars=env_vars,
         ),
         max_attempts=3,
     )
@@ -153,7 +146,7 @@ def copy_files_from_dwd_https(
             dst_root_path=dst_root_path,
             transfer_parallelism=transfer_parallelism,
             checkers=checkers,
-            env_vars=full_env,
+            env_vars=env_vars,
             stats_logging_freq=stats_logging_freq,
         ),
         max_attempts=2,
