@@ -1,0 +1,93 @@
+{
+  "shape": [
+    1,
+    47,
+    101,
+    121,
+    240
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        47,
+        101,
+        121,
+        240
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          1,
+          47,
+          101,
+          11,
+          24
+        ],
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 4,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Soil temperature top 20 cm",
+    "short_name": "st20",
+    "standard_name": "soil_temperature",
+    "units": "degree_Celsius",
+    "comment": "Mean soil temperature 0-20 cm over the previous 24 hours. Land points only; sea points are missing.",
+    "step_type": "avg",
+    "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "ensemble_member",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
