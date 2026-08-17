@@ -146,8 +146,8 @@ class MaterializedRegionJob(
             results = job.process(
                 primary_store=primary_store, replica_stores=replica_stores
             )
-            for var_name, coords in results.items():
-                worker_results.setdefault(var_name, []).extend(
+            for var_path, coords in results.items():
+                worker_results.setdefault(var_path, []).extend(
                     SourceFileResult(
                         status=c.status,
                         out_loc={**c.out_loc()},
@@ -276,8 +276,7 @@ class MaterializedRegionJob(
         return results
 
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
-        # Keyed by var path so a job spanning vertical groups keeps vars with the same
-        # bare name (e.g. pressure_level/temperature, model_level/temperature) distinct.
+        # Key by var path so the same var in different groups is distinct
         var_paths = [v.path for v in self.data_vars]
         ds: xr.Dataset = flatten_groups(self.template_ds)[var_paths]  # ty: ignore[invalid-assignment]
         processing_region = self.get_processing_region()

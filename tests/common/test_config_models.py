@@ -26,10 +26,18 @@ class TestGroupAndVarPath:
     def test_vertical_group_var_path_is_group_slash_name(self) -> None:
         assert var_path("pressure_level", "temperature") == "pressure_level/temperature"
 
-    def test_split_var_path_inverts_var_path(self) -> None:
+    def test_split_root_var_path_has_no_group(self) -> None:
         assert split_var_path("temperature_2m") == (None, "temperature_2m")
+
+    def test_split_vertical_group_var_path(self) -> None:
         assert split_var_path("pressure_level/temperature") == (
             "pressure_level",
+            "temperature",
+        )
+
+    def test_split_nested_var_path_keeps_full_group(self) -> None:
+        assert split_var_path("foo/bar/baz/temperature") == (
+            "foo/bar/baz",
             "temperature",
         )
 
