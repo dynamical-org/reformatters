@@ -73,10 +73,15 @@ class NoaaHrrrAnalysisDataset(
                 validation.check_analysis_recent_nans,
                 exclude_vars=source_fill_value_vars,
             ),
+            # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
+            # coverage is small and clustered: a sampled quadrant is regularly all
+            # marker, while whole-grid coverage stays well clear of the threshold
+            # (percent frozen precipitation, the sparser of the two, peaks near 0.996
+            # in the driest hours of the year).
             partial(
                 validation.check_analysis_recent_nans,
                 include_vars=source_fill_value_vars,
-                max_nan_fraction=0.9999,
-                spatial_sampling="quarter",
+                max_nan_fraction=0.999,
+                spatial_sampling="all",
             ),
         )
