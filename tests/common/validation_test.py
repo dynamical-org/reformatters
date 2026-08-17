@@ -1045,3 +1045,86 @@ def test_check_for_expected_shards_icechunk_store(rng: np.random.Generator) -> N
 
     assert result.passed
     assert "All variables have expected shards" in result.message
+
+
+def _grouped_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
+    """A store with a root variable plus a `pressure_level` group variable carrying a
+    dimension the root variable does not have."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    y = np.arange(8)
+    x = np.arange(10)
+    levels = np.array([500, 850])
+
+    root_ds = xr.Dataset(
+        {
+            "temperature_2m": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+    root_ds["temperature_2m"].encoding.update(
+        {"chunks": (4, 4, 5), "shards": (4, 4, 5)}
+    )
+
+    group_ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "pressure_level", "y", "x"],
+                rng.standard_normal((len(times), len(levels), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "pressure_level": levels, "y": y, "x": x},
+    )
+    group_ds["temperature"].encoding.update(
+        {"chunks": (4, 1, 4, 5), "shards": (4, 1, 4, 5)}
+    )
+
+    tree = xr.DataTree.from_dict({"/": root_ds, "/pressure_level": group_ds})
+    store = zarr.storage.MemoryStore()
+    tree.to_zarr(store, mode="w", consolidated=False, write_inherited_coords=True)
+    return store
+
+
+def test_check_for_expected_shards_passes_with_vertical_group(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
+
+
+def test_check_for_expected_shards_fails_missing_group_shards(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    zarr.core.sync.sync(store.delete("pressure_level/temperature/c/0/1/0/0"))
+
+    result = validation.check_for_expected_shards(store, ds)
+
+    assert not result.passed
+    assert result.message == (
+        "Missing shards: pressure_level/temperature (1 missing). "
+        "pressure_level/temperature: [0/1/0/0]"
+    )
+
+
+def test_compare_replica_and_primary_passes_with_vertical_group(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    primary_ds = validation.open_flattened_dataset(store, consolidated=False)
+    replica_ds = primary_ds.copy(deep=True)
+
+    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+
+    assert result.passed
+    assert "replica and primary stores is the same" in result.message

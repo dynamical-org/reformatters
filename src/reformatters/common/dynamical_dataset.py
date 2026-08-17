@@ -571,8 +571,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     ) -> None:
         """Validate the dataset, raising an exception if it is invalid."""
         # validators() lists both validator kinds; validate_dataset dispatches by type.
-        # check_for_expected_shards / compare_replica_and_primary are materialized-only
-        # and appended below.
+        # check_for_expected_shards, appended below, is materialized-only; a virtual
+        # store holds chunk references rather than shards.
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         base_validators = list(self.validators())
         with self._monitor(ValidationCronJob, reformat_job_name):
@@ -601,18 +601,16 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     replica_store_validators.append(
                         partial(validation.check_for_expected_shards, replica_store)
                     )
-                    replica_store_validators.append(
-                        partial(  # ty: ignore[invalid-argument-type]
-                            validation.compare_replica_and_primary,
-                            self.template_config.append_dim,
-                            validation.open_flattened_dataset(
-                                replica_store,
-                                consolidated=not isinstance(
-                                    replica_store, IcechunkStore
-                                ),
-                            ),
-                        )
+                replica_store_validators.append(
+                    partial(  # ty: ignore[invalid-argument-type]
+                        validation.compare_replica_and_primary,
+                        self.template_config.append_dim,
+                        validation.open_flattened_dataset(
+                            replica_store,
+                            consolidated=not isinstance(replica_store, IcechunkStore),
+                        ),
                     )
+                )
 
                 validation.validate_dataset(
                     replica_store,
