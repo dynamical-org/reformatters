@@ -732,9 +732,17 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
       (1.0,)      every append-dim position whole (default).
       (0.5, 1.0)  the newest may be half-published (e.g. GEFS 35-day's slow long lead
                   times); older append-dim positions whole.
+      (0.0, 1.0)  the newest is excused entirely; every older position whole.
+
+    `include_vars` / `exclude_vars` narrow the check to the source files carrying those
+    variables, named by path (`<group>/<name>`, or the bare name at the root). A file
+    counts when it carries any of them, and the split must fall on source-file
+    boundaries (asserted).
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
+    include_vars: Sequence[str] | Literal["all"] = "all"
+    exclude_vars: Sequence[str] = ()
 
     def __post_init__(self) -> None:
         assert self.min_present_fraction, "min_present_fraction must be non-empty"
@@ -758,7 +766,16 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             coord
             for coord in region_job.source_file_coords()
             if coord.out_loc()[append_dim] <= ingested_through
+            and self._carries_checked_var(coord, region_job)
         ]
+        if not candidates and self._filters_variables():
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"No source files carry the variables being checked "
+                    f"({self._variable_selection()})"
+                ),
+            )
         expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
         positions = sorted(expected_per_position, reverse=True)  # newest first
         if len(positions) < len(self.min_present_fraction):
@@ -787,10 +804,13 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
                     f"{append_dim}={position}: {present}/{expected} present "
                     f"({present / expected:.1%} < required {required:.0%})"
                 )
+        selection = (
+            f" ({self._variable_selection()})" if self._filters_variables() else ""
+        )
         if problems:
             return ValidationResult(
                 passed=False,
-                message="Incomplete manifest:\n"
+                message=f"Incomplete manifest{selection}:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
         return ValidationResult(
@@ -798,9 +818,35 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             message=(
                 f"All {len(positions)} ingested {append_dim} positions (through "
                 f"{ingested_through}) meet completeness thresholds "
-                f"{self.min_present_fraction}"
+                f"{self.min_present_fraction}{selection}"
             ),
         )
+
+    def _filters_variables(self) -> bool:
+        return self.include_vars != "all" or bool(self.exclude_vars)
+
+    def _variable_selection(self) -> str:
+        return f"include_vars={self.include_vars}, exclude_vars={self.exclude_vars}"
+
+    def _carries_checked_var(
+        self, coord: SourceFileCoord, region_job: VirtualRegionJob[Any, Any]
+    ) -> bool:
+        if not self._filters_variables():
+            return True
+        file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
+        checked = [
+            (self.include_vars == "all" or var.path in self.include_vars)
+            and var.path not in self.exclude_vars
+            for var in file_vars
+        ]
+        assert all(checked) or not any(checked), (
+            f"{coord.get_url()} carries both checked and unchecked variables "
+            f"({self._variable_selection()}). Presence is probed through the file's "
+            "representative variable, which may be one this instance does not cover, "
+            "so a partially-checked file could pass while a checked variable has no "
+            "references. Split checks along source-file boundaries."
+        )
+        return any(checked)
 
 
 @dataclass(frozen=True)

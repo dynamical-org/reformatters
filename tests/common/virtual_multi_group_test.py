@@ -872,3 +872,47 @@ def test_refresh_metadata_preserves_store_written_coord_values(tmp_path: Path) -
     runtime_state = tree["runtime_state"]
     assert isinstance(runtime_state, xr.DataArray)
     np.testing.assert_array_equal(runtime_state.values, [1.5, 2.5])
+
+
+def test_completeness_variable_filter_requires_disjoint_source_files(
+    tmp_path: Path,
+) -> None:
+    """A source file carrying both a checked and an unchecked variable is rejected.
+
+    This fixture's files carry both `temperature_2m` and `pressure_level/temperature`.
+    """
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    _process_virtual(job, repo)
+    store = repo.readonly_session("main").store
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    with pytest.raises(AssertionError, match="carries both checked and unchecked"):
+        validation.CheckVirtualManifestCompleteness(
+            include_vars=["pressure_level/temperature"]
+        )(job, store, ds)
+
+    # Covering every variable the files carry is the supported case.
+    assert validation.CheckVirtualManifestCompleteness(
+        include_vars=["temperature_2m", "pressure_level/temperature"]
+    )(job, store, ds).passed
+
+
+def test_representative_probe_loc_supplements_the_group_level() -> None:
+    """A file spanning every level of a vertical group is probed at its first level."""
+    template_ds = _create_template_ds(2)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    coord = job.source_file_coords()[0]
+    group_var = next(var for var in job.data_vars if var.group == "pressure_level")
+
+    assert "pressure_level" not in coord.out_loc()
+    assert dict(job.representative_probe_loc(coord, group_var)) == {
+        **dict(coord.out_loc()),
+        "pressure_level": PRESSURE_LEVELS[0],
+    }
+    # A root variable has no vertical dim, so its probe is just the file's slab.
+    root_var = next(var for var in job.data_vars if var.group is ROOT)
+    assert dict(job.representative_probe_loc(coord, root_var)) == dict(coord.out_loc())

@@ -21,7 +21,6 @@ from reformatters.ecmwf.aifs_single.template_config import (
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 
 from .template_config import (
-    PRESSURE_LEVELS,
     EcmwfAifsSingleVirtualDataVar,
 )
 
@@ -29,10 +28,6 @@ log = get_logger(__name__)
 
 SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 SOURCE_REGION = "eu-central-1"
-
-# A file coord carrying only pressure_level variables needs one concrete level for the
-# per-file manifest probe; 1000 hPa exists in every era. See docs/virtual_datasets.md.
-_REPRESENTATIVE_PRESSURE_LEVEL = PRESSURE_LEVELS[0]
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -71,13 +66,7 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(SourceFileCoord):
         return self._get_base_url() + ".index"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
-        loc: dict[Dim, CoordinateValue] = {
-            "init_time": self.init_time,
-            "lead_time": self.lead_time,
-        }
-        if all(var.group is not ROOT for var in self.data_vars):
-            loc["pressure_level"] = _REPRESENTATIVE_PRESSURE_LEVEL
-        return loc
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
 class EcmwfAifsSingleForecastVirtualRegionJob(
