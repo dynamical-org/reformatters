@@ -34,7 +34,7 @@ from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
 
 if TYPE_CHECKING:
-    from reformatters.common.config_models import DataVar
+    from reformatters.common.config_models import BaseInternalAttrs, DataVar
     from reformatters.common.region_job import SourceFileCoord
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
@@ -194,6 +194,24 @@ def open_flattened_dataset(
         decode_timedelta=True,  # so lead_time selects by pd.Timedelta label
     )
     return iterating.flatten_groups(tree)
+
+
+def uses_semantic_missing_values(
+    da: xr.DataArray, template_var: DataVar[BaseInternalAttrs] | None = None
+) -> bool:
+    """Whether a NaN in this variable can be a valid missing state, not absent data.
+
+    True when the variable's missing marker is a real source value: replaced with NaN as
+    it is written (`source_fill_value`), or declared as a non-NaN `_FillValue` a CF-aware
+    reader masks. Such a variable may read NaN anywhere, up to everywhere — HRRR's
+    percent frozen precipitation is all marker in an hour with no precipitation over the
+    domain — so NaN alone never establishes that data is missing.
+    """
+    fill_value = da.encoding.get("_FillValue")
+    return (
+        template_var is not None
+        and template_var.internal_attrs.source_fill_value is not None
+    ) or (fill_value is not None and not np.isnan(fill_value))
 
 
 def validate_dataset(
@@ -970,6 +988,11 @@ class CheckVirtualDecodeHealth(Validator):
     so a group var is decode-checked at a bounded set of levels rather than every one.
     A variable fails if any sampled chunk errors or all of its sampled chunks decode
     entirely NaN. Fails — never silently passes — when no references are present.
+
+    The all-NaN half of that rule is skipped for a variable with semantic missing values
+    (uses_semantic_missing_values), whose NaNs are a source marker it can carry across the
+    whole domain at once; those are checked for decode errors only, and whether their
+    references exist stays CheckVirtualManifestCompleteness's question.
     """
 
     positions: int | Literal["all"] = 1
@@ -1046,7 +1069,9 @@ class CheckVirtualDecodeHealth(Validator):
         for var_path in sorted(min_nan_fraction):
             if var_path in first_error:
                 problems.append(f"{var_path}: decode error ({first_error[var_path]})")
-            elif min_nan_fraction[var_path] >= 1.0:
+            elif min_nan_fraction[var_path] >= 1.0 and not uses_semantic_missing_values(
+                ds[var_path]
+            ):
                 problems.append(f"{var_path}: every sampled chunk decoded entirely NaN")
 
         target_label = ", ".join(str(p) for p in sorted(targets))

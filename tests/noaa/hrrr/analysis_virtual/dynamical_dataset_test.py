@@ -1,7 +1,6 @@
 import re
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -79,11 +78,6 @@ def test_backfill_local_and_operational_update(
     profile = cell["pressure_level/temperature"].sel(pressure_level=[1000, 700, 500])
     assert (profile.diff("pressure_level") < 0).all(), profile.values
 
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-01T10:00")),
-    )
     original_update_jobs = (
         NoaaHrrrAnalysisVirtualRegionJob.operational_update_jobs.__func__
     )
@@ -100,13 +94,18 @@ def test_backfill_local_and_operational_update(
             **kwargs,
         )
 
-    monkeypatch.setattr(
-        NoaaHrrrAnalysisVirtualRegionJob,
-        "operational_update_jobs",
-        classmethod(filtered_update_jobs),
-    )
-
-    dataset.update("test-update")
+    with monkeypatch.context() as update_monkeypatch:
+        update_monkeypatch.setattr(
+            pd.Timestamp,
+            "now",
+            classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-01T10:00")),
+        )
+        update_monkeypatch.setattr(
+            NoaaHrrrAnalysisVirtualRegionJob,
+            "operational_update_jobs",
+            classmethod(filtered_update_jobs),
+        )
+        dataset.update("test-update")
 
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
@@ -193,13 +192,12 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 4
-    (current_data,) = [
+    current_data = next(
         validator
         for validator in validators
-        if isinstance(validator, partial)
-        and validator.func is validation.check_analysis_current_data
-    ]
-    assert current_data.keywords == {"max_expected_delay": timedelta(hours=2)}
+        if isinstance(validator, validation.CheckCurrentData)
+    )
+    assert current_data.max_delay == timedelta(hours=2)
 
     # One completeness instance per source-file publication schedule, each held to a
     # whole 1.0 from the position where its variables are expected to be present.
@@ -233,7 +231,7 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckVirtualDecodeHealth)
     )
-    assert (decode_health.positions, decode_health.max_positions) == ("latest", None)
+    assert (decode_health.positions, decode_health.max_positions) == (1, None)
 
 
 def _resolved_split_size(

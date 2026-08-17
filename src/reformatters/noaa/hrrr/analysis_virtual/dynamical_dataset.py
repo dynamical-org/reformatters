@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from pydantic import Field
 
@@ -86,17 +85,14 @@ class NoaaHrrrAnalysisVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         hour_0_var_paths = tuple(
             var.path
             for var in self.template_config.data_vars
             if var.has_hour_0_values()
         )
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=timedelta(hours=2),
-            ),
+            validation.CheckCurrentData(max_delay=timedelta(hours=2)),
             validation.CheckVirtualManifestCompleteness(exclude_vars=hour_0_var_paths),
             # A cycle running past the update's poll deadline leaves the newest hour
             # without its own f00 files until the next fire.

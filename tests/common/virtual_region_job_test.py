@@ -98,16 +98,19 @@ def _create_template_ds(
     *,
     serializer: dict[str, Any] | None = None,
     chunks: tuple[int, ...] = (1, 1, N_LAT, N_LON),
+    fill_value: float = np.nan,
 ) -> xr.DataTree:
     """Forecast-shaped virtual template (no shards; one chunk per message)."""
     init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
     encoding: dict[str, Any] = {
         "dtype": "float64",
         "chunks": chunks,
-        "fill_value": np.nan,
+        "fill_value": fill_value,
         "compressors": None,
         "filters": None,
     }
+    # Like assign_var_metadata: the CF fill value a reader masks on, alongside zarr's.
+    encoding["_FillValue"] = fill_value
     if serializer is not None:
         encoding["serializer"] = serializer
     ds = xr.Dataset(
@@ -1597,17 +1600,22 @@ def test_check_virtual_decode_health_fails_when_no_present_refs(tmp_path: Path) 
     assert "No present references" in result.message
 
 
-def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
-    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
-    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
-    dataset = _make_dataset(tmp_path)
+def _overwrite_messages_with_nan(tmp_path: Path, *, init_idx: int) -> None:
+    """Replace every lead's message block for one init with all-NaN values."""
     messages = tmp_path / "messages.bin"
     data = bytearray(messages.read_bytes())
     nan_block = np.full(N_LAT * N_LON, np.nan, dtype="<f8").tobytes()
     for lead_idx in range(N_LEADS):
-        offset, length = _message_offset_length(0, lead_idx)
+        offset, length = _message_offset_length(init_idx, lead_idx)
         data[offset : offset + length] = nan_block
     messages.write_bytes(bytes(data))
+
+
+def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
+    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
+    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
 
     template_ds = _create_template_ds(1)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
@@ -1618,6 +1626,28 @@ def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> N
     )
     assert not result.passed
     assert "entirely NaN" in result.message
+
+
+def test_check_virtual_decode_health_allows_all_nan_semantic_missing_values(
+    tmp_path: Path,
+) -> None:
+    # Same all-NaN refs as detects_unreadable_ref, but the variable declares a non-NaN
+    # fill value, so its NaNs are a source marker it may carry across the whole domain
+    # (HRRR percent frozen precipitation in an hour with no precipitation anywhere).
+    # Decode-health checks it for decode errors only -> passes.
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
+
+    template_ds = _create_template_ds(1, fill_value=-50.0)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+    assert ds["temperature_2m"].encoding["_FillValue"] == -50.0
+
+    result = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, ds)
+    )
+    assert result.passed, result.message
 
 
 def test_check_virtual_decode_health_skips_vars_without_reference(
