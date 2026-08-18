@@ -28,7 +28,7 @@ class GefsForecast35DayDataset(
             # +5 min buffer. The prior init (reprocessed each run, see operational_update_jobs)
             # is by now complete out to f840 (lands ~init+27h).
             schedule="33 6 * * *",
-            pod_active_deadline=timedelta(minutes=30),  # runs take <23 min
+            pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node
