@@ -540,7 +540,7 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
         spatial_sampling="all",
     ).check(validation.ValidationContext(store=store, ds=flat, append_dim="init_time"))
     assert result.passed, result.message
-    assert "All 2 checked recent init_time positions" in result.message
+    assert "All 2 checked init_time positions" in result.message
 
 
 def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
