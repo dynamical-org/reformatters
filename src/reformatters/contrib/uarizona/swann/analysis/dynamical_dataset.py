@@ -35,19 +35,21 @@ class UarizonaSwannAnalysisDataset(
             # this is a contrib dataset.
             validation.CheckCurrentData(max_delay=timedelta(days=5)),
             validation.CheckRecentNans(
-                # Check the full grid for a stable NaN fraction.
+                # Check the full grid for a stable NaN fraction. Whole-grid reads
+                # are per position, so this covers the newest few; the deep check
+                # below follows the update over the whole year it rewrites.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
+                window=2,
             ),
             validation.CheckRecentNans(
-                # The update rewrites a year of data (UArizona restates files as they
-                # go early -> provisional -> stable), so the window covers all of it.
+                # The update rewrites a year of data (UArizona restates files as
+                # they go early -> provisional -> stable) and the window follows it.
                 # Point sampling reads the whole year in one pass: a point spans 2 time
                 # chunks, so this costs about what a single position does. Outside
                 # CONUS every position is NaN, so those points are dropped as
                 # structural holes; sample extra to be sure some land in CONUS.
                 max_nan_fraction=0.0,
-                window=366,
                 sampled_points=8,
             ),
         )

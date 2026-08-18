@@ -68,7 +68,8 @@ class NasaImergAnalysisMaterializedDataset(
                 # 0.05 leaves margin for seasonal polar variation the sample can't see.
                 max_nan_fraction=0.05,
                 spatial_sampling="quarter",
-                # 2 new 30-minute positions per hourly update plus a reprocess.
+                # Quarter-grid reads are per position, so this covers the newest few
+                # rather than the whole shard the update rewrites.
                 window=3,
             ),
         )

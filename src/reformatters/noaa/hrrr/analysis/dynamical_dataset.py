@@ -67,8 +67,7 @@ class NoaaHrrrAnalysisDataset(
         )
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=4)),
-            # 3 new hourly positions per 3h update plus a reprocess of the newest.
-            validation.CheckRecentNans(exclude_vars=source_fill_value_vars, window=4),
+            validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
             # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
             # coverage is small and clustered: a sampled quadrant is regularly all
             # marker, while whole-grid coverage stays well clear of the threshold
@@ -78,6 +77,8 @@ class NoaaHrrrAnalysisDataset(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.999,
                 spatial_sampling="all",
+                # Whole-grid reads are per position, so this covers the newest few
+                # rather than the whole shard the update rewrites.
                 window=4,
             ),
         )

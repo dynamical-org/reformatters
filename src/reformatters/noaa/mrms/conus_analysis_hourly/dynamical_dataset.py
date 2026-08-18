@@ -50,6 +50,9 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
+        # Every check here reads a quarter grid per position, so each takes an explicit
+        # window covering the newest few rather than the whole shard the update
+        # rewrites.
         return (
             # The hourly update at :03 writes each hour's position (radar-only fields
             # arrive within minutes; pass 2 fills in on later runs); validation fires
@@ -61,8 +64,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # quarter-sampled NaN from the second-newest onward is 18.4% (6.2%
                 # over the whole domain), constant across timestamps.
                 max_nan_fraction=(1.0, 0.25),
-                window=5,
                 spatial_sampling="quarter",
+                window=5,
                 include_vars=[
                     "precipitation_pass_1_surface",
                     "precipitation_pass_2_surface",
@@ -74,8 +77,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # worst quarter), not the 18.4% its gauge-corrected older timestamps
                 # show.
                 max_nan_fraction=(0.63, 0.25),
-                window=5,
                 spatial_sampling="quarter",
+                window=5,
                 include_vars=["precipitation_surface"],
             ),
             validation.CheckRecentNans(
@@ -98,8 +101,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # in the worst quarter. Its newest timestamp lands late like the
                 # gauge-corrected fields (excused by the leading 1.0).
                 max_nan_fraction=(1.0, 0.86),
-                window=5,
                 spatial_sampling="quarter",
+                window=5,
                 include_vars=["flash_qpe_ffg_max_surface"],
             ),
         )

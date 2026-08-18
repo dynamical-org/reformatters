@@ -56,6 +56,7 @@ class NoaaNdviCdrAnalysisDataset(
                 max_nan_fraction=0.97,
                 include_vars=["ndvi_usable"],
                 spatial_sampling="all",
+                window=2,
             ),
             validation.CheckRecentNans(
                 # ndvi_raw and qa had no NaN check at all. Their tight per-variable
@@ -64,5 +65,6 @@ class NoaaNdviCdrAnalysisDataset(
                 max_nan_fraction=1.0 - 1e-9,
                 include_vars=["ndvi_raw", "qa"],
                 spatial_sampling="all",
+                window=2,
             ),
         )

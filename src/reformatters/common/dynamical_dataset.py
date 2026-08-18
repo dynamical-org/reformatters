@@ -579,9 +579,15 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         if not is_virtual:
             validators.append(validation.CheckExpectedShards())
         with self._monitor(ValidationCronJob, reformat_job_name):
-            region_job = self._virtual_validation_region_job(
-                validators, reformat_job_name
-            )
+            # The jobs this dataset's operational update runs. Their regions are the
+            # append-dim positions it writes, which is what a check covers by default.
+            # Built only when a check asks, so a dataset whose checks all declare an
+            # explicit window does no extra work.
+            update_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]] = ()
+            if any(validator.requires_update_jobs for validator in validators):
+                update_jobs, _template_ds = self._operational_update_jobs(
+                    reformat_job_name, self._tmp_store()
+                )
 
             primary_store = self.store_factory.primary_store()
             validation.validate_dataset(
@@ -591,7 +597,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 append_dim_frequency=self.template_config.append_dim_frequency,
                 data_vars=self.template_config.data_vars,
                 dataset_id=self.dataset_id,
-                region_job=region_job,
+                update_jobs=update_jobs,
             )
             log.info(f"Done validating {primary_store}")
 
@@ -615,7 +621,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     append_dim_frequency=self.template_config.append_dim_frequency,
                     data_vars=self.template_config.data_vars,
                     dataset_id=self.dataset_id,
-                    region_job=region_job,
+                    update_jobs=update_jobs,
                     primary_ds=primary_ds,
                 )
                 log.info(f"Done validating {replica_store}")
@@ -640,26 +646,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             reformat_job_name=reformat_job_name,
             **fire_time_kwarg,
         )
-
-    def _virtual_validation_region_job(
-        self,
-        validators: Sequence[validation.Validator],
-        reformat_job_name: str,
-    ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
-        """The operational-window job a manifest-probing check runs against, or None if
-        none of the validators need it. Built once and shared across primary + replica
-        (the job is store-independent; validate_dataset passes each check the store)."""
-        if not any(v.requires_virtual_dataset for v in validators):
-            return None
-        jobs, _template_ds = self._operational_update_jobs(
-            reformat_job_name, self._tmp_store()
-        )
-        job = item(jobs)
-        assert isinstance(job, VirtualRegionJob), (
-            f"validators() includes a check that requires a virtual dataset but "
-            f"{self.region_job_class.__name__} is not a VirtualRegionJob"
-        )
-        return job
 
     def dataset_urls(
         self,

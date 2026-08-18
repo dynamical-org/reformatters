@@ -91,7 +91,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
                 store=store,
                 ds=ds,
                 append_dim=dataset.template_config.append_dim,
-                region_job=cast("VirtualRegionJob[Any, Any]", job),
+                update_jobs=[cast("VirtualRegionJob[Any, Any]", job)],
             )
         )
 

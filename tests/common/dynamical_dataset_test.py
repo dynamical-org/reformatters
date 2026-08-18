@@ -85,18 +85,16 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
         validators.append(validation.CheckExpectedShards())
 
-    region_job = None
-    if any(v.requires_virtual_dataset for v in validators):
-        jobs, _ = dataset.region_job_class.operational_update_jobs(
-            primary_store=store,
-            tmp_store=dataset._tmp_store(),
-            get_template_fn=dataset._get_template,
-            append_dim=dataset.template_config.append_dim,
-            all_data_vars=dataset.template_config.data_vars,
-            reformat_job_name="test",
-        )
-        region_job = jobs[0]
-        assert isinstance(region_job, VirtualRegionJob)
+    # Mirrors validate_dataset: the checks derive what they cover from the jobs one
+    # operational update runs.
+    update_jobs, _ = dataset.region_job_class.operational_update_jobs(
+        primary_store=store,
+        tmp_store=dataset._tmp_store(),
+        get_template_fn=dataset._get_template,
+        append_dim=dataset.template_config.append_dim,
+        all_data_vars=dataset.template_config.data_vars,
+        reformat_job_name="test",
+    )
 
     context = validation.ValidationContext(
         store=store,
@@ -104,7 +102,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
         append_dim=dataset.template_config.append_dim,
         append_dim_frequency=dataset.template_config.append_dim_frequency,
         data_vars=tuple(dataset.template_config.data_vars),
-        region_job=region_job,
+        update_jobs=update_jobs,
     )
     with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
         for validator in validators:
@@ -547,7 +545,6 @@ def test_validate_dataset_calls_validators(
 
     mock_validate = Mock()
     monkeypatch.setattr(validation, "validate_dataset", mock_validate)
-
     dataset = ExampleDataset(
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
@@ -586,7 +583,8 @@ def test_validate_dataset_calls_validators(
     assert primary_call.kwargs["store"] == mock_store
     assert primary_call.kwargs["append_dim"] == dataset.template_config.append_dim
     assert primary_call.kwargs["dataset_id"] == dataset.dataset_id
-    assert primary_call.kwargs["region_job"] is None
+    # None of these checks derive a window, so no update jobs were built.
+    assert primary_call.kwargs["update_jobs"] == ()
     assert primary_validators == [
         *configured_validators,
         validation.CheckExpectedShards(),
@@ -650,9 +648,37 @@ def test_validate_dataset_virtual_replica_compares_but_skips_shard_check(
         validation.CheckReplicaMatchesPrimary(),
     ]
     assert replica_call.kwargs["primary_ds"] == mock_primary_ds
-    # No manifest-probing check configured, so no operational-window job is built.
-    assert primary_call.kwargs["region_job"] is None
-    assert replica_call.kwargs["region_job"] is None
+    assert primary_call.kwargs["update_jobs"] == ()
+    assert replica_call.kwargs["update_jobs"] == ()
+
+
+def test_validate_dataset_builds_update_jobs_when_a_check_derives_its_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CheckRecentNans derives what it covers from the update, so validate_dataset
+    builds the update's jobs and hands them over."""
+    monkeypatch.setattr(
+        ExampleDataset, "validators", lambda self: [validation.CheckRecentNans()]
+    )
+    mock_validate = Mock()
+    monkeypatch.setattr(validation, "validate_dataset", mock_validate)
+    mock_update_jobs = [Mock()]
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        lambda self, reformat_job_name, tmp_store: (mock_update_jobs, Mock()),
+    )
+    dataset = ExampleDataset(
+        template_config=ExampleConfig(), region_job_class=ExampleRegionJob
+    )
+    store_factory = Mock()
+    monkeypatch.setattr(ExampleDataset, "store_factory", store_factory)
+    monkeypatch.setattr(store_factory, "replica_stores", list)
+
+    dataset.validate_dataset("example-job-name")
+
+    (call,) = mock_validate.call_args_list
+    assert call.kwargs["update_jobs"] == mock_update_jobs
 
 
 def test_run_virtual_operational_update_asserts_single_writer() -> None:
