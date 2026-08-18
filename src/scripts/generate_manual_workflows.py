@@ -275,7 +275,7 @@ def generate_backfill_workflow(dataset_ids: list[str]) -> dict[str, Any]:
                     },
                     {
                         "name": "Install uv",
-                        "uses": "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9",
+                        "uses": "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d",
                         "with": {
                             "enable-cache": True,
                             "cache-dependency-glob": "uv.lock",

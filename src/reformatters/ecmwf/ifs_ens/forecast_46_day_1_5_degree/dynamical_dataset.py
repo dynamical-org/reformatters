@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.config_models import source_fill_value_var_names
@@ -75,24 +74,19 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfS2sDynamicalDataset):
             validation_cron_job,
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
         # NaN by construction, at a fraction that varies with where the sampled points
         # land. Whole-grid sampling would make it stable but reads every lead time of
-        # all 101 members, so they are gated on completeness by
-        # check_for_expected_shards instead.
+        # all 101 members, so they are gated on completeness by CheckExpectedShards
+        # instead.
         masked_vars = (
             *source_fill_value_var_names(self.template_config.data_vars),
             "pressure_level/specific_humidity",
         )
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(days=4),
-            ),
-            partial(
-                validation.check_forecast_recent_nans,
-                num_recent_init_times=3,
-                exclude_vars=masked_vars,
-            ),
+            # ECDS publishes about 53 hours after the reference time and the update
+            # runs at 09 UTC, so an initialization lands about 57 hours out. Four days
+            # leaves room for one missed cycle, which the next day's update fills.
+            validation.CheckCurrentData(max_delay=timedelta(days=4)),
+            validation.CheckRecentNans(window=3, exclude_vars=masked_vars),
         )
