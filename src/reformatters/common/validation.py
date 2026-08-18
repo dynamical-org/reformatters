@@ -11,11 +11,10 @@ from functools import partial
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Literal,
-    Protocol,
     assert_never,
     cast,
-    runtime_checkable,
 )
 
 import numpy as np
@@ -31,9 +30,11 @@ from zarr.abc.store import Store
 
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
 
 if TYPE_CHECKING:
+    from reformatters.common.config_models import DataVar
     from reformatters.common.region_job import SourceFileCoord
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
@@ -67,39 +68,109 @@ class OperationalValidationError(ValueError):
     """Raised by validate_dataset when one or more checks fail."""
 
 
-@runtime_checkable
-class XarrayDataValidator(Protocol):
-    """A validator that runs on an opened xarray Dataset.
+@dataclass(frozen=True)
+class ValidationContext:
+    """Everything a validator may draw on. Each validator uses the subset it needs."""
 
-    The common, generic kind — works on any dataset (materialized or virtual) and
-    needs nothing beyond the data it reads (lag, NaN-fraction, ...).
+    store: zarr.storage.StoreLike
+    # The store's contents as one flat Dataset covering every group
+    # (see open_flattened_dataset); variables are keyed by store path.
+    ds: xr.Dataset
+    append_dim: str
+    # The template config's append_dim_frequency; None when no template is in play.
+    append_dim_frequency: pd.Timedelta | None = None
+    # The template config's declared variables; empty when no template is in play
+    # (offline scripts, tests). Lets a check consult config that is not written to
+    # the store (has_hour_0_values, internal attrs) and validate variable names.
+    data_vars: Sequence[DataVar[Any]] = ()
+    # The operational-window job, present when validating a virtual dataset.
+    region_job: VirtualRegionJob[Any, Any] | None = None
+    # The primary store's dataset, present when `store` is a replica.
+    primary_ds: xr.Dataset | None = None
+
+    def virtual_region_job(self) -> VirtualRegionJob[Any, Any]:
+        assert self.region_job is not None, (
+            "this check requires a virtual dataset's operational-window region job"
+        )
+        return self.region_job
+
+    def known_var_paths(self) -> Sequence[str]:
+        """The variable paths a check's include/exclude filters are validated against:
+        the template's when available (the complete catalog, even when a partially
+        backfilled store carries a subset), else the opened store's."""
+        if self.data_vars:
+            return [var.path for var in self.data_vars]
+        return [str(name) for name in self.ds.data_vars]
+
+
+class Validator(FrozenBaseModel, abc.ABC):
+    """One operational check: configuration (validated pydantic fields) plus logic.
+
+    Datasets list configured instances in DynamicalDataset.validators(); validate_dataset
+    runs each against a ValidationContext. Unknown field names are rejected at
+    construction, so a config typo fails when the dataset module imports, not at the
+    first cron fire.
     """
 
-    def __call__(self, ds: xr.Dataset) -> ValidationResult: ...
+    model_config = pydantic.ConfigDict(frozen=True, strict=True, extra="forbid")
 
+    # True for checks that probe a virtual dataset's manifest; validate_dataset
+    # requires a region_job when any listed check sets this.
+    requires_virtual_dataset: ClassVar[bool] = False
 
-class VirtualDataValidator(abc.ABC):
-    """A validator that needs manifest/store access, not just an opened Dataset.
-
-    Virtual datasets list these in DynamicalDataset.validators() alongside the plain
-    XarrayDataValidator functions; validate_dataset dispatches by type, handing these the
-    operational-window region job (to regenerate source-file coords and probe the
-    manifest), the icechunk store, and the opened dataset — each validator uses the subset
-    it needs. Tuning (e.g. the per-position completeness thresholds) is a field on the
-    concrete validator, set where it is listed in validators() — one place.
-    """
+    @property
+    def name(self) -> str:
+        """Identifies this check in log lines, failure messages, and the Sentry
+        fingerprint. Includes the variable selection so multiple instances of one
+        class are distinguishable."""
+        label = self.selection_label() if isinstance(self, VariableSelection) else None
+        return f"{type(self).__name__}({label})" if label else type(self).__name__
 
     @abc.abstractmethod
-    def __call__(
-        self,
-        region_job: VirtualRegionJob[Any, Any],
-        store: IcechunkStore,
-        ds: xr.Dataset,
-    ) -> ValidationResult: ...
+    def check(self, context: ValidationContext) -> ValidationResult: ...
 
 
-# A dataset's validators() may mix the two kinds; validate_dataset dispatches on type.
-DataValidator = XarrayDataValidator | VirtualDataValidator
+class VariableSelection(FrozenBaseModel):
+    """include_vars/exclude_vars fields for checks that can target a variable subset.
+
+    Variables are named by store path (`<group>/<name>`, or the bare name at the root).
+    Names are validated against the known catalog — a typo raises instead of silently
+    checking nothing.
+    """
+
+    include_vars: Sequence[str] | Literal["all"] = "all"
+    exclude_vars: Sequence[str] = ()
+
+    def selects(self, var_path: str) -> bool:
+        return (
+            self.include_vars == "all" or var_path in self.include_vars
+        ) and var_path not in self.exclude_vars
+
+    def validate_var_names(self, known_var_paths: Sequence[str]) -> None:
+        named = set(self.exclude_vars)
+        if self.include_vars != "all":
+            named |= set(self.include_vars)
+        unknown = sorted(named - set(known_var_paths))
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__} names unknown variables {unknown}. "
+                f"Known variable paths: {sorted(known_var_paths)}"
+            )
+        if not any(self.selects(path) for path in known_var_paths):
+            raise ValueError(f"{type(self).__name__} selects no variables")
+
+    def selection_label(self) -> str | None:
+        if self.include_vars != "all":
+            return f"include={self._truncate(self.include_vars)}"
+        if self.exclude_vars:
+            return f"exclude={self._truncate(self.exclude_vars)}"
+        return None
+
+    @staticmethod
+    def _truncate(names: Sequence[str], keep: int = 3) -> str:
+        if len(names) <= keep:
+            return ",".join(names)
+        return f"{','.join(names[:keep])},+{len(names) - keep}"
 
 
 def open_flattened_dataset(
@@ -125,258 +196,287 @@ def open_flattened_dataset(
     return iterating.flatten_groups(tree)
 
 
-def _validator_check_name(validator: DataValidator) -> str:
-    """A stable per-check identifier for Sentry fingerprinting, independent of any
-    particular failure's message text.
-    """
-    if isinstance(validator, VirtualDataValidator):
-        return type(validator).__name__
-    if isinstance(validator, partial):
-        return validator.func.__name__  # ty: ignore[unresolved-attribute]
-    return validator.__name__  # ty: ignore[unresolved-attribute]
-
-
 def validate_dataset(
-    store: zarr.storage.StoreLike,
-    validators: Sequence[DataValidator],
+    validators: Sequence[Validator],
     *,
+    store: zarr.storage.StoreLike,
+    append_dim: str,
     dataset_id: str,
+    append_dim_frequency: pd.Timedelta | None = None,
+    data_vars: Sequence[DataVar[Any]] = (),
     region_job: VirtualRegionJob[Any, Any] | None = None,
+    primary_ds: xr.Dataset | None = None,
 ) -> None:
     """
     Validate a zarr dataset by running a series of quality checks.
 
     Args:
+        validators: the checks to run.
         store: the zarr/icechunk store to validate.
-        validators: the checks to run; XarrayDataValidators receive the opened dataset,
-            VirtualDataValidators receive (region_job, store, ds).
+        append_dim: the dataset's append dimension.
         dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
-        region_job: the operational-window job, required when any validator is a
-            VirtualDataValidator (it supplies the source-file coords + manifest probe).
+        append_dim_frequency: the template config's append-dim frequency.
+        data_vars: the template config's declared variables (see ValidationContext).
+        region_job: the operational-window job, required when any validator sets
+            requires_virtual_dataset.
+        primary_ds: the primary store's dataset, when `store` is a replica.
 
     Raises:
         OperationalValidationError: If any validation checks fail
     """
     log.info(f"Validating zarr {store}")
 
+    virtual_checks = [v.name for v in validators if v.requires_virtual_dataset]
+    assert not virtual_checks or region_job is not None, (
+        f"{virtual_checks} require a region_job but validate_dataset was called without one"
+    )
+
     consolidated = not isinstance(store, IcechunkStore)
 
-    # Run all validators
-    failed_validations = []
-    failed_checks = []
+    failures: list[tuple[str, str]] = []
     for validator in validators:
+        # A fresh open per check bounds memory: nothing one check loaded keeps the
+        # next check's working set alive.
         ds = open_flattened_dataset(store, consolidated=consolidated)
-
-        if isinstance(validator, VirtualDataValidator):
-            assert region_job is not None, (
-                f"{type(validator).__name__} needs a region_job but validate_dataset "
-                "was called without one"
-            )
-            assert isinstance(store, IcechunkStore)
-            result = validator(region_job, store, ds)
-        else:
-            result = validator(ds)
+        context = ValidationContext(
+            store=store,
+            ds=ds,
+            append_dim=append_dim,
+            append_dim_frequency=append_dim_frequency,
+            data_vars=tuple(data_vars),
+            region_job=region_job,
+            primary_ds=primary_ds,
+        )
+        result = validator.check(context)
 
         if not result.passed:
             # Warn don't error; the raise below creates a single Sentry issue.
-            log.warning(f"Failed validation: {result.message}")
-            failed_validations.append(result.message)
-            failed_checks.append(_validator_check_name(validator))
+            log.warning(f"Failed {validator.name}: {result.message}")
+            failures.append((validator.name, result.message))
         else:
-            log.info(f"Passed validation: {result.message}")
+            log.info(f"Passed {validator.name}: {result.message}")
 
         ds.close()
         del ds
 
-    if failed_validations:
+    if failures:
         message = "Zarr validation failed:\n" + "\n".join(
-            f"- {msg}" for msg in failed_validations
+            f"- {name}: {message}" for name, message in failures
         )
-        sentry_sdk.get_isolation_scope().fingerprint = [dataset_id, *failed_checks]
+        # Fingerprint by (dataset_id, failed check names), not message text, so repeated
+        # failures carrying different per-run details group into one Sentry issue.
+        sentry_sdk.get_isolation_scope().fingerprint = [
+            dataset_id,
+            *[name for name, _ in failures],
+        ]
         raise OperationalValidationError(message)
 
     log.info("Zarr validation passed all checks")
 
 
-def check_forecast_current_data(
-    ds: xr.Dataset,
-    max_latest_init_time_age: timedelta = timedelta(days=1),
-) -> ValidationResult:
-    """Check that the latest init_time is within max_latest_init_time_age. Fails if no recent init_time."""
-    now = pd.Timestamp.now()
-    latest_init_time_ds = ds.sel(init_time=slice(now - max_latest_init_time_age, None))
-    if latest_init_time_ds.sizes["init_time"] == 0:
-        return ValidationResult(
-            passed=False,
-            message=f"No data found within {max_latest_init_time_age} of now",
-        )
+class CheckCurrentData(Validator):
+    """Fail when an append-dim position that is due has not been ingested.
 
-    return ValidationResult(
-        passed=True,
-        message=f"Data found within {max_latest_init_time_age} of now",
-    )
-
-
-def check_analysis_current_data(
-    ds: xr.Dataset, max_expected_delay: timedelta = timedelta(hours=12)
-) -> ValidationResult:
-    """Check for data in the most recent day. Fails if no data is found."""
-    now = pd.Timestamp.now()
-    latest_init_time_ds = ds.sel(time=slice(now - max_expected_delay, None))
-    if latest_init_time_ds.sizes["time"] == 0:
-        return ValidationResult(
-            passed=False,
-            message=f"No data found within {max_expected_delay} of now",
-        )
-
-    return ValidationResult(
-        passed=True,
-        message=f"Data found within {max_expected_delay} of now",
-    )
-
-
-def check_forecast_recent_nans(
-    ds: xr.Dataset,
-    *,
-    init_time_offset: int = -1,
-    num_recent_init_times: int = 1,
-    max_nan_fraction: float = 0.0,
-    include_vars: Sequence[str] | Literal["all"] = "all",
-    exclude_vars: Sequence[str] = (),
-    spatial_sampling: SpatialSamplingStrategy = "random_points",
-    additional_skip_lead_time_0_vars: Sequence[str] = (),
-    max_workers: int | None = None,
-) -> ValidationResult:
+    A position is due `max_delay` after its own timestamp: the source's publication
+    delay plus our update duration plus slack — typically the validation cron's
+    offset after the cycle it validates. Deadlines attach to grid positions (the
+    template's append_dim_frequency, anchored to the dataset's own positions), not
+    to the moment the check runs, so a tight deadline holds at any wall-clock time
+    and an off-schedule run never alerts on a gap that is merely the normal wait
+    for the next cycle.
     """
-    Check the NaN fraction of recent init_times in a forecast dataset.
 
-    Checks `num_recent_init_times` init_times ending at `init_time_offset`
-    (inclusive), newest first, and fails if any of them exceeds
-    `max_nan_fraction`. Each init_time is checked independently, so a per-init
-    threshold is not diluted by a wider window. A window > 1 catches a gap that
-    lands in a recent-but-no-longer-newest init_time (a late source file, a
-    catch-up or re-backfill run): with a window of 1 each init_time is validated
-    only while it is the newest, then never looked at again.
+    max_delay: timedelta
 
-    `init_time_offset` selects the newest init_time to check, counted from the
-    end (`-1` = latest, `-2` = previous, etc.). Use `-2` for datasets whose
-    latest init is still being filled in (e.g. long-horizon ensembles).
-
-    Default `spatial_sampling="random_points"` reads all lead_times (and any
-    ensemble members) at 2 random spatial points per variable — cheap when
-    data is chunked by init_time. Use `"all"` only for small datasets.
-
-    Variables with `step_type != "instant"` always have their lead_time=0 slice
-    dropped before computing the NaN fraction (these vars do not have valid
-    hour 0 data). `additional_skip_lead_time_0_vars` adds extra names on top
-    (e.g. HRRR categorical vars which are step_type=instant but have no hour 0 data).
-    """
-    assert num_recent_init_times >= 1, "num_recent_init_times must be >= 1"
-
-    newest = init_time_offset % ds.sizes["init_time"]  # positive index
-    oldest = max(0, newest - num_recent_init_times + 1)
-
-    results = [
-        (
-            index,
-            _check_nan_fractions(
-                _apply_spatial_sampling(ds.isel(init_time=[index]), spatial_sampling),
-                max_nan_fraction=max_nan_fraction,
-                include_vars=include_vars,
-                exclude_vars=exclude_vars,
-                additional_skip_lead_time_0_vars=additional_skip_lead_time_0_vars,
-                max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
-            ),
+    def check(self, context: ValidationContext) -> ValidationResult:
+        append_dim = context.append_dim
+        frequency = context.append_dim_frequency
+        assert frequency is not None, (
+            "CheckCurrentData requires the template's append_dim_frequency on the context"
         )
-        for index in range(newest, oldest - 1, -1)
-    ]
-
-    if len(results) == 1:
-        return results[0][1]
-
-    failures = [
-        f"init_time={_format_coord_value(ds['init_time'].values[index])}: {result.message}"
-        for index, result in results
-        if not result.passed
-    ]
-    if failures:
+        index = context.ds.get_index(append_dim)
+        if len(index) == 0:
+            return ValidationResult(
+                passed=False, message=f"Dataset has no {append_dim} positions"
+            )
+        first = pd.Timestamp(index.min())
+        latest = pd.Timestamp(index.max())
+        # The newest grid position whose deadline has passed.
+        due = (
+            first
+            + ((pd.Timestamp.now() - self.max_delay - first) // frequency) * frequency
+        )
+        if due < first:
+            return ValidationResult(
+                passed=True,
+                message=f"No {append_dim} position is due yet (positions are due "
+                f"{self.max_delay} after their timestamp)",
+            )
+        if latest < due:
+            return ValidationResult(
+                passed=False,
+                message=f"Missing {append_dim}={due.isoformat()}, which was due "
+                f"{self.max_delay} after its timestamp "
+                f"(latest present is {latest.isoformat()})",
+            )
         return ValidationResult(
-            passed=False,
-            message=f"Excessive NaN fraction in {len(failures)} of {len(results)} "
-            "recent init_times:\n" + "\n".join(failures),
+            passed=True,
+            message=f"{append_dim}={due.isoformat()}, the newest position due "
+            f"{self.max_delay} after its timestamp, is present "
+            f"(latest is {latest.isoformat()})",
         )
-    return ValidationResult(
-        passed=True,
-        message=f"All {len(results)} recent init_times have NaN fraction "
-        f"<= {max_nan_fraction}",
-    )
 
 
-def check_analysis_recent_nans(
-    ds: xr.Dataset,
-    *,
-    time_offset: int = -1,
-    num_recent_times: int = 2,
-    max_nan_fraction: float = 0.0,
-    include_vars: Sequence[str] | Literal["all"] = "all",
-    exclude_vars: Sequence[str] = (),
-    spatial_sampling: SpatialSamplingStrategy = "random_points",
-    max_workers: int | None = None,
-) -> ValidationResult:
+class CheckRecentNans(VariableSelection, Validator):
+    """Check the NaN fraction of recent append-dim positions.
+
+    Checks the newest `window` positions, each independently so a per-position
+    threshold is not diluted by a wider window. A window > 1 catches a gap that lands
+    in a recent-but-no-longer-newest position (a late source file, a catch-up or
+    re-backfill run): with a window of 1 each position is validated only while it is
+    the newest, then never looked at again.
+
+    `max_nan_fraction` is one threshold for every checked position, or a tuple indexed
+    newest-first with the last value extending through the rest of the window — the
+    same shape as CheckVirtualManifestCompleteness.min_present_fraction. A leading tier
+    loosens positions the source is still filling in: `(0.45, 0.0)` allows the newest
+    position 45% NaN while every older one must be complete, and a leading `1.0`
+    excuses the newest position entirely (it is skipped, not read). For variables that
+    fill in over several positions on different schedules, separate instances with
+    different include_vars/tiers check each group against what is complete by then,
+    instead of one threshold loose enough for all of them.
+
+    Default `spatial_sampling="random_points"` reads all non-spatial dims (lead times,
+    ensemble members) at 2 random spatial points per variable — cheap when data is
+    chunked along the append dim. Use `"quarter"` for structural-NaN datasets (random
+    points are bimodal/unstable) and `"all"` only for small datasets.
+
+    When the operational update rewrites a deep window (e.g. a year of positions each
+    run), set `window` to that depth and `sampled_positions` to a small count: each
+    validation then checks that many randomly chosen positions within the window
+    instead of every one, so older rewritten positions get eventual coverage at
+    bounded cost. Sampled positions are chosen randomly, so per-recency tiers do not
+    apply — a sampled check takes a single max_nan_fraction.
+
+    A variable without hour-0 values (`step_type != "instant"`, or the template's
+    `has_hour_0_values()` is false) has its lead_time=0 slice dropped before computing
+    the NaN fraction.
     """
-    Check the NaN fraction of recent timesteps in an analysis dataset.
 
-    Checks `num_recent_times` timesteps ending at `time_offset` (`-1` = newest), each
-    independently, failing if any exceeds `max_nan_fraction`. Positional selection
-    means an off-schedule run still checks real data; recency is
-    `check_analysis_current_data`'s question.
+    max_nan_fraction: float | tuple[float, ...] = 0.0
+    window: int = 2
+    sampled_positions: int | None = None
+    spatial_sampling: SpatialSamplingStrategy = "random_points"
+    max_workers: int | None = None
 
-    For a variable that fills in over several timesteps, separate calls with different
-    `time_offset` / `num_recent_times` / `max_nan_fraction` check each stage against
-    what is complete by then, instead of one threshold loose enough for all of them.
-
-    Default `spatial_sampling="random_points"` reads 2 random spatial points. Use
-    `"quarter"` for structural-NaN datasets and `"all"` only when small.
-    """
-    assert num_recent_times >= 1, "num_recent_times must be >= 1"
-
-    newest = time_offset % ds.sizes["time"]  # positive index
-    oldest = max(0, newest - num_recent_times + 1)
-
-    results = [
-        (
-            index,
-            _check_nan_fractions(
-                _apply_spatial_sampling(ds.isel(time=[index]), spatial_sampling),
-                max_nan_fraction=max_nan_fraction,
-                include_vars=include_vars,
-                exclude_vars=exclude_vars,
-                additional_skip_lead_time_0_vars=(),
-                max_workers=max_workers or _DEFAULT_MAX_WORKERS[spatial_sampling],
-            ),
+    @pydantic.model_validator(mode="after")
+    def _validate_thresholds(self) -> CheckRecentNans:
+        tiers = self._tiers
+        assert self.window >= 1, "window must be >= 1"
+        assert 1 <= len(tiers) <= self.window, (
+            f"max_nan_fraction has {len(tiers)} tiers which must fit in window={self.window}"
         )
-        for index in range(newest, oldest - 1, -1)
-    ]
+        assert all(0.0 <= t <= 1.0 for t in tiers), (
+            f"max_nan_fraction values must be within [0, 1], got {tiers}"
+        )
+        assert min(tiers) < 1.0, (
+            "every max_nan_fraction tier is 1.0, which no NaN fraction can exceed — "
+            "this check would test nothing"
+        )
+        if self.sampled_positions is not None:
+            assert 1 <= self.sampled_positions <= self.window, (
+                f"sampled_positions ({self.sampled_positions}) must be within "
+                f"[1, window={self.window}]"
+            )
+            assert len(tiers) == 1, (
+                "sampled positions are randomly chosen, so per-recency max_nan_fraction "
+                "tiers do not apply; use a single threshold"
+            )
+        return self
 
-    if len(results) == 1:
-        return results[0][1]
+    @property
+    def name(self) -> str:
+        if self.sampled_positions is None:
+            return super().name
+        parts = [f"sampled_positions={self.sampled_positions}", f"window={self.window}"]
+        if label := self.selection_label():
+            parts.insert(0, label)
+        return f"{type(self).__name__}({', '.join(parts)})"
 
-    failures = [
-        f"time={_format_coord_value(ds['time'].values[index])}: {result.message}"
-        for index, result in results
-        if not result.passed
-    ]
-    if failures:
+    @property
+    def _tiers(self) -> tuple[float, ...]:
+        if isinstance(self.max_nan_fraction, tuple):
+            return self.max_nan_fraction
+        return (self.max_nan_fraction,)
+
+    def check(self, context: ValidationContext) -> ValidationResult:
+        ds = context.ds
+        append_dim = context.append_dim
+        self.validate_var_names(context.known_var_paths())
+        # A partially backfilled store (e2e tests) may carry a subset of the template.
+        var_paths = [str(name) for name in ds.data_vars if self.selects(str(name))]
+        if not var_paths:
+            return ValidationResult(
+                passed=False,
+                message="None of the selected variables are in the store",
+            )
+        skip_lead_time_0_vars = {
+            var.path for var in context.data_vars if not var.has_hour_0_values()
+        }
+
+        tiers = self._tiers
+        size = ds.sizes[append_dim]
+        if size < len(tiers):
+            return ValidationResult(
+                passed=False,
+                message=(
+                    f"Only {size} {append_dim} position(s), need at least "
+                    f"{len(tiers)} to check the {tiers} NaN thresholds"
+                ),
+            )
+
+        recencies: Sequence[int] = range(min(self.window, size))
+        if self.sampled_positions is not None and self.sampled_positions < len(
+            recencies
+        ):
+            rng = np.random.default_rng()
+            recencies = sorted(
+                rng.choice(len(recencies), size=self.sampled_positions, replace=False)
+            )
+
+        failures = []
+        checked = 0
+        for recency in recencies:
+            threshold = tiers[min(recency, len(tiers) - 1)]
+            if threshold >= 1.0:
+                continue  # no NaN fraction can exceed 1.0; skip the read
+            index = size - 1 - recency
+            checked += 1
+            result = _check_nan_fractions(
+                _apply_spatial_sampling(
+                    ds.isel({append_dim: [index]}), self.spatial_sampling
+                ),
+                max_nan_fraction=threshold,
+                var_paths=var_paths,
+                skip_lead_time_0_vars=skip_lead_time_0_vars,
+                max_workers=self.max_workers
+                or _DEFAULT_MAX_WORKERS[self.spatial_sampling],
+            )
+            if not result.passed:
+                position = _format_coord_value(ds[append_dim].values[index])
+                failures.append(f"{append_dim}={position}: {result.message}")
+
+        if failures:
+            return ValidationResult(
+                passed=False,
+                message=f"Excessive NaN fraction in {len(failures)} of {checked} "
+                "recent positions:\n" + "\n".join(failures),
+            )
         return ValidationResult(
-            passed=False,
-            message=f"Excessive NaN fraction in {len(failures)} of {len(results)} "
-            "recent times:\n" + "\n".join(failures),
+            passed=True,
+            message=f"All {checked} checked recent {append_dim} positions have "
+            f"NaN fraction within {tiers}",
         )
-    return ValidationResult(
-        passed=True,
-        message=f"All {len(results)} recent times have NaN fraction "
-        f"<= {max_nan_fraction}",
-    )
 
 
 def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
@@ -459,34 +559,25 @@ def _check_nan_fractions(
     sample_ds: xr.Dataset,
     *,
     max_nan_fraction: float,
-    include_vars: Sequence[str] | Literal["all"],
-    exclude_vars: Sequence[str],
-    additional_skip_lead_time_0_vars: Sequence[str],
+    var_paths: Sequence[str],
+    skip_lead_time_0_vars: set[str],
     max_workers: int,
 ) -> ValidationResult:
-    var_names = [
-        var_name
-        for var_name in map(str, sample_ds.data_vars)
-        if (include_vars == "all" or var_name in include_vars)
-        and var_name not in exclude_vars
-    ]
-
     log.info(
-        f"Computing NaN fraction for {len(var_names)} variables: {sorted(var_names)} "
+        f"Computing NaN fraction for {len(var_paths)} variables: {sorted(var_paths)} "
         f"over coordinates: {_summarize_coords(sample_ds)}"
     )
 
-    skip_lead_time_0_vars = set(additional_skip_lead_time_0_vars)
     fractions: dict[str, float] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_var = {
             executor.submit(
                 _compute_var_nan_fraction,
                 sample_ds,
-                var_name,
-                additional_skip_lead_time_0_vars=skip_lead_time_0_vars,
-            ): var_name
-            for var_name in var_names
+                var_path,
+                skip_lead_time_0_vars=skip_lead_time_0_vars,
+            ): var_path
+            for var_path in var_paths
         }
         for future in as_completed(future_to_var):
             fractions[future_to_var[future]] = future.result()
@@ -498,13 +589,13 @@ def _check_nan_fractions(
     # An empty selection means the check measured nothing. Its NaN fraction is NaN,
     # which is not > any threshold, so without this it reports a pass.
     unmeasured_vars = sorted(
-        var_name
-        for var_name, fraction in fractions.items()
+        var_path
+        for var_path, fraction in fractions.items()
         if not np.isfinite(fraction)
     )
     problem_vars = {
-        var_name: fraction
-        for var_name, fraction in fractions.items()
+        var_path: fraction
+        for var_path, fraction in fractions.items()
         if np.isfinite(fraction) and fraction > max_nan_fraction
     }
 
@@ -527,19 +618,19 @@ def _check_nan_fractions(
 
     return ValidationResult(
         passed=True,
-        message=f"All {len(var_names)} variables have NaN fraction <= {max_nan_fraction}",
+        message=f"All {len(var_paths)} variables have NaN fraction <= {max_nan_fraction}",
     )
 
 
 def _compute_var_nan_fraction(
     ds: xr.Dataset,
-    var_name: str,
+    var_path: str,
     *,
-    additional_skip_lead_time_0_vars: set[str],
+    skip_lead_time_0_vars: set[str],
 ) -> float:
-    da = ds[var_name]
+    da = ds[var_path]
     if "lead_time" in da.dims and (
-        var_name in additional_skip_lead_time_0_vars
+        var_path in skip_lead_time_0_vars
         or da.attrs.get("step_type", "instant") != "instant"
     ):
         da = da.isel(lead_time=slice(1, None))
@@ -549,151 +640,168 @@ def _compute_var_nan_fraction(
     return float(da.isnull().mean().compute().item())
 
 
-def compare_replica_and_primary(
-    append_dim: str, replica_ds: xr.Dataset, primary_ds: xr.Dataset
-) -> ValidationResult:
-    """Compare the data in the replica and primary stores."""
-    rng = np.random.default_rng()
-    problem_coords = []
-    for coord in primary_ds.coords:
-        try:
-            xr.testing.assert_equal(primary_ds[coord], replica_ds[coord])
-        except AssertionError as e:
-            log.exception(e)
-            problem_coords.append(coord)
-    if problem_coords:
-        message = f"Data in replica and primary stores are different for coords: {problem_coords}"
-        return ValidationResult(passed=False, message=message)
+class CheckReplicaMatchesPrimary(Validator):
+    """Compare a replica store's data against the primary's.
 
-    num_variables_to_check = min(5, len(primary_ds.data_vars))
-    data_var_names = [str(k) for k in primary_ds.data_vars]
-    variables_to_check = rng.choice(
-        data_var_names, num_variables_to_check, replace=False
-    )
+    Coordinates are compared exactly; a random subset of variables is compared over
+    the last append-dim chunk at a random spatial window.
+    """
 
-    last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
-    problem_vars = []
+    def check(self, context: ValidationContext) -> ValidationResult:
+        replica_ds = context.ds
+        primary_ds = context.primary_ds
+        assert primary_ds is not None, (
+            "CheckReplicaMatchesPrimary runs on replica stores; validate_dataset "
+            "was called without a primary_ds"
+        )
+        append_dim = context.append_dim
 
-    window_size = 100
-
-    rng = np.random.default_rng()
-
-    for var in variables_to_check:
-        # Create random slices of `window_size` along non-append dimensions
-        non_append_dim_slices = {
-            dim_name: slice(
-                *(
-                    start := int(rng.integers(0, max(1, dim_size - window_size - 1))),
-                    start + window_size,
-                )
+        rng = np.random.default_rng()
+        problem_coords = []
+        for coord in primary_ds.coords:
+            try:
+                xr.testing.assert_equal(primary_ds[coord], replica_ds[coord])
+            except AssertionError as e:
+                log.exception(e)
+                problem_coords.append(coord)
+        if problem_coords:
+            return ValidationResult(
+                passed=False,
+                message=f"Data in replica and primary stores are different for coords: {problem_coords}",
             )
-            for dim_name, dim_size in replica_ds[var].sizes.items()
-            if dim_name != append_dim
-        }
 
-        # We create deep copies here to avoid sharing memory with the original dataset
-        replica_ds_last_chunk = (
-            replica_ds[var]
-            .isel({append_dim: last_chunk, **non_append_dim_slices})
-            .copy(deep=True)
-        )
-        primary_ds_last_chunk = (
-            primary_ds[var]
-            .isel({append_dim: last_chunk, **non_append_dim_slices})
-            .copy(deep=True)
+        num_variables_to_check = min(5, len(primary_ds.data_vars))
+        data_var_names = [str(k) for k in primary_ds.data_vars]
+        variables_to_check = rng.choice(
+            data_var_names, num_variables_to_check, replace=False
         )
 
-        try:
-            log.info(f"Comparing {var} in replica and primary stores")
-            xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
-        except AssertionError as e:
-            log.exception(e)
-            problem_vars.append(str(var))
+        last_chunk = iterating.dimension_slices(primary_ds, append_dim, "chunks")[-1]
+        problem_vars = []
 
-        replica_ds_last_chunk.close()
-        primary_ds_last_chunk.close()
-        del replica_ds_last_chunk
-        del primary_ds_last_chunk
+        window_size = 100
 
-    if problem_vars:
-        return ValidationResult(
-            passed=False,
-            message=f"Data in replica and primary stores are different for at least the following vars: {problem_vars}",
-        )
-    else:
+        for var in variables_to_check:
+            # Create random slices of `window_size` along non-append dimensions
+            non_append_dim_slices = {
+                dim_name: slice(
+                    *(
+                        start := int(
+                            rng.integers(0, max(1, dim_size - window_size - 1))
+                        ),
+                        start + window_size,
+                    )
+                )
+                for dim_name, dim_size in replica_ds[var].sizes.items()
+                if dim_name != append_dim
+            }
+
+            # We create deep copies here to avoid sharing memory with the original dataset
+            replica_ds_last_chunk = (
+                replica_ds[var]
+                .isel({append_dim: last_chunk, **non_append_dim_slices})
+                .copy(deep=True)
+            )
+            primary_ds_last_chunk = (
+                primary_ds[var]
+                .isel({append_dim: last_chunk, **non_append_dim_slices})
+                .copy(deep=True)
+            )
+
+            try:
+                log.info(f"Comparing {var} in replica and primary stores")
+                xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
+            except AssertionError as e:
+                log.exception(e)
+                problem_vars.append(str(var))
+
+            replica_ds_last_chunk.close()
+            primary_ds_last_chunk.close()
+            del replica_ds_last_chunk
+            del primary_ds_last_chunk
+
+        if problem_vars:
+            return ValidationResult(
+                passed=False,
+                message=f"Data in replica and primary stores are different for at least the following vars: {problem_vars}",
+            )
         return ValidationResult(
             passed=True,
             message="Data in tested subset of replica and primary stores is the same",
         )
 
 
-def check_for_expected_shards(store: Store, ds: xr.Dataset) -> ValidationResult:
-    """Check that the expected shards are present in the store."""
-    log.info(f"Checking for expected shards in {store}")
+class CheckExpectedShards(Validator):
+    """Check that every shard the store's metadata declares is present.
 
-    problem_vars = []
-    var_missing_shard_indexes = {}
+    The write path passes write_empty_chunks=True, so even an all-fill shard is
+    written and a missing shard always means a failed write.
+    """
 
-    for var in map(str, ds.data_vars):  # our keys are strs, xr types as Hashable
-        shard_counts_per_dim = [
-            len(iterating.chunk_slices(size, shard_size))
-            for size, shard_size in zip(
-                ds[var].shape, ds[var].encoding["shards"], strict=True
-            )
-        ]
-        ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
-        expected_shard_indexes = {
-            "/".join(map(str, index)) for index in itertools.product(*ranges)
-        }
-
-        actual_var_shard_indexes = retry(
-            partial(_sync_list_shards, store, var),
-            max_attempts=3,
+    def check(self, context: ValidationContext) -> ValidationResult:
+        store = context.store
+        ds = context.ds
+        assert isinstance(store, Store), (
+            f"CheckExpectedShards lists store keys, which requires a zarr Store, got {type(store)}"
         )
+        log.info(f"Checking for expected shards in {store}")
 
-        # During operational updates we trim down the dataset to only include
-        # data that was fully processed. This means there may be some extra shards present
-        # in the store, but the metadata has been trimmed such that they are not exposed.
-        # As such, we don't expect these two sets to necessarily be equal, but we do expect
-        # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
-        missing_shard_indexes = expected_shard_indexes - actual_var_shard_indexes
-        if len(missing_shard_indexes) > 0:
-            # HRRR categorical variables have enough 0s that some shards are not written
-            # We will remove this skip when fill_value is updated to nan / write_empty_chunks is true
-            if (
-                ds.attrs["dataset_id"] == "noaa-hrrr-forecast-48-hour"
-                and "categorical" in var
-            ):
-                log.info(
-                    f"Expecting to find fewer than the maximum shards for categorical hrrr variable ({var}) due to fill value 0 and write empty chunks false"
+        problem_vars = []
+        var_missing_shard_indexes = {}
+
+        for var in map(str, ds.data_vars):  # our keys are strs, xr types as Hashable
+            shard_counts_per_dim = [
+                len(iterating.chunk_slices(size, shard_size))
+                for size, shard_size in zip(
+                    ds[var].shape, ds[var].encoding["shards"], strict=True
                 )
-                continue
+            ]
+            ranges = [range(shard_count) for shard_count in shard_counts_per_dim]
+            expected_shard_indexes = {
+                "/".join(map(str, index)) for index in itertools.product(*ranges)
+            }
 
-            problem_vars.append(var)
-            var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
+            actual_var_shard_indexes = retry(
+                partial(_sync_list_shards, store, var),
+                max_attempts=3,
+            )
 
-    if len(problem_vars) > 0:
-        summary = ", ".join(
-            f"{var} ({len(var_missing_shard_indexes[var])} missing)"
-            for var in problem_vars
-        )
-        shard_lists = [var_missing_shard_indexes[var] for var in problem_vars]
-        if len(problem_vars) > 1 and all(s == shard_lists[0] for s in shard_lists[1:]):
-            details = f"all missing the same shards: {_truncate_shards(shard_lists[0])}"
-        else:
-            details = ", ".join(
-                f"{var}: {_truncate_shards(var_missing_shard_indexes[var])}"
+            # During operational updates we trim down the dataset to only include
+            # data that was fully processed. This means there may be some extra shards present
+            # in the store, but the metadata has been trimmed such that they are not exposed.
+            # As such, we don't expect these two sets to necessarily be equal, but we do expect
+            # that expected_shard_indexes should be a proper subset of actual_var_shard_indexes.
+            missing_shard_indexes = expected_shard_indexes - actual_var_shard_indexes
+            if len(missing_shard_indexes) > 0:
+                problem_vars.append(var)
+                var_missing_shard_indexes[var] = sorted(missing_shard_indexes)
+
+        if len(problem_vars) > 0:
+            summary = ", ".join(
+                f"{var} ({len(var_missing_shard_indexes[var])} missing)"
                 for var in problem_vars
             )
-        return ValidationResult(
-            passed=False,
-            message=f"Missing shards: {summary}. {details}",
-        )
+            shard_lists = [var_missing_shard_indexes[var] for var in problem_vars]
+            if len(problem_vars) > 1 and all(
+                s == shard_lists[0] for s in shard_lists[1:]
+            ):
+                details = (
+                    f"all missing the same shards: {_truncate_shards(shard_lists[0])}"
+                )
+            else:
+                details = ", ".join(
+                    f"{var}: {_truncate_shards(var_missing_shard_indexes[var])}"
+                    for var in problem_vars
+                )
+            return ValidationResult(
+                passed=False,
+                message=f"Missing shards: {summary}. {details}",
+            )
 
-    return ValidationResult(
-        passed=True,
-        message="All variables have expected shards",
-    )
+        return ValidationResult(
+            passed=True,
+            message="All variables have expected shards",
+        )
 
 
 def _truncate_shards(shards: Sequence[str], keep: int = 3) -> str:
@@ -712,11 +820,10 @@ async def _list_shards(store: Store, var: str) -> set[str]:
     return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}
 
 
-@dataclass(frozen=True)
-class CheckVirtualManifestCompleteness(VirtualDataValidator):
+class CheckVirtualManifestCompleteness(VariableSelection, Validator):
     """Assert each recent append-dim position is sufficiently present in the manifest.
 
-    The virtual analog of check_for_expected_shards. Re-runs the region job's own
+    The virtual analog of CheckExpectedShards. Re-runs the region job's own
     source_file_coords + filter_already_present over its window (a handful of recent
     steps; whole-archive coverage is manifest_scan) and checks, per position, the fraction
     of expected source files present against `min_present_fraction` — indexed newest-first,
@@ -726,8 +833,8 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
 
     Positions past the store's append-dim extent are skipped: the window runs ahead of what
     the source has published, and an update grows the append dim only as far as the refs it
-    writes. So a wholly un-ingested recent stretch is check_forecast_current_data's job,
-    while an interior gap still fails here.
+    writes. So a wholly un-ingested recent stretch is CheckCurrentData's job, while an
+    interior gap still fails here.
 
       (1.0,)      every append-dim position whole (default).
       (0.5, 1.0)  the newest may be half-published (e.g. GEFS 35-day's slow long lead
@@ -735,16 +842,20 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
       (0.0, 1.0)  the newest is excused entirely; every older position whole.
 
     `include_vars` / `exclude_vars` narrow the check to the source files carrying those
-    variables, named by path (`<group>/<name>`, or the bare name at the root). A file
-    counts when it carries any of them, and the split must fall on source-file
-    boundaries (asserted).
+    variables — a file is expected when it carries any of them — so variables publishing
+    on different schedules can be checked separately, each held to a whole 1.0 from the
+    position where its own files are expected. The split must fall on source-file
+    boundaries (asserted): presence is probed through each file's representative
+    variable, so a file carrying both checked and unchecked variables could pass on a
+    variable this instance does not cover.
     """
 
     min_present_fraction: tuple[float, ...] = (1.0,)
-    include_vars: Sequence[str] | Literal["all"] = "all"
-    exclude_vars: Sequence[str] = ()
 
-    def __post_init__(self) -> None:
+    requires_virtual_dataset: ClassVar[bool] = True
+
+    @pydantic.model_validator(mode="after")
+    def _validate_thresholds(self) -> CheckVirtualManifestCompleteness:
         assert self.min_present_fraction, "min_present_fraction must be non-empty"
         # If a real source ever leaves append-dim positions permanently incomplete, add
         # an explicit opt-out field rather than relaxing this into a soft convention.
@@ -753,29 +864,22 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             "position, so it must be 1.0; loosen only the leading tiers, which cover "
             f"positions the source may still be filling in (got {self.min_present_fraction})"
         )
+        return self
 
-    def __call__(
-        self,
-        region_job: VirtualRegionJob[Any, Any],
-        store: IcechunkStore,
-        ds: xr.Dataset,
-    ) -> ValidationResult:
+    def check(self, context: ValidationContext) -> ValidationResult:
+        region_job = context.virtual_region_job()
+        store = context.store
+        assert isinstance(store, IcechunkStore)
         append_dim = region_job.append_dim
-        ingested_through = ds.get_index(append_dim).max()
+        self.validate_var_names([var.path for var in region_job.data_vars])
+
+        ingested_through = context.ds.get_index(append_dim).max()
         candidates = [
             coord
             for coord in region_job.source_file_coords()
             if coord.out_loc()[append_dim] <= ingested_through
-            and self._carries_checked_var(coord, region_job)
+            and self._carries_selected_var(coord, region_job)
         ]
-        if not candidates and self._filters_variables():
-            return ValidationResult(
-                passed=False,
-                message=(
-                    f"No source files carry the variables being checked "
-                    f"({self._variable_selection()})"
-                ),
-            )
         expected_per_position = Counter(c.out_loc()[append_dim] for c in candidates)
         positions = sorted(expected_per_position, reverse=True)  # newest first
         if len(positions) < len(self.min_present_fraction):
@@ -804,13 +908,10 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
                     f"{append_dim}={position}: {present}/{expected} present "
                     f"({present / expected:.1%} < required {required:.0%})"
                 )
-        selection = (
-            f" ({self._variable_selection()})" if self._filters_variables() else ""
-        )
         if problems:
             return ValidationResult(
                 passed=False,
-                message=f"Incomplete manifest{selection}:\n"
+                message="Incomplete manifest:\n"
                 + "\n".join(f"- {p}" for p in problems),
             )
         return ValidationResult(
@@ -818,39 +919,28 @@ class CheckVirtualManifestCompleteness(VirtualDataValidator):
             message=(
                 f"All {len(positions)} ingested {append_dim} positions (through "
                 f"{ingested_through}) meet completeness thresholds "
-                f"{self.min_present_fraction}{selection}"
+                f"{self.min_present_fraction}"
             ),
         )
 
-    def _filters_variables(self) -> bool:
-        return self.include_vars != "all" or bool(self.exclude_vars)
-
-    def _variable_selection(self) -> str:
-        return f"include_vars={self.include_vars}, exclude_vars={self.exclude_vars}"
-
-    def _carries_checked_var(
+    def _carries_selected_var(
         self, coord: SourceFileCoord, region_job: VirtualRegionJob[Any, Any]
     ) -> bool:
-        if not self._filters_variables():
+        if self.include_vars == "all" and not self.exclude_vars:
             return True
         file_vars = getattr(coord, "data_vars", None) or region_job.data_vars
-        checked = [
-            (self.include_vars == "all" or var.path in self.include_vars)
-            and var.path not in self.exclude_vars
-            for var in file_vars
-        ]
-        assert all(checked) or not any(checked), (
-            f"{coord.get_url()} carries both checked and unchecked variables "
-            f"({self._variable_selection()}). Presence is probed through the file's "
-            "representative variable, which may be one this instance does not cover, "
-            "so a partially-checked file could pass while a checked variable has no "
+        selected = [self.selects(var.path) for var in file_vars]
+        assert all(selected) or not any(selected), (
+            f"{coord.get_url()} carries both selected and unselected variables "
+            f"({self.name}). Presence is probed through the file's representative "
+            "variable, which may be one this instance does not cover, so a "
+            "partially-checked file could pass while a checked variable has no "
             "references. Split checks along source-file boundaries."
         )
-        return any(checked)
+        return any(selected)
 
 
-@dataclass(frozen=True)
-class CheckVirtualDecodeHealth(VirtualDataValidator):
+class CheckVirtualDecodeHealth(Validator):
     """Decode the references that are present and assert they are readable.
 
     Completeness checks that references *exist*; this checks the ones that exist actually
@@ -858,18 +948,19 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     authorization, end to end. Over the recent window it keeps only the source files
     present in the manifest (filter_already_present), so a not-yet-published ref is never
     mistaken for a decode failure, then decodes a bounded sample of them. `positions`
-    selects which append-dim positions to check: "latest" (default) targets the newest
-    position with data — so a broken newest reference is caught at the next validation, not
-    a cycle later — while "all" covers the whole window. Within a position it samples
-    `sampled_leads` lead times (first + last + evenly spaced interior) across every member,
-    and `sampled_levels` levels of any vertical dim (e.g. pressure_level) so a group var is
-    decode-checked at a bounded set of levels rather than every one. `max_positions`
-    optionally caps "all" to an evenly spaced subset of positions for a whole-archive
-    offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks
-    decode entirely NaN. Fails — never silently passes — when no references are present.
+    selects which append-dim positions to check: an int targets that many of the newest
+    positions with data (default 1 — so a broken newest reference is caught at the next
+    validation, not a cycle later; use more when the newest position does not carry every
+    variable), while "all" covers the whole window, optionally capped to `max_positions`
+    evenly spaced positions for a whole-archive offline sweep. Within a position it
+    samples `sampled_leads` lead times (first + last + evenly spaced interior) across
+    every member, and `sampled_levels` levels of any vertical dim (e.g. pressure_level)
+    so a group var is decode-checked at a bounded set of levels rather than every one.
+    A variable fails if any sampled chunk errors or all of its sampled chunks decode
+    entirely NaN. Fails — never silently passes — when no references are present.
     """
 
-    positions: Literal["latest", "all"] = "latest"
+    positions: int | Literal["all"] = 1
     sampled_leads: int = 5
     sampled_levels: int = 3
     max_positions: int | None = None
@@ -882,12 +973,23 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
     # catches removed/renamed/unpulled vars.
     reference_exists: Callable[[str, Mapping[str, Any]], bool] | None = None
 
-    def __call__(
-        self,
-        region_job: VirtualRegionJob[Any, Any],
-        store: IcechunkStore,
-        ds: xr.Dataset,
-    ) -> ValidationResult:
+    requires_virtual_dataset: ClassVar[bool] = True
+
+    @pydantic.model_validator(mode="after")
+    def _validate_positions(self) -> CheckVirtualDecodeHealth:
+        if isinstance(self.positions, int):
+            assert self.positions >= 1, "positions must be >= 1"
+            assert self.max_positions is None, (
+                "max_positions caps positions='all'; an int positions already bounds "
+                "the check"
+            )
+        return self
+
+    def check(self, context: ValidationContext) -> ValidationResult:
+        region_job = context.virtual_region_job()
+        store = context.store
+        assert isinstance(store, IcechunkStore)
+        ds = context.ds
         append_dim = region_job.append_dim
         candidates = region_job.source_file_coords()
         if not candidates:
@@ -959,8 +1061,8 @@ class CheckVirtualDecodeHealth(VirtualDataValidator):
         )
 
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
-        if self.positions == "latest":
-            return {present_positions[-1]}
+        if isinstance(self.positions, int):
+            return set(present_positions[-self.positions :])
         if self.max_positions and len(present_positions) > self.max_positions:
             return {
                 present_positions[i]

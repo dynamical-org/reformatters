@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from typing import Any
 
 import numpy as np
@@ -166,8 +165,7 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: GefsForecast10DaySpatialDataset) -> None:
     lag, completeness, decode_health = dataset.validators()
-    assert isinstance(lag, partial)
-    assert lag.func is validation.check_forecast_current_data
-    assert lag.keywords == {"max_latest_init_time_age": timedelta(hours=10)}
+    assert isinstance(lag, validation.CheckCurrentData)
+    assert lag.max_delay == timedelta(hours=5, minutes=53)
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode_health, validation.CheckVirtualDecodeHealth)

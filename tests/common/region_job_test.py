@@ -235,7 +235,9 @@ def test_region_job_empty_chunk_writing(
 
     ds = xr.open_zarr(store_factory.primary_store())
 
-    result = validation.check_for_expected_shards(primary_store, ds)
+    result = validation.CheckExpectedShards().check(
+        validation.ValidationContext(store=primary_store, ds=ds, append_dim="time")
+    )
     assert result.passed, result.message
 
     # ExampleRegionJob.download_file raises FileNotFoundError for 2025-01-01T00:00

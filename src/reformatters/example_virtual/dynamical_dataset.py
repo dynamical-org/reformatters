@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta  # noqa: F401
-from functools import partial  # noqa: F401
 
 import icechunk  # noqa: F401
 from pydantic import Field  # noqa: F401
@@ -92,10 +91,10 @@ class ExampleSpatialDynamicalDataset(
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return the DataValidators to run on this dataset.
+    def validators(self) -> Sequence[validation.Validator]:
+        """Return the operational validation checks to run on this dataset.
 
-        Mix the generic xarray validators (which read the opened dataset) with the two
+        Mix the generic checks (which read the opened dataset) with the two
         virtual-specific ones, which need manifest/store access:
         - CheckVirtualManifestCompleteness: re-runs the operational filter to assert
           recent append-dim positions are sufficiently ingested (refs exist).
@@ -103,10 +102,7 @@ class ExampleSpatialDynamicalDataset(
           confirm the serializer and virtual-container authorization work end to end.
         """
         # return (
-        #     partial(
-        #         validation.check_forecast_current_data,
-        #         max_latest_init_time_age=timedelta(hours=10),
-        #     ),
+        #     validation.CheckCurrentData(max_delay=timedelta(hours=4)),
         #     validation.CheckVirtualManifestCompleteness(),
         #     validation.CheckVirtualDecodeHealth(),
         # )
