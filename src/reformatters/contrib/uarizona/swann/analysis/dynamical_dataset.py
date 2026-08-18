@@ -40,13 +40,15 @@ class UarizonaSwannAnalysisDataset(
                 spatial_sampling="all",
             ),
             validation.CheckRecentNans(
-                # The operational update rewrites a year of data, so spot-check one
-                # random position in that window each run to verify older timesteps
-                # remain healthy.
-                max_nan_fraction=MAX_NAN_FRACTION,
-                spatial_sampling="all",
-                window=365,
-                sampled_positions=1,
+                # The update rewrites a year of data (UArizona restates files as they
+                # go early -> provisional -> stable), so the window covers all of it.
+                # Point sampling reads the whole year in one pass: a point spans 2 time
+                # chunks, so this costs about what a single position does. Outside
+                # CONUS every position is NaN, so those points are dropped as
+                # structural holes; sample extra to be sure some land in CONUS.
+                max_nan_fraction=0.0,
+                window=366,
+                sampled_points=8,
             ),
         )
 

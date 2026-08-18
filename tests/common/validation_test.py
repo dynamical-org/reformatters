@@ -461,7 +461,7 @@ def test_check_recent_nans_window_all_clean_passes(
         _context(forecast_dataset, "init_time")
     )
     assert result.passed
-    assert "All 3 checked recent init_time positions" in result.message
+    assert "All 3 checked init_time positions" in result.message
 
 
 def test_check_recent_nans_empty_selection_fails(
@@ -558,36 +558,66 @@ def test_check_recent_nans_checks_each_position_independently(
     )
 
     assert not result.passed
-    assert "1 of 2 recent positions" in result.message
+    assert "2024-01-02T23:00:00 exceeds 0.4" in result.message
 
 
-def test_check_recent_nans_sampled_positions(analysis_dataset: xr.Dataset) -> None:
-    """sampled_positions spot-checks randomly chosen positions within the window."""
+def test_check_recent_nans_deep_window_checks_every_position(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """A window as deep as the update's rewrite depth catches a gap anywhere in it."""
     context = _context(analysis_dataset, "time")
-    assert (
-        validation.CheckRecentNans(window=48, sampled_positions=1).check(context).passed
-    )
 
-    # Ruin a deep position the default newest-positions check would never see.
+    # Ruin a deep position the default newest-positions window would never see.
     analysis_dataset["temperature"].loc[{"time": "2024-01-01 12:00"}] = np.nan
     assert validation.CheckRecentNans().check(context).passed
 
-    # Sampling every position in the window is deterministic and catches it.
-    result = validation.CheckRecentNans(window=48, sampled_positions=48).check(context)
+    result = validation.CheckRecentNans(window=48).check(context)
     assert not result.passed
     assert "2024-01-01T12:00:00" in result.message
 
 
-def test_check_recent_nans_sampled_positions_config_validation() -> None:
+def test_check_recent_nans_excludes_structurally_dead_points(
+    rng: np.random.Generator,
+) -> None:
+    """A point that is NaN at every position is a structural hole, not a gap.
+
+    Without excluding it, an ocean/out-of-domain cell would fail every run; with only
+    dead points sampled there is nothing to measure, which must fail rather than pass.
+    """
+    times = pd.date_range("2024-01-01", periods=6, freq="1h")
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "latitude", "longitude"],
+                rng.standard_normal((len(times), 2, 2)),
+            )
+        },
+        coords={
+            "time": times,
+            "latitude": [10.0, 20.0],
+            "longitude": [30.0, 40.0],
+        },
+    )
+    # One column is NaN at every position (structural), the rest is clean.
+    ds["temperature"].loc[{"latitude": 10.0, "longitude": 30.0}] = np.nan
+    context = _context(ds, "time")
+
+    # 4 points over a 2x2 grid pairs every index, so the dead cell is always sampled.
+    assert validation.CheckRecentNans(sampled_points=4).check(context).passed
+
+    # With every sampled point dead there is nothing measurable: fail, don't pass.
+    all_dead = ds.copy(deep=True)
+    all_dead["temperature"].values[:] = np.nan
+    result = validation.CheckRecentNans(sampled_points=4).check(
+        _context(all_dead, "time")
+    )
+    assert not result.passed
+    assert "No values selected" in result.message
+
+
+def test_check_recent_nans_sampled_points_config_validation() -> None:
     with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(window=10, sampled_positions=11)
-    with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(window=10, sampled_positions=0)
-    # Sampled positions are randomly chosen, so per-recency tiers do not apply.
-    with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(
-            window=10, sampled_positions=1, max_nan_fraction=(1.0, 0.0)
-        )
+        validation.CheckRecentNans(sampled_points=0)
 
 
 def test_check_recent_nans_config_validation() -> None:
@@ -627,7 +657,7 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
         )
 
     fraction_records = [
-        r.getMessage() for r in caplog.records if "NaN fractions:" in r.getMessage()
+        r.getMessage() for r in caplog.records if "NaN fractions" in r.getMessage()
     ]
     assert len(fraction_records) == 1
     assert "temperature=0.000000" in fraction_records[0]
@@ -934,10 +964,6 @@ def test_validator_name() -> None:
     assert (
         validation.CheckVirtualManifestCompleteness().name
         == "CheckVirtualManifestCompleteness"
-    )
-    assert (
-        validation.CheckRecentNans(window=365, sampled_positions=1).name
-        == "CheckRecentNans(sampled_positions=1, window=365)"
     )
 
 

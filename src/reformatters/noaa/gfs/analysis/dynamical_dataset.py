@@ -56,5 +56,7 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=7)),
-            validation.CheckRecentNans(),
+            # One update writes the 6 hourly positions since the last run plus a
+            # reprocess of the newest, so window=7 value-checks every written position.
+            validation.CheckRecentNans(window=7),
         )

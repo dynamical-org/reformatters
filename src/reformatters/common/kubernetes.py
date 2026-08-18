@@ -1,4 +1,5 @@
 import base64
+import itertools
 import json
 import os
 import random
@@ -245,6 +246,18 @@ class CronJob(Job):
         while fire_time.hour not in hours:
             fire_time -= timedelta(hours=1)
         return fire_time
+
+    def max_interval(self) -> timedelta:
+        """The longest gap between consecutive fires of this schedule."""
+        _minute, hours = _parse_schedule(self.schedule)
+        ordered = sorted(hours)
+        gaps = [
+            timedelta(hours=later - earlier)
+            for earlier, later in itertools.pairwise(ordered)
+        ]
+        # The wrap from the last fire of one day to the first of the next.
+        gaps.append(timedelta(hours=24 - ordered[-1] + ordered[0]))
+        return max(gaps)
 
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]

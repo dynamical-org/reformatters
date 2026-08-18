@@ -57,4 +57,12 @@ class NoaaNdviCdrAnalysisDataset(
                 include_vars=["ndvi_usable"],
                 spatial_sampling="all",
             ),
+            validation.CheckRecentNans(
+                # ndvi_raw and qa had no NaN check at all. Their tight per-variable
+                # thresholds need a measurement against the store, so until then this
+                # is the floor that still catches a position written entirely NaN.
+                max_nan_fraction=1.0 - 1e-9,
+                include_vars=["ndvi_raw", "qa"],
+                spatial_sampling="all",
+            ),
         )
