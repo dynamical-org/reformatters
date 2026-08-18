@@ -75,6 +75,8 @@ def _metadata_table(stats: VariableStats) -> list[str]:
         rows.append(f"| flag_meanings | {stats.flag_meanings} |")
     if stats.level_dim is not None:
         rows.append(f"| sampled level | {stats.level_dim}={stats.level_value:g} |")
+    if stats.comment is not None:
+        rows.append(f"| comment | {stats.comment} |")
     rows.append("")
     return rows
 
