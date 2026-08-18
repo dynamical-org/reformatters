@@ -97,7 +97,9 @@ When one value covers every missing cell in both reads:
 - Materialized either already receives NaN from rasterio or records rasterio's exact non-NaN value in `internal_attrs.source_fill_value` and replaces it with NaN. It writes physical NaN and uses NaN for both metadata fields.
 - Virtual sets `fill_value` and `_FillValue` to gribberish's value, or leaves both NaN when gribberish already returns NaN.
 
-When no single value does, neither product changes any value and the variable's `comment` records what the raw values mean. Never normalize part of a variable's invalid set — masking some invalid values claims the rest are good. Treat an equivalent variable the same way across models where you can, but the single-value test overrides.
+When no single value does, neither product changes any value and the variable's `comment` records what the raw values mean and ends with the range to mask, such as "Mask values < -0.1." Never normalize part of a variable's invalid set — masking some invalid values claims the rest are good. Treat an equivalent variable the same way across models where you can, but the single-value test overrides.
+
+A `comment` states what NaN means when the answer is not "data we do not have": that the quantity does not apply there, such as no cloud ceiling because there is no cloud, or percent frozen where there is no precipitation. Without it a reader takes those cells for an outage and reads the NaN fraction as an availability statistic. A variable whose NaN does mean missing data needs no `comment`. Where the marker is a declared `fill_value`, write the sentence about the NaN rather than the marker — a CF-aware reader only ever sees NaN, and the materialized and virtual products then describe the variable identically — and say nothing about masking, which `fill_value` already handles. Only an undeclared marker, the no-single-value case above, is named by its raw value and paired with the range to mask.
 
 Materialized scaling is applied before values are written. Virtual scaling uses Zarr's `ScaleOffset` filter, which decodes as `encoded / scale + offset`.
 
