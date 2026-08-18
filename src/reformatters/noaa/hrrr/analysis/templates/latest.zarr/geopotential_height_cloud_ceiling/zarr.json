@@ -69,6 +69,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
+    "comment": "NaN where no cloud ceiling was detected.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

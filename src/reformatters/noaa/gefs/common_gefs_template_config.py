@@ -401,7 +401,7 @@ def get_shared_data_var_configs(
                 short_name="cpofp",
                 long_name="Percent frozen precipitation",
                 units="percent",
-                comment="Contains the value -50 when there is no precipitation.",
+                comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -571,6 +571,7 @@ def get_shared_data_var_configs(
                 short_name="gh",
                 long_name="Geopotential height",
                 units="m",
+                comment="Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
                 step_type="instant",
                 standard_name="geopotential_height",
             ),

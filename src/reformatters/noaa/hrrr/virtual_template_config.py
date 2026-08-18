@@ -566,7 +566,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="retop",
             long_name="Echo top",
             units="m",
-            comment="-999 encodes no echo; CF-aware readers mask it to NaN.",
+            comment="NaN where no radar echo was detected.",
             fill_value=-999.0,
         ),
         root_var(
@@ -1028,7 +1028,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="cpofp",
             long_name="Percent frozen precipitation",
             units="percent",
-            comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
+            comment="NaN where there is no precipitation.",
             fill_value=-50.0,
             hour_0=False,
         ),
@@ -1406,6 +1406,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            comment="NaN where no cloud ceiling was detected.",
         ),
         root_var(
             "geopotential_height_cloud_base",
@@ -1415,6 +1416,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            comment="NaN where no cloud was detected.",
         ),
         root_var(
             "pressure_cloud_base",
@@ -1424,6 +1426,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_base",
+            comment="NaN where no cloud was detected.",
         ),
         root_var(
             "pressure_cloud_top",
@@ -1433,6 +1436,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_top",
+            comment="NaN where no cloud was detected.",
         ),
         root_var(
             "geopotential_height_cloud_top",
@@ -1442,6 +1446,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height_at_cloud_top",
+            comment="NaN where no cloud was detected.",
         ),
         root_var(
             "upward_long_wave_radiation_flux_top_of_atmosphere",

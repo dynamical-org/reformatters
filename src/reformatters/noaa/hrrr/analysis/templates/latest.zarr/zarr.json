@@ -779,6 +779,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no cloud ceiling was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -978,7 +979,7 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "The source's -50 no/undefined marker is exposed as NaN.",
+          "comment": "NaN where there is no precipitation.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

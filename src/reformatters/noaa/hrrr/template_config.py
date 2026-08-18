@@ -374,7 +374,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Percent frozen precipitation",
                     units="percent",
                     step_type="instant",
-                    comment="The source's -50 no/undefined marker is exposed as NaN.",
+                    comment="NaN where there is no precipitation.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",
@@ -522,6 +522,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Geopotential height",
                     units="m",
                     step_type="instant",
+                    comment="NaN where no cloud ceiling was detected.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="HGT",
