@@ -37,6 +37,7 @@
     "short_name": "pres",
     "standard_name": "air_pressure_at_cloud_top",
     "units": "Pa",
+    "comment": "NaN where no cloud was detected.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

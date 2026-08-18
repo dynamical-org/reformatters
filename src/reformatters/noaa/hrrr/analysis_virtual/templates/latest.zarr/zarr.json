@@ -1586,7 +1586,7 @@
           "long_name": "Echo top",
           "short_name": "retop",
           "units": "m",
-          "comment": "-999 encodes no echo; CF-aware readers mask it to NaN.",
+          "comment": "NaN where no radar echo was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAA4j8A="
@@ -2156,6 +2156,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2208,6 +2209,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no cloud ceiling was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2260,6 +2262,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height_at_cloud_top",
           "units": "m",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -5959,7 +5962,7 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
+          "comment": "NaN where there is no precipitation.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAAScA="
@@ -6324,6 +6327,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -6376,6 +6380,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

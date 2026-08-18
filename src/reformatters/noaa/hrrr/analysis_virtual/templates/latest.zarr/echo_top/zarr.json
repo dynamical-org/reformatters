@@ -36,7 +36,7 @@
     "long_name": "Echo top",
     "short_name": "retop",
     "units": "m",
-    "comment": "-999 encodes no echo; CF-aware readers mask it to NaN.",
+    "comment": "NaN where no radar echo was detected.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAA4j8A="
