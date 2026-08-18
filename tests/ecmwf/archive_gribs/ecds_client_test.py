@@ -364,7 +364,7 @@ def test_retrieve_keeps_a_blob_it_has_already_downloaded(tmp_path: Path) -> None
     assert target.read_bytes() == message
 
 
-def test_retrieve_downloads_again_when_the_staged_blob_does_not_match(
+def test_retrieve_downloads_again_when_the_archived_blob_does_not_match(
     tmp_path: Path,
 ) -> None:
     payload = {"variable": ["total_precipitation"]}
@@ -420,7 +420,7 @@ def test_retrieve_resubmits_after_a_terminal_failure(tmp_path: Path) -> None:
 
 
 def test_constraints_retries_a_transient_server_error() -> None:
-    """ECDS intermittently 502s these endpoints; one blip must not abort a staging run."""
+    """ECDS intermittently 502s these endpoints; one blip must not abort an archiving run."""
     session = Mock()
     failure = Mock()
     failure.raise_for_status.side_effect = requests.HTTPError("502 Bad Gateway")

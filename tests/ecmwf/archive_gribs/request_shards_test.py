@@ -156,7 +156,7 @@ def test_whole_initialization_shards_are_uniquely_named_and_within_the_cost_cap(
 ):
     selections = initialization_selections(ALL_VARIABLES)
 
-    staged_variables = {
+    archived_variables = {
         (shard.forecast_type, variable)
         for shard in selections
         for variable in shard.variables
@@ -168,11 +168,11 @@ def test_whole_initialization_shards_are_uniquely_named_and_within_the_cost_cap(
         for shard in selections
         if len(shard.variables) > 1
     )
-    assert {variable for _, variable in staged_variables} == set(ALL_VARIABLES)
+    assert {variable for _, variable in archived_variables} == set(ALL_VARIABLES)
     assert (
         not {
             variable
-            for forecast_type, variable in staged_variables
+            for forecast_type, variable in archived_variables
             if forecast_type == "perturbed_forecast"
         }
         & CONTROL_ONLY_VARIABLES

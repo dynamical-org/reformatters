@@ -1,9 +1,9 @@
-"""Stage ECMWF-origin S2S GRIBs from ECDS into a dynamical-controlled bucket.
+"""Archive ECMWF-origin S2S GRIBs from ECDS into a dynamical-controlled bucket.
 
 The bucket is the authoritative source for the reformatter: reading from ECDS at
 reformat time would put its request queue back into the write path. A blob is only
 published once its full variable x level x member x lead inventory is validated, so
-the presence of a staged object means it is complete.
+the presence of an archived object means it is complete.
 """
 
 import shutil
@@ -21,22 +21,22 @@ from reformatters.common.rclone import copy_local_file, list_files
 from reformatters.common.retry import retry
 
 from .ecds_client import EcdsRequest, StateStore, constraints, costing
-from .grib_inventory import check_and_index_staged_blob
+from .grib_inventory import check_and_index_archived_blob
 from .request_shards import ECMWF_ORIGIN, EcdsSelection
 
 log = get_logger(__name__)
 
-STAGING_WORK_DIR: Final[Path] = DOWNLOAD_DIR / "ecmwf-s2s-staging"
+ARCHIVE_WORK_DIR: Final[Path] = DOWNLOAD_DIR / "ecmwf-s2s-archive"
 # ECDS serves 8 simultaneous requests without error; 4 keeps most of the queue-time
 # saving while leaving room for other users of the account.
 DEFAULT_CONCURRENT_REQUESTS: Final[int] = 4
 
 
-def stage_initialization(
+def archive_initialization(
     init_time: pd.Timestamp,
     selections: Sequence[EcdsSelection],
     dst_root_path: str,
-    work_dir: Path = STAGING_WORK_DIR,
+    work_dir: Path = ARCHIVE_WORK_DIR,
     api_url: str | None = None,
     checkers: int = 8,
     concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS,
@@ -44,16 +44,16 @@ def stage_initialization(
     maximum_polls: int = 240,
     env_vars: dict[str, Any] | None = None,
 ) -> None:
-    """Transfer the selections of `init_time` that are not already staged.
+    """Transfer the selections of `init_time` that are not already archived.
 
     An initialization ECDS has not published yet is skipped, so a caller working
     backwards through recent initializations reaches the older, published ones.
 
     Args:
-        init_time: The initialization to stage. ECMWF S2S initializes at 00 UTC only.
+        init_time: The initialization to archive. ECMWF S2S initializes at 00 UTC only.
         selections: The ECDS requests covering the initialization, from
             `request_shards.initialization_selections`.
-        dst_root_path: Staging root in the form `rclone` expects, e.g.
+        dst_root_path: Archive root in the form `rclone` expects, e.g.
             `:s3:bucket/ecmwf-s2s-grib/`.
         work_dir: Local scratch for in-flight request state and blobs.
         checkers: Passed to `rclone --checkers` when listing the destination.
@@ -66,17 +66,17 @@ def stage_initialization(
     init_time_str = format_init_time(init_time)
     dst_init_path = f"{dst_root_path.rstrip('/')}/{init_time_str}"
 
-    staged_file_names = {
+    archived_file_names = {
         path.name
         for path in list_files(dst_init_path, checkers=checkers, env_vars=env_vars)
     }
     pending = [
         selection
         for selection in selections
-        if selection.file_name not in staged_file_names
+        if selection.file_name not in archived_file_names
     ]
     log.info(
-        "%d of %d selections still to stage for %s",
+        "%d of %d selections still to archive for %s",
         len(pending),
         len(selections),
         init_time_str,
@@ -90,9 +90,9 @@ def stage_initialization(
         log.warning("ECDS has not published %s, skipping it", init_time_str)
         return
 
-    def stage_one(selection: EcdsSelection) -> None:
+    def archive_one(selection: EcdsSelection) -> None:
         retry(
-            lambda: _stage_one_selection(
+            lambda: _archive_one_selection(
                 init_time=init_time,
                 selection=selection,
                 dst_init_path=dst_init_path,
@@ -109,7 +109,7 @@ def stage_initialization(
         )
 
     with ThreadPoolExecutor(concurrent_requests) as pool:
-        list(pool.map(stage_one, pending))
+        list(pool.map(archive_one, pending))
 
 
 def check_available(
@@ -162,14 +162,14 @@ def check_available(
 
 
 def format_init_time(init_time: pd.Timestamp) -> str:
-    """The staged directory for an initialization, matching the sibling ECMWF IFS ENS archive.
+    """The archived directory for an initialization, matching the sibling ECMWF IFS ENS archive.
 
     S2S initializes at 00 UTC only, so the date alone identifies it.
     """
     return init_time.strftime("%Y-%m-%d")
 
 
-def _stage_one_selection(
+def _archive_one_selection(
     init_time: pd.Timestamp,
     selection: EcdsSelection,
     dst_init_path: str,
@@ -190,7 +190,7 @@ def _stage_one_selection(
         poll_seconds=poll_seconds,
         maximum_polls=maximum_polls,
     )
-    index_path = check_and_index_staged_blob(
+    index_path = check_and_index_archived_blob(
         target,
         variables=set(selection.variables),
         levels=set(selection.level_values),
@@ -200,7 +200,7 @@ def _stage_one_selection(
     # The index lands first so a blob is never visible without the index that reads it.
     copy_local_file(index_path, f"{dst_init_path}/{index_path.name}", env_vars=env_vars)
     copy_local_file(target, f"{dst_init_path}/{selection.file_name}", env_vars=env_vars)
-    log.info("Staged %s/%s", dst_init_path, selection.file_name)
+    log.info("Archived %s/%s", dst_init_path, selection.file_name)
     # Kept until here so a retry resumes the in-flight job and partial download.
     shutil.rmtree(selection_work_dir)
 

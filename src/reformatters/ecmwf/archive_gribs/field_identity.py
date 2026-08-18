@@ -1,4 +1,4 @@
-"""Which ECDS variable each GRIB2 message in a staged blob answers.
+"""Which ECDS variable each GRIB2 message in an archived blob answers.
 
 ECDS names a variable in a request but the returned blob names nothing: the only
 identity a message carries is its GRIB2 discipline, parameter and fixed surfaces.

@@ -210,7 +210,7 @@ def initialization_selections(
     variables: Sequence[str],
     maximum_shard_bytes: int = DEFAULT_MAXIMUM_SHARD_BYTES,
 ) -> list[EcdsSelection]:
-    """Split `variables` into the ECDS requests that stage one whole initialization."""
+    """Split `variables` into the ECDS requests that archive one whole initialization."""
     assert len(variables) > 0
     groups: dict[SelectionGroup, list[str]] = {}
     for variable in sorted(set(variables)):

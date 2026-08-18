@@ -153,7 +153,7 @@ def read_index(index_path: Path) -> list[MessageRecord]:
     ]
 
 
-def check_and_index_staged_blob(
+def check_and_index_archived_blob(
     path: Path,
     *,
     variables: AbstractSet[str],

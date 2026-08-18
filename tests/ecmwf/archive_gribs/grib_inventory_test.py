@@ -12,7 +12,7 @@ from reformatters.ecmwf.archive_gribs.field_identity import (
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     GribMetadata,
     MessageRecord,
-    check_and_index_staged_blob,
+    check_and_index_archived_blob,
     check_inventory,
     count_grib_messages,
     iter_grib_messages,
@@ -197,7 +197,7 @@ def test_rejects_an_unrequested_lead_time() -> None:
         check_complete([*records, unrequested])
 
 
-def stage_precipitation(tmp_path: Path, *lead_hours: int) -> Path:
+def archive_precipitation(tmp_path: Path, *lead_hours: int) -> Path:
     return extract_messages(
         tmp_path / CONTROL_BLOB.name,
         *(blob_record("total_precipitation", "", hours) for hours in lead_hours),
@@ -205,10 +205,10 @@ def stage_precipitation(tmp_path: Path, *lead_hours: int) -> Path:
 
 
 def test_indexes_a_complete_blob(tmp_path: Path) -> None:
-    staged = stage_precipitation(tmp_path, 0, 6, 12)
+    archived = archive_precipitation(tmp_path, 0, 6, 12)
 
-    index_path = check_and_index_staged_blob(
-        staged,
+    index_path = check_and_index_archived_blob(
+        archived,
         variables={"total_precipitation"},
         levels=set(),
         ensemble_members={0},
@@ -219,11 +219,11 @@ def test_indexes_a_complete_blob(tmp_path: Path) -> None:
 
 
 def test_rejects_a_blob_missing_one_of_its_messages(tmp_path: Path) -> None:
-    staged = stage_precipitation(tmp_path, 0, 6)
+    archived = archive_precipitation(tmp_path, 0, 6)
 
     with pytest.raises(AssertionError, match="is missing"):
-        check_and_index_staged_blob(
-            staged,
+        check_and_index_archived_blob(
+            archived,
             variables={"total_precipitation"},
             levels=set(),
             ensemble_members={0},
