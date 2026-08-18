@@ -907,3 +907,64 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
 
     with ThreadPoolExecutor() as pool:
         list(pool.map(_download_and_check, template_config.data_vars))
+
+
+def _pre_v12_step_var(
+    name: str, flag_values: tuple[int, ...] | None, flag_meanings: str | None
+) -> GEFSDataVar:
+    return GEFSDataVar(
+        name=name,
+        encoding=Encoding(dtype="float32", fill_value=np.nan, chunks=(3,), shards=(3,)),
+        attrs=DataVarAttrs(
+            long_name=name,
+            short_name=name,
+            units="1",
+            step_type="instant",
+            flag_values=flag_values,
+            flag_meanings=flag_meanings,
+        ),
+        internal_attrs=GEFSInternalAttrs(
+            grib_element="TEST",
+            grib_description="Test variable",
+            grib_index_level="surface",
+            gefs_file_type="s+a",
+            index_position=1,
+            keep_mantissa_bits="no-rounding",
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("flag_values", "flag_meanings", "expected_intermediate_value"),
+    [(None, None, 0.5), ((0, 1), "no yes", np.nan)],
+)
+def test_apply_data_transformations_leaves_flag_variable_steps_unset(
+    template_ds: xr.Dataset,
+    flag_values: tuple[int, ...] | None,
+    flag_meanings: str | None,
+    expected_intermediate_value: float,
+) -> None:
+    """Pre-v12 steps with no source file are interpolated, except for flag variables."""
+    data_var = _pre_v12_step_var("test_var", flag_values, flag_meanings)
+    # 03:00 has no pre-v12 source file; 00:00 and 06:00 do.
+    time_coords = pd.date_range("2020-06-01T00:00", freq="3h", periods=3)
+    data_array = xr.DataArray(
+        np.array([0.0, np.nan, 1.0], dtype=np.float32).reshape(3, 1, 1),
+        dims=["time", "latitude", "longitude"],
+        coords={"time": time_coords, "latitude": [0.0], "longitude": [0.0]},
+    )
+
+    job = GefsAnalysisRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
+        data_vars=[data_var],
+        append_dim="time",
+        region=slice(0, 3),
+        reformat_job_name="test-job",
+    )
+    job.apply_data_transformations(data_array, data_var)
+
+    np.testing.assert_array_equal(
+        data_array.values.ravel(),
+        np.array([0.0, expected_intermediate_value, 1.0], dtype=np.float32),
+    )
