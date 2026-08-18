@@ -69,14 +69,14 @@ def _metadata_table(stats: VariableStats) -> list[str]:
         f"| standard_name | {stats.standard_name or 'n/a'} |",
         f"| step_type | {stats.step_type or 'n/a'} |",
     ]
-    if stats.comment is not None:
-        rows.append(f"| comment | {stats.comment} |")
     if stats.flag_values is not None:
         rows.append(f"| flag_values | `{stats.flag_values}` |")
     if stats.flag_meanings is not None:
         rows.append(f"| flag_meanings | {stats.flag_meanings} |")
     if stats.level_dim is not None:
         rows.append(f"| sampled level | {stats.level_dim}={stats.level_value:g} |")
+    if stats.comment is not None:
+        rows.append(f"| comment | {stats.comment} |")
     rows.append("")
     return rows
 

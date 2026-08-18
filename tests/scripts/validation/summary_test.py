@@ -77,8 +77,13 @@ def test_metadata_table_omits_comment_when_unset() -> None:
     assert not any("| comment |" in line for line in table)
 
 
-def test_metadata_table_includes_comment_when_set() -> None:
+def test_metadata_table_puts_comment_last() -> None:
     table = _metadata_table(
-        VariableStats(name="temperature", comment="Mask values < -0.1.")
+        VariableStats(
+            name="precipitation_type",
+            comment="Mask values < -0.1.",
+            flag_values="0, 1",
+            flag_meanings="no yes",
+        )
     )
-    assert "| comment | Mask values < -0.1. |" in table
+    assert [line for line in table if line][-1] == "| comment | Mask values < -0.1. |"
