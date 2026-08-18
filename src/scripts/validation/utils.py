@@ -137,6 +137,7 @@ class VariableStats:
     short_name: str | None = None
     standard_name: str | None = None
     step_type: str | None = None
+    comment: str | None = None
     # Categorical / flag variables (CF flag_values + flag_meanings), formatted for display.
     flag_values: str | None = None
     flag_meanings: str | None = None
@@ -573,6 +574,7 @@ def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:
         "short_name": attrs.get("short_name"),
         "standard_name": attrs.get("standard_name"),
         "step_type": attrs.get("step_type"),
+        "comment": attrs.get("comment"),
         "flag_values": flag_values,
         "flag_meanings": attrs.get("flag_meanings"),
     }

@@ -112,7 +112,7 @@ The entry point for every run. It contains, in order:
 - Validation and reference dataset identity (name, id, version, URL), time ranges, and scope.
 - Run parameters: spatial points used by the value scans (all ensemble members), and for each of the spatial and time series sections the picked ensemble member plus the chosen init/lead/time (spatial) or timeseries period.
 - Availability section: how availability was measured, the heatmap, a table of incomplete variables (complete/total positions, first/last incomplete), and a link to the unavailable-timestamps file (`unavailable_timestamps.txt`).
-- Per-variable details: metadata (units, long/short/standard name, step type), full-period value min/mean/std/max at each point, spatial + temporal min/max/mean for both validation and reference, and an availability line (positions complete, plus null counts at the two points on materialized stores).
+- Per-variable details: metadata (units, long/short/standard name, step type, and the variable's `comment` attr when it has one), full-period value min/mean/std/max at each point, spatial + temporal min/max/mean for both validation and reference, and an availability line (positions complete, plus null counts at the two points on materialized stores).
 
 ## 3. Step-by-step inspection
 

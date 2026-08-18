@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from scripts.validation.summary import _availability_line, _run_parameters_table
+from scripts.validation.summary import (
+    _availability_line,
+    _metadata_table,
+    _run_parameters_table,
+)
 from scripts.validation.utils import RunContext, VariableStats
 
 
@@ -66,3 +70,15 @@ def test_availability_line_complete_and_unmeasured() -> None:
     )
 
     assert _availability_line(VariableStats(name="v")) == "**Availability** — n/a"
+
+
+def test_metadata_table_omits_comment_when_unset() -> None:
+    table = _metadata_table(VariableStats(name="temperature"))
+    assert not any("| comment |" in line for line in table)
+
+
+def test_metadata_table_includes_comment_when_set() -> None:
+    table = _metadata_table(
+        VariableStats(name="temperature", comment="Mask values < -0.1.")
+    )
+    assert "| comment | Mask values < -0.1. |" in table

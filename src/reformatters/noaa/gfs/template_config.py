@@ -350,7 +350,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     long_name="Percent frozen precipitation",
                     units="percent",
                     step_type="instant",
-                    comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN; mask values < -0.1.",
+                    comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="CPOFP",
@@ -512,7 +512,7 @@ class NoaaGfsCommonTemplateConfig(TemplateConfig[NoaaDataVar]):
                     units="m",
                     step_type="instant",
                     standard_name="geopotential_height",
-                    comment="Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN; mask values above 19,000m.",
+                    comment="Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
                 ),
                 internal_attrs=NoaaInternalAttrs(
                     grib_element="HGT",
