@@ -6,7 +6,6 @@ directory straight across, preserving the source's own structure, and rely on
 `--ignore-existing` for idempotency (Datamart files are immutable once published).
 """
 
-import os
 from collections.abc import Sequence
 from typing import Any, Final
 
@@ -42,14 +41,10 @@ def copy_files_from_eccc_https(
         transfer_parallelism: Passed to `rclone --transfers`.
         checkers: Passed to `rclone --checkers`.
         stats_logging_freq: The period between each stats log, e.g. "1m".
-        env_vars: Additional environment variables to give to `rclone`.
+        env_vars: Environment variables to add to this process's environment for `rclone`.
     """
     if not dst_root_path.endswith("/"):
         dst_root_path += "/"
-
-    full_env = os.environ.copy()
-    if env_vars:
-        full_env.update(env_vars)
 
     now = pd.Timestamp.now("UTC")
     for day_offset in range(days_back + 1):
@@ -66,7 +61,7 @@ def copy_files_from_eccc_https(
                     transfer_parallelism=transfer_parallelism,
                     checkers=checkers,
                     stats_logging_freq=stats_logging_freq,
-                    env_vars=full_env,
+                    env_vars=env_vars,
                 ),
                 max_attempts=2,
             )
@@ -78,7 +73,7 @@ def _copy_one_init_hour(
     transfer_parallelism: int,
     checkers: int,
     stats_logging_freq: str,
-    env_vars: dict[str, Any],
+    env_vars: dict[str, Any] | None,
 ) -> None:
     cmd = (
         "/usr/bin/rclone",
