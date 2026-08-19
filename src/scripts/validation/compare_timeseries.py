@@ -30,6 +30,7 @@ from scripts.validation.utils import (
     select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    time_option,
     var_slug,
     variables_option,
 )
@@ -38,12 +39,15 @@ log = get_logger(__name__)
 
 
 def select_time_period_for_comparison(
-    validation_ds: xr.Dataset, reference_ds: xr.Dataset, init_time: str | None = None
+    validation_ds: xr.Dataset,
+    reference_ds: xr.Dataset,
+    init_time: str | None = None,
+    time: str | None = None,
 ) -> tuple[xr.Dataset, xr.Dataset, str, str, str]:
     """Select appropriate time periods for validation and reference datasets.
 
-    On a forecast dataset `init_time` pins the forecast to plot, rather than drawing
-    one at random.
+    `init_time` (forecast) or `time` (analysis) pins the period instead of drawing one
+    at random; on an analysis dataset the pinned time starts the window.
     """
     rng = np.random.default_rng()
     # A period the reference doesn't cover plots the validation series alone, losing every
@@ -82,9 +86,12 @@ def select_time_period_for_comparison(
         selected_end = time_end
     else:
         latest_start = time_end - ten_days
-        time_range_seconds = (latest_start - time_start).total_seconds()
-        random_offset = rng.integers(0, int(time_range_seconds) + 1)
-        selected_start = time_start + pd.Timedelta(seconds=random_offset)
+        if time is not None:
+            selected_start = min(max(pd.Timestamp(time), time_start), latest_start)
+        else:
+            time_range_seconds = (latest_start - time_start).total_seconds()
+            random_offset = rng.integers(0, int(time_range_seconds) + 1)
+            selected_start = time_start + pd.Timedelta(seconds=random_offset)
         selected_end = selected_start + ten_days
 
     validation_subset = validation_ds.sel(time=slice(selected_start, selected_end))
@@ -216,7 +223,7 @@ def _fmt(v: float | None) -> str:
     return f"{v:.3g}" if v is not None else "n/a"
 
 
-def run_compare_timeseries(ctx: RunContext, init_time: str | None = None) -> None:
+def run_compare_timeseries(ctx: RunContext) -> None:
     """Produce per-variable timeseries comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, (
         "compare-timeseries requires a reference dataset"
@@ -240,7 +247,9 @@ def run_compare_timeseries(ctx: RunContext, init_time: str | None = None) -> Non
         title_suffix,
         time_coord,
         ref_time_coord,
-    ) = select_time_period_for_comparison(validation_ds, ctx.reference_ds, init_time)
+    ) = select_time_period_for_comparison(
+        validation_ds, ctx.reference_ds, ctx.init_time, ctx.time
+    )
 
     val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
@@ -310,6 +319,7 @@ def compare_timeseries(
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
     init_time: str | None = init_time_option,
+    time: str | None = time_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
@@ -348,8 +358,10 @@ def compare_timeseries(
         variables=selected_vars,
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
+        init_time=init_time,
+        time=time,
     )
-    run_compare_timeseries(ctx, init_time)
+    run_compare_timeseries(ctx)
 
     if show_plot:
         plt.show()

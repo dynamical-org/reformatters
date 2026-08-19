@@ -72,6 +72,18 @@ init_time_option = typer.Option(
     help="Forecast init_time to plot (default: random)",
 )
 
+lead_time_option = typer.Option(
+    None,
+    "--lead-time",
+    help="Forecast lead_time in hours for the spatial snapshot (default: random)",
+)
+
+time_option = typer.Option(
+    None,
+    "--time",
+    help="Analysis time to plot (default: random)",
+)
+
 start_date_option = typer.Option(
     None,
     "--start-date",
@@ -232,6 +244,12 @@ class RunContext:
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
     level_override: float | None = None
+    # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
+    # the spatial snapshot), an analysis run uses time; each anchors both the spatial
+    # snapshot and the temporal comparison so one flag places the whole report.
+    init_time: str | None = None
+    lead_time: str | None = None
+    time: str | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
