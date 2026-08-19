@@ -62,7 +62,7 @@ def test_region_job_generate_source_file_coords_open_data() -> None:
     groups = EcmwfIfsEnsForecast15Day025DegreeRegionJob.source_file_var_groups(
         template_config.data_vars
     )
-    # We are grouping by date_available and has_hour_0_values, so we should get 4 groups
+    # We are grouping by date_available and has_hour_0_source_message, so we should get 4 groups
     group_0_source_file_coords = region_job.generate_source_file_coords(
         processing_region_ds, groups[0]
     )

@@ -100,7 +100,7 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
                     var
                     for var in available_vars
                     if (
-                        var.has_hour_0_values()
+                        var.has_hour_0_source_message()
                         if lead_time == pd.Timedelta(0)
                         else not var.internal_attrs.lead_0_only
                     )

@@ -83,16 +83,14 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
-    def has_hour_0_values(self) -> bool:
-        """Returns True if this variable has a value at lead_time=0h.
+    def has_hour_0_source_message(self) -> bool:
+        """Returns True if the source file at lead_time=0h contains this variable.
 
         ECMWF avg/accum variables (e.g. total precipitation, radiation) include a 0h
-        accumulation of 0 in the GRIB, so they do have hour 0 values. Only "max" and "min"
-        step_type variables are absent at lead_time=0h since they represent the extremum
-        since the previous post-processing step, which doesn't exist at initialization time.
+        accumulation of 0 in the GRIB. Only "max" and "min" step_type variables are absent
+        at lead_time=0h since they represent the extremum since the previous
+        post-processing step, which doesn't exist at initialization time.
         """
-        if self.internal_attrs.hour_0_values_override is not None:
-            return self.internal_attrs.hour_0_values_override
         match self.attrs.step_type:
             case "instant" | "accum" | "avg":
                 return True
@@ -100,6 +98,18 @@ class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
                 return False
             case _ as unreachable:
                 assert_never(unreachable)
+
+    def has_hour_0_values(self) -> bool:
+        """Returns True if this variable has a value at lead_time=0h.
+
+        Deaccumulating to a rate consumes the 0h accumulation as the first step's
+        baseline, leaving no rate to write at lead_time=0h.
+        """
+        if self.internal_attrs.hour_0_values_override is not None:
+            return self.internal_attrs.hour_0_values_override
+        if self.internal_attrs.deaccumulate_to_rate:
+            return False
+        return self.has_hour_0_source_message()
 
 
 def vars_available(

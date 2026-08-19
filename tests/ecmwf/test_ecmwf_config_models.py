@@ -19,6 +19,7 @@ def _make_data_var(
     step_type: StepType = "instant",
     hour_0_values_override: bool | None = None,
     date_available: pd.Timestamp | None = None,
+    deaccumulate_to_rate: bool = False,
 ) -> EcmwfDataVar:
     return EcmwfDataVar(
         name="test_var",
@@ -43,6 +44,7 @@ def _make_data_var(
             keep_mantissa_bits=7,
             hour_0_values_override=hour_0_values_override,
             date_available=date_available,
+            deaccumulate_to_rate=deaccumulate_to_rate,
         ),
     )
 
@@ -93,6 +95,22 @@ def test_has_hour_0_values_true_for_non_extremum_step_types(
 @pytest.mark.parametrize("step_type", ["max", "min"])
 def test_has_hour_0_values_false_for_extremum_step_types(step_type: StepType) -> None:
     assert _make_data_var(step_type).has_hour_0_values() is False
+
+
+@pytest.mark.parametrize("step_type", ["avg", "accum"])
+def test_deaccumulated_var_has_a_source_message_but_no_stored_hour_0_value(
+    step_type: StepType,
+) -> None:
+    data_var = _make_data_var(step_type, deaccumulate_to_rate=True)
+    assert data_var.has_hour_0_source_message() is True
+    assert data_var.has_hour_0_values() is False
+
+
+def test_has_hour_0_values_override_wins_over_deaccumulation() -> None:
+    data_var = _make_data_var(
+        "avg", hour_0_values_override=True, deaccumulate_to_rate=True
+    )
+    assert data_var.has_hour_0_values() is True
 
 
 def test_has_hour_0_values_override_true_overrides_step_type() -> None:
