@@ -1052,11 +1052,11 @@ class TestReplicaOrdering:
     commit_if_icechunk. commit_if_icechunk is separately verified to commit
     replicas first in tests/common/test_storage.py.
 
-    Finalize ordering: _finalize iterates icechunk_repos(sort="primary-last")
-    and does the per-repo commit + reset in that order. The test below
-    observes the reset_branch calls end-to-end. Ordering under a partial
-    failure between replica and primary resets is additionally verified by
-    TestLastWorkerRetryAfterPartialFinalize."""
+    Finalize ordering: _finalize publishes zarr v3 stores (only ever replicas)
+    before icechunk ones, and iterates icechunk_repos(sort="primary-last") for
+    the per-repo commit + reset. The tests below observe both end-to-end.
+    Ordering under a partial failure between replica and primary resets is
+    additionally verified by TestLastWorkerRetryAfterPartialFinalize."""
 
     def test_icechunk_repos_sort_order(self, tmp_path: Path) -> None:
         """icechunk_repos returns the primary first or last per the sort kwarg."""
@@ -1146,6 +1146,70 @@ class TestReplicaOrdering:
         _run_workers(dataset, all_jobs, template_ds, workers_total=2)
 
         assert reset_order == ["replica-0", "replica-1", "primary"]
+
+    def test_finalize_publishes_zarr3_replica_before_icechunk_primary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Zarr v3 stores are published in a separate pass from icechunk stores,
+        and that pass runs first: a zarr v3 replica of an icechunk primary is
+        published before the primary's main branch advances."""
+        monkeypatch.setattr(
+            storage_module,
+            "_get_store_path",
+            lambda dataset_id, version, config: (
+                f"{config.base_path}/{dataset_id}/v{version}"
+                f".{'icechunk' if config.format == DatasetFormat.ICECHUNK else 'zarr'}"
+            ),
+        )
+        dataset = ParallelDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path / "primary"), format=DatasetFormat.ICECHUNK
+            ),
+            replica_storage_configs=[
+                StorageConfig(
+                    base_path=str(tmp_path / "replica"), format=DatasetFormat.ZARR3
+                ),
+            ],
+        )
+        template_ds = _create_template_ds(num_time=2)
+        template_utils.write_metadata(template_ds, dataset.store_factory)
+
+        publish_order: list[str] = []
+        original_reset = icechunk.Repository.reset_branch
+
+        def recording_reset(
+            self: icechunk.Repository, *args: object, **kwargs: object
+        ) -> object:
+            publish_order.append("icechunk-primary")
+            return original_reset(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+        monkeypatch.setattr(icechunk.Repository, "reset_branch", recording_reset)
+
+        original_copy = pc_module.copy_zarr_metadata
+
+        def recording_copy(*args: object, **kwargs: object) -> None:
+            if kwargs.get("zarr3_only"):
+                publish_order.append("zarr3-replica")
+            return original_copy(*args, **kwargs)  # ty: ignore[invalid-argument-type]
+
+        monkeypatch.setattr(pc_module, "copy_zarr_metadata", recording_copy)
+
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+        _run_workers(
+            dataset,
+            all_jobs,
+            template_ds,
+            workers_total=1,
+            update_template_with_results=True,
+        )
+
+        assert publish_order == ["zarr3-replica", "icechunk-primary"]
 
 
 class TestConcurrentJobs:

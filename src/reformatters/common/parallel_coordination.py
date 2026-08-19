@@ -190,6 +190,25 @@ def finalize(
     now = pd.Timestamp.now(tz="UTC")
     commit_message = f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}"
 
+    # Zarr v3: copy metadata now (makes data visible to readers). Updates defer the
+    # metadata write to here; overwrite backfills publish here so a metadata change
+    # (new variable, extension) appears only after all chunk data is written. Fresh-store
+    # backfills wrote metadata before workers started and skip this.
+    # A zarr v3 store is only ever a replica, so publishing this format before the
+    # icechunk stores below keeps the primary the last store to advance.
+    if publish_zarr3_metadata:
+        primary_store = store_factory.primary_store(writable=True)
+        replica_stores = store_factory.replica_stores(writable=True)
+        copy_zarr_metadata(
+            updated_template,
+            tmp_store,
+            primary_store,
+            replica_stores=replica_stores,
+            zarr3_only=True,
+            skip_unchanged=not update_template_with_results,
+            exclude_coord_value_chunks=exclude_coord_value_chunks,
+        )
+
     # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
     # on the temp branch from parallel_setup — we only need to update the metadata files.
@@ -241,23 +260,6 @@ def finalize(
         for _role, repo in replicas_first:
             if branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
-
-    # Zarr v3: copy metadata now (makes data visible to readers). Updates defer the
-    # metadata write to here; overwrite backfills publish here so a metadata change
-    # (new variable, extension) appears only after all chunk data is written. Fresh-store
-    # backfills wrote metadata before workers started and skip this.
-    if publish_zarr3_metadata:
-        zarr3_primary = store_factory.primary_store(writable=True)
-        zarr3_replicas = store_factory.replica_stores(writable=True)
-        copy_zarr_metadata(
-            updated_template,
-            tmp_store,
-            zarr3_primary,
-            replica_stores=zarr3_replicas,
-            zarr3_only=True,
-            skip_unchanged=not update_template_with_results,
-            exclude_coord_value_chunks=exclude_coord_value_chunks,
-        )
 
     if workers_total > 1:
         store_factory.clear_coordination_files(reformat_job_name)
