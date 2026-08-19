@@ -72,7 +72,7 @@
     "short_name": "aswdir_s",
     "standard_name": "surface_direct_downwelling_shortwave_flux_in_air",
     "units": "W m-2",
-    "comment": "Average value since the previous forecast step.",
+    "comment": "Average flux since the previous forecast step.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

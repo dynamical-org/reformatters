@@ -353,6 +353,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     units="W m-2",
                     step_type="avg",
                     standard_name="surface_diffuse_downwelling_shortwave_flux_in_air",
+                    comment="Average flux since the previous forecast step.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdifd_s",
@@ -375,7 +376,7 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     long_name="Surface direct short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
-                    comment="Average value since the previous forecast step.",
+                    comment="Average flux since the previous forecast step.",
                 ),
                 internal_attrs=DwdIconEuInternalAttrs(
                     variable_name_in_filename="aswdir_s",
