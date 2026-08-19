@@ -290,19 +290,105 @@ or step change is detectable anywhere in this archive.
 
 ---
 
+## How BOM distributes ACCESS-G, and whether a rolling window exists
+
+There are four distinct routes. Only one is openly licensed, and it is the closed archive above.
+
+| Route | Live? | Gridded ACCESS-G? | Licence | Rolling window |
+|---|---|---|---|---|
+| NCI THREDDS `wr45/ops_aps3` | **No** — ended 2025-06-26 | Yes, full global | CC-BY 4.0 | None; full 6-year archive retained |
+| BOM anonymous FTP `ftp.bom.gov.au/anon/gen/` | Yes | **No** | Personal/internal use only, no redistribution | Yes, hours |
+| BOM Registered User cloud (S)FTP | Yes | Yes, full global | Paid subscription, real-time only | Not documented |
+| Third-party derived (e.g. Open-Meteo) | No — also stopped 2025-06-27 | Derived, not source | Non-commercial | n/a |
+
+**The public anonymous FTP does have a genuine short rolling window, but carries no gridded NWP.**
+Its catalogue (`https://www.bom.gov.au/catalogue/data/SMSRPR09.json`, 2865 products) defines
+"Delete time ... the time (in hours) an instance of any product will remain on the FTP", with most
+operational products at 2–24 h. Every ACCESS-related entry on it is a **chart image** (`IDX0007`
+"M.S.L. ANAL (ACCESS-G)", 36 h; `IDX0002` "M.S.L. PROG (ACCESS-G+36)", 120 h) or a text/marine wind
+product — none of the `IDY25xxx` grid files. Its terms also forbid redistribution: "you may
+download, use and copy that material for personal use, or use within your organisation but you may
+not supply that material to any other person or use it for any commercial purpose."
+
+**The Registered User service is the only live route to the grids.** Per the official
+[ACCESS-G NWP Data User Guide v2.1, 1 July 2025](https://www.bom.gov.au/catalogue/Bureau_of_Meteorology_ACCESS-G_user_guide.pdf):
+
+- Delivery is **cloud FTP `ftp-reg.cloud.bom.gov.au` and SFTP `sftp-reg.cloud.bom.gov.au`** — the
+  guide states products are "only available via cloud FTP ... and SFTP ... and not via
+  ftp.bom.gov.au". Files land in a per-subscriber directory, `/access_g3_nwp4` (NetCDF4) and
+  `/access_g3_grib2` (GRIB2).
+- **File layout differs fundamentally from NCI's.** Names are
+  `IDY25NNN.version.fields.levels.base-time.forecast-hour.grid-coords.ext` (ext `grb2` or `nc4`),
+  i.e. one file **per forecast hour** carrying many fields — the inverse of NCI's one file per
+  variable carrying all forecast hours. Code written against one layout does not read the other.
+- Products: `IDY25000` global all-levels, `IDY25020` global surface-only, `IDY25001`/`IDY25021`
+  Australian sub-domain, `IDY25006`/`IDY25026` regional sub-domain.
+- **No retention period is stated** for this service in the guide. The product catalogue only says
+  "these services are **real-time data only**. For historical data, please see the Bureau's Climate
+  and Ocean Data Services", which implies a short window but does not quantify it. **Unverified** —
+  FTP egress is blocked from this environment, so neither the live directories nor the public sample
+  directories under `ftp://ftp.bom.gov.au/register/sample/access/` could be listed. If this route
+  matters, the retention window is a question for webreg@bom.gov.au.
+- **Cost** (2026/27 financial year, GST inclusive, payment in advance): `IDBY0001` ACCESS-G full
+  global bundle **$16,047/yr**; `IDBY0021` global **surface-only $6,019/yr**; Australian sub-domain
+  the same two prices. Plus a one-time $1,335 service establishment fee and $1,282/yr Registered
+  User FTP registration. Being a cost-recovery subscription, redistribution rights are not implied —
+  they would need to be agreed explicitly, unlike the CC-BY 4.0 covering `wr45`.
+
+**Publication latency on the live feed** (guide Table 7, APS4): the `+000` analysis is available ~6 h
+after base time and the complete run ~8 h (00Z run: analysis 0600Z, complete 0800Z). This matches the
+~7–8.6 h measured from NCI `Last-Modified` timestamps, so NCI was mirroring with little added delay.
+
+**A third party stopping at the same moment corroborates the cutoff.** Open-Meteo's AWS open-data
+bucket carries `data/bom_access_global/`, whose newest object is dated **2025-06-27** — one day after
+the last NCI init time. Their data is derived and non-commercially licensed, so it is not a usable
+source for us, but it is independent evidence that the open feed, not just NCI's copy of it, ended.
+
+**No other open route exists.** All 64 NCI THREDDS collections were listed; the only operational NWP
+one is `wr45` (APS3), and there is no APS4 collection (`ops_aps4` and `ops_aps5` are 404). The
+ACCESS-adjacent NCI collections are different products: `bs94` ACCESS Regional, `ia89` 400 m
+limited-area, `cj37`/`ob53` BARRA/BARRA2 regional **reanalysis** for Australia, `ux62` ACCESS-S2
+seasonal. If open Australian coverage is the actual goal rather than ACCESS-G specifically, BARRA2
+(`ob53`) is the collection worth exploring next — it is a reanalysis, still maintained, and openly
+licensed.
+
+### The live model is APS4/ACCESS-G4, and it is not the model in the archive
+
+The archive is APS3 throughout (`source = "APS3"` in every file). The guide describes the current
+operational model as **APS4 / ACCESS-G4**. Two documented differences would matter if the live feed
+were ever integrated alongside the archive:
+
+- **Upper-level time steps**: APS4 hybrid and pressure level fields are "3 hours to 72 hours, 6 hours
+  thereafter", whereas the APS3 archive has pressure levels **only at analysis time** and `fc/ml` on
+  4 levels with a mixed 1/2/3 h step pattern.
+- **Low-level winds**: APS4 publishes "Zonal/Meridional wind at the **50 m rho level**", a single
+  level, replacing APS3's four rho levels (10, 36.664, 76.664, 130 m).
+
+The run-length asymmetry is unchanged and confirmed independently by the guide: "00 and 12Z Runs
+Up to +240 hours; 06 and 18Z Runs Up to +84 hours".
+
+---
+
 ## Open questions for scoping
 
 1. **Is a source that cannot receive operational updates in scope at all?** The archive is closed and
    complete; nothing here can keep a store current. A materialized historical dataset with its update
    cronjob permanently suspended is coherent but unlike our other datasets.
-2. **Forecast, analysis, or both?** Analysis is ~2 TiB for every surface variable; the forecast is
+2. **If a live dataset is wanted, is a paid subscription on the table?** The Registered User feed is
+   $6,019–$16,047/yr plus fees, carries no stated redistribution right, uses a different file layout
+   requiring a second reader, and serves APS4 rather than the archive's APS3 — so it would be a
+   separate dataset, not a continuation of this one.
+3. **Forecast, analysis, or both?** Analysis is ~2 TiB for every surface variable; the forecast is
    ~74 TiB for 15 variables. The analysis is also the only place `lnd_mask` and `topog` live.
-3. **How should the 00/12Z-vs-06/18Z asymmetry be represented?** A `lead_time` axis of 1–240 h leaves
+4. **How should the 00/12Z-vs-06/18Z asymmetry be represented?** A `lead_time` axis of 1–240 h leaves
    85–240 h empty for half the inits. Restricting to 00Z/12Z gives a 12-hourly, fully dense cube.
-4. **What to do about 100 m wind?** There is no 100 m wind level: `theta_lvl` has 100 m but carries
+5. **What to do about 100 m wind?** There is no 100 m wind level: `theta_lvl` has 100 m but carries
    only temperature and humidity, while the winds sit on `rho_lvl` at 76.664 m and 130 m, are
    published for only 136 of 240 lead times, and `wnd_vcmp` is on the staggered `lat=1537` grid with
    no destaggered counterpart.
-5. **Pressure levels are analysis-only** (`an/pl`, 27 levels, no `fc/pl`), so a `pressure_level` group
+6. **Pressure levels are analysis-only** (`an/pl`, 27 levels, no `fc/pl`), so a `pressure_level` group
    is possible for an analysis dataset but not for a forecast one.
-6. Should `fcmm` (regional, 10-minute, 72 h) be a separate dataset, or left out entirely?
+7. Should `fcmm` (regional, 10-minute, 72 h) be a separate dataset, or left out entirely?
+8. **Is BARRA2 (`ob53`) a better fit for the underlying goal?** It is an openly licensed, still
+   maintained high-resolution regional reanalysis for Australia — worth exploring if the aim is open
+   Australian coverage rather than ACCESS-G specifically.
