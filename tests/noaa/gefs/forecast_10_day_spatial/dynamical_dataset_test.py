@@ -14,10 +14,10 @@ from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
     GefsForecast10DaySpatialDataset,
 )
 from reformatters.noaa.gefs.forecast_10_day_spatial.region_job import (
-    _S3_LOCATION_PREFIX,
     GefsForecast10DaySpatialRegionJob,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.utils import GEFS_S3_LOCATION_PREFIX
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
 
@@ -140,7 +140,7 @@ def test_virtual_container_matches_ref_locations(
     dataset: GefsForecast10DaySpatialDataset,
 ) -> None:
     (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == _S3_LOCATION_PREFIX
+    assert container.url_prefix == GEFS_S3_LOCATION_PREFIX
 
 
 def test_operational_kubernetes_resources(

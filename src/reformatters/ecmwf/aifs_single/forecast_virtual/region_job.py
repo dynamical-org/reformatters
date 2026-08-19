@@ -9,12 +9,12 @@ from reformatters.common.config_models import ROOT
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, SourceFileCoord
+from reformatters.common.source_listing import (
+    discover_available_by_obstore_listing,
+)
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from reformatters.common.virtual_source_listing import (
-    discover_available_by_obstore_listing,
-)
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )

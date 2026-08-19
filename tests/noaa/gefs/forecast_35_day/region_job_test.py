@@ -18,6 +18,7 @@ from reformatters.common.storage import (
     StoreFactory,
     get_local_tmp_store,
 )
+from reformatters.noaa.gefs import utils as gefs_utils
 from reformatters.noaa.gefs.forecast_35_day.region_job import (
     GefsForecast35DayRegionJob,
     GefsForecast35DaySourceFileCoord,
@@ -208,6 +209,43 @@ def test_generate_source_file_coords_ensemble(
 
     # All should be ensemble source file coords
     assert all(isinstance(c, GefsEnsembleSourceFileCoord) for c in coords)
+
+
+def test_generate_source_file_coords_skips_unpublished_lead_times(
+    template_ds: xr.Dataset,
+    example_data_vars: list[GEFSDataVar],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cycle still in production yields only the lead times the source has reached."""
+    recent_ds = template_ds.assign_coords(
+        init_time=[pd.Timestamp.now().floor("D")] * template_ds.sizes["init_time"]
+    ).isel(init_time=slice(0, 1))
+
+    def listed_through_6h(store: object, prefixes: list[str]) -> dict[str, int]:
+        published = GefsForecast35DaySourceFileCoord(
+            init_time=pd.Timestamp(recent_ds["init_time"].values[0]),
+            lead_time=pd.Timedelta("6h"),
+            data_vars=example_data_vars[:1],
+            ensemble_member=0,
+        )
+        return {urlparse(published.get_url()).path.removeprefix("/"): 9000}
+
+    monkeypatch.setattr(gefs_utils, "listed_keys_by_prefix", listed_through_6h)
+
+    job = GefsForecast35DayRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=xr.DataTree.from_dict({"/": recent_ds}),
+        data_vars=example_data_vars[:1],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+    coords = list(job.generate_source_file_coords(recent_ds, example_data_vars[:1]))
+
+    # 3 lead times (0h, 3h, 6h) * 4 ensemble members, not all 8 lead times.
+    assert len(coords) == 12
+    assert max(c.lead_time for c in coords) == pd.Timedelta("6h")
 
 
 def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:

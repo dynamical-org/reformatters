@@ -3,12 +3,12 @@ from collections.abc import Mapping
 import obstore
 import pytest
 
-from reformatters.common import virtual_source_listing
+from reformatters.common import source_listing
 from reformatters.common.region_job import CoordinateValue, SourceFileCoord
-from reformatters.common.types import Dim
-from reformatters.common.virtual_source_listing import (
+from reformatters.common.source_listing import (
     discover_available_by_obstore_listing,
 )
+from reformatters.common.types import Dim
 
 _PREFIX = "s3://bucket/"
 
@@ -33,7 +33,7 @@ def _fake_listing(monkeypatch: pytest.MonkeyPatch, listed: dict[str, int]) -> li
         seen_prefixes.extend(prefixes)
         return listed
 
-    monkeypatch.setattr(virtual_source_listing, "_list_objects", fake)
+    monkeypatch.setattr(source_listing, "listed_keys_by_prefix", fake)
     return seen_prefixes
 
 
@@ -156,7 +156,7 @@ def test_discovery_against_real_memory_store() -> None:
     obstore.put(store, "dir/data_only.grib2", b"y" * 50)
     obstore.put(store, "other/extra.grib2", b"z" * 7)
 
-    assert virtual_source_listing._list_objects(store, ["dir/", "other/"]) == {
+    assert source_listing.listed_keys_by_prefix(store, ["dir/", "other/"]) == {
         "dir/both.grib2": 9000,
         "dir/both.index": 200,
         "dir/data_only.grib2": 50,

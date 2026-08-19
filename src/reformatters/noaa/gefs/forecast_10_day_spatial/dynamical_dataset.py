@@ -13,10 +13,12 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.utils import (
+    GEFS_S3_BUCKET_REGION,
+    GEFS_S3_LOCATION_PREFIX,
+)
 
 from .region_job import (
-    _S3_BUCKET_REGION,
-    _S3_LOCATION_PREFIX,
     GefsForecast10DaySpatialRegionJob,
     GefsForecast10DaySpatialSourceFileCoord,
 )
@@ -40,7 +42,8 @@ class GefsForecast10DaySpatialDataset(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=(
                 icechunk.VirtualChunkContainer(
-                    _S3_LOCATION_PREFIX, icechunk.s3_store(region=_S3_BUCKET_REGION)
+                    GEFS_S3_LOCATION_PREFIX,
+                    icechunk.s3_store(region=GEFS_S3_BUCKET_REGION),
                 ),
             ),
             # One week of inits per manifest split: every commit rewrites each

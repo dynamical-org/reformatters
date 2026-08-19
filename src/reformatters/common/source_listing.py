@@ -1,9 +1,11 @@
-"""Object-store-listing source-file discovery for virtual datasets that opt into it.
+"""Object-store listing of the source files a job could fetch.
 
-A `VirtualRegionJob.discover_available` implementation for sources listable with
-obstore (S3, GCS, Azure, local filesystem, ...), generic over the backend — the
-caller passes the built store. Sources obstore can't list (an HTML directory index,
-a frontier to probe) implement `discover_available` another way and never import this.
+`discover_available_by_obstore_listing` is a `VirtualRegionJob.discover_available`
+implementation for sources listable with obstore (S3, GCS, Azure, local filesystem,
+...), generic over the backend — the caller passes the built store. Sources obstore
+can't list (an HTML directory index, a frontier to probe) implement
+`discover_available` another way and never import it. `listed_keys_by_prefix` is the
+underlying listing, for callers that ask a different question of the same keys.
 """
 
 import obstore
@@ -28,7 +30,7 @@ def discover_available_by_obstore_listing(
     """
     by_key = {coord.get_url().removeprefix(location_prefix): coord for coord in pending}
     prefixes = sorted({key.rsplit("/", 1)[0] + "/" for key in by_key})
-    listed = _list_objects(store, prefixes)
+    listed = listed_keys_by_prefix(store, prefixes)
     return [
         (coord, listed[key])
         for key, coord in by_key.items()
@@ -40,7 +42,7 @@ def discover_available_by_obstore_listing(
     ]
 
 
-def _list_objects(
+def listed_keys_by_prefix(
     store: obstore.store.ObjectStore, prefixes: list[str]
 ) -> dict[str, int]:
     """All object keys under each prefix in `store`, mapped to size in bytes."""

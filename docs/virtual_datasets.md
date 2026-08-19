@@ -54,7 +54,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 **Optional overrides (working defaults):** `filter_already_present` (manifest probe), `representative_var` (first instant var among the coord's own `data_vars` — only override for a packing that rule misses), the `tick_interval` (1s) / `download_concurrency` (64) class attrs, and `process_virtual_refs` itself (only for a fundamentally different batching policy).
 
-**Discovery utilities** (opt-in, off the base, in `virtual_source_listing.py`): `discover_available_by_obstore_listing(pending, *, store, location_prefix, require_index)` works for any obstore backend (S3, GCS, Azure, local) — a file is ready once `store` lists its data object, plus its sidecar index when `require_index` is true; the caller passes the built store. A source obstore can't list (an HTTP file server whose directory index is HTML, a frontier that must be probed) gets its own discovery util in the same module and a custom `discover_available`.
+**Discovery utilities** (opt-in, off the base, in `source_listing.py`): `discover_available_by_obstore_listing(pending, *, store, location_prefix, require_index)` works for any obstore backend (S3, GCS, Azure, local) — a file is ready once `store` lists its data object, plus its sidecar index when `require_index` is true; the caller passes the built store. A source obstore can't list (an HTTP file server whose directory index is HTML, a frontier that must be probed) gets its own discovery util in the same module and a custom `discover_available`.
 
 ## Reader safety: whole files, atomic commits
 
