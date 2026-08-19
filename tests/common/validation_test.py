@@ -1,11 +1,11 @@
 import logging
 import warnings
 from datetime import timedelta
-from functools import partial
 
 import icechunk
 import numpy as np
 import pandas as pd
+import pydantic
 import pytest
 import sentry_sdk
 import xarray as xr
@@ -13,6 +13,44 @@ import zarr.core.sync
 import zarr.storage
 
 from reformatters.common import validation
+from reformatters.common.config_models import (
+    BaseInternalAttrs,
+    DataVar,
+    DataVarAttrs,
+    Encoding,
+)
+
+
+class NanTestDataVar(DataVar[BaseInternalAttrs]):
+    encoding: Encoding = Encoding(
+        dtype="float32",
+        fill_value=np.nan,
+        chunks=(1, 1, 1, 1),
+        shards=None,
+    )
+    attrs: DataVarAttrs = DataVarAttrs(
+        units="K",
+        long_name="Test variable",
+        short_name="test",
+        step_type="instant",
+    )
+    internal_attrs: BaseInternalAttrs = BaseInternalAttrs(
+        keep_mantissa_bits="no-rounding"
+    )
+
+
+def _context(
+    ds: xr.Dataset,
+    append_dim: str,
+    store: zarr.storage.StoreLike | None = None,
+    **kwargs: object,
+) -> validation.ValidationContext:
+    return validation.ValidationContext(
+        store=store if store is not None else zarr.storage.MemoryStore(),
+        ds=ds,
+        append_dim=append_dim,
+        **kwargs,  # ty: ignore[invalid-argument-type]
+    )
 
 
 @pytest.fixture
@@ -73,67 +111,129 @@ def analysis_dataset(rng: np.random.Generator) -> xr.Dataset:
     return ds
 
 
-def test_check_forecast_current_data_passes(
+def test_check_current_data_passes_and_fails(
     monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
 ) -> None:
-    """Test that check_forecast_current_data passes when recent data exists."""
-    now = pd.Timestamp("2024-01-01 18:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    result = validation.check_forecast_current_data(forecast_dataset)
-
-    assert result.passed
-    assert "Data found within" in result.message
-
-
-def test_check_forecast_current_data_fails(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
-) -> None:
-    """Test that check_forecast_current_data fails when no recent data exists."""
-    now = pd.Timestamp("2024-01-10")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    result = validation.check_forecast_current_data(forecast_dataset)
-
-    assert not result.passed
-    assert "No data found within" in result.message
-
-
-def test_check_forecast_current_data_custom_age(
-    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
-) -> None:
-    """Custom max_latest_init_time_age tightens the threshold."""
-    # Dataset latest init_time is 2024-01-02 00:00 (5 * 6h after 2024-01-01)
-    now = pd.Timestamp("2024-01-02 10:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda: now)
-
-    # Default 1 day allows it
-    assert validation.check_forecast_current_data(forecast_dataset).passed
-
-    # 6 hour age threshold should fail (latest init is 10 hours ago)
-    result = validation.check_forecast_current_data(
-        forecast_dataset, max_latest_init_time_age=timedelta(hours=6)
+    """A position missing past its deadline fails; present positions pass."""
+    # Dataset has 6-hourly init_times through 2024-01-02 00:00.
+    context = _context(
+        forecast_dataset, "init_time", append_dim_frequency=pd.Timedelta("6h")
     )
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2))
+
+    # 2024-01-02 00:00 was due at 02:00 and is present.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 03:00")
+    )
+    assert check.check(context).passed
+
+    # 2024-01-02 06:00 was due at 08:00 and is missing.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 08:01")
+    )
+    result = check.check(context)
     assert not result.passed
+    assert "Missing init_time=2024-01-02T06:00:00" in result.message
 
 
-def test_check_forecast_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:
+def test_check_current_data_tight_deadline_holds_off_schedule(
+    monkeypatch: pytest.MonkeyPatch, forecast_dataset: xr.Dataset
+) -> None:
+    """Deadlines attach to grid positions, so a tight max_delay does not false-alarm
+    when the check runs mid-cycle, long after the newest position's timestamp."""
+    context = _context(
+        forecast_dataset, "init_time", append_dim_frequency=pd.Timedelta("6h")
+    )
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=31))
+
+    # Latest present init is 2024-01-02 00:00; mid-cycle its age is ~5h59m but the
+    # next init (06:00) is not yet due, so this passes.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 05:59")
+    )
+    assert check.check(context).passed
+
+    # One minute past 06:00's deadline it fails.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-02 08:32")
+    )
+    assert not check.check(context).passed
+
+
+def test_check_current_data_grid_anchored_to_dataset_positions(
+    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
+) -> None:
+    """Deadlines fall on the dataset's own grid, not epoch-aligned multiples."""
+    # 6-hourly grid offset from midnight: 03:00, 09:00, 15:00, 21:00.
+    init_times = pd.date_range("2024-01-01 03:00", periods=3, freq="6h")
+    ds = xr.Dataset(
+        {"temperature": (["init_time"], rng.standard_normal(len(init_times)))},
+        coords={"init_time": init_times},
+    )
+    context = _context(ds, "init_time", append_dim_frequency=pd.Timedelta("6h"))
+    check = validation.CheckCurrentData(max_delay=timedelta(hours=2))
+
+    # Latest present is 15:00. At 17:00 an epoch-aligned floor would demand a
+    # nonexistent 12:00 position; the newest due grid position is 15:00, present.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-01 17:00")
+    )
+    assert check.check(context).passed
+
+    # 21:00 is due at 23:00 and missing.
+    monkeypatch.setattr(
+        "pandas.Timestamp.now", lambda: pd.Timestamp("2024-01-01 23:01")
+    )
+    assert not check.check(context).passed
+
+
+def test_check_current_data_analysis_dim(
+    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+) -> None:
+    """The same check works on a time append dim."""
+    # Dataset ends at 2024-01-02 23:00:00; check 13 hours later.
+    now = pd.Timestamp("2024-01-03 12:00:00")
+    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+
+    context = _context(
+        analysis_dataset, "time", append_dim_frequency=pd.Timedelta("1h")
+    )
+    assert (
+        not validation.CheckCurrentData(max_delay=timedelta(hours=12))
+        .check(context)
+        .passed
+    )
+    assert (
+        validation.CheckCurrentData(max_delay=timedelta(hours=14)).check(context).passed
+    )
+
+
+def test_check_current_data_requires_append_dim_frequency(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    with pytest.raises(AssertionError, match="append_dim_frequency"):
+        validation.CheckCurrentData(max_delay=timedelta(hours=2)).check(
+            _context(forecast_dataset, "init_time")
+        )
+
+
+def test_check_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:
     """Default (no NaNs allowed) passes for a clean dataset."""
-    result = validation.check_forecast_recent_nans(forecast_dataset)
+    result = validation.CheckRecentNans().check(_context(forecast_dataset, "init_time"))
 
     assert result.passed
-    assert "NaN fraction <=" in result.message
+    assert "NaN fraction within" in result.message
 
 
-def test_check_forecast_recent_nans_fails(forecast_dataset: xr.Dataset) -> None:
+def test_check_recent_nans_fails(forecast_dataset: xr.Dataset) -> None:
     """Fails when NaN fraction exceeds threshold."""
     # Add excessive NaNs to the latest init_time
     forecast_dataset["temperature"].loc[
         {"init_time": forecast_dataset.init_time[-1]}
     ] = np.nan
 
-    result = validation.check_forecast_recent_nans(
-        forecast_dataset, max_nan_fraction=0.1
+    result = validation.CheckRecentNans(max_nan_fraction=0.1).check(
+        _context(forecast_dataset, "init_time")
     )
 
     assert not result.passed
@@ -141,7 +241,7 @@ def test_check_forecast_recent_nans_fails(forecast_dataset: xr.Dataset) -> None:
     assert "temperature" in result.message
 
 
-def test_check_forecast_recent_nans_skips_lead_time_0_for_non_instant(
+def test_check_recent_nans_skips_lead_time_0_for_non_instant(
     forecast_dataset: xr.Dataset,
 ) -> None:
     """lead_time=0 is dropped for vars with step_type != instant."""
@@ -153,17 +253,18 @@ def test_check_forecast_recent_nans_skips_lead_time_0_for_non_instant(
         }
     ] = np.nan
 
-    result = validation.check_forecast_recent_nans(forecast_dataset)
+    result = validation.CheckRecentNans().check(_context(forecast_dataset, "init_time"))
 
     # Should still pass because lead_time=0 is dropped for non-instant vars.
     assert result.passed
 
 
-def test_check_forecast_recent_nans_additional_skip_lead_time_0_vars(
+def test_check_recent_nans_skips_lead_time_0_from_template_config(
     forecast_dataset: xr.Dataset,
 ) -> None:
-    """Vars listed in additional_skip_lead_time_0_vars also drop lead_time=0."""
-    # temperature is step_type=instant but we explicitly request its lead_time=0 be dropped.
+    """A template var declaring hour_0_values_override=False also drops lead_time=0."""
+    # temperature is step_type=instant in the store's attrs but its template config
+    # declares it has no hour 0 values (e.g. HRRR categorical vars).
     forecast_dataset["temperature"].loc[
         {
             "init_time": forecast_dataset.init_time[-1],
@@ -171,16 +272,63 @@ def test_check_forecast_recent_nans_additional_skip_lead_time_0_vars(
         }
     ] = np.nan
 
-    failed = validation.check_forecast_recent_nans(forecast_dataset)
+    data_vars = (
+        NanTestDataVar(name="temperature"),
+        NanTestDataVar(name="precipitation"),
+    )
+    failed = validation.CheckRecentNans().check(
+        _context(forecast_dataset, "init_time", data_vars=data_vars)
+    )
     assert not failed.passed
 
-    passed = validation.check_forecast_recent_nans(
-        forecast_dataset, additional_skip_lead_time_0_vars=["temperature"]
+    data_vars_with_override = (
+        NanTestDataVar(
+            name="temperature",
+            internal_attrs=BaseInternalAttrs(
+                keep_mantissa_bits="no-rounding", hour_0_values_override=False
+            ),
+        ),
+        NanTestDataVar(name="precipitation"),
+    )
+    passed = validation.CheckRecentNans().check(
+        _context(forecast_dataset, "init_time", data_vars=data_vars_with_override)
     )
     assert passed.passed
 
 
-def test_check_forecast_recent_nans_include_exclude_vars(
+def test_check_recent_nans_skips_lead_time_0_for_deaccumulated_var(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A deaccumulated rate has no lead-0 value even where its source provides a lead-0
+    accumulation, so that slice is dropped."""
+    forecast_dataset["precipitation"].loc[
+        {
+            "init_time": forecast_dataset.init_time[-1],
+            "lead_time": pd.Timedelta(0),
+        }
+    ] = np.nan
+    forecast_dataset["precipitation"].attrs["step_type"] = "instant"
+
+    data_vars = (
+        NanTestDataVar(name="temperature"),
+        NanTestDataVar(
+            name="precipitation",
+            internal_attrs=BaseInternalAttrs(
+                keep_mantissa_bits="no-rounding",
+                deaccumulate_to_rate=True,
+                hour_0_values_override=True,
+            ),
+        ),
+    )
+
+    result = validation.CheckRecentNans().check(
+        _context(forecast_dataset, "init_time", data_vars=data_vars)
+    )
+
+    assert result.passed
+
+
+def test_check_recent_nans_include_exclude_vars(
     forecast_dataset: xr.Dataset,
 ) -> None:
     """include_vars / exclude_vars limit which vars are checked."""
@@ -189,68 +337,134 @@ def test_check_forecast_recent_nans_include_exclude_vars(
     ] = np.nan
 
     # Excluding temperature should make the check pass
-    result = validation.check_forecast_recent_nans(
-        forecast_dataset, exclude_vars=["temperature"]
+    result = validation.CheckRecentNans(exclude_vars=["temperature"]).check(
+        _context(forecast_dataset, "init_time")
     )
     assert result.passed
 
     # Including only precipitation should also pass
-    result = validation.check_forecast_recent_nans(
-        forecast_dataset, include_vars=["precipitation"]
+    result = validation.CheckRecentNans(include_vars=["precipitation"]).check(
+        _context(forecast_dataset, "init_time")
     )
     assert result.passed
 
 
-def test_check_forecast_recent_nans_init_time_offset(
+def test_check_recent_nans_unknown_var_raises(forecast_dataset: xr.Dataset) -> None:
+    """A typo'd variable name raises instead of silently checking nothing."""
+    with pytest.raises(ValueError, match=r"unknown variables.*not_a_var"):
+        validation.CheckRecentNans(include_vars=["not_a_var"]).check(
+            _context(forecast_dataset, "init_time")
+        )
+    with pytest.raises(ValueError, match="unknown variables"):
+        validation.CheckRecentNans(exclude_vars=["not_a_var"]).check(
+            _context(forecast_dataset, "init_time")
+        )
+
+
+def test_check_recent_nans_empty_selection_raises(
     forecast_dataset: xr.Dataset,
 ) -> None:
-    """init_time_offset selects which init_time slice to check."""
+    """A selection excluding every variable is a config error."""
+    with pytest.raises(ValueError, match="selects no variables"):
+        validation.CheckRecentNans(
+            include_vars=["temperature"], exclude_vars=["temperature"]
+        ).check(_context(forecast_dataset, "init_time"))
+
+
+def test_check_recent_nans_selected_vars_missing_from_store_fails(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A template var the store does not carry yet fails, not vacuously passes.
+
+    Names are validated against the template's catalog so a partially backfilled
+    store is not a config error, but measuring nothing must not report a pass.
+    """
+    data_vars = (
+        NanTestDataVar(name="temperature"),
+        NanTestDataVar(name="not_written_yet"),
+    )
+    result = validation.CheckRecentNans(include_vars=["not_written_yet"]).check(
+        _context(forecast_dataset, "init_time", data_vars=data_vars)
+    )
+    assert not result.passed
+    assert "None of the selected variables are in the store" in result.message
+
+
+def test_check_recent_nans_leading_tier_excuses_newest(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A leading 1.0 tier skips the newest position, checking only older ones."""
     # NaN only the latest init_time
     forecast_dataset["temperature"].loc[
         {"init_time": forecast_dataset.init_time[-1]}
     ] = np.nan
 
-    # Default (-1) targets the bad init_time and fails
-    assert not validation.check_forecast_recent_nans(forecast_dataset).passed
+    context = _context(forecast_dataset, "init_time")
+    # Default targets the bad init_time and fails
+    assert not validation.CheckRecentNans().check(context).passed
 
-    # Offset -2 targets the still-clean previous init_time and passes
-    assert validation.check_forecast_recent_nans(
-        forecast_dataset, init_time_offset=-2
-    ).passed
+    # A leading 1.0 tier excuses the still-filling newest init_time and passes
+    assert (
+        validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0), window=2)
+        .check(context)
+        .passed
+    )
 
 
-def test_check_forecast_recent_nans_window_catches_older_init(
+def test_check_recent_nans_intermediate_tier(forecast_dataset: xr.Dataset) -> None:
+    """A fractional leading tier loosens the newest position without excusing it."""
+    # Make the newest init_time ~50% NaN and an older one clean.
+    forecast_dataset["temperature"].loc[
+        {
+            "init_time": forecast_dataset.init_time[-1],
+            "lead_time": forecast_dataset.lead_time[::2],
+        }
+    ] = np.nan
+
+    context = _context(forecast_dataset, "init_time")
+    assert (
+        validation.CheckRecentNans(max_nan_fraction=(0.6, 0.0), window=2)
+        .check(context)
+        .passed
+    )
+    assert (
+        not validation.CheckRecentNans(max_nan_fraction=(0.3, 0.0), window=2)
+        .check(context)
+        .passed
+    )
+
+
+def test_check_recent_nans_window_catches_older_init(
     forecast_dataset: xr.Dataset,
 ) -> None:
-    """A window > 1 catches NaNs in a recent-but-not-newest init_time."""
-    # NaN a whole init_time that is not the newest (index 2 of 5, i.e. offset -3)
+    """A wider window catches NaNs in a recent-but-not-newest init_time."""
+    # NaN a whole init_time that is not the newest (index 2 of 5, 3rd newest)
     bad_init = forecast_dataset.init_time[2]
     forecast_dataset["temperature"].loc[{"init_time": bad_init}] = np.nan
 
-    # The default window of 1 only checks the newest init_time, so it misses it.
-    assert validation.check_forecast_recent_nans(forecast_dataset).passed
+    context = _context(forecast_dataset, "init_time")
+    # The default window of 2 only checks the newest two init_times, so it misses it.
+    assert validation.CheckRecentNans().check(context).passed
 
     # A window reaching back to it catches the gap and names the offending init_time.
-    result = validation.check_forecast_recent_nans(
-        forecast_dataset, num_recent_init_times=3
-    )
+    result = validation.CheckRecentNans(window=3).check(context)
     assert not result.passed
     assert "Excessive NaN fraction" in result.message
     assert pd.Timestamp(bad_init.values).isoformat() in result.message
 
 
-def test_check_forecast_recent_nans_window_all_clean_passes(
+def test_check_recent_nans_window_all_clean_passes(
     forecast_dataset: xr.Dataset,
 ) -> None:
-    """A clean window passes and reports how many init_times were checked."""
-    result = validation.check_forecast_recent_nans(
-        forecast_dataset, num_recent_init_times=3
+    """A clean window passes and reports how many positions were checked."""
+    result = validation.CheckRecentNans(window=3).check(
+        _context(forecast_dataset, "init_time")
     )
     assert result.passed
-    assert "All 3 recent init_times" in result.message
+    assert "All 3 checked recent init_time positions" in result.message
 
 
-def test_check_forecast_recent_nans_empty_selection_fails(
+def test_check_recent_nans_empty_selection_fails(
     rng: np.random.Generator,
 ) -> None:
     """A variable left with no values to check must fail, not vacuously pass.
@@ -277,35 +491,59 @@ def test_check_forecast_recent_nans_empty_selection_fails(
         },
     )
 
-    result = validation.check_forecast_recent_nans(ds)
+    result = validation.CheckRecentNans().check(_context(ds, "init_time"))
 
     assert not result.passed
     assert "precipitation" in result.message
 
 
-def test_check_analysis_recent_nans_selects_by_position_not_clock(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+def test_check_recent_nans_fewer_positions_than_tiers_fails(
+    rng: np.random.Generator,
 ) -> None:
-    """Timesteps are chosen by position, so a clock far past the data still checks it.
+    """A store with fewer positions than threshold tiers fails, not silently skips.
 
-    An off-schedule run, or one before a late update publishes, used to select no
-    times at all.
+    The strict older-position tiers would otherwise never run.
     """
-    now = pd.Timestamp("2024-01-10")  # dataset ends 2024-01-02 23:00
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "latitude", "longitude"],
+                rng.standard_normal((1, 3, 4)),
+            )
+        },
+        coords={
+            "time": pd.date_range("2024-01-01", periods=1, freq="1h"),
+            "latitude": np.linspace(90, -90, 3),
+            "longitude": np.linspace(-180, 180, 4),
+        },
+    )
+    result = validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0), window=2).check(
+        _context(ds, "time")
+    )
+    assert not result.passed
+    assert "need at least 2" in result.message
 
-    assert validation.check_analysis_recent_nans(analysis_dataset).passed
+
+def test_check_recent_nans_selects_by_position_not_clock(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """Positions are chosen positionally, so recency does not affect what is checked.
+
+    Recency is CheckCurrentData's question; an off-schedule run still checks real data.
+    """
+    context = _context(analysis_dataset, "time")
+    assert validation.CheckRecentNans().check(context).passed
 
     # Proves it selected real values rather than passing vacuously.
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02 22:00", None)}] = (
         np.nan
     )
-    result = validation.check_analysis_recent_nans(analysis_dataset)
+    result = validation.CheckRecentNans().check(context)
     assert not result.passed
     assert "temperature" in result.message
 
 
-def test_check_analysis_recent_nans_checks_each_time_independently(
+def test_check_recent_nans_checks_each_position_independently(
     analysis_dataset: xr.Dataset,
 ) -> None:
     """One ruined timestep fails even when its neighbours are clean.
@@ -315,24 +553,62 @@ def test_check_analysis_recent_nans_checks_each_time_independently(
     """
     analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset, num_recent_times=2, max_nan_fraction=0.4
+    result = validation.CheckRecentNans(window=2, max_nan_fraction=0.4).check(
+        _context(analysis_dataset, "time")
     )
 
     assert not result.passed
-    assert "1 of 2 recent times" in result.message
+    assert "1 of 2 recent positions" in result.message
 
 
-def test_check_analysis_recent_nans_time_offset_skips_newest(
-    analysis_dataset: xr.Dataset,
-) -> None:
-    """time_offset excludes a newest timestep that is empty by design."""
-    analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
+def test_check_recent_nans_sampled_positions(analysis_dataset: xr.Dataset) -> None:
+    """sampled_positions spot-checks randomly chosen positions within the window."""
+    context = _context(analysis_dataset, "time")
+    assert (
+        validation.CheckRecentNans(window=48, sampled_positions=1).check(context).passed
+    )
 
-    assert not validation.check_analysis_recent_nans(analysis_dataset).passed
-    assert validation.check_analysis_recent_nans(
-        analysis_dataset, time_offset=-2, num_recent_times=2
-    ).passed
+    # Ruin a deep position the default newest-positions check would never see.
+    analysis_dataset["temperature"].loc[{"time": "2024-01-01 12:00"}] = np.nan
+    assert validation.CheckRecentNans().check(context).passed
+
+    # Sampling every position in the window is deterministic and catches it.
+    result = validation.CheckRecentNans(window=48, sampled_positions=48).check(context)
+    assert not result.passed
+    assert "2024-01-01T12:00:00" in result.message
+
+
+def test_check_recent_nans_sampled_positions_config_validation() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(window=10, sampled_positions=11)
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(window=10, sampled_positions=0)
+    # Sampled positions are randomly chosen, so per-recency tiers do not apply.
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(
+            window=10, sampled_positions=1, max_nan_fraction=(1.0, 0.0)
+        )
+
+
+def test_check_recent_nans_config_validation() -> None:
+    """Misconfiguration is rejected at construction, not at the first cron fire."""
+    # Unknown field name
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(max_nan_fracton=0.1)  # ty: ignore[unknown-argument]
+    # Invalid sampling strategy
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(spatial_sampling="invalid")  # ty: ignore[invalid-argument-type]
+    # More tiers than window
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(max_nan_fraction=(1.0, 0.5, 0.0), window=2)
+    # Threshold out of range
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(max_nan_fraction=1.5)
+    # All tiers 1.0 would check nothing
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(max_nan_fraction=(1.0, 1.0), window=2)
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(window=0)
 
 
 def test_check_nan_fractions_logs_one_record_for_all_variables(
@@ -344,9 +620,11 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
     per variable loses exactly the detail a later inspection needs.
     """
     with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
-        assert validation.check_analysis_recent_nans(
-            analysis_dataset, num_recent_times=1
-        ).passed
+        assert (
+            validation.CheckRecentNans(window=1)
+            .check(_context(analysis_dataset, "time"))
+            .passed
+        )
 
     fraction_records = [
         r.getMessage() for r in caplog.records if "NaN fractions:" in r.getMessage()
@@ -356,151 +634,35 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
     assert "humidity=0.000000" in fraction_records[0]
 
 
-def test_check_analysis_current_data_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+def test_check_recent_nans_quarter_sampling_passes(
+    analysis_dataset: xr.Dataset,
 ) -> None:
-    """Test that check_analysis_current_data passes when recent data exists."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_current_data(analysis_dataset)
-
-    assert result.passed
-    assert "Data found within" in result.message
-
-
-def test_check_analysis_current_data_fails(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Test that check_analysis_current_data fails when no recent data exists."""
-    now = pd.Timestamp("2024-01-10")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_current_data(analysis_dataset)
-
-    assert not result.passed
-    assert "No data found within" in result.message
-
-
-def test_check_analysis_current_data_custom_delay(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Test that check_analysis_current_data respects custom max_expected_delay."""
-    # Dataset ends at 2024-01-02 23:00:00
-    # Check at 2024-01-03 12:00:00 (13 hours after last data)
-    now = pd.Timestamp("2024-01-03 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    # Should fail with default 12 hour delay (last data is 13 hours ago)
-    result = validation.check_analysis_current_data(analysis_dataset)
-    assert not result.passed
-
-    # Should pass with 48 hour delay
-    result = validation.check_analysis_current_data(
-        analysis_dataset, max_expected_delay=timedelta(hours=48)
-    )
-    assert result.passed
-
-
-def test_check_analysis_recent_nans_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Default (no NaNs allowed) passes for a clean dataset."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_recent_nans(analysis_dataset)
-
-    assert result.passed
-    assert "NaN fraction <=" in result.message
-
-
-def test_check_analysis_recent_nans_fails(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Fails when NaN fraction exceeds threshold."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    # Set all recent data to NaN
-    analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-    )
-
-    assert not result.passed
-    assert "Excessive NaN fraction" in result.message
-    assert "temperature" in result.message
-
-
-def test_check_analysis_recent_nans_custom_parameters(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Test that check_analysis_recent_nans respects custom parameters."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    recent_slice = {"time": slice("2024-01-02", None)}
-    analysis_dataset["temperature"].loc[recent_slice] = np.nan
-
-    # Should fail with 0.05 threshold
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-    )
-    assert not result.passed
-
-    # Should pass with 1.0 threshold
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=1.0,
-    )
-    assert result.passed
-
-
-def test_check_analysis_recent_nans_quarter_sampling_passes(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Test that check_analysis_recent_nans passes with quarter spatial sampling."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset, spatial_sampling="quarter"
+    result = validation.CheckRecentNans(spatial_sampling="quarter").check(
+        _context(analysis_dataset, "time")
     )
 
     assert result.passed
 
 
-def test_check_analysis_recent_nans_quarter_sampling_fails(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+def test_check_recent_nans_quarter_sampling_fails(
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """Quarter sampling catches excessive NaNs covering the dataset."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-        spatial_sampling="quarter",
-    )
+    result = validation.CheckRecentNans(
+        max_nan_fraction=0.05, spatial_sampling="quarter"
+    ).check(_context(analysis_dataset, "time"))
 
     assert not result.passed
     assert "Excessive NaN fraction" in result.message
     assert "temperature" in result.message
 
 
-def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
+def test_check_recent_nans_quarter_sampling_different_quarters(
     monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
 ) -> None:
     """Quarter sampling selects different quarters based on RNG."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
     lat_size = len(analysis_dataset.latitude)
     lon_size = len(analysis_dataset.longitude)
 
@@ -524,11 +686,9 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         lambda seed=None: MockRngBottomRight(),
     )
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-        spatial_sampling="quarter",
-    )
+    result = validation.CheckRecentNans(
+        max_nan_fraction=0.05, spatial_sampling="quarter"
+    ).check(_context(analysis_dataset, "time"))
     assert result.passed
 
     class MockRngTopLeft:
@@ -544,44 +704,31 @@ def test_check_analysis_recent_nans_quarter_sampling_different_quarters(
         lambda seed=None: MockRngTopLeft(),
     )
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-        spatial_sampling="quarter",
-    )
+    result = validation.CheckRecentNans(
+        max_nan_fraction=0.05, spatial_sampling="quarter"
+    ).check(_context(analysis_dataset, "time"))
     assert not result.passed
 
 
-def test_check_analysis_recent_nans_random_points_sampling(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
+def test_check_recent_nans_random_points_sampling(
+    analysis_dataset: xr.Dataset,
 ) -> None:
     """random_points strategy selects N spatial points."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        spatial_sampling="random_points",
+    result = validation.CheckRecentNans(spatial_sampling="random_points").check(
+        _context(analysis_dataset, "time")
     )
     assert result.passed
 
     # Inject NaNs at every point so any random sample sees them
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        max_nan_fraction=0.05,
-        spatial_sampling="random_points",
-    )
+    result = validation.CheckRecentNans(
+        max_nan_fraction=0.05, spatial_sampling="random_points"
+    ).check(_context(analysis_dataset, "time"))
     assert not result.passed
 
 
-def test_check_analysis_recent_nans_xy_dimensions(
-    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
-) -> None:
-    """check_analysis_recent_nans works with x/y dimensions instead of lat/lon."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
+def test_check_recent_nans_xy_dimensions(rng: np.random.Generator) -> None:
+    """CheckRecentNans works with x/y dimensions instead of lat/lon."""
     times = pd.date_range("2024-01-01", periods=48, freq="1h")
     x = np.arange(20)
     y = np.arange(10)
@@ -596,51 +743,25 @@ def test_check_analysis_recent_nans_xy_dimensions(
         coords={"time": times, "y": y, "x": x},
     )
 
-    result = validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
+    result = validation.CheckRecentNans(spatial_sampling="quarter").check(
+        _context(ds, "time")
+    )
     assert result.passed
 
 
-def test_check_analysis_recent_nans_invalid_sampling_strategy(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
-    """Invalid spatial_sampling values are rejected by assert_never."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    with pytest.raises(AssertionError, match="Expected code to be unreachable"):
-        validation.check_analysis_recent_nans(
-            analysis_dataset,
-            spatial_sampling="invalid",  # ty: ignore[invalid-argument-type]
-        )
-
-
-def test_check_analysis_recent_nans_all_sampling(
-    monkeypatch: pytest.MonkeyPatch, analysis_dataset: xr.Dataset
-) -> None:
+def test_check_recent_nans_all_sampling(analysis_dataset: xr.Dataset) -> None:
     """spatial_sampling='all' reads the full spatial grid."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
-    # Inject NaNs only outside the bounds a random_2x2/random_points sample
-    # could reliably hit — full-grid sampling must still see them.
     analysis_dataset["temperature"].loc[{"time": slice("2024-01-02", None)}] = np.nan
 
-    result = validation.check_analysis_recent_nans(
-        analysis_dataset,
-        spatial_sampling="all",
-        max_nan_fraction=0.05,
-    )
+    result = validation.CheckRecentNans(
+        spatial_sampling="all", max_nan_fraction=0.05
+    ).check(_context(analysis_dataset, "time"))
     assert not result.passed
     assert "temperature" in result.message
 
 
-def test_spatial_dims_raises_when_unknown(
-    monkeypatch: pytest.MonkeyPatch, rng: np.random.Generator
-) -> None:
+def test_spatial_dims_raises_when_unknown(rng: np.random.Generator) -> None:
     """Sampling on a dataset without lat/lon or x/y dims raises ValueError."""
-    now = pd.Timestamp("2024-01-02 12:00:00")
-    monkeypatch.setattr("pandas.Timestamp.now", lambda tz=None: now)
-
     times = pd.date_range("2024-01-01", periods=48, freq="1h")
     ds = xr.Dataset(
         {"temperature": (["time", "row", "col"], rng.standard_normal((48, 10, 10)))},
@@ -648,7 +769,9 @@ def test_spatial_dims_raises_when_unknown(
     )
 
     with pytest.raises(ValueError, match="Can't infer spatial dimensions"):
-        validation.check_analysis_recent_nans(ds, spatial_sampling="quarter")
+        validation.CheckRecentNans(spatial_sampling="quarter").check(
+            _context(ds, "time")
+        )
 
 
 def test_truncate_shards_truncation() -> None:
@@ -683,53 +806,31 @@ def test_summarize_coords_multidimensional() -> None:
     assert "lead_time=[0 days 00:00:00..8 days 16:00:00] (n=209)" in summary
 
 
-def test_check_for_expected_shards_skips_hrrr_categorical(
-    rng: np.random.Generator,
-) -> None:
-    """HRRR categorical vars are allowed to have missing shards (fill_value 0)."""
-    times = pd.date_range("2024-01-01", periods=8, freq="1h")
-    x = np.arange(6)
-    y = np.arange(4)
-
-    ds = xr.Dataset(
-        {
-            "categorical_rain_surface": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "temperature_2m": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-        attrs={"dataset_id": "noaa-hrrr-forecast-48-hour"},
-    )
-    chunk_sizes = (4, 2, 3)
-    shard_sizes = (4, 2, 3)
-    for var in ds.data_vars.values():
-        var.encoding["chunks"] = chunk_sizes
-        var.encoding["shards"] = shard_sizes
-
-    store = zarr.storage.MemoryStore()
-    ds.to_zarr(store, mode="w", consolidated=False)
-
-    # Delete one shard from each variable
-    zarr.core.sync.sync(store.delete("categorical_rain_surface/c/0/0/0"))
-    zarr.core.sync.sync(store.delete("temperature_2m/c/0/0/0"))
-
-    result = validation.check_for_expected_shards(store, ds)
-
-    # Should fail only on temperature_2m; categorical is skipped
-    assert not result.passed
-    assert "temperature_2m" in result.message
-    assert "categorical_rain_surface" not in result.message
+class PassingCheck(validation.Validator):
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
+    ) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=True, message="ok")
 
 
-def test_validate_dataset_raises_on_failed_validator(
-    rng: np.random.Generator,
-) -> None:
-    """validate_dataset raises ValueError listing failed validator messages."""
+class FailingCheck(validation.Validator):
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
+    ) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="bad thing")
+
+
+class AlsoFailingCheck(validation.Validator):
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
+    ) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=False, message="another bad thing")
+
+
+def _write_test_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
     times = pd.date_range("2024-01-01", periods=4, freq="1h")
     ds = xr.Dataset(
         {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
@@ -746,26 +847,49 @@ def test_validate_dataset_raises_on_failed_validator(
             category=UserWarning,
         )
         ds.to_zarr(store, mode="w")
+    return store
 
-    def passing(ds: xr.Dataset) -> validation.ValidationResult:
-        return validation.ValidationResult(passed=True, message="ok")
 
-    def failing(ds: xr.Dataset) -> validation.ValidationResult:
-        return validation.ValidationResult(passed=False, message="bad thing")
+def test_validate_dataset_raises_on_failed_validator(
+    rng: np.random.Generator,
+) -> None:
+    """validate_dataset raises listing failed check names and messages."""
+    store = _write_test_store(rng)
 
-    with pytest.raises(validation.OperationalValidationError, match="bad thing"):
+    with pytest.raises(
+        validation.OperationalValidationError, match="FailingCheck: bad thing"
+    ):
         validation.validate_dataset(
-            store, validators=[passing, failing], dataset_id="d"
+            [PassingCheck(), FailingCheck()],
+            store=store,
+            append_dim="time",
+            dataset_id="d",
         )
 
     # Passing-only validators should not raise.
-    validation.validate_dataset(store, validators=[passing], dataset_id="d")
+    validation.validate_dataset(
+        [PassingCheck()], store=store, append_dim="time", dataset_id="d"
+    )
+
+
+def test_validate_dataset_requires_region_job_for_virtual_checks(
+    rng: np.random.Generator,
+) -> None:
+    """A manifest-probing check without a region_job is caught before any check runs."""
+    store = _write_test_store(rng)
+    with pytest.raises(AssertionError, match="require a region_job"):
+        validation.validate_dataset(
+            [validation.CheckVirtualManifestCompleteness()],
+            store=store,
+            append_dim="time",
+            dataset_id="d",
+        )
 
 
 def test_validate_dataset_fingerprints_by_dataset_and_check(
     caplog: pytest.LogCaptureFixture, rng: np.random.Generator
 ) -> None:
-    """A failure fingerprints by (dataset_id, failed checks), not by message text, so
+    """A failure fingerprints by (dataset_id, failed check names), not by message text, so
     repeated failures carrying different per-run details (a NaN fraction, an init_time,
     ...) group into one Sentry issue instead of each filing a new one. The fingerprint
     goes on the isolation scope, which outlives validate_dataset's frame, so it is still
@@ -774,60 +898,52 @@ def test_validate_dataset_fingerprints_by_dataset_and_check(
     ERROR, which the Sentry logging integration would report as a second, differently
     grouped issue.
     """
-    times = pd.date_range("2024-01-01", periods=4, freq="1h")
-    ds = xr.Dataset(
-        {"temperature": (["time", "y", "x"], rng.standard_normal((4, 4, 4)))},
-        coords={"time": times, "y": np.arange(4), "x": np.arange(4)},
-    )
-    store = zarr.storage.MemoryStore()
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
-            category=UserWarning,
-        )
-        ds.to_zarr(store, mode="w")
-
-    def failing(ds: xr.Dataset) -> validation.ValidationResult:
-        return validation.ValidationResult(passed=False, message="bad thing")
-
-    def also_failing(ds: xr.Dataset) -> validation.ValidationResult:
-        return validation.ValidationResult(passed=False, message="another bad thing")
+    store = _write_test_store(rng)
 
     with sentry_sdk.isolation_scope():
         with pytest.raises(validation.OperationalValidationError):
             validation.validate_dataset(
-                store,
-                validators=[failing, also_failing],
+                [FailingCheck(), AlsoFailingCheck()],
+                store=store,
+                append_dim="time",
                 dataset_id="noaa-gfs-forecast",
             )
 
         assert sentry_sdk.get_isolation_scope()._fingerprint == [
             "noaa-gfs-forecast",
-            "failing",
-            "also_failing",
+            "FailingCheck",
+            "AlsoFailingCheck",
         ]
 
-    failure_logs = [r for r in caplog.records if "Failed validation" in r.getMessage()]
+    failure_logs = [r for r in caplog.records if "Failed " in r.getMessage()]
     assert [r.levelno for r in failure_logs] == [logging.WARNING, logging.WARNING]
 
 
-def test_validator_check_name() -> None:
-    def a_check(ds: xr.Dataset) -> validation.ValidationResult:
-        raise NotImplementedError
-
-    assert validation._validator_check_name(a_check) == "a_check"
-    assert validation._validator_check_name(partial(a_check)) == "a_check"
+def test_validator_name() -> None:
+    """Instance names distinguish multiple instances of one check class."""
+    assert PassingCheck().name == "PassingCheck"
+    assert validation.CheckRecentNans().name == "CheckRecentNans"
     assert (
-        validation._validator_check_name(validation.CheckVirtualManifestCompleteness())
+        validation.CheckRecentNans(include_vars=["a", "b"]).name
+        == "CheckRecentNans(include=a,b)"
+    )
+    assert (
+        validation.CheckRecentNans(exclude_vars=["a", "b", "c", "d"]).name
+        == "CheckRecentNans(exclude=a,b,c,+1)"
+    )
+    assert (
+        validation.CheckVirtualManifestCompleteness().name
         == "CheckVirtualManifestCompleteness"
+    )
+    assert (
+        validation.CheckRecentNans(window=365, sampled_positions=1).name
+        == "CheckRecentNans(sampled_positions=1, window=365)"
     )
 
 
-def test_compare_replica_and_primary_coords_divergence(
+def _replica_and_primary(
     rng: np.random.Generator,
-) -> None:
-    """Test that compare_replica_and_primary detects coordinate divergence."""
+) -> tuple[xr.Dataset, xr.Dataset]:
     times = pd.date_range("2024-01-01", periods=24, freq="1h")
     x = np.arange(20)
     y = np.arange(10)
@@ -849,42 +965,33 @@ def test_compare_replica_and_primary_coords_divergence(
     for var in primary_ds.data_vars.values():
         var.encoding["chunks"] = (chunk_size, len(y), len(x))
 
-    replica_ds = primary_ds.copy(deep=True).isel(time=slice(None, -1))
-    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+    return primary_ds.copy(deep=True), primary_ds
+
+
+def test_check_replica_matches_primary_coords_divergence(
+    rng: np.random.Generator,
+) -> None:
+    replica_ds, primary_ds = _replica_and_primary(rng)
+    replica_ds = replica_ds.isel(time=slice(None, -1))
+
+    result = validation.CheckReplicaMatchesPrimary().check(
+        _context(replica_ds, "time", primary_ds=primary_ds)
+    )
 
     assert not result.passed
     assert "different for coords: ['time']" in result.message
 
 
-def test_compare_replica_and_primary_vars_divergence(
+def test_check_replica_matches_primary_vars_divergence(
     rng: np.random.Generator,
 ) -> None:
-    """Test that compare_replica_and_primary detects variable data divergence."""
-    times = pd.date_range("2024-01-01", periods=24, freq="1h")
-    x = np.arange(20)
-    y = np.arange(10)
+    replica_ds, primary_ds = _replica_and_primary(rng)
     chunk_size = 8
-
-    primary_ds = xr.Dataset(
-        {
-            "temperature": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "humidity": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-    )
-    for var in primary_ds.data_vars.values():
-        var.encoding["chunks"] = (chunk_size, len(y), len(x))
-
-    replica_ds = primary_ds.copy(deep=True)
     replica_ds["temperature"].values[-chunk_size:, 0, 0] = 999.0
 
-    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
+    result = validation.CheckReplicaMatchesPrimary().check(
+        _context(replica_ds, "time", primary_ds=primary_ds)
+    )
 
     assert not result.passed
     assert (
@@ -892,42 +999,21 @@ def test_compare_replica_and_primary_vars_divergence(
     )
 
 
-def test_compare_replica_and_primary_passes(
+def test_check_replica_matches_primary_passes(
     rng: np.random.Generator,
 ) -> None:
-    """Test that compare_replica_and_primary passes when replica and primary are identical."""
-    times = pd.date_range("2024-01-01", periods=24, freq="1h")
-    x = np.arange(20)
-    y = np.arange(10)
-    chunk_size = 8
+    replica_ds, primary_ds = _replica_and_primary(rng)
 
-    primary_ds = xr.Dataset(
-        {
-            "temperature": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "humidity": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
+    result = validation.CheckReplicaMatchesPrimary().check(
+        _context(replica_ds, "time", primary_ds=primary_ds)
     )
-    for var in primary_ds.data_vars.values():
-        var.encoding["chunks"] = (chunk_size, len(y), len(x))
-
-    replica_ds = primary_ds.copy(deep=True)
-
-    result = validation.compare_replica_and_primary("time", replica_ds, primary_ds)
 
     assert result.passed
     assert "replica and primary stores is the same" in result.message
 
 
-def test_check_for_expected_shards_passes(rng: np.random.Generator) -> None:
-    """Test that check_for_expected_shards passes when all expected shards are present."""
-    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+def _sharded_dataset(rng: np.random.Generator, periods: int = 16) -> xr.Dataset:
+    times = pd.date_range("2024-01-01", periods=periods, freq="1h")
     x = np.arange(10)
     y = np.arange(8)
 
@@ -946,54 +1032,29 @@ def test_check_for_expected_shards_passes(rng: np.random.Generator) -> None:
         attrs={"dataset_id": "test-dataset"},
     )
 
-    # Set chunking and sharding to create multiple shards
     chunk_sizes = (4, 4, 5)
     shard_sizes = (4, 4, 5)
     for var in ds.data_vars.values():
         var.encoding["chunks"] = chunk_sizes
         var.encoding["shards"] = shard_sizes
+    return ds
 
-    # Write to memory store
+
+def test_check_expected_shards_passes(rng: np.random.Generator) -> None:
+    ds = _sharded_dataset(rng)
     store = zarr.storage.MemoryStore()
     ds.to_zarr(store, mode="w", consolidated=False)
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert result.passed
     assert "All variables have expected shards" in result.message
 
 
-def test_check_for_expected_shards_fails_missing_shards(
+def test_check_expected_shards_fails_missing_shards(
     rng: np.random.Generator,
 ) -> None:
-    """Test that check_for_expected_shards fails when expected shards are missing."""
-    times = pd.date_range("2024-01-01", periods=16, freq="1h")
-    x = np.arange(10)
-    y = np.arange(8)
-
-    ds = xr.Dataset(
-        {
-            "temperature": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "humidity": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-        attrs={"dataset_id": "test-dataset"},
-    )
-
-    # Set chunking and sharding to create multiple shards (4x2x2 = 16 total shards)
-    chunk_sizes = (4, 4, 5)
-    shard_sizes = (4, 4, 5)
-    for var in ds.data_vars.values():
-        var.encoding["chunks"] = chunk_sizes
-        var.encoding["shards"] = shard_sizes
-
-    # Write to memory store
+    ds = _sharded_dataset(rng)
     store = zarr.storage.MemoryStore()
     ds.to_zarr(store, mode="w", consolidated=False)
 
@@ -1002,7 +1063,7 @@ def test_check_for_expected_shards_fails_missing_shards(
     zarr.core.sync.sync(store.delete("humidity/c/1/0/0"))
     zarr.core.sync.sync(store.delete("humidity/c/2/0/0"))
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert not result.passed
     assert result.message == (
@@ -1011,35 +1072,11 @@ def test_check_for_expected_shards_fails_missing_shards(
     )
 
 
-def test_check_for_expected_shards_fails_same_missing_shards_across_vars(
+def test_check_expected_shards_fails_same_missing_shards_across_vars(
     rng: np.random.Generator,
 ) -> None:
     """When all problem vars are missing the same shards the message is collapsed."""
-    times = pd.date_range("2024-01-01", periods=16, freq="1h")
-    x = np.arange(10)
-    y = np.arange(8)
-
-    ds = xr.Dataset(
-        {
-            "temperature": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-            "humidity": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-        attrs={"dataset_id": "test-dataset"},
-    )
-
-    chunk_sizes = (4, 4, 5)
-    shard_sizes = (4, 4, 5)
-    for var in ds.data_vars.values():
-        var.encoding["chunks"] = chunk_sizes
-        var.encoding["shards"] = shard_sizes
-
+    ds = _sharded_dataset(rng)
     store = zarr.storage.MemoryStore()
     ds.to_zarr(store, mode="w", consolidated=False)
 
@@ -1048,7 +1085,7 @@ def test_check_for_expected_shards_fails_same_missing_shards_across_vars(
         zarr.core.sync.sync(store.delete(f"{var}/c/0/0/0"))
         zarr.core.sync.sync(store.delete(f"{var}/c/1/0/0"))
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert not result.passed
     assert result.message == (
@@ -1057,30 +1094,13 @@ def test_check_for_expected_shards_fails_same_missing_shards_across_vars(
     )
 
 
-def test_check_for_expected_shards_passes_with_extra_shards(
+def test_check_expected_shards_passes_with_extra_shards(
     rng: np.random.Generator,
 ) -> None:
-    """Test that check_for_expected_shards passes when extra shards are present."""
-    times = pd.date_range("2024-01-01", periods=8, freq="1h")
-    x = np.arange(10)
-    y = np.arange(8)
-
-    ds = xr.Dataset(
-        {
-            "temperature": (
-                ["time", "y", "x"],
-                rng.standard_normal((len(times), len(y), len(x))),
-            ),
-        },
-        coords={"time": times, "y": y, "x": x},
-        attrs={"dataset_id": "test-dataset"},
-    )
-
+    """Extra shards beyond the metadata's extent are fine (operational trim)."""
+    ds = _sharded_dataset(rng, periods=8)
     chunk_sizes = (4, 4, 5)
     shard_sizes = (4, 4, 5)
-    for var in ds.data_vars.values():
-        var.encoding["chunks"] = chunk_sizes
-        var.encoding["shards"] = shard_sizes
 
     # Write full dataset to store
     store = zarr.storage.MemoryStore()
@@ -1095,14 +1115,15 @@ def test_check_for_expected_shards_passes_with_extra_shards(
 
     # The store has shards for all 8 time steps, but metadata only exposes first 4
     # This simulates the operational update scenario where extra shards exist
-    result = validation.check_for_expected_shards(store, ds_trimmed)
+    result = validation.CheckExpectedShards().check(
+        _context(ds_trimmed, "time", store=store)
+    )
 
     assert result.passed
     assert "All variables have expected shards" in result.message
 
 
-def test_check_for_expected_shards_icechunk_store(rng: np.random.Generator) -> None:
-    """Test that check_for_expected_shards works with an IcechunkStore."""
+def test_check_expected_shards_icechunk_store(rng: np.random.Generator) -> None:
     times = pd.date_range("2024-01-01", periods=8, freq="1h")
     x = np.arange(6)
     y = np.arange(4)
@@ -1140,7 +1161,92 @@ def test_check_for_expected_shards_icechunk_store(rng: np.random.Generator) -> N
     # Commit the changes
     session.commit("Initial commit")
 
-    result = validation.check_for_expected_shards(store, ds)
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
 
     assert result.passed
     assert "All variables have expected shards" in result.message
+
+
+def _grouped_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
+    """A store with a root variable plus a `pressure_level` group variable carrying a
+    dimension the root variable does not have."""
+    times = pd.date_range("2024-01-01", periods=16, freq="1h")
+    y = np.arange(8)
+    x = np.arange(10)
+    levels = np.array([500, 850])
+
+    root_ds = xr.Dataset(
+        {
+            "temperature_2m": (
+                ["time", "y", "x"],
+                rng.standard_normal((len(times), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "y": y, "x": x},
+        attrs={"dataset_id": "test-dataset"},
+    )
+    root_ds["temperature_2m"].encoding.update(
+        {"chunks": (4, 4, 5), "shards": (4, 4, 5)}
+    )
+
+    group_ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "pressure_level", "y", "x"],
+                rng.standard_normal((len(times), len(levels), len(y), len(x))),
+            ),
+        },
+        coords={"time": times, "pressure_level": levels, "y": y, "x": x},
+    )
+    group_ds["temperature"].encoding.update(
+        {"chunks": (4, 1, 4, 5), "shards": (4, 1, 4, 5)}
+    )
+
+    tree = xr.DataTree.from_dict({"/": root_ds, "/pressure_level": group_ds})
+    store = zarr.storage.MemoryStore()
+    tree.to_zarr(store, mode="w", consolidated=False, write_inherited_coords=True)
+    return store
+
+
+def test_check_expected_shards_passes_with_vertical_group(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
+
+    assert result.passed
+    assert "All variables have expected shards" in result.message
+
+
+def test_check_expected_shards_fails_missing_group_shards(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    zarr.core.sync.sync(store.delete("pressure_level/temperature/c/0/1/0/0"))
+
+    result = validation.CheckExpectedShards().check(_context(ds, "time", store=store))
+
+    assert not result.passed
+    assert result.message == (
+        "Missing shards: pressure_level/temperature (1 missing). "
+        "pressure_level/temperature: [0/1/0/0]"
+    )
+
+
+def test_check_replica_matches_primary_passes_with_vertical_group(
+    rng: np.random.Generator,
+) -> None:
+    store = _grouped_store(rng)
+    primary_ds = validation.open_flattened_dataset(store, consolidated=False)
+    replica_ds = primary_ds.copy(deep=True)
+
+    result = validation.CheckReplicaMatchesPrimary().check(
+        _context(replica_ds, "time", primary_ds=primary_ds)
+    )
+
+    assert result.passed
+    assert "replica and primary stores is the same" in result.message

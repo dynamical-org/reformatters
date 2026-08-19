@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -52,16 +51,13 @@ class GefsForecast35DayDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.check_forecast_current_data,
-            # 2nd-to-last init_time is fully populated; expect no NaNs.
-            partial(validation.check_forecast_recent_nans, init_time_offset=-2),
-            # Latest init_time is only filled out to ~day 15 of 35,
-            # so ~42% of lead_times at any spatial point are legitimately NaN.
-            # Observed max 0.420789 in prod; keep small headroom.
-            # The strict offset=-2 check above covers correctness of the
-            # fully-populated previous init.
-            partial(validation.check_forecast_recent_nans, max_nan_fraction=0.45),
+            # The update ingests each init at init+6h33m; validation fires at init+7h03m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=3)),
+            # Latest init_time is only filled out to ~day 15 of 35, so ~42% of
+            # lead_times at any spatial point are legitimately NaN (observed max
+            # 0.420789 in prod; keep small headroom). Older init_times are fully
+            # populated; expect no NaNs.
+            validation.CheckRecentNans(max_nan_fraction=(0.45, 0.0)),
         )

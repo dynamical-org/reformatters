@@ -14,10 +14,13 @@ from reformatters.common.download import (
 )
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
+from reformatters.common.pydantic import replace
 from reformatters.common.source_listing import listed_keys_by_prefix
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_CYCLE_COMPLETE_DELAY,
+    GEFSDataVar,
     GefsSourceFileCoord,
+    get_grib_element,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
 from reformatters.noaa.noaa_utils import (
@@ -91,6 +94,25 @@ def gefs_published_coords[T: GefsSourceFileCoord](coords: Sequence[T]) -> list[T
     return kept
 
 
+def _index_data_vars(coord: GefsSourceFileCoord) -> Sequence[GEFSDataVar]:
+    """coord.data_vars carrying the element names this file's index uses.
+
+    The v12 reforecast labels some messages with a different element name than the
+    operational archive, so the index lookup has to rename to match, the same way
+    read_data renames to match GRIB band tags.
+    """
+    return [
+        replace(
+            var,
+            internal_attrs=replace(
+                var.internal_attrs,
+                grib_element=get_grib_element(var, coord.init_time),
+            ),
+        )
+        for var in coord.data_vars
+    ]
+
+
 def _download_file_from_gefs_source(
     dataset_id: str,
     coord: GefsSourceFileCoord,
@@ -101,7 +123,7 @@ def _download_file_from_gefs_source(
     idx_local_path = download(index_url, dataset_id, disk_cache=True)
 
     starts, ends = grib_message_byte_ranges_from_index(
-        idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
+        idx_local_path, _index_data_vars(coord), coord.init_time, coord.lead_time
     )
     vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
     return download(

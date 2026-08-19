@@ -78,7 +78,7 @@ def test_flatten_groups_keys_group_vars_by_path() -> None:
     # The group var keeps its vertical dim and that group's own coord is merged in.
     assert flat["pressure_level/temperature"].dims == ("time", "pressure_level")
     assert "pressure_level" in flat.coords
-    # Root attrs (read by check_for_expected_shards) survive the flatten/merge.
+    # Root attrs (read by CheckExpectedShards) survive the flatten/merge.
     assert flat.attrs["dataset_id"] == "test-dataset"
 
 

@@ -11,6 +11,7 @@ with contextlib.suppress(RuntimeError):  # skip if already set
 
 import sentry_sdk
 import typer
+from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.typer import TyperIntegration
 from sentry_sdk.types import Hint, Log
 
@@ -164,31 +165,31 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaGfsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast35DayDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast10DaySpatialDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -197,19 +198,17 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfAifsSingleForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[
-            EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig()
-        ],
+        primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfAifsSingleForecastVirtualDataset(
         primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -267,11 +266,11 @@ if Config.is_sentry_enabled:
         project_root="src/",
         in_app_include=["reformatters"],
         default_integrations=True,
-        enable_logs=True,
         # Connection idles cause us to lose events after quiet periods
         keep_alive=True,
         before_send_log=before_log,
         integrations=[
+            LoggingIntegration(capture_sentry_logs=True),
             TyperIntegration(),
         ],
     )

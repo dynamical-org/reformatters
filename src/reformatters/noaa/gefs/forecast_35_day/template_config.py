@@ -14,6 +14,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
@@ -23,6 +24,18 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_template_dimension_coordinates,
 )
 from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+
+_CATEGORICAL_RESAMPLING_COMMENT = (
+    "Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to "
+    "this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 "
+    "occur and give the flagged fraction of the neighborhood."
+)
+_CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES = (
+    "categorical_freezing_rain_surface",
+    "categorical_ice_pellets_surface",
+    "categorical_rain_surface",
+    "categorical_snow_surface",
+)
 
 
 class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
@@ -286,4 +299,21 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims[ROOT])
         var_shards_ordered = tuple(var_shards[dim] for dim in self.dims[ROOT])
 
-        return get_shared_data_var_configs(var_chunks_ordered, var_shards_ordered)
+        def append_resampling_comment(var: GEFSDataVar) -> GEFSDataVar:
+            return replace(
+                var,
+                attrs=replace(
+                    var.attrs,
+                    comment=f"{var.attrs.comment}. {_CATEGORICAL_RESAMPLING_COMMENT}",
+                ),
+            )
+
+        var_configs = get_shared_data_var_configs(
+            var_chunks_ordered, var_shards_ordered
+        )
+        return [
+            append_resampling_comment(var)
+            if var.name in _CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES
+            else var
+            for var in var_configs
+        ]

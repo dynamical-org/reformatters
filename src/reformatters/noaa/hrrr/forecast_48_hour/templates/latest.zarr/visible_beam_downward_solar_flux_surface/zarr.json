@@ -71,6 +71,7 @@
     "long_name": "Visible Beam Downward Solar Flux",
     "short_name": "vbdsf",
     "units": "W m-2",
+    "comment": "Direct normal irradiance \u2014 the flux perpendicular to the solar beam, so it exceeds the horizontal downward shortwave flux when the sun is low. Values inflate without bound in a narrow band of grid cells at sunrise, reaching 10000. Mask values > 1361, the solar constant.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -66,6 +66,24 @@ variables_option = typer.Option(
     "If not provided, will plot all common variables.",
 )
 
+init_time_option = typer.Option(
+    None,
+    "--init-time",
+    help="Forecast init_time to plot (default: random)",
+)
+
+lead_time_option = typer.Option(
+    None,
+    "--lead-time",
+    help="Forecast lead_time in hours for the spatial snapshot (default: random)",
+)
+
+time_option = typer.Option(
+    None,
+    "--time",
+    help="Analysis time to plot (default: random)",
+)
+
 start_date_option = typer.Option(
     None,
     "--start-date",
@@ -137,6 +155,7 @@ class VariableStats:
     short_name: str | None = None
     standard_name: str | None = None
     step_type: str | None = None
+    comment: str | None = None
     # Categorical / flag variables (CF flag_values + flag_meanings), formatted for display.
     flag_values: str | None = None
     flag_meanings: str | None = None
@@ -225,6 +244,12 @@ class RunContext:
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
     level_override: float | None = None
+    # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
+    # the spatial snapshot), an analysis run uses time; each anchors both the spatial
+    # snapshot and the temporal comparison so one flag places the whole report.
+    init_time: str | None = None
+    lead_time: str | None = None
+    time: str | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
@@ -573,6 +598,7 @@ def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:
         "short_name": attrs.get("short_name"),
         "standard_name": attrs.get("standard_name"),
         "step_type": attrs.get("step_type"),
+        "comment": attrs.get("comment"),
         "flag_values": flag_values,
         "flag_meanings": attrs.get("flag_meanings"),
     }

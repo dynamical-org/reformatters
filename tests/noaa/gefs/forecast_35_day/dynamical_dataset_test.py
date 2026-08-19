@@ -48,10 +48,11 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 
 def test_validators(dataset: GefsForecast35DayDataset) -> None:
     """Test that validators are properly configured."""
-    validators = tuple(dataset.validators())
-    assert len(validators) == 3
-    assert validation.check_forecast_current_data in validators
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    current_data, recent_nans = dataset.validators()
+    assert isinstance(current_data, validation.CheckCurrentData)
+    assert current_data.max_delay == timedelta(hours=7, minutes=3)
+    assert isinstance(recent_nans, validation.CheckRecentNans)
+    assert recent_nans.max_nan_fraction == (0.45, 0.0)
 
 
 def test_template_config(dataset: GefsForecast35DayDataset) -> None:

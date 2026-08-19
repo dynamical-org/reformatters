@@ -94,7 +94,7 @@
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
           "units": "1",
-          "comment": "0=no; 1=yes",
+          "comment": "0=no; 1=yes. Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 occur and give the flagged fraction of the neighborhood.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -191,7 +191,7 @@
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
           "units": "1",
-          "comment": "0=no; 1=yes",
+          "comment": "0=no; 1=yes. Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 occur and give the flagged fraction of the neighborhood.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -288,7 +288,7 @@
           "long_name": "Categorical rain",
           "short_name": "crain",
           "units": "1",
-          "comment": "0=no; 1=yes",
+          "comment": "0=no; 1=yes. Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 occur and give the flagged fraction of the neighborhood.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -385,7 +385,7 @@
           "long_name": "Categorical snow",
           "short_name": "csnow",
           "units": "1",
-          "comment": "0=no; 1=yes",
+          "comment": "0=no; 1=yes. Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 occur and give the flagged fraction of the neighborhood.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -867,6 +867,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1423,7 +1424,7 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "Contains the value -50 when there is no precipitation.",
+          "comment": "Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

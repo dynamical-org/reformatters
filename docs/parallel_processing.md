@@ -126,3 +126,5 @@ Because any operational update that publishes during an overwrite backfill makes
 ## Replica ordering
 
 Replicas are always updated before the primary store. This ensures that if a failure occurs between updating replicas and primary, the primary (which drives what work needs to be done) still reflects the pre-update state, causing a retry to redo all the work including re-updating replicas.
+
+Finalization publishes in two passes by format — zarr v3 stores, then icechunk stores. Zarr v3 is deprecated: no new zarr v3 store is created and the remaining ones are only ever replicas of an icechunk primary (a registry test in `tests/datasets_test.py` enforces this), so publishing that format first keeps the primary the last store to advance.

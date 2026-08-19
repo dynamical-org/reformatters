@@ -1,5 +1,3 @@
-from functools import partial
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +8,9 @@ from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
+)
+from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
+    NoaaHrrrForecast48HourTemplateConfig,
 )
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
@@ -180,16 +181,32 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 4
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
-    assert isinstance(validators[2], partial)
-    assert validators[2].keywords["exclude_vars"] == (
+    assert len(validators) == 3
+    assert all(isinstance(v, validation.Validator) for v in validators)
+    assert isinstance(validators[1], validation.CheckRecentNans)
+    assert validators[1].exclude_vars == (
         "percent_frozen_precipitation_surface",
         "geopotential_height_cloud_ceiling",
     )
-    assert isinstance(validators[3], partial)
-    assert (
-        validators[3].keywords["include_vars"] == validators[2].keywords["exclude_vars"]
-    )
-    assert validators[3].keywords["max_nan_fraction"] == 0.9999
-    assert validators[3].keywords["spatial_sampling"] == "quarter"
+    # A day of 6-hourly cycles, so a truncated or missing forecast is caught even
+    # after newer cycles land.
+    assert validators[1].window == 4
+    assert isinstance(validators[2], validation.CheckRecentNans)
+    assert validators[2].include_vars == validators[1].exclude_vars
+    assert validators[2].max_nan_fraction == 0.9999
+    assert validators[2].spatial_sampling == "quarter"
+
+
+def test_vars_without_hour_0_values_declared_in_template() -> None:
+    """CheckRecentNans derives its lead_time=0 skips from these declarations."""
+    config = NoaaHrrrForecast48HourTemplateConfig()
+    no_hour_0 = {var.name for var in config.data_vars if not var.has_hour_0_values()}
+    assert no_hour_0 == {
+        "precipitation_surface",
+        "snowfall_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_rain_surface",
+        "categorical_snow_surface",
+        "percent_frozen_precipitation_surface",
+    }

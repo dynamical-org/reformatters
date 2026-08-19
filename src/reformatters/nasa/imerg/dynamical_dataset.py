@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from typing import ClassVar
 
 from reformatters.common import validation
@@ -58,14 +57,10 @@ class NasaImergAnalysisMaterializedDataset(
         )
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=self.max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
+            validation.CheckCurrentData(max_delay=self.max_expected_delay),
+            validation.CheckRecentNans(
                 # IMERG is globally complete (precip is 0, not NaN, where it is dry);
                 # only sparse polar gaps are NaN. On-disk granules measure <=0.8% NaN
                 # globally (deep archive) and <=0.15% recent; "quarter" sampling can

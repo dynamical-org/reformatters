@@ -8,7 +8,7 @@ import pytest
 import xarray as xr
 
 from reformatters.noaa.hrrr import (
-    forecast_virtual_region_job as region_job_module,
+    virtual_region_job as region_job_module,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
     NoaaHrrrForecast48HourVirtualRegionJob,
@@ -16,10 +16,10 @@ from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.template_config import (
     NoaaHrrrForecast48HourVirtualTemplateConfig,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 _LEAD_6H = pd.Timedelta("6h")
@@ -93,12 +93,17 @@ def test_out_loc_root_file_excludes_level() -> None:
     }
 
 
-def test_out_loc_group_file_carries_representative_level() -> None:
-    # A prs/nat file holds only group vars, so the per-file probe needs a concrete level.
+def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> None:
+    # out_loc stays the file's slab; the manifest probe supplements a concrete level.
     prs = _coord("prs", [get_var("pressure_level/temperature")])
-    assert dict(prs.out_loc())["pressure_level"] == 1000
+    assert "pressure_level" not in prs.out_loc()
+    job = make_job(template_ds, data_vars=prs.data_vars)
+    prs_probe = job.representative_probe_loc(prs, job.representative_var(prs))
+    assert prs_probe["pressure_level"] == 1000
+
     nat = _coord("nat", [get_var("model_level/temperature")])
-    assert dict(nat.out_loc())["model_level"] == 1
+    nat_probe = job.representative_probe_loc(nat, job.representative_var(nat))
+    assert nat_probe["model_level"] == 1
 
 
 # --- message-driven file_refs ---

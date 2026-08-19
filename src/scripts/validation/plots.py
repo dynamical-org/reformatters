@@ -29,8 +29,10 @@ from scripts.validation.utils import (
     create_run_output_dir,
     end_date_option,
     get_two_random_points,
+    init_time_option,
     is_forecast_dataset,
     is_virtual_store,
+    lead_time_option,
     level_option,
     load_zarr_dataset,
     output_dir_option,
@@ -41,6 +43,7 @@ from scripts.validation.utils import (
     scope_time_period,
     select_variables_for_plotting,
     start_date_option,
+    time_option,
     variables_option,
 )
 from scripts.validation.value_timeseries import (
@@ -96,19 +99,9 @@ def run_all(
     variables: list[str] | None = variables_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
-    init_time: str | None = typer.Option(
-        None,
-        "--init-time",
-        help="Forecast init_time for spatial plots (default: random)",
-    ),
-    lead_time: str | None = typer.Option(
-        None,
-        "--lead-time",
-        help="Forecast lead_time in hours for spatial plots (default: random)",
-    ),
-    time: str | None = typer.Option(
-        None, "--time", help="Analysis time for spatial plots (default: random)"
-    ),
+    init_time: str | None = init_time_option,
+    lead_time: str | None = lead_time_option,
+    time: str | None = time_option,
     level: float | None = level_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
@@ -172,6 +165,9 @@ def run_all(
         start_date=start_date,
         is_virtual=is_virtual,
         level_override=level,
+        init_time=init_time,
+        lead_time=lead_time,
+        time=time,
     )
 
     if ctx.is_virtual:
@@ -184,9 +180,7 @@ def run_all(
                 run_decode_scan(ctx)
                 run_value_timeseries(ctx)
                 run_compare_timeseries(ctx)
-                run_compare_spatial(
-                    ctx, init_time=init_time, lead_time=lead_time, time=time
-                )
+                run_compare_spatial(ctx)
             finally:
                 # Always join so a background scan failure surfaces rather than being
                 # discarded when a foreground phase raises.
@@ -196,7 +190,7 @@ def run_all(
         run_value_availability(ctx)
         run_value_timeseries(ctx)
         run_compare_timeseries(ctx)
-        run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
+        run_compare_spatial(ctx)
 
     summary_path = write_summary_md(ctx)
     log.info(f"Done. Summary: {summary_path}")

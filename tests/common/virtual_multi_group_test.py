@@ -376,7 +376,7 @@ class MultiGroupDataset(
             ),
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return ()
 
 
@@ -525,8 +525,8 @@ def test_open_flattened_dataset_includes_group_vars(tmp_path: Path) -> None:
 
 def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     # The most safety-critical case: a NaN/coverage validator must evaluate group vars,
-    # not silently drop to root-only. Running it over the flat dataset with the group var
-    # explicitly included reports "1 variable" (it was found and checked), not "0".
+    # not silently drop to root-only. Selecting the group var by path must find and
+    # check it (an unknown name raises; a selection missing from the store fails).
     dataset = _make_dataset(tmp_path, n_inits=2)
     template_ds = _create_template_ds(2)
     template_utils.write_metadata(template_ds, dataset.store_factory)
@@ -535,13 +535,12 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     store = repo.readonly_session("main").store
 
     flat = validation.open_flattened_dataset(store, consolidated=False)
-    result = validation.check_forecast_recent_nans(
-        flat,
+    result = validation.CheckRecentNans(
         include_vars=["pressure_level/temperature"],
         spatial_sampling="all",
-    )
+    ).check(validation.ValidationContext(store=store, ds=flat, append_dim="init_time"))
     assert result.passed, result.message
-    assert "All 1 variables" in result.message
+    assert "All 2 checked recent init_time positions" in result.message
 
 
 def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
@@ -558,7 +557,11 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
 
     ds = validation.open_flattened_dataset(store, consolidated=False)
     assert "pressure_level/temperature" in ds.data_vars
-    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    result = validation.CheckVirtualDecodeHealth().check(
+        validation.ValidationContext(
+            store=store, ds=ds, append_dim=job.append_dim, region_job=job
+        )
+    )
     assert result.passed, result.message
 
 
@@ -573,15 +576,18 @@ def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 2))
     ds = validation.open_flattened_dataset(store, consolidated=False)
+    context = validation.ValidationContext(
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
+    )
 
     # Sampling one of the two pressure levels still exercises the group var and passes.
-    sampled = validation.CheckVirtualDecodeHealth(sampled_levels=1)(job, store, ds)
+    sampled = validation.CheckVirtualDecodeHealth(sampled_levels=1).check(context)
     assert sampled.passed, sampled.message
 
     # positions="all" capped to a single position decode-checks just one init.
-    capped = validation.CheckVirtualDecodeHealth(positions="all", max_positions=1)(
-        job, store, ds
-    )
+    capped = validation.CheckVirtualDecodeHealth(
+        positions="all", max_positions=1
+    ).check(context)
     assert capped.passed, capped.message
     assert capped.message.count("init_time=") == 1
 
@@ -872,3 +878,54 @@ def test_refresh_metadata_preserves_store_written_coord_values(tmp_path: Path) -
     runtime_state = tree["runtime_state"]
     assert isinstance(runtime_state, xr.DataArray)
     np.testing.assert_array_equal(runtime_state.values, [1.5, 2.5])
+
+
+def test_completeness_variable_filter_requires_disjoint_source_files(
+    tmp_path: Path,
+) -> None:
+    """A source file carrying both a checked and an unchecked variable is rejected.
+
+    This fixture's files carry both `temperature_2m` and `pressure_level/temperature`.
+    """
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    _process_virtual(job, repo)
+    store = repo.readonly_session("main").store
+    ds = validation.open_flattened_dataset(store, consolidated=False)
+
+    context = validation.ValidationContext(
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
+    )
+    with pytest.raises(AssertionError, match="carries both selected and unselected"):
+        validation.CheckVirtualManifestCompleteness(
+            include_vars=["pressure_level/temperature"]
+        ).check(context)
+
+    # Covering every variable the files carry is the supported case.
+    assert (
+        validation.CheckVirtualManifestCompleteness(
+            include_vars=["temperature_2m", "pressure_level/temperature"]
+        )
+        .check(context)
+        .passed
+    )
+
+
+def test_representative_probe_loc_supplements_the_group_level() -> None:
+    """A file spanning every level of a vertical group is probed at its first level."""
+    template_ds = _create_template_ds(2)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    coord = job.source_file_coords()[0]
+    group_var = next(var for var in job.data_vars if var.group == "pressure_level")
+
+    assert "pressure_level" not in coord.out_loc()
+    assert dict(job.representative_probe_loc(coord, group_var)) == {
+        **dict(coord.out_loc()),
+        "pressure_level": PRESSURE_LEVELS[0],
+    }
+    # A root variable has no vertical dim, so its probe is just the file's slab.
+    root_var = next(var for var in job.data_vars if var.group is ROOT)
+    assert dict(job.representative_probe_loc(coord, root_var)) == dict(coord.out_loc())

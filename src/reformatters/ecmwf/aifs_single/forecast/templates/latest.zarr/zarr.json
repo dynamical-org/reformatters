@@ -180,6 +180,7 @@
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
           "units": "W m-2",
+          "comment": "Average flux since the previous forecast step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -268,6 +269,7 @@
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
+          "comment": "Average flux since the previous forecast step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

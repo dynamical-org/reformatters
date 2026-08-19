@@ -116,4 +116,4 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: NasaSmapLevel336KmV9Dataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    assert all(isinstance(v, validation.Validator) for v in validators)

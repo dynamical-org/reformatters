@@ -292,7 +292,7 @@ class VirtualTestDataset(
             ),
         ]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return ()
 
 
@@ -1345,7 +1345,7 @@ def test_virtual_operational_rejects_multiple_jobs(tmp_path: Path) -> None:
 
 def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
     # Virtual stores have shards=None and intentionally-missing chunks for
-    # partially-published inits, so check_for_expected_shards must be skipped.
+    # partially-published inits, so CheckExpectedShards must be skipped.
     dataset = _make_dataset(tmp_path)
     template_utils.write_metadata(_create_template_ds(4), dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
@@ -1379,6 +1379,25 @@ def _updated_store(
     return repo.readonly_session("main").store
 
 
+def test_representative_probe_loc_supplements_only_unpinned_multi_chunk_dims() -> None:
+    """The probe cell adds a label only where out_loc leaves a multi-chunk dim free."""
+    template_ds = _create_template_ds(4)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    coord = job.source_file_coords()[0]
+    var = job.representative_var(coord)
+
+    # out_loc pins both multi-chunk dims here and the spatial dims are single-chunk.
+    assert dict(job.representative_probe_loc(coord, var)) == dict(coord.out_loc())
+
+
+def _virtual_context(
+    job: VirtualTestRegionJob, store: icechunk.IcechunkStore, ds: xr.Dataset
+) -> validation.ValidationContext:
+    return validation.ValidationContext(
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
+    )
+
+
 def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
     # Default (1.0,): every position in the window must be fully present.
     dataset = _make_dataset(tmp_path)
@@ -1386,8 +1405,8 @@ def test_check_virtual_manifest_completeness_passes(tmp_path: Path) -> None:
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    result = validation.CheckVirtualManifestCompleteness()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    result = validation.CheckVirtualManifestCompleteness().check(
+        _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     )
     assert result.passed, result.message
 
@@ -1402,8 +1421,8 @@ def test_check_virtual_manifest_completeness_detects_hole_below_extent(
     store = _updated_store(dataset, template_ds, emit=[slice(0, 2), slice(3, 4)])
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    result = validation.CheckVirtualManifestCompleteness()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    result = validation.CheckVirtualManifestCompleteness().check(
+        _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     )
     assert not result.passed
     assert "Incomplete" in result.message
@@ -1419,8 +1438,8 @@ def test_check_virtual_manifest_completeness_ignores_unpublished_newest(
     store = _updated_store(dataset, template_ds, emit=[slice(0, 3)])
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    result = validation.CheckVirtualManifestCompleteness()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    result = validation.CheckVirtualManifestCompleteness().check(
+        _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     )
     assert result.passed, result.message
 
@@ -1440,12 +1459,14 @@ def test_check_virtual_manifest_completeness_thresholds_apply_to_ingested(
     partial_job.process_virtual(repo, [], "main", coords[: len(coords) // 2])
     store = repo.readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 4))
-    ds = xr.open_zarr(store, decode_timedelta=True)
+    context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
 
-    assert validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.4, 1.0))(
-        job, store, ds
-    ).passed
-    result = validation.CheckVirtualManifestCompleteness()(job, store, ds)
+    assert (
+        validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.4, 1.0))
+        .check(context)
+        .passed
+    )
+    result = validation.CheckVirtualManifestCompleteness().check(context)
     assert not result.passed
     assert "Incomplete" in result.message
 
@@ -1461,15 +1482,69 @@ def test_check_virtual_manifest_completeness_fails_when_window_too_short(
 
     result = validation.CheckVirtualManifestCompleteness(
         min_present_fraction=(0.5, 1.0)
-    )(job, store, xr.open_zarr(store, decode_timedelta=True))
+    ).check(_virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True)))
     assert not result.passed
     assert "need at least 2" in result.message
+
+
+def test_check_virtual_manifest_completeness_zero_tier_excuses_newest(
+    tmp_path: Path,
+) -> None:
+    # A 0.0 leading tier is how a position whose files have not published yet is
+    # excused, while every older position is still held to a whole 1.0.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+    partial_job = _make_region_job(template_ds, region=slice(2, 3))
+    coords = partial_job.source_file_coords()
+    partial_job.process_virtual(repo, [], "main", coords[: len(coords) // 2])
+    store = repo.readonly_session("main").store
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+
+    context = _virtual_context(job, store, ds)
+    assert (
+        validation.CheckVirtualManifestCompleteness(min_present_fraction=(0.0, 1.0))
+        .check(context)
+        .passed
+    )
+    assert not validation.CheckVirtualManifestCompleteness().check(context).passed
+
+
+def test_check_virtual_manifest_completeness_selects_files_by_variable(
+    tmp_path: Path,
+) -> None:
+    # An instance checks only the files carrying its own variables, and a filter
+    # matching nothing raises as a config error rather than vacuously passing.
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 4))
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+    (var_path,) = [var.path for var in job.data_vars]
+
+    assert (
+        validation.CheckVirtualManifestCompleteness(include_vars=[var_path])
+        .check(context)
+        .passed
+    )
+
+    with pytest.raises(ValueError, match="selects no variables"):
+        validation.CheckVirtualManifestCompleteness(exclude_vars=[var_path]).check(
+            context
+        )
+    with pytest.raises(ValueError, match="unknown variables"):
+        validation.CheckVirtualManifestCompleteness(include_vars=["not_a_var"]).check(
+            context
+        )
 
 
 def test_check_virtual_manifest_completeness_rejects_loose_last_tier() -> None:
     # The last tier holds for every older append-dim position, so anything under 1.0
     # would permanently accept incomplete data rather than ever failing on it.
-    with pytest.raises(AssertionError, match=r"must be 1\.0"):
+    with pytest.raises(ValidationError, match=r"must be 1\.0"):
         validation.CheckVirtualManifestCompleteness(min_present_fraction=(1.0, 0.8))
 
 
@@ -1480,10 +1555,12 @@ def test_check_virtual_decode_health_passes(tmp_path: Path) -> None:
     job = _make_region_job(template_ds, region=slice(0, 4))
     ds = xr.open_zarr(store, decode_timedelta=True)
 
-    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    result = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, ds)
+    )
     assert result.passed, result.message
     assert "all readable" in result.message
-    # "latest": targets the newest present position, not an older one.
+    # Default positions=1: targets the newest present position, not an older one.
     assert str(ds.get_index("init_time")[-1]) in result.message
 
 
@@ -1497,7 +1574,9 @@ def test_check_virtual_decode_health_only_decodes_present_refs(tmp_path: Path) -
     job = _make_region_job(template_ds, region=slice(0, 4))
     ds = xr.open_zarr(store, decode_timedelta=True)
 
-    result = validation.CheckVirtualDecodeHealth()(job, store, ds)
+    result = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, ds)
+    )
     assert result.passed, result.message
     assert str(ds.get_index("init_time")[1]) in result.message
 
@@ -1511,8 +1590,8 @@ def test_check_virtual_decode_health_fails_when_no_present_refs(tmp_path: Path) 
     store = _primary_repo(dataset.store_factory).readonly_session("main").store
     job = _make_region_job(template_ds, region=slice(0, 4))
 
-    result = validation.CheckVirtualDecodeHealth()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    result = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     )
     assert not result.passed
     assert "No present references" in result.message
@@ -1534,8 +1613,8 @@ def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> N
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
     job = _make_region_job(template_ds, region=slice(0, 1))
 
-    result = validation.CheckVirtualDecodeHealth()(
-        job, store, xr.open_zarr(store, decode_timedelta=True)
+    result = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
     )
     assert not result.passed
     assert "entirely NaN" in result.message
@@ -1561,17 +1640,17 @@ def test_check_virtual_decode_health_skips_vars_without_reference(
     template_ds = _create_template_ds(1)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
     job = _make_region_job(template_ds, region=slice(0, 1))
-    ds = xr.open_zarr(store, decode_timedelta=True)
+    context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
 
     skipped = validation.CheckVirtualDecodeHealth(
         reference_exists=lambda var_path, out_loc: False
-    )(job, store, ds)
+    ).check(context)
     assert skipped.passed, skipped.message
     assert "no reference" in skipped.message
 
     present = validation.CheckVirtualDecodeHealth(
         reference_exists=lambda var_path, out_loc: True
-    )(job, store, ds)
+    ).check(context)
     assert not present.passed
     assert "entirely NaN" in present.message
 
@@ -1581,9 +1660,12 @@ def test_validate_dataset_requires_region_job_for_virtual_validator(
 ) -> None:
     dataset = _make_dataset(tmp_path)
     store = _backfilled_store(dataset, _create_template_ds(4), emit=slice(0, 4))
-    with pytest.raises(AssertionError, match="needs a region_job"):
+    with pytest.raises(AssertionError, match="require a region_job"):
         validation.validate_dataset(
-            store, [validation.CheckVirtualManifestCompleteness()], dataset_id="test"
+            [validation.CheckVirtualManifestCompleteness()],
+            store=store,
+            append_dim="init_time",
+            dataset_id="test",
         )
 
 

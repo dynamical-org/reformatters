@@ -184,13 +184,13 @@ def _stub_registry(
 
 def _stub_var(
     name: str,
-    has_hour_0: bool,
+    stores_hour_0: bool,
     source_fill_value: float | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         name=name,
         path=name,
-        has_hour_0_values=lambda: has_hour_0,
+        stores_hour_0_values=lambda: stores_hour_0,
         internal_attrs=SimpleNamespace(source_fill_value=source_fill_value),
     )
 
@@ -208,9 +208,9 @@ def test_run_value_availability_exempts_hour_0_override_vars(
     _stub_registry(
         monkeypatch,
         [
-            _stub_var("temperature_2m", has_hour_0=True),
-            _stub_var("precipitation_surface", has_hour_0=False),
-            _stub_var("categorical_rain_surface", has_hour_0=False),
+            _stub_var("temperature_2m", stores_hour_0=True),
+            _stub_var("precipitation_surface", stores_hour_0=False),
+            _stub_var("categorical_rain_surface", stores_hour_0=False),
         ],
     )
     ctx = _ctx(ds, tmp_path)
@@ -238,11 +238,11 @@ def test_run_value_availability_sentinel_masked_uses_co_ingested(
     _stub_registry(
         monkeypatch,
         [
-            _stub_var("temperature_2m", has_hour_0=True),
-            _stub_var("precipitation_surface", has_hour_0=False),
+            _stub_var("temperature_2m", stores_hour_0=True),
+            _stub_var("precipitation_surface", stores_hour_0=False),
             _stub_var(
                 "percent_frozen_precipitation_surface",
-                has_hour_0=False,
+                stores_hour_0=False,
                 source_fill_value=-50.0,
             ),
         ],
@@ -297,9 +297,9 @@ def test_run_value_availability_source_mask_uses_co_ingested(
     _stub_registry(
         monkeypatch,
         [
-            _stub_var("temperature_2m", has_hour_0=True),
-            _stub_var("precipitation_surface", has_hour_0=False),
-            _stub_var("cloud_ceiling", has_hour_0=True, source_fill_value=9_999.0),
+            _stub_var("temperature_2m", stores_hour_0=True),
+            _stub_var("precipitation_surface", stores_hour_0=False),
+            _stub_var("cloud_ceiling", stores_hour_0=True, source_fill_value=9_999.0),
         ],
     )
     ctx = _ctx(ds, tmp_path)

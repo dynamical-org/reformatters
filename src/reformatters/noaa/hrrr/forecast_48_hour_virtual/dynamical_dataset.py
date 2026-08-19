@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from pydantic import Field
 
@@ -11,11 +10,11 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
     hrrr_virtual_chunk_containers,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 
 from .region_job import NoaaHrrrForecast48HourVirtualRegionJob
 from .template_config import NoaaHrrrForecast48HourVirtualTemplateConfig
@@ -81,13 +80,11 @@ class NoaaHrrrForecast48HourVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        # 6h cycle + ~2h publication = ~8h before the latest init is current.
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=8),
-            ),
+            # The update polls each init from init+50m (f48 publishes ~init+1h50m);
+            # validation fires at init+2h40m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=40)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )
