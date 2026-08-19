@@ -242,7 +242,7 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
         return var_path(self.group, self.name)
 
     def has_hour_0_values(self) -> bool:
-        """Whether this variable has values at lead_time=0 (the analysis step).
+        """Whether the source provides values for this variable at lead_time=0 (the analysis step).
 
         Providers with different lead-0 semantics override this default.
         Per-variable exceptions set internal_attrs.hour_0_values_override.
@@ -250,6 +250,14 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
         if self.internal_attrs.hour_0_values_override is not None:
             return self.internal_attrs.hour_0_values_override
         return self.attrs.step_type == "instant"
+
+    def stores_hour_0_values(self) -> bool:
+        """Whether the written store holds a value for this variable at lead_time=0.
+
+        A rate deaccumulated from a running total has none even where the source
+        provides a lead-0 accumulation: differencing has no prior step there.
+        """
+        return self.has_hour_0_values() and not self.internal_attrs.deaccumulate_to_rate
 
 
 def source_fill_value_var_names(

@@ -358,9 +358,8 @@ class CheckRecentNans(VariableSelection, Validator):
     bounded cost. Sampled positions are chosen randomly, so per-recency tiers do not
     apply — a sampled check takes a single max_nan_fraction.
 
-    A variable without hour-0 values (`step_type != "instant"`, or the template's
-    `has_hour_0_values()` is false) has its lead_time=0 slice dropped before computing
-    the NaN fraction.
+    A variable the store holds no lead_time=0 value for (see `stores_hour_0_values`)
+    has that slice dropped before computing the NaN fraction.
     """
 
     max_nan_fraction: float | tuple[float, ...] = 0.0
@@ -420,8 +419,11 @@ class CheckRecentNans(VariableSelection, Validator):
                 passed=False,
                 message="None of the selected variables are in the store",
             )
+        template_vars = {var.path: var for var in context.data_vars}
         skip_lead_time_0_vars = {
-            var.path for var in context.data_vars if not var.has_hour_0_values()
+            var_path
+            for var_path in var_paths
+            if not stores_hour_0_values(template_vars.get(var_path), ds[var_path])
         }
 
         tiers = self._tiers
@@ -477,6 +479,19 @@ class CheckRecentNans(VariableSelection, Validator):
             message=f"All {checked} checked recent {append_dim} positions have "
             f"NaN fraction within {tiers}",
         )
+
+
+def stores_hour_0_values(
+    template_var: DataVar[Any] | None, data_array: xr.DataArray
+) -> bool:
+    """Whether `data_array` holds a value at lead_time=0.
+
+    The template config is authoritative; the store's own `step_type` answers for a
+    variable no template declares (an unregistered store, or a test fixture).
+    """
+    if template_var is not None:
+        return template_var.stores_hour_0_values()
+    return data_array.attrs.get("step_type", "instant") == "instant"
 
 
 def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
@@ -629,10 +644,7 @@ def _compute_var_nan_fraction(
     skip_lead_time_0_vars: set[str],
 ) -> float:
     da = ds[var_path]
-    if "lead_time" in da.dims and (
-        var_path in skip_lead_time_0_vars
-        or da.attrs.get("step_type", "instant") != "instant"
-    ):
+    if "lead_time" in da.dims and var_path in skip_lead_time_0_vars:
         da = da.isel(lead_time=slice(1, None))
     # Deep copy after slicing to force eager load of just the needed region
     # (helps avoid memory leaks observed iterating null checks across vars).

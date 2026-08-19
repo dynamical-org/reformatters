@@ -23,6 +23,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
+from reformatters.common.validation import stores_hour_0_values
 from scripts.validation.manifest_scan import (
     result_availability_series,
     scan_manifest,
@@ -418,12 +419,7 @@ def run_value_availability(ctx: RunContext) -> None:
         if var in semantic_missing_vars:
             continue
 
-        template_var = template_vars.get(var)
-        has_hour_0 = (
-            template_var.has_hour_0_values()
-            if template_var is not None
-            else da_p1.attrs.get("step_type") == "instant"
-        )
+        has_hour_0 = stores_hour_0_values(template_vars.get(var), da_p1)
         null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(
             da_p1, has_hour_0=has_hour_0
         )
