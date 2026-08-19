@@ -296,6 +296,38 @@ def test_check_recent_nans_skips_lead_time_0_from_template_config(
     assert passed.passed
 
 
+def test_check_recent_nans_skips_lead_time_0_for_deaccumulated_var(
+    forecast_dataset: xr.Dataset,
+) -> None:
+    """A deaccumulated rate has no lead-0 value even where its source provides a lead-0
+    accumulation, so that slice is dropped."""
+    forecast_dataset["precipitation"].loc[
+        {
+            "init_time": forecast_dataset.init_time[-1],
+            "lead_time": pd.Timedelta(0),
+        }
+    ] = np.nan
+    forecast_dataset["precipitation"].attrs["step_type"] = "instant"
+
+    data_vars = (
+        NanTestDataVar(name="temperature"),
+        NanTestDataVar(
+            name="precipitation",
+            internal_attrs=BaseInternalAttrs(
+                keep_mantissa_bits="no-rounding",
+                deaccumulate_to_rate=True,
+                hour_0_values_override=True,
+            ),
+        ),
+    )
+
+    result = validation.CheckRecentNans().check(
+        _context(forecast_dataset, "init_time", data_vars=data_vars)
+    )
+
+    assert result.passed
+
+
 def test_check_recent_nans_include_exclude_vars(
     forecast_dataset: xr.Dataset,
 ) -> None:

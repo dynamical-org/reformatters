@@ -84,7 +84,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
 
 class EcmwfDataVar(DataVar[EcmwfInternalAttrs]):
     def has_hour_0_values(self) -> bool:
-        """Returns True if this variable has a value at lead_time=0h.
+        """Returns True if the source provides a value for this variable at lead_time=0h.
 
         ECMWF avg/accum variables (e.g. total precipitation, radiation) include a 0h
         accumulation of 0 in the GRIB, so they do have hour 0 values. Only "max" and "min"
