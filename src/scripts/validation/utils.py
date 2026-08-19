@@ -66,6 +66,12 @@ variables_option = typer.Option(
     "If not provided, will plot all common variables.",
 )
 
+init_time_option = typer.Option(
+    None,
+    "--init-time",
+    help="Forecast init_time to plot (default: random)",
+)
+
 start_date_option = typer.Option(
     None,
     "--start-date",

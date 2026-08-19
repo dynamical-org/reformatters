@@ -12,6 +12,7 @@ from scripts.validation.utils import (
     VariableStats,
     end_date_option,
     get_two_random_points,
+    init_time_option,
     is_forecast_dataset,
     is_virtual_store,
     level_label,
@@ -37,9 +38,13 @@ log = get_logger(__name__)
 
 
 def select_time_period_for_comparison(
-    validation_ds: xr.Dataset, reference_ds: xr.Dataset
+    validation_ds: xr.Dataset, reference_ds: xr.Dataset, init_time: str | None = None
 ) -> tuple[xr.Dataset, xr.Dataset, str, str, str]:
-    """Select appropriate time periods for validation and reference datasets."""
+    """Select appropriate time periods for validation and reference datasets.
+
+    On a forecast dataset `init_time` pins the forecast to plot, rather than drawing
+    one at random.
+    """
     rng = np.random.default_rng()
     # A period the reference doesn't cover plots the validation series alone, losing every
     # cross-dataset check, so draw from the overlap whenever the two archives have one.
@@ -50,7 +55,11 @@ def select_time_period_for_comparison(
         init_times = pd.DatetimeIndex(validation_ds.init_time.values)
         covered = init_times[(init_times >= ref_start) & (init_times <= ref_end)]
         candidate_init_times = covered if len(covered) > 0 else init_times
-        selected_init_time = pd.Timestamp(rng.choice(candidate_init_times, 1)[0])
+        selected_init_time = (
+            pd.Timestamp(init_time)
+            if init_time is not None
+            else pd.Timestamp(rng.choice(candidate_init_times, 1)[0])
+        )
         validation_subset = validation_ds.sel(init_time=selected_init_time)
 
         valid_time_start = validation_subset.valid_time.min().item()
@@ -207,7 +216,7 @@ def _fmt(v: float | None) -> str:
     return f"{v:.3g}" if v is not None else "n/a"
 
 
-def run_compare_timeseries(ctx: RunContext) -> None:
+def run_compare_timeseries(ctx: RunContext, init_time: str | None = None) -> None:
     """Produce per-variable timeseries comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, (
         "compare-timeseries requires a reference dataset"
@@ -231,7 +240,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         title_suffix,
         time_coord,
         ref_time_coord,
-    ) = select_time_period_for_comparison(validation_ds, ctx.reference_ds)
+    ) = select_time_period_for_comparison(validation_ds, ctx.reference_ds, init_time)
 
     val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
@@ -300,6 +309,7 @@ def compare_timeseries(
     reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
+    init_time: str | None = init_time_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
@@ -339,7 +349,7 @@ def compare_timeseries(
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
     )
-    run_compare_timeseries(ctx)
+    run_compare_timeseries(ctx, init_time)
 
     if show_plot:
         plt.show()

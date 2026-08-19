@@ -29,6 +29,7 @@ from scripts.validation.utils import (
     create_run_output_dir,
     end_date_option,
     get_two_random_points,
+    init_time_option,
     is_forecast_dataset,
     is_virtual_store,
     level_option,
@@ -96,11 +97,7 @@ def run_all(
     variables: list[str] | None = variables_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
-    init_time: str | None = typer.Option(
-        None,
-        "--init-time",
-        help="Forecast init_time for spatial plots (default: random)",
-    ),
+    init_time: str | None = init_time_option,
     lead_time: str | None = typer.Option(
         None,
         "--lead-time",
@@ -183,7 +180,7 @@ def run_all(
             try:
                 run_decode_scan(ctx)
                 run_value_timeseries(ctx)
-                run_compare_timeseries(ctx)
+                run_compare_timeseries(ctx, init_time)
                 run_compare_spatial(
                     ctx, init_time=init_time, lead_time=lead_time, time=time
                 )
@@ -195,7 +192,7 @@ def run_all(
     else:
         run_value_availability(ctx)
         run_value_timeseries(ctx)
-        run_compare_timeseries(ctx)
+        run_compare_timeseries(ctx, init_time)
         run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
 
     summary_path = write_summary_md(ctx)
