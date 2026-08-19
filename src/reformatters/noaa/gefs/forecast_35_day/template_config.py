@@ -30,6 +30,12 @@ _CATEGORICAL_RESAMPLING_COMMENT = (
     "this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 "
     "occur and give the flagged fraction of the neighborhood."
 )
+_CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES = (
+    "categorical_freezing_rain_surface",
+    "categorical_ice_pellets_surface",
+    "categorical_rain_surface",
+    "categorical_snow_surface",
+)
 
 
 class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
@@ -302,7 +308,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
                         comment=f"{var.attrs.comment}. {_CATEGORICAL_RESAMPLING_COMMENT}",
                     ),
                 )
-                if var.name.startswith("categorical_")
+                if var.name in _CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES
                 else var
             )
             for var in get_shared_data_var_configs(
