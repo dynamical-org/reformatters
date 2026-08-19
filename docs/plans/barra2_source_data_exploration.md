@@ -16,6 +16,11 @@ Model + JULES); there is no ocean member of the family.
 Five published `(source_id, domain_id)` streams exist. Whichever was meant by "BARRA-O2" is
 one of these — see [Which product to build](#which-product-to-build).
 
+Two related claims circulate and are both wrong: **BARRA-R2 is the 12 km Australasian
+domain**, not a 4.4 km Australian one (that is BARRA-C2), and there is no separate ~12 km
+"Oceania" domain — the Australasian domain that covers Australia, New Zealand and the South
+Pacific *is* BARRA-R2 / AUS-11. See [Geographic coverage](#geographic-coverage).
+
 ---
 
 ## Dataset: Bureau of Meteorology BARRA2
@@ -163,6 +168,40 @@ Notes:
   unpacked, with no NaN: `orog` is 0 over ocean, `sftlf` is a 0–100 % land fraction.
   Verified `orog` maxima: AUS-11 3696.67 m, AUS-22 3449.72 m, AUST-04 3654.38 m,
   AUST-11 3137.81 m.
+
+### Geographic coverage
+
+Only the two Australasian domains reach New Zealand. **AUS-11 (BARRA-R2) and AUS-22
+(BARRA-RE2) cover Australia, New Zealand and the maritime continent in one grid**; the 0.04°
+and Australia-only domains (AUST-04, AUST-11, AUST-22) stop at ~160°E, well west of New
+Zealand. AUS-11 runs east to 207.39°E (152.61°W), so it crosses the dateline and includes the
+Chatham Islands and Fiji.
+
+Verified by sampling the AUS-11 `fx` fields and 2026-03 `tas`/`pr` at real locations:
+
+| site | in AUS-11 | `orog` | `sftlf` | 2026-03 mean `tas` | 2026-03 total `pr` | in AUST-04 |
+|---|---|---|---|---|---|---|
+| Auckland, NZ | yes | 34.1 m | 66.5 % | 19.3 °C | 141.8 mm | no |
+| Wellington, NZ | yes | 0.0 m | 49.7 % | — | — | no |
+| Christchurch, NZ | yes | 55.0 m | 99.3 % | 14.5 °C | 50.0 mm | no |
+| Aoraki / Mt Cook, NZ | yes | 1401.3 m | 100.0 % | 7.9 °C | 419.9 mm | no |
+| Invercargill, NZ | yes | 12.7 m | 85.2 % | — | — | no |
+| Chatham Islands, NZ (183.4°E) | yes | 37.2 m | 82.9 % | 14.3 °C | 101.9 mm | no |
+| Sydney, AU | yes | 33.0 m | 88.3 % | — | — | yes |
+| Perth, AU | yes | 12.7 m | 100.0 % | — | — | yes |
+| Suva, FJ | yes | 0.0 m | 31.8 % | — | — | no |
+| Port Moresby, PG | yes | 54.7 m | 86.1 % | — | — | yes |
+
+No NaN at any New Zealand sample in either 1979-01 or 2026-03, so the coverage holds across
+the whole archive. New Zealand sits roughly 24° of longitude inside the eastern boundary, far
+from the near-boundary artefact zone. NZ orography is heavily smoothed at 12 km — the Southern
+Alps peak at 1401 m in the AUS-11 `orog` cell nearest Aoraki (3724 m in reality) — which is
+inherent to the resolution, not a data defect.
+
+The provider describes BARRA-R2/RE2 as covering "Australia, New Zealand and the maritime
+continent" and runs its 4D-Var assimilation over the whole AUS-11 domain, so New Zealand is
+inside the assimilating region rather than a passive downscaling of ERA5. That framing is from
+provider documentation and was not independently verified here.
 
 ### Dimensions & Dimension Coordinates
 
@@ -376,13 +415,14 @@ and `tas` metadata for every second year 1979–2026 plus every month of 1991–
 
 The exploration cannot settle this; it is a Checkpoint A decision. What the data says:
 
-- **BARRA-R2 / AUS-11** is the natural flagship: the full CORDEX-Australasia domain, the
-  richest deterministic variable set at 12 km, deterministic (no ensemble dimension), and the
-  cheapest of the three at 637 MiB per variable-month. Best first target.
+- **BARRA-R2 / AUS-11** is the natural flagship: the full CORDEX-Australasia domain at 12 km,
+  deterministic (no ensemble dimension), and the cheapest of the three at 637 MiB per
+  variable-month. It is also **the only deterministic stream that covers Australia and New
+  Zealand in one grid**, so a single dataset serves both. Best first target.
 - **BARRA-C2 / AUST-04** is the headline product for Australian users — 4.4 km, 209 `1hr`
   variables including radar reflectivity, lightning flash rate, visibility and fog — but its
-  grid has 1.9× the cells of AUS-11 (1.7× the bytes for `tas` 2026-03) and it is
-  Australia-only.
+  grid has 1.9× the cells of AUS-11 (1.7× the bytes for `tas` 2026-03) and it stops at
+  159.9°E, so it **does not reach New Zealand**.
 - **BARRA-RE2 / AUS-22** adds a 22-member ensemble at 24 km, at 5.9× the bytes of AUS-11 for
   `tas` 2026-03, with a string-valued member coordinate that needs a naming decision.
 - **AUST-11 / AUST-22** are convective-diagnostic add-ons on sub-lattices of the R2/RE2 grids,
