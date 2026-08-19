@@ -28,6 +28,10 @@ from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
 
 
 class NoaaHrrrAnalysisTemplateConfig(NoaaHrrrCommonTemplateConfig):
+    # Each step reads a 1 hour lead time from its own init, so a source accumulation that
+    # runs from forecast start covers exactly one hour and never carries into the next step.
+    run_total_window_reset_frequency: Timedelta = pd.Timedelta("1h")
+
     dims: Dims = {ROOT: ("time", "y", "x")}
     append_dim: AppendDim = "time"
     # HRRR operational start is 2014-09-30. We start at 2014-10-01 to skip the incomplete first day.

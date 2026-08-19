@@ -7,6 +7,10 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
+from reformatters.noaa.hrrr.analysis.region_job import NoaaHrrrAnalysisRegionJob
+from reformatters.noaa.hrrr.analysis.template_config import (
+    NoaaHrrrAnalysisTemplateConfig,
+)
 from reformatters.noaa.hrrr.forecast_48_hour.region_job import (
     NoaaHrrrForecast48HourRegionJob,
     NoaaHrrrForecast48HourSourceFileCoord,
@@ -402,6 +406,77 @@ def test_apply_data_transformations_deaccumulation(
     call_args = mock_deaccumulate.call_args
     assert call_args.kwargs["dim"] == "time"
     assert call_args.kwargs["reset_frequency"] == pd.Timedelta(hours=1)
+
+
+def test_analysis_snowfall_deaccumulates_each_step_independently() -> None:
+    """Each analysis step reads a fresh 0-1 hour accumulation, so its rate is value / 3600."""
+    template_config = NoaaHrrrAnalysisTemplateConfig()
+    snowfall = next(
+        v for v in template_config.data_vars if v.name == "snowfall_surface"
+    )
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=[snowfall],
+        append_dim=template_config.append_dim,
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+    # Real ASNOW values from hrrr.t{07,08,09,10}z.wrfsfcf01 on 2024-01-13, where the hourly
+    # accumulation rises and then falls; differencing them would zero out the final step.
+    accumulations = np.array([0.000302, 0.00507, 0.02098, 0.008972], dtype=np.float32)
+    data_array = xr.DataArray(
+        accumulations.copy(),
+        dims=["time"],
+        coords={"time": pd.date_range("2024-01-13T08", periods=4, freq="1h")},
+        attrs={"units": snowfall.attrs.units},
+    )
+
+    region_job.apply_data_transformations(data_array, snowfall)
+
+    # First step has no preceding value to deaccumulate from.
+    assert np.isnan(data_array.values[0])
+    np.testing.assert_allclose(
+        data_array.values[1:],
+        accumulations[1:] / 3600,
+        rtol=5e-3,  # keep_mantissa_bits rounding is applied after deaccumulation
+    )
+
+
+def test_read_data_selects_the_hourly_accumulation_band(
+    template_config: NoaaHrrrCommonTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An f06 file holds both APCP06 and APCP01; precipitation must read the hourly bucket."""
+    data_vars = {v.name: v for v in template_config.data_vars}
+    region_job = NoaaHrrrRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=Mock(),
+        data_vars=list(data_vars.values()),
+        append_dim=template_config.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    coord = Mock(downloaded_path=Path("unused.grib2"))
+
+    def read_with_bands(data_var_name: str, elements: list[str]) -> float:
+        data_var = data_vars[data_var_name]
+        description = data_var.internal_attrs.grib_description
+        reader = Mock(count=len(elements), descriptions=[description] * len(elements))
+        reader.tags.side_effect = lambda i: {"GRIB_ELEMENT": elements[i - 1]}
+        reader.read.side_effect = lambda i, out_dtype: np.full(
+            (1, 1), float(i), dtype=out_dtype
+        )
+        monkeypatch.setattr(
+            "reformatters.noaa.hrrr.region_job.rasterio.open",
+            Mock(
+                return_value=Mock(__enter__=Mock(return_value=reader), __exit__=Mock())
+            ),
+        )
+        return float(region_job.read_data(coord, data_var)[0, 0])
+
+    assert read_with_bands("precipitation_surface", ["APCP06", "APCP01"]) == 2
+    assert read_with_bands("snowfall_surface", ["ASNOW"]) == 1
 
 
 def test_update_append_dim_end() -> None:
