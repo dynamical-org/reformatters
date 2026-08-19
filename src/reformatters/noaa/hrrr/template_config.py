@@ -323,7 +323,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Visible Beam Downward Solar Flux",
                     units="W m-2",
                     step_type="instant",
-                    comment="Grid cells where the sun is just rising can carry physically impossible values, up to about 10000 W m-2, present in the source data. Mask values > 1361, the solar constant.",
+                    comment="Direct normal irradiance — the flux perpendicular to the solar beam, so it exceeds the horizontal downward shortwave flux when the sun is low. Values inflate without bound in a narrow band of grid cells at sunrise, reaching 10000. Mask values > 1361, the solar constant.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VBDSF",

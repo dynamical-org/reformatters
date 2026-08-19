@@ -2102,7 +2102,7 @@
           "long_name": "Visible Beam Downward Solar Flux",
           "short_name": "vbdsf",
           "units": "W m-2",
-          "comment": "Grid cells where the sun is just rising can carry physically impossible values, up to about 10000 W m-2, present in the source data. Mask values > 1361, the solar constant.",
+          "comment": "Direct normal irradiance \u2014 the flux perpendicular to the solar beam, so it exceeds the horizontal downward shortwave flux when the sun is low. Values inflate without bound in a narrow band of grid cells at sunrise, reaching 10000. Mask values > 1361, the solar constant.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
