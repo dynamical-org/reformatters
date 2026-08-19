@@ -299,19 +299,21 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims[ROOT])
         var_shards_ordered = tuple(var_shards[dim] for dim in self.dims[ROOT])
 
+        def append_resampling_comment(var: GEFSDataVar) -> GEFSDataVar:
+            return replace(
+                var,
+                attrs=replace(
+                    var.attrs,
+                    comment=f"{var.attrs.comment}. {_CATEGORICAL_RESAMPLING_COMMENT}",
+                ),
+            )
+
+        var_configs = get_shared_data_var_configs(
+            var_chunks_ordered, var_shards_ordered
+        )
         return [
-            (
-                replace(
-                    var,
-                    attrs=replace(
-                        var.attrs,
-                        comment=f"{var.attrs.comment}. {_CATEGORICAL_RESAMPLING_COMMENT}",
-                    ),
-                )
-                if var.name in _CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES
-                else var
-            )
-            for var in get_shared_data_var_configs(
-                var_chunks_ordered, var_shards_ordered
-            )
+            append_resampling_comment(var)
+            if var.name in _CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES
+            else var
+            for var in var_configs
         ]
