@@ -11,6 +11,7 @@ with contextlib.suppress(RuntimeError):  # skip if already set
 
 import sentry_sdk
 import typer
+from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.typer import TyperIntegration
 from sentry_sdk.types import Hint, Log
 
@@ -267,11 +268,11 @@ if Config.is_sentry_enabled:
         project_root="src/",
         in_app_include=["reformatters"],
         default_integrations=True,
-        enable_logs=True,
         # Connection idles cause us to lose events after quiet periods
         keep_alive=True,
         before_send_log=before_log,
         integrations=[
+            LoggingIntegration(capture_sentry_logs=True),
             TyperIntegration(),
         ],
     )
