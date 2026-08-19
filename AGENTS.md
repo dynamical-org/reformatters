@@ -117,7 +117,7 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 **Brings together** a `TemplateConfig` and `RegionJob` class, plus storage and operational configuration. Key responsibilities:
 - Declare `template_config` and `region_job_class`
-- Configure `primary_storage_config` and optional `replica_storage_configs`
+- Configure `primary_storage_config` and optional `replica_storage_configs`. Every new store is icechunk; zarr v3 is deprecated and the remaining zarr v3 stores are only ever replicas of an icechunk primary.
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
 - Implement `validators()` - return validation functions for the dataset
 

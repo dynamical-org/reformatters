@@ -164,31 +164,31 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaGfsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast35DayDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast10DaySpatialDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -197,19 +197,17 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfAifsSingleForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[
-            EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig()
-        ],
+        primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfAifsSingleForecastVirtualDataset(
         primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
