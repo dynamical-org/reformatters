@@ -80,25 +80,48 @@ the access facts are shared. Per-stream differences are in
     structure and attributes without transferring data.
   - `fileServer` honours HTTP range requests (`206 Partial Content`), so HDF5 chunk-level
     byte-range reads are possible — relevant if a virtual dataset is ever considered.
-  - **Throughput is the main constraint.** Measured from this environment: a single stream
-    sustains ~0.3–0.5 MB/s. Concurrency scales close to linearly — 8 parallel range requests
-    gave ~2.5 MB/s aggregate, 24 gave ~5.5 MB/s, and a 32-way parallel fetch pulled the
-    549 MB 1979-01 `tas` file in 66 s (~8.3 MB/s). Any backfill must parallelise
-    aggressively; serial per-file downloads will not finish.
+  - **Discover files from `catalog.xml`, not the HTML pages.** Every catalogue directory also
+    serves `catalog.xml`, listing each file's `urlPath`, `dataSize` and modified date (the
+    AUS-11 `1hr` `tas` directory returns 568 dataset entries in 288 KB). `robots.txt` on both
+    hostnames is `Disallow: /`, so scraping the HTML listings is off the table; `catalog.xml`
+    and deterministic URL construction from the filename pattern are the supported routes.
+  - **Throughput is the main constraint, but it parallelises.** Measured from this
+    environment: a single stream sustains ~0.3–0.5 MB/s. Aggregate scales close to linearly
+    with concurrency — 8 parallel range requests gave ~2.5 MB/s, 24 gave ~5.5 MB/s, 32 gave
+    ~8.3 MB/s (the 549 MB 1979-01 `tas` file in 66 s), and 48 gave ~10.7 MB/s. At 48-way
+    concurrency all 48 requests returned `206`; no throttling, rate limiting or connection
+    refusal was observed. Any backfill must parallelise aggressively; serial per-file
+    downloads will not finish.
   - NCI account holders can instead read `/g/data/ob53/...` directly on Gadi after
     registering with project `ob53` (provider documentation; not tested here).
-  - No cloud mirror (S3/GCS, Zarr, or otherwise) was found. NCI THREDDS is the only public
-    route.
-- **License**: Creative Commons Attribution 4.0 International
-  (https://creativecommons.org/licenses/by/4.0/), stated in
-  `.../ob53/BARRA2/license.txt` and in every file's `license` global attribute. Clearly open;
-  attribution required. The collection `README.txt` asks for two citations: the NCI
-  collection DOI `10.25914/1X6G-2V48` and Su et al. (2025), *J. Southern Hemisphere Earth
-  Syst. Sci.* 75, ES25032, `10.1071/ES25032`. The provider labels the data "a research
-  product ... that has not been fully evaluated".
+  - No cloud mirror (S3/GCS, Zarr, or otherwise) was found, and the NCI Data Catalogue record
+    lists exactly one distribution channel — the NCI THREDDS Data Server. It is the only
+    public route.
+- **License**: **Creative Commons Attribution 4.0 International** — open, attribution the only
+  obligation. No non-commercial, share-alike or redistribution restriction. Three independent
+  statements agree:
+  - `.../ob53/BARRA2/license.txt`: "This work is licensed under the Creative Commons
+    Attribution 4.0 International License."
+  - The ISO 19115 record behind the collection DOI: `gmd:useLimitation` = "Creative Commons
+    Attribution 4.0 International", `gmd:otherConstraints` = `https://creativecommons.org/licenses/by/4.0/`,
+    with `accessConstraints` and `useConstraints` both `license`.
+  - The collection `README.txt`.
+
+  The record carries a second `otherConstraints` entry, which is an advisory rather than a
+  legal restriction: the data is "a research product containing direct modelling outputs from
+  the ACCESS ... that has not been fully evaluated", users are advised to consult the known
+  issues and evaluate before use, and the Bureau seeks feedback via help@nci.org.au.
+
+  Attribution: the `README.txt` asks for two citations — the NCI collection DOI
+  `10.25914/1X6G-2V48` and Su et al. (2025), *J. Southern Hemisphere Earth Syst. Sci.* 75,
+  ES25032, `10.1071/ES25032`. Note the per-file `license` global attribute is the DOI link
+  (`https://doi.org/10.25914/1x6g-2v48`), not the CC-BY URL; if we republish, our own
+  `dataset_attributes` should carry the CC-BY URL and both citations explicitly.
 - **Browse root**: https://dapds00.nci.org.au/thredds/catalogs/ob53/catalog.html
   (collection `README.txt` and `license.txt`:
-  https://dapds00.nci.org.au/thredds/catalog/ob53/BARRA2/catalog.html)
+  https://dapds00.nci.org.au/thredds/catalog/ob53/BARRA2/catalog.html). Catalogue record and
+  DOI: https://dx.doi.org/10.25914/1x6g-2v48. Extended documentation, FAQ and known issues:
+  https://opus.nci.org.au/x/DgDADw.
 - **URL format**:
 
 ```
@@ -112,8 +135,9 @@ https://dapds00.nci.org.au/thredds/fileServer/ob53/output/reanalysis/{domain_id}
 https://dapds00.nci.org.au/thredds/dodsC/{same path}.dds
 https://dapds00.nci.org.au/thredds/dodsC/{same path}.das
 
-# directory listing (same path shape as the data URLs)
-https://dapds00.nci.org.au/thredds/catalog/ob53/output/reanalysis/{domain_id}/BOM/ERA5/historical/{driving_variant}/{source_id}/v1/{freq}/{variable_id}/latest/catalog.html
+# machine-readable directory listing: urlPath, dataSize and modified date per file
+# (swap .xml for .html to browse; HTML scraping is disallowed by robots.txt)
+https://dapds00.nci.org.au/thredds/catalog/ob53/output/reanalysis/{domain_id}/BOM/ERA5/historical/{driving_variant}/{source_id}/v1/{freq}/{variable_id}/latest/catalog.xml
 ```
 
 - **Example URLs**:
