@@ -33,7 +33,7 @@ def _fake_listing(monkeypatch: pytest.MonkeyPatch, listed: dict[str, int]) -> li
         seen_prefixes.extend(prefixes)
         return listed
 
-    monkeypatch.setattr(source_listing, "listed_keys_by_prefix", fake)
+    monkeypatch.setattr(source_listing, "list_keys_by_prefix", fake)
     return seen_prefixes
 
 
@@ -156,7 +156,7 @@ def test_discovery_against_real_memory_store() -> None:
     obstore.put(store, "dir/data_only.grib2", b"y" * 50)
     obstore.put(store, "other/extra.grib2", b"z" * 7)
 
-    assert source_listing.listed_keys_by_prefix(store, ["dir/", "other/"]) == {
+    assert source_listing.list_keys_by_prefix(store, ["dir/", "other/"]) == {
         "dir/both.grib2": 9000,
         "dir/both.index": 200,
         "dir/data_only.grib2": 50,

@@ -15,7 +15,7 @@ from reformatters.common.download import (
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
-from reformatters.common.source_listing import listed_keys_by_prefix
+from reformatters.common.source_listing import list_keys_by_prefix
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_CYCLE_COMPLETE_DELAY,
     GEFSDataVar,
@@ -30,8 +30,8 @@ from reformatters.noaa.noaa_utils import (
 
 log = get_logger(__name__)
 
-GEFS_S3_LOCATION_PREFIX: Final = "s3://noaa-gefs-pds/"
-GEFS_S3_BUCKET_REGION: Final = "us-east-1"
+GEFS_NODD_S3_LOCATION_PREFIX: Final = "s3://noaa-gefs-pds/"
+GEFS_NODD_S3_BUCKET_REGION: Final = "us-east-1"
 
 type _DownloadFn = Callable[..., Path]
 
@@ -67,8 +67,8 @@ def gefs_published_coords[T: GefsSourceFileCoord](coords: Sequence[T]) -> list[T
     if not in_production:
         return list(coords)
 
-    listed = listed_keys_by_prefix(
-        s3_store(GEFS_S3_LOCATION_PREFIX, region=GEFS_S3_BUCKET_REGION),
+    listed = list_keys_by_prefix(
+        s3_store(GEFS_NODD_S3_LOCATION_PREFIX, region=GEFS_NODD_S3_BUCKET_REGION),
         sorted(in_production),
     )
     frontiers: dict[str, pd.Timedelta | None] = {

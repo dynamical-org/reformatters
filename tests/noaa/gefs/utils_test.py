@@ -68,7 +68,7 @@ def _fake_listing(
         calls.append(prefixes)
         return listed
 
-    monkeypatch.setattr(utils, "listed_keys_by_prefix", fake)
+    monkeypatch.setattr(utils, "list_keys_by_prefix", fake)
     return calls
 
 

@@ -230,7 +230,7 @@ def test_generate_source_file_coords_skips_unpublished_lead_times(
         )
         return {urlparse(published.get_url()).path.removeprefix("/"): 9000}
 
-    monkeypatch.setattr(gefs_utils, "listed_keys_by_prefix", listed_through_6h)
+    monkeypatch.setattr(gefs_utils, "list_keys_by_prefix", listed_through_6h)
 
     job = GefsForecast35DayRegionJob(
         tmp_store=get_local_tmp_store(),

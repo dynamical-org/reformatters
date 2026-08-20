@@ -19,8 +19,8 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GefsEnsembleSourceFileCoord,
 )
 from reformatters.noaa.gefs.utils import (
-    GEFS_S3_BUCKET_REGION,
-    GEFS_S3_LOCATION_PREFIX,
+    GEFS_NODD_S3_BUCKET_REGION,
+    GEFS_NODD_S3_LOCATION_PREFIX,
 )
 from reformatters.noaa.noaa_grib_index import (
     GRIB_INDEX_UNKNOWN_END_PAD,
@@ -54,7 +54,7 @@ class GefsForecast10DaySpatialSourceFileCoord(GefsEnsembleSourceFileCoord):
         url = super().get_url()
         https_prefix = f"https://{self.primary_base_url}/"
         assert url.startswith(https_prefix), url
-        return GEFS_S3_LOCATION_PREFIX + url.removeprefix(https_prefix)
+        return GEFS_NODD_S3_LOCATION_PREFIX + url.removeprefix(https_prefix)
 
 
 class GefsForecast10DaySpatialRegionJob(
@@ -93,8 +93,10 @@ class GefsForecast10DaySpatialRegionJob(
     ) -> list[tuple[GefsForecast10DaySpatialSourceFileCoord, int]]:
         return discover_available_by_obstore_listing(
             pending,
-            store=s3_store(GEFS_S3_LOCATION_PREFIX, region=GEFS_S3_BUCKET_REGION),
-            location_prefix=GEFS_S3_LOCATION_PREFIX,
+            store=s3_store(
+                GEFS_NODD_S3_LOCATION_PREFIX, region=GEFS_NODD_S3_BUCKET_REGION
+            ),
+            location_prefix=GEFS_NODD_S3_LOCATION_PREFIX,
             require_index=True,
         )
 
@@ -102,7 +104,7 @@ class GefsForecast10DaySpatialRegionJob(
         self, coord: GefsForecast10DaySpatialSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=GEFS_S3_BUCKET_REGION
+            coord.get_index_url(), self.dataset_id, region=GEFS_NODD_S3_BUCKET_REGION
         )
         try:
             starts, ends = grib_message_byte_ranges_from_index(
