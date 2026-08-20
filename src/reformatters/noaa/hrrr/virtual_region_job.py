@@ -9,12 +9,12 @@ from reformatters.common.config_models import ROOT
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
-from reformatters.common.source_listing import (
-    discover_available_by_obstore_listing,
-)
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_source_listing import (
+    discover_available_by_obstore_listing,
+)
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
 from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines

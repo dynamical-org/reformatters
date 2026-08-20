@@ -13,14 +13,14 @@ from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
 )
-from reformatters.common.source_listing import (
-    discover_available_by_obstore_listing,  # noqa: F401
-)
 from reformatters.common.types import (
     Dim,
     Timedelta,
 )
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_source_listing import (
+    discover_available_by_obstore_listing,  # noqa: F401
+)
 
 from .template_config import ExampleDataVar
 

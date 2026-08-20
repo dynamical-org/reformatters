@@ -15,12 +15,14 @@ from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
 from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_EXTENSION_COMPLETE_DELAY,
+    GEFS_PRE_EXTENSION_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSFileType,
 )
 from reformatters.noaa.gefs.read_data import read_data
-from reformatters.noaa.gefs.utils import gefs_download_file, gefs_published_coords
+from reformatters.noaa.gefs.utils import gefs_download_file
 
 log = get_logger(__name__)
 
@@ -73,19 +75,20 @@ class GefsForecast35DayRegionJob(
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 
-        return gefs_published_coords(
-            [
-                GefsForecast35DaySourceFileCoord(
-                    init_time=pd.Timestamp(init_time),
-                    lead_time=pd.Timedelta(lead_time),
-                    data_vars=data_var_group,
-                    ensemble_member=int(ensemble_member),
-                )
-                for init_time in processing_region_ds["init_time"].values
-                for lead_time in processing_region_ds["lead_time"].values
-                for ensemble_member in processing_region_ds["ensemble_member"].values
-            ]
-        )
+        now = pd.Timestamp.now()
+        return [
+            GefsForecast35DaySourceFileCoord(
+                init_time=pd.Timestamp(init_time),
+                lead_time=pd.Timedelta(lead_time),
+                data_vars=data_var_group,
+                ensemble_member=int(ensemble_member),
+            )
+            for init_time in processing_region_ds["init_time"].values
+            for lead_time in processing_region_ds["lead_time"].values
+            for ensemble_member in processing_region_ds["ensemble_member"].values
+            if pd.Timedelta(lead_time) <= GEFS_PRE_EXTENSION_MAX
+            or now - pd.Timestamp(init_time) >= GEFS_EXTENSION_COMPLETE_DELAY
+        ]
 
     def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:
         """Download the source file for the given coordinate."""

@@ -18,7 +18,6 @@ from reformatters.common.storage import (
     StoreFactory,
     get_local_tmp_store,
 )
-from reformatters.noaa.gefs import utils as gefs_utils
 from reformatters.noaa.gefs.forecast_35_day.region_job import (
     GefsForecast35DayRegionJob,
     GefsForecast35DaySourceFileCoord,
@@ -27,6 +26,7 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_EXTENSION_COMPLETE_DELAY,
     GEFS_S_FILE_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
@@ -211,41 +211,70 @@ def test_generate_source_file_coords_ensemble(
     assert all(isinstance(c, GefsEnsembleSourceFileCoord) for c in coords)
 
 
-def test_generate_source_file_coords_skips_unpublished_lead_times(
-    template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A cycle still in production yields only the lead times the source has reached."""
-    recent_ds = template_ds.assign_coords(
-        init_time=[pd.Timestamp.now().floor("D")] * template_ds.sizes["init_time"]
-    ).isel(init_time=slice(0, 1))
+def _extension_region_ds(init_time: pd.Timestamp, data_var: GEFSDataVar) -> xr.Dataset:
+    """A region spanning lead times either side of the 384h extension boundary."""
+    lead_times = pd.to_timedelta([0, 240, 384, 390, 840], unit="h")
+    return xr.Dataset(
+        {
+            data_var.name: xr.Variable(
+                data=np.ones((1, len(lead_times), 2), dtype=np.float32),
+                dims=["init_time", "lead_time", "ensemble_member"],
+            )
+        },
+        coords={
+            "init_time": [init_time],
+            "lead_time": lead_times,
+            "ensemble_member": [0, 1],
+        },
+    )
 
-    def listed_through_6h(store: object, prefixes: list[str]) -> dict[str, int]:
-        published = GefsForecast35DaySourceFileCoord(
-            init_time=pd.Timestamp(recent_ds["init_time"].values[0]),
-            lead_time=pd.Timedelta("6h"),
-            data_vars=example_data_vars[:1],
-            ensemble_member=0,
-        )
-        return {urlparse(published.get_url()).path.removeprefix("/"): 9000}
 
-    monkeypatch.setattr(gefs_utils, "list_keys_by_prefix", listed_through_6h)
-
-    job = GefsForecast35DayRegionJob(
+def _job_for(
+    region_ds: xr.Dataset, data_var: GEFSDataVar
+) -> GefsForecast35DayRegionJob:
+    return GefsForecast35DayRegionJob(
         tmp_store=get_local_tmp_store(),
-        template_ds=xr.DataTree.from_dict({"/": recent_ds}),
-        data_vars=example_data_vars[:1],
+        template_ds=xr.DataTree.from_dict({"/": region_ds}),
+        data_vars=[data_var],
         append_dim="init_time",
         region=slice(0, 1),
         reformat_job_name="test-job",
     )
 
-    coords = list(job.generate_source_file_coords(recent_ds, example_data_vars[:1]))
 
-    # 3 lead times (0h, 3h, 6h) * 4 ensemble members, not all 8 lead times.
-    assert len(coords) == 12
-    assert max(c.lead_time for c in coords) == pd.Timedelta("6h")
+def test_generate_source_file_coords_skips_the_unpublished_extension(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """A cycle too young to hold its 840h extension yields no lead time past 384h."""
+    data_var = example_data_vars[0]
+    region_ds = _extension_region_ds(pd.Timestamp.now().floor("h"), data_var)
+
+    coords = list(
+        _job_for(region_ds, data_var).generate_source_file_coords(region_ds, [data_var])
+    )
+
+    assert sorted({c.lead_time for c in coords}) == list(
+        pd.to_timedelta([0, 240, 384], unit="h")
+    )
+    assert len(coords) == 6  # 3 lead times * 2 ensemble members
+
+
+def test_generate_source_file_coords_includes_a_settled_extension(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Once a cycle is older than the extension delay, every lead time is requested."""
+    data_var = example_data_vars[0]
+    settled = pd.Timestamp.now().floor("h") - GEFS_EXTENSION_COMPLETE_DELAY
+    region_ds = _extension_region_ds(settled, data_var)
+
+    coords = list(
+        _job_for(region_ds, data_var).generate_source_file_coords(region_ds, [data_var])
+    )
+
+    assert sorted({c.lead_time for c in coords}) == list(
+        pd.to_timedelta([0, 240, 384, 390, 840], unit="h")
+    )
+    assert len(coords) == 10  # 5 lead times * 2 ensemble members
 
 
 def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:

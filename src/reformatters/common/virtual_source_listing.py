@@ -20,7 +20,7 @@ def discover_available_by_obstore_listing(
     """
     by_key = {coord.get_url().removeprefix(location_prefix): coord for coord in pending}
     prefixes = sorted({key.rsplit("/", 1)[0] + "/" for key in by_key})
-    listed = list_keys_by_prefix(store, prefixes)
+    listed = _list_objects(store, prefixes)
     return [
         (coord, listed[key])
         for key, coord in by_key.items()
@@ -32,7 +32,7 @@ def discover_available_by_obstore_listing(
     ]
 
 
-def list_keys_by_prefix(
+def _list_objects(
     store: obstore.store.ObjectStore, prefixes: list[str]
 ) -> dict[str, int]:
     """All object keys under each prefix in `store`, mapped to size in bytes."""

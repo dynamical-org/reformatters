@@ -16,6 +16,14 @@ from reformatters.noaa.models import NoaaInternalAttrs
 # `s+b-b22` is the same as `s+b` when init time >= 2022-10-18T12 and `b` before.
 type GEFSFileType = Literal["a", "b", "s+a", "s+b", "s+b-b22"]
 GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
+
+# Lead times through GEFS_PRE_EXTENSION_MAX are published within ~6.6h of init. The
+# 00z cycle then extends to 840h, arriving over the following ~20h and complete by
+# ~init+27h. Requesting the extension earlier is thousands of requests for files
+# that do not exist yet, so wait until a cycle is old enough to hold all of it.
+GEFS_PRE_EXTENSION_MAX = pd.Timedelta(hours=384)
+GEFS_EXTENSION_COMPLETE_DELAY = pd.Timedelta(hours=28)
+
 GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 
@@ -40,11 +48,6 @@ GEFS_REFORECAST_START = pd.Timestamp("2000-01-01T00:00")
 
 GEFS_REFORECAST_INIT_TIME_FREQUENCY = pd.Timedelta("24h")
 GEFS_INIT_TIME_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")
-
-# A cycle's 00z extension to lead time 840h lands ~27h after init; past this delay
-# every file a cycle will ever have exists. Used only to skip checking what the
-# source has published, so an underestimate costs requests, never data.
-GEFS_CYCLE_COMPLETE_DELAY: Final[pd.Timedelta] = pd.Timedelta("30h")
 
 # Accumulations are reset every 6 hours in all periods of GEFS data
 GEFS_ACCUMULATION_RESET_FREQUENCY: Final[pd.Timedelta] = pd.Timedelta("6h")

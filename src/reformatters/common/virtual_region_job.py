@@ -144,7 +144,7 @@ class VirtualRegionJob(
 
         Return the same coord objects from `pending` (the loop drops them by
         identity). For an obstore-listable backend, delegate to
-        `source_listing.discover_available_by_obstore_listing`; for a source
+        `virtual_source_listing.discover_available_by_obstore_listing`; for a source
         obstore can't list (an HTML directory index, a frontier to probe,
         assume-all) implement it directly.
         """

@@ -1,23 +1,13 @@
 import functools
-from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Final
-from urllib.parse import urlparse
 
 import pandas as pd
 
-from reformatters.common.download import (
-    http_download_to_disk,
-    httpx_download_to_disk,
-    s3_store,
-)
+from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
 from reformatters.common.iterating import digest
-from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
-from reformatters.common.source_listing import list_keys_by_prefix
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_CYCLE_COMPLETE_DELAY,
     GEFSDataVar,
     GefsSourceFileCoord,
     get_grib_element,
@@ -28,70 +18,7 @@ from reformatters.noaa.noaa_utils import (
     nomads_rate_limiter,
 )
 
-log = get_logger(__name__)
-
-GEFS_NODD_S3_LOCATION_PREFIX: Final = "s3://noaa-gefs-pds/"
-GEFS_NODD_S3_BUCKET_REGION: Final = "us-east-1"
-
 type _DownloadFn = Callable[..., Path]
-
-
-def _s3_key(coord: GefsSourceFileCoord) -> str:
-    url = urlparse(coord.get_url())
-    assert url.netloc == coord.primary_base_url, (
-        f"Only files in {coord.primary_base_url} can be listed, got {coord.get_url()}"
-    )
-    return url.path.removeprefix("/")
-
-
-def _s3_directory(coord: GefsSourceFileCoord) -> str:
-    return _s3_key(coord).rsplit("/", 1)[0] + "/"
-
-
-def gefs_published_coords[T: GefsSourceFileCoord](coords: Sequence[T]) -> list[T]:
-    """The subset of `coords` whose lead time the source has begun publishing.
-
-    A cycle publishes lead times in order, so within one source directory — which
-    holds every ensemble member of one init time and file type — the greatest lead
-    time listed is the production frontier. Coords at or below it are kept even when
-    that member's own file is not listed yet, so a file that has reached NOMADS but
-    not yet the S3 mirror is still reachable via the fallback in `gefs_download_file`.
-    Coords of a cycle old enough to have finished are returned without listing.
-    """
-    settled_before = pd.Timestamp.now() - GEFS_CYCLE_COMPLETE_DELAY
-    in_production: dict[str, list[T]] = defaultdict(list)
-    for coord in coords:
-        if coord.init_time > settled_before:
-            in_production[_s3_directory(coord)].append(coord)
-
-    if not in_production:
-        return list(coords)
-
-    listed = list_keys_by_prefix(
-        s3_store(GEFS_NODD_S3_LOCATION_PREFIX, region=GEFS_NODD_S3_BUCKET_REGION),
-        sorted(in_production),
-    )
-    frontiers: dict[str, pd.Timedelta | None] = {
-        directory: max(
-            (coord.lead_time for coord in group if _s3_key(coord) in listed),
-            default=None,
-        )
-        for directory, group in in_production.items()
-    }
-
-    def published(coord: T) -> bool:
-        if coord.init_time <= settled_before:
-            return True
-        frontier = frontiers[_s3_directory(coord)]
-        return frontier is not None and coord.lead_time <= frontier
-
-    kept = [coord for coord in coords if published(coord)]
-    if len(kept) < len(coords):
-        log.info(
-            f"Source published through {frontiers}, "
-            f"skipping {len(coords) - len(kept)} of {len(coords)} unpublished files"
-        )
-    return kept
 
 
 def _index_data_vars(coord: GefsSourceFileCoord) -> Sequence[GEFSDataVar]:
