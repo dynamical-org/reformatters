@@ -27,7 +27,7 @@ class GefsForecast35DayDataset(
             # +5 min buffer. The prior init (reprocessed each run, see operational_update_jobs)
             # is by now complete out to f840 (lands ~init+27h).
             schedule="33 6 * * *",
-            pod_active_deadline=timedelta(minutes=30),  # runs take <23 min
+            pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node
@@ -55,9 +55,9 @@ class GefsForecast35DayDataset(
         return (
             # The update ingests each init at init+6h33m; validation fires at init+7h03m.
             validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=3)),
-            # Latest init_time is only filled out to ~day 15 of 35, so ~42% of
-            # lead_times at any spatial point are legitimately NaN (observed max
-            # 0.420789 in prod; keep small headroom). Older init_times are fully
-            # populated; expect no NaNs.
+            # The newest init_time stops at GEFS_PRE_EXTENSION_MAX, leaving 76 of
+            # 181 lead times NaN at any spatial point: 0.42, or 0.422 for a variable
+            # with no hour-0 value, whose lead_time=0 slice is dropped before the
+            # fraction is computed. Older init_times are fully populated.
             validation.CheckRecentNans(max_nan_fraction=(0.45, 0.0)),
         )

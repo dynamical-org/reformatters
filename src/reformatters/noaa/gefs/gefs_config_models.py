@@ -16,6 +16,18 @@ from reformatters.noaa.models import NoaaInternalAttrs
 # `s+b-b22` is the same as `s+b` when init time >= 2022-10-18T12 and `b` before.
 type GEFSFileType = Literal["a", "b", "s+a", "s+b", "s+b-b22"]
 GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
+
+# Lead times through GEFS_PRE_EXTENSION_MAX are published within ~6.7h of init. The
+# 00z cycle then extends to 840h, arriving over the following ~21h. Requesting the
+# extension before it exists is thousands of futile requests, so only ask for it once
+# a cycle is GEFS_EXTENSION_REQUEST_MIN_AGE old. That age must fall between the two
+# init times an operational update touches -- the newest, 6h33m old at cron time, and
+# the previous, 30h33m -- which test_extension_request_age_splits_the_updates_inits
+# pins. It sits near the top of that range so a mid-cycle catch-up run skips the
+# extension rather than writing a partial one.
+GEFS_PRE_EXTENSION_MAX = pd.Timedelta(hours=384)
+GEFS_EXTENSION_REQUEST_MIN_AGE = pd.Timedelta(hours=28)
+
 GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 

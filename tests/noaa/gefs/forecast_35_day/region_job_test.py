@@ -26,6 +26,7 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_EXTENSION_REQUEST_MIN_AGE,
     GEFS_S_FILE_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
@@ -208,6 +209,72 @@ def test_generate_source_file_coords_ensemble(
 
     # All should be ensemble source file coords
     assert all(isinstance(c, GefsEnsembleSourceFileCoord) for c in coords)
+
+
+def _extension_region_ds(init_time: pd.Timestamp, data_var: GEFSDataVar) -> xr.Dataset:
+    """A region spanning lead times either side of the 384h extension boundary."""
+    lead_times = pd.to_timedelta([0, 240, 384, 390, 840], unit="h")
+    return xr.Dataset(
+        {
+            data_var.name: xr.Variable(
+                data=np.ones((1, len(lead_times), 2), dtype=np.float32),
+                dims=["init_time", "lead_time", "ensemble_member"],
+            )
+        },
+        coords={
+            "init_time": [init_time],
+            "lead_time": lead_times,
+            "ensemble_member": [0, 1],
+        },
+    )
+
+
+def _job_for(
+    region_ds: xr.Dataset, data_var: GEFSDataVar
+) -> GefsForecast35DayRegionJob:
+    return GefsForecast35DayRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=xr.DataTree.from_dict({"/": region_ds}),
+        data_vars=[data_var],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+
+
+def test_generate_source_file_coords_skips_the_unpublished_extension(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """A cycle too young to hold its 840h extension yields no lead time past 384h."""
+    data_var = example_data_vars[0]
+    region_ds = _extension_region_ds(pd.Timestamp.now().floor("h"), data_var)
+
+    coords = list(
+        _job_for(region_ds, data_var).generate_source_file_coords(region_ds, [data_var])
+    )
+
+    assert sorted({c.lead_time for c in coords}) == list(
+        pd.to_timedelta([0, 240, 384], unit="h")
+    )
+    assert len(coords) == 6  # 3 lead times * 2 ensemble members
+
+
+def test_generate_source_file_coords_includes_a_settled_extension(
+    example_data_vars: list[GEFSDataVar],
+) -> None:
+    """Once a cycle is older than the extension delay, every lead time is requested."""
+    data_var = example_data_vars[0]
+    settled = pd.Timestamp.now().floor("h") - GEFS_EXTENSION_REQUEST_MIN_AGE
+    region_ds = _extension_region_ds(settled, data_var)
+
+    coords = list(
+        _job_for(region_ds, data_var).generate_source_file_coords(region_ds, [data_var])
+    )
+
+    assert sorted({c.lead_time for c in coords}) == list(
+        pd.to_timedelta([0, 240, 384, 390, 840], unit="h")
+    )
+    assert len(coords) == 10  # 5 lead times * 2 ensemble members
 
 
 def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
