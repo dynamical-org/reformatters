@@ -26,7 +26,7 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_EXTENSION_COMPLETE_DELAY,
+    GEFS_EXTENSION_REQUEST_MIN_AGE,
     GEFS_S_FILE_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
@@ -264,7 +264,7 @@ def test_generate_source_file_coords_includes_a_settled_extension(
 ) -> None:
     """Once a cycle is older than the extension delay, every lead time is requested."""
     data_var = example_data_vars[0]
-    settled = pd.Timestamp.now().floor("h") - GEFS_EXTENSION_COMPLETE_DELAY
+    settled = pd.Timestamp.now().floor("h") - GEFS_EXTENSION_REQUEST_MIN_AGE
     region_ds = _extension_region_ds(settled, data_var)
 
     coords = list(
