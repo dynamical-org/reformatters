@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 os.environ["DYNAMICAL_ENV"] = "test"
 
 
-from reformatters.common import dynamical_dataset, storage  # noqa: E402
+from reformatters.common import operational, storage  # noqa: E402
 
 
 def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
@@ -68,9 +68,9 @@ def set_local_zarr_store_base_path(
 def reset_run_monitors() -> Iterator[None]:
     """Keep the module-level monitor registry empty by default so importing
     __main__ (which registers prod monitors) in one test doesn't leak into others."""
-    dynamical_dataset._RUN_MONITORS.clear()
+    operational._RUN_MONITORS.clear()
     yield
-    dynamical_dataset._RUN_MONITORS.clear()
+    operational._RUN_MONITORS.clear()
 
 
 @pytest.fixture

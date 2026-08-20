@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
 
@@ -36,10 +36,10 @@ MANUAL_K8S_GITHUB_ENVIRONMENT = "prod"
 
 
 def get_all_cronjob_names() -> list[str]:
-    """Extract all CronJob names from DYNAMICAL_DATASETS."""
+    """Extract all CronJob names from every unit that deploys them."""
     cronjob_names: list[str] = []
 
-    for dataset in DYNAMICAL_DATASETS:
+    for dataset in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]:
         try:
             resources = dataset.operational_kubernetes_resources(
                 "placeholder-image-tag"

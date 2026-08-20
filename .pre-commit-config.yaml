@@ -20,6 +20,6 @@ repos:
         name: generate manual workflows
         entry: "uv run src/scripts/generate_manual_workflows.py"
         language: system
-        files: ^(src/reformatters/__main__\.py|src/reformatters/.*/dynamical_dataset\.py|src/scripts/generate_manual_workflows\.py)$
+        files: ^(src/reformatters/__main__\.py|src/reformatters/.*/dynamical_dataset\.py|src/reformatters/.*/s2s_archiver\.py|src/scripts/generate_manual_workflows\.py)$
         pass_filenames: false
         require_serial: true

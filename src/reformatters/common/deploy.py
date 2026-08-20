@@ -8,12 +8,13 @@ import typer
 from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
+from reformatters.common.operational import OperationalResources
 
 log = get_logger(__name__)
 
 
 def deploy_operational_resources(
-    datasets: Iterable[DynamicalDataset[Any, Any]],
+    resources: Iterable[OperationalResources],
     docker_image: str | None = None,
     dataset_id_filter: str | None = None,
     cronjob_transform: Callable[[kubernetes.CronJob], kubernetes.CronJob] | None = None,
@@ -22,15 +23,17 @@ def deploy_operational_resources(
 
     reformat_jobs: list[kubernetes.Job] = []
 
-    for dataset in datasets:
-        if dataset_id_filter is not None and dataset.dataset_id != dataset_id_filter:
+    for resource in resources:
+        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
             continue
 
         try:
-            dataset_cronjobs = list(dataset.operational_kubernetes_resources(image_tag))
+            dataset_cronjobs = list(
+                resource.operational_kubernetes_resources(image_tag)
+            )
         except NotImplementedError:
             log.info(
-                f"Skipping deploy for {dataset.__class__.__name__}, "
+                f"Skipping deploy for {resource.__class__.__name__}, "
                 "`operational_kubernetes_resources` not implemented."
             )
             continue
@@ -65,7 +68,9 @@ def deploy_operational_resources(
 
 
 def register_commands(
-    app: typer.Typer, datasets: Sequence[DynamicalDataset[Any, Any]]
+    app: typer.Typer,
+    datasets: Sequence[DynamicalDataset[Any, Any]],
+    archivers: Sequence[OperationalResources] = (),
 ) -> None:
     @app.command()
     def deploy(
@@ -73,7 +78,7 @@ def register_commands(
         dataset_id: str | None = None,
     ) -> None:
         deploy_operational_resources(
-            datasets, docker_image, dataset_id_filter=dataset_id
+            [*datasets, *archivers], docker_image, dataset_id_filter=dataset_id
         )
 
     @app.command()
