@@ -39,9 +39,9 @@ def get_all_cronjob_names() -> list[str]:
     """Extract all CronJob names from every unit that deploys them."""
     cronjob_names: list[str] = []
 
-    for dataset in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]:
+    for deployable in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]:
         try:
-            resources = dataset.operational_kubernetes_resources(
+            resources = deployable.operational_kubernetes_resources(
                 "placeholder-image-tag"
             )
             cronjob_names.extend(

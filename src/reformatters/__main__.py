@@ -289,8 +289,8 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 app.command()(initialize_new_integration)
 
 
-# Source archives that feed a dataset but have no store of their own. They deploy
-# their own cronjobs and are not datasets, so they carry no update/validate/backfill.
+# Source archives feed datasets but have no store, so they deploy their own cronjobs
+# without a dataset's update/validate/backfill surface.
 OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfS2sGribArchiver()]
 
 for dataset in DYNAMICAL_DATASETS:
