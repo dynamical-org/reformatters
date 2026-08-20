@@ -62,7 +62,9 @@ def test_region_job_generete_source_file_coords() -> None:
         assert len(coord.data_vars) == 3
 
 
-def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_region_job_download_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     template_config = NoaaGfsForecastTemplateConfig()
 
     # Create a region job with mock stores
@@ -85,10 +87,13 @@ def test_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_download = Mock()
     mock_index_path = Mock()
     mock_index_path.read_text.return_value = "ignored"
-    mock_data_path = Mock()
+    mock_data_path = tmp_path / "data.grib2"
+    mock_data_path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
 
     # Configure the mock to return different paths for index and data files
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+    def mock_download_side_effect(
+        url: str, dataset_id: str, **kwargs: object
+    ) -> Path | Mock:
         if url.endswith(".idx"):
             return mock_index_path
         else:

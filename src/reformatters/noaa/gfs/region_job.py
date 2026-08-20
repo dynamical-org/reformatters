@@ -34,7 +34,10 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.noaa.models import NoaaDataVar
-from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
+from reformatters.noaa.noaa_grib_index import (
+    assert_downloaded_grib_message,
+    grib_message_byte_ranges_from_index,
+)
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
     nomads_rate_limiter,
@@ -106,12 +109,14 @@ class NoaaGfsCommonRegionJob(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
         vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-        return download(
+        local_path = download(
             coord.get_url(source=source),
             self.dataset_id,
             byte_ranges=(starts, ends),
             local_path_suffix=f"-{vars_suffix}",
         )
+        assert_downloaded_grib_message(local_path)
+        return local_path
 
     def download_file(self, coord: NoaaGfsSourceFileCoord) -> Path:
         try:

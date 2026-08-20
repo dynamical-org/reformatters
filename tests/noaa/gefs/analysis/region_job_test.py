@@ -373,6 +373,7 @@ def test_download_file(
     template_ds: xr.Dataset,
     example_data_vars: list[GEFSDataVar],
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test download file method."""
     tmp_store = get_local_tmp_store()
@@ -397,10 +398,13 @@ def test_download_file(
     mock_download = Mock()
     mock_index_path = Mock()
     mock_index_path.read_text.return_value = "ignored"
-    mock_data_path = Mock()
+    mock_data_path = tmp_path / "data.grib2"
+    mock_data_path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
 
     # Configure the mock to return different paths for index and data files
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+    def mock_download_side_effect(
+        url: str, dataset_id: str, **kwargs: object
+    ) -> Path | Mock:
         if url.endswith(".idx"):
             return mock_index_path
         else:
@@ -657,6 +661,7 @@ def test_download_file_fallback(
     template_ds: xr.Dataset,
     example_data_vars: list[GEFSDataVar],
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Test download_file falls back to alternative source when primary fails for recent data."""
     tmp_store = get_local_tmp_store()
@@ -681,7 +686,8 @@ def test_download_file_fallback(
 
     mock_index_path = Mock()
     mock_index_path.read_text.return_value = "ignored"
-    mock_data_path = Mock()
+    mock_data_path = tmp_path / "data.grib2"
+    mock_data_path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
 
     fallback_url = coord.get_fallback_url()
     fallback_index_url = coord.get_index_url(fallback=True)
@@ -695,7 +701,9 @@ def test_download_file_fallback(
         raise FileNotFoundError(f"Primary index not found: {url}")
 
     # Fallback source (httpx_download_to_disk for NOMADS) succeeds
-    def mock_fallback_download(url: str, dataset_id: str, **kwargs: object) -> Mock:
+    def mock_fallback_download(
+        url: str, dataset_id: str, **kwargs: object
+    ) -> Path | Mock:
         nonlocal call_count
         call_count += 1
         if url == fallback_index_url:

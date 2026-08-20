@@ -78,7 +78,9 @@ def test_common_region_job_source_groups() -> None:
         assert len(group_has_hour_0) == 1
 
 
-def test_common_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_common_region_job_download_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Test download_file method of common region job."""
     template_config = NoaaGfsForecastTemplateConfig()
 
@@ -102,9 +104,12 @@ def test_common_region_job_download_file(monkeypatch: pytest.MonkeyPatch) -> Non
     mock_download = Mock()
     mock_index_path = Mock()
     mock_index_path.read_text.return_value = "ignored"
-    mock_data_path = Mock()
+    mock_data_path = tmp_path / "data.grib2"
+    mock_data_path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
 
-    def mock_download_side_effect(url: str, dataset_id: str, **kwargs: object) -> Mock:
+    def mock_download_side_effect(
+        url: str, dataset_id: str, **kwargs: object
+    ) -> Path | Mock:
         if url.endswith(".idx"):
             return mock_index_path
         else:
@@ -327,7 +332,7 @@ def test_download_file_raises_for_old_init_time(
 
 
 def test_download_file_nomads_fallback_uses_httpx(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """NOMADS fallback uses httpx_download_to_disk (not http_download_to_disk)."""
     template_config = NoaaGfsForecastTemplateConfig()
@@ -343,7 +348,9 @@ def test_download_file_nomads_fallback_uses_httpx(
         "reformatters.noaa.gfs.region_job.http_download_to_disk",
         Mock(side_effect=FileNotFoundError("not on s3")),
     )
-    mock_httpx = Mock(return_value=Mock())
+    grib_path = tmp_path / "nomads.grib2"
+    grib_path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
+    mock_httpx = Mock(return_value=grib_path)
     monkeypatch.setattr(
         "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_httpx
     )

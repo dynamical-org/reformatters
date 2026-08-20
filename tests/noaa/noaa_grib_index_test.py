@@ -15,6 +15,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 )
 from reformatters.noaa.noaa_grib_index import (
     _lead_time_str,
+    assert_downloaded_grib_message,
     grib_message_byte_ranges_from_index,
 )
 
@@ -366,6 +367,19 @@ def test_grib_index_raises_when_no_matches() -> None:
 
     with pytest.raises(ValueError, match="No GRIB index matches found"):
         grib_message_byte_ranges_from_index(idx_path, [bogus_var], init_time, lead_time)
+
+
+class TestAssertDownloadedGribMessage:
+    def test_valid_grib_message_passes(self, tmp_path: Path) -> None:
+        path = tmp_path / "message.grib2"
+        path.write_bytes(b"GRIB" + b"\x00" * 12 + b"7777")
+        assert_downloaded_grib_message(path)
+
+    def test_non_grib_bytes_raises_file_not_found(self, tmp_path: Path) -> None:
+        path = tmp_path / "message.grib2"
+        path.write_bytes(b"\x00" * 16)
+        with pytest.raises(FileNotFoundError, match="does not start with a GRIB"):
+            assert_downloaded_grib_message(path)
 
 
 class TestLeadTimeStr:

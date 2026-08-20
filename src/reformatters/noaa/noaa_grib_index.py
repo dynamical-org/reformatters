@@ -1,6 +1,7 @@
 import re
 from collections.abc import Sequence
 from os import PathLike
+from pathlib import Path
 
 import pandas as pd
 
@@ -12,6 +13,23 @@ from reformatters.noaa.models import NoaaInternalAttrs
 # byte is unknown without the file size. Ranged downloads return bytes up to the
 # end of file; callers needing an exact length must detect ends >= this pad.
 GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
+
+
+def assert_downloaded_grib_message(path: Path) -> None:
+    """Raise FileNotFoundError if `path` doesn't start with a GRIB message.
+
+    NOAA occasionally reprocesses an archived source file without regenerating
+    its .idx sidecar, leaving the sidecar's byte offsets pointing at the wrong
+    bytes of the reprocessed file. Treating that mismatch like a missing file
+    routes it through the same not-found handling (log softly for old
+    requests, fall back to an alternate source for recent ones) instead of
+    surfacing an opaque decode error from the GRIB reader.
+    """
+    with open(path, "rb") as f:
+        if f.read(4) != b"GRIB":
+            raise FileNotFoundError(
+                f"{path}: GRIB index byte range does not start with a GRIB message"
+            )
 
 
 def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:

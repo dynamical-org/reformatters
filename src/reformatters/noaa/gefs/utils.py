@@ -12,7 +12,10 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GefsSourceFileCoord,
     get_grib_element,
 )
-from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
+from reformatters.noaa.noaa_grib_index import (
+    assert_downloaded_grib_message,
+    grib_message_byte_ranges_from_index,
+)
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
     nomads_rate_limiter,
@@ -53,12 +56,14 @@ def _download_file_from_gefs_source(
         idx_local_path, _index_data_vars(coord), coord.init_time, coord.lead_time
     )
     vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
-    return download(
+    local_path = download(
         source_url,
         dataset_id,
         byte_ranges=(starts, ends),
         local_path_suffix=f"-{vars_suffix}",
     )
+    assert_downloaded_grib_message(local_path)
+    return local_path
 
 
 def gefs_download_file(
