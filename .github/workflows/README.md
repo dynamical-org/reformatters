@@ -43,7 +43,7 @@ The cronjob dropdown in `manual-create-job-from-cronjob.yml` and dataset dropdow
    - Scans `DYNAMICAL_DATASETS` in `src/reformatters/__main__.py`
    - Computes the available cronjobs and backfillable datasets
    - Updates only the dropdown choices in the checked-in workflows
-   - Leaves the rest of each workflow unchanged so Dependabot owns action versions
+   - Leaves the rest of each workflow unchanged
 
 2. **Prek Hook:** Configured in `.pre-commit-config.yaml`
    - Automatically runs generator when relevant files change
