@@ -62,5 +62,6 @@ class NasaSmapLevel336KmV9Dataset(
                 # This value sounds very loose but has been tuned based on real values
                 max_nan_fraction=0.995,
                 spatial_sampling="quarter",
+                window=2,
             ),
         )

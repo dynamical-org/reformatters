@@ -56,5 +56,15 @@ class NoaaNdviCdrAnalysisDataset(
                 max_nan_fraction=0.97,
                 include_vars=["ndvi_usable"],
                 spatial_sampling="all",
+                window=2,
+            ),
+            validation.CheckRecentNans(
+                # ndvi_raw has no measured stable NaN baseline; this threshold still
+                # catches a position written entirely NaN. qa is integer typed, so it
+                # holds no NaN to measure and a NaN check cannot cover it.
+                max_nan_fraction=1.0 - 1e-9,
+                include_vars=["ndvi_raw"],
+                spatial_sampling="all",
+                window=2,
             ),
         )

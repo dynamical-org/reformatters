@@ -121,7 +121,9 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 - Declare `template_config` and `region_job_class`
 - Configure `primary_storage_config` and optional `replica_storage_configs`. Every new store is icechunk; zarr v3 is deprecated and the remaining zarr v3 stores are only ever replicas of an icechunk primary.
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
-- Implement `validators()` - return validation functions for the dataset
+- Implement `validators()` - return the operational validation checks for the dataset
+
+Operational validation conventions. `CheckCurrentData(max_delay=...)` sets when each append-dim position is due, counted from that position's own timestamp (typically the validation cron's offset after the cycle it validates), so a tight deadline holds even on an off-schedule run. `CheckRecentNans` defaults to covering the two newest output shards: the current trailing shard and the previous one in case an update crossed a shard boundary. Increase its `shards` value when an update deliberately re-sweeps further back. `CheckExpectedShards` proves a written shard exists; only the NaN check sees NaNs left *inside* a shard by a transiently failed source file. With the default `spatial_sampling="random_points"`, points are drawn once and read across the whole window in one pass. `"quarter"` and `"all"` read each position separately, so use `window` to set an explicit position count.
 
 ## Dataset structures
 

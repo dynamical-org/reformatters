@@ -328,51 +328,52 @@ class CheckCurrentData(Validator):
 
 
 class CheckRecentNans(VariableSelection, Validator):
-    """Check the NaN fraction of recent append-dim positions.
+    """Check the NaN fraction of recent append-dim positions, each independently.
 
-    Checks the newest `window` positions, each independently so a per-position
-    threshold is not diluted by a wider window. A window > 1 catches a gap that lands
-    in a recent-but-no-longer-newest position (a late source file, a catch-up or
-    re-backfill run): with a window of 1 each position is validated only while it is
-    the newest, then never looked at again.
+    By default, checks every position in the newest `shards` output shards. Two shards
+    cover the boundary case where an update begins in the previous trailing shard and
+    appends the first position of a new shard. Increase `shards` for an update that
+    deliberately re-sweeps further back. `window` overrides this with an explicit count
+    of newest positions. CheckExpectedShards proves a shard exists; only this check sees
+    the NaNs a transiently failed source file left inside one.
 
     `max_nan_fraction` is one threshold for every checked position, or a tuple indexed
     newest-first with the last value extending through the rest of the window — the
     same shape as CheckVirtualManifestCompleteness.min_present_fraction. A leading tier
     loosens positions the source is still filling in: `(0.45, 0.0)` allows the newest
     position 45% NaN while every older one must be complete, and a leading `1.0`
-    excuses the newest position entirely (it is skipped, not read). For variables that
-    fill in over several positions on different schedules, separate instances with
-    different include_vars/tiers check each group against what is complete by then,
-    instead of one threshold loose enough for all of them.
+    excuses the newest position entirely (whole-grid strategies skip reading it).
+    For variables that fill in over several positions on different schedules, separate
+    instances with different include_vars/tiers check each group against what is
+    complete by then, instead of one threshold loose enough for all of them.
 
     Default `spatial_sampling="random_points"` reads all non-spatial dims (lead times,
-    ensemble members) at 2 random spatial points per variable — cheap when data is
-    chunked along the append dim. Use `"quarter"` for structural-NaN datasets (random
-    points are bimodal/unstable) and `"all"` only for small datasets.
-
-    When the operational update rewrites a deep window (e.g. a year of positions each
-    run), set `window` to that depth and `sampled_positions` to a small count: each
-    validation then checks that many randomly chosen positions within the window
-    instead of every one, so older rewritten positions get eventual coverage at
-    bounded cost. Sampled positions are chosen randomly, so per-recency tiers do not
-    apply — a sampled check takes a single max_nan_fraction.
+    ensemble members) at `sampled_points` random spatial points per variable, chosen
+    once and read across the whole window in a single pass, so each zarr chunk is
+    fetched once. A point that is NaN at every checked position carries no per-position
+    signal (a structural hole, e.g. an ocean or out-of-domain cell) and is excluded;
+    the check fails if every sampled point is like that, so raise `sampled_points` for
+    datasets with large structural-NaN regions.
 
     A variable the store holds no lead_time=0 value for (see `stores_hour_0_values`)
     has that slice dropped before computing the NaN fraction.
     """
 
     max_nan_fraction: float | tuple[float, ...] = 0.0
-    window: int = 2
-    sampled_positions: int | None = None
+    window: int | None = None
+    shards: int = 2
+    sampled_points: int = 2
     spatial_sampling: SpatialSamplingStrategy = "random_points"
     max_workers: int | None = None
 
     @pydantic.model_validator(mode="after")
     def _validate_thresholds(self) -> CheckRecentNans:
         tiers = self._tiers
-        assert self.window >= 1, "window must be >= 1"
-        assert 1 <= len(tiers) <= self.window, (
+        assert self.window is None or self.window >= 1, "window must be >= 1"
+        assert self.shards >= 1, "shards must be >= 1"
+        assert self.sampled_points >= 1, "sampled_points must be >= 1"
+        assert len(tiers) >= 1, "max_nan_fraction needs at least one threshold"
+        assert self.window is None or len(tiers) <= self.window, (
             f"max_nan_fraction has {len(tiers)} tiers which must fit in window={self.window}"
         )
         assert all(0.0 <= t <= 1.0 for t in tiers), (
@@ -382,31 +383,19 @@ class CheckRecentNans(VariableSelection, Validator):
             "every max_nan_fraction tier is 1.0, which no NaN fraction can exceed — "
             "this check would test nothing"
         )
-        if self.sampled_positions is not None:
-            assert 1 <= self.sampled_positions <= self.window, (
-                f"sampled_positions ({self.sampled_positions}) must be within "
-                f"[1, window={self.window}]"
-            )
-            assert len(tiers) == 1, (
-                "sampled positions are randomly chosen, so per-recency max_nan_fraction "
-                "tiers do not apply; use a single threshold"
-            )
         return self
-
-    @property
-    def name(self) -> str:
-        if self.sampled_positions is None:
-            return super().name
-        parts = [f"sampled_positions={self.sampled_positions}", f"window={self.window}"]
-        if label := self.selection_label():
-            parts.insert(0, label)
-        return f"{type(self).__name__}({', '.join(parts)})"
 
     @property
     def _tiers(self) -> tuple[float, ...]:
         if isinstance(self.max_nan_fraction, tuple):
             return self.max_nan_fraction
         return (self.max_nan_fraction,)
+
+    def _resolve_window(self, ds: xr.Dataset, append_dim: str) -> int:
+        if self.window is not None:
+            return self.window
+        shard_slices = iterating.dimension_slices(ds, append_dim)
+        return ds.sizes[append_dim] - shard_slices[-self.shards :][0].start
 
     def check(self, context: ValidationContext) -> ValidationResult:
         ds = context.ds
@@ -437,47 +426,100 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
-        recencies: Sequence[int] = range(min(self.window, size))
-        if self.sampled_positions is not None and self.sampled_positions < len(
-            recencies
-        ):
-            rng = np.random.default_rng()
-            recencies = sorted(
-                rng.choice(len(recencies), size=self.sampled_positions, replace=False)
-            )
+        positions = min(
+            self._resolve_window(cast("xr.Dataset", ds[var_paths]), append_dim), size
+        )
+        window_ds = ds.isel({append_dim: slice(size - positions, None)})
+        max_workers = self.max_workers or _DEFAULT_MAX_WORKERS[self.spatial_sampling]
+        # A tier of 1.0 excuses a position entirely, so never read for it.
+        compared = [
+            recency
+            for recency in range(positions)
+            if tiers[min(recency, len(tiers) - 1)] < 1.0
+        ]
 
-        failures = []
-        checked = 0
-        for recency in recencies:
-            threshold = tiers[min(recency, len(tiers) - 1)]
-            if threshold >= 1.0:
-                continue  # no NaN fraction can exceed 1.0; skip the read
-            index = size - 1 - recency
-            checked += 1
-            result = _check_nan_fractions(
+        if self.spatial_sampling == "random_points":
+            # One pass over the whole window: points are drawn once and every position
+            # read in a single selection, so each zarr chunk is fetched once no matter
+            # how deep the window.
+            fractions, unmeasured = _nan_fractions_by_position(
                 _apply_spatial_sampling(
-                    ds.isel({append_dim: [index]}), self.spatial_sampling
+                    window_ds, "random_points", num_points=self.sampled_points
                 ),
-                max_nan_fraction=threshold,
+                append_dim=append_dim,
                 var_paths=var_paths,
                 skip_lead_time_0_vars=skip_lead_time_0_vars,
-                max_workers=self.max_workers
-                or _DEFAULT_MAX_WORKERS[self.spatial_sampling],
+                max_workers=max_workers,
             )
-            if not result.passed:
-                position = _format_coord_value(ds[append_dim].values[index])
-                failures.append(f"{append_dim}={position}: {result.message}")
+        else:
+            # Spatial slabs are too big to hold for a whole window, so read per position.
+            fractions = {var_path: {} for var_path in var_paths}
+            unmeasured = set()
+            for recency in compared:
+                position_fractions, position_unmeasured = _nan_fractions_by_position(
+                    _apply_spatial_sampling(
+                        window_ds.isel({append_dim: [positions - 1 - recency]}),
+                        self.spatial_sampling,
+                    ),
+                    append_dim=append_dim,
+                    var_paths=var_paths,
+                    skip_lead_time_0_vars=skip_lead_time_0_vars,
+                    max_workers=max_workers,
+                )
+                for var_path, by_recency in position_fractions.items():
+                    fractions[var_path][recency] = by_recency[0]
+                unmeasured |= position_unmeasured
 
-        if failures:
+        worst = ", ".join(
+            f"{var_path}={max((by_recency[recency] for recency in compared if recency in by_recency), default=float('nan')):.6f}"
+            for var_path, by_recency in sorted(fractions.items())
+        )
+        # Combine: many info records in the same second are dropped before reaching Sentry.
+        log.info(
+            f"NaN fractions (max over {len(compared)} compared of {positions} recent "
+            f"{append_dim} positions): {worst}"
+        )
+
+        problems = []
+        if len(tiers) > positions:
+            problems.append(
+                f"only {positions} {append_dim} position(s) available for the "
+                f"{tiers} NaN thresholds"
+            )
+        if unmeasured:
+            problems.append(
+                "No values selected to compute a NaN fraction for: "
+                + ", ".join(sorted(unmeasured))
+            )
+        for recency in compared:
+            threshold = tiers[min(recency, len(tiers) - 1)]
+            excessive = {
+                var_path: by_recency[recency]
+                for var_path, by_recency in fractions.items()
+                if recency in by_recency and by_recency[recency] > threshold
+            }
+            if excessive:
+                position = _format_coord_value(
+                    window_ds[append_dim].values[positions - 1 - recency]
+                )
+                problems.append(
+                    f"{append_dim}={position} exceeds {threshold}: "
+                    + ", ".join(
+                        f"{var_path}={fraction:.6f}"
+                        for var_path, fraction in sorted(excessive.items())
+                    )
+                )
+
+        if problems:
             return ValidationResult(
                 passed=False,
-                message=f"Excessive NaN fraction in {len(failures)} of {checked} "
-                "recent positions:\n" + "\n".join(failures),
+                message="Excessive NaN fraction:\n"
+                + "\n".join(f"- {problem}" for problem in problems),
             )
         return ValidationResult(
             passed=True,
-            message=f"All {checked} checked recent {append_dim} positions have "
-            f"NaN fraction within {tiers}",
+            message=f"All {len(compared)} checked {append_dim} positions (of the "
+            f"{positions} most recent) have NaN fraction within {tiers}",
         )
 
 
@@ -505,6 +547,7 @@ def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
 def _apply_spatial_sampling(
     ds: xr.Dataset,
     sampling_strategy: SpatialSamplingStrategy,
+    num_points: int = _NUM_RANDOM_POINTS,
 ) -> xr.Dataset:
     rng = np.random.default_rng()
 
@@ -529,8 +572,8 @@ def _apply_spatial_sampling(
         return ds.isel({x_dim: x_slice, y_dim: y_slice})
 
     if sampling_strategy == "random_points":
-        x_idxs = rng.integers(0, x_size, size=_NUM_RANDOM_POINTS)
-        y_idxs = rng.integers(0, y_size, size=_NUM_RANDOM_POINTS)
+        x_idxs = rng.integers(0, x_size, size=num_points)
+        y_idxs = rng.integers(0, y_size, size=num_points)
         # Pair each x with each y to form N points (use a synthetic "point" dim).
         return ds.isel(
             {
@@ -570,86 +613,86 @@ def _summarize_coords(ds: xr.Dataset) -> str:
     return ", ".join(parts)
 
 
-def _check_nan_fractions(
+def _nan_fractions_by_position(
     sample_ds: xr.Dataset,
     *,
-    max_nan_fraction: float,
+    append_dim: str,
     var_paths: Sequence[str],
     skip_lead_time_0_vars: set[str],
     max_workers: int,
-) -> ValidationResult:
+) -> tuple[dict[str, dict[int, float]], set[str]]:
+    """Each variable's NaN fraction at each append-dim position of `sample_ds`.
+
+    Fractions are keyed by recency (0 = newest). The second return value names the
+    variables nothing could be measured for — an empty selection, or (for point
+    sampling) every point being a structural hole.
+    """
     log.info(
         f"Computing NaN fraction for {len(var_paths)} variables: {sorted(var_paths)} "
         f"over coordinates: {_summarize_coords(sample_ds)}"
     )
 
-    fractions: dict[str, float] = {}
+    fractions: dict[str, dict[int, float]] = {}
+    unmeasured: set[str] = set()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_var = {
             executor.submit(
-                _compute_var_nan_fraction,
+                _var_nan_fractions,
                 sample_ds,
                 var_path,
+                append_dim=append_dim,
                 skip_lead_time_0_vars=skip_lead_time_0_vars,
             ): var_path
             for var_path in var_paths
         }
         for future in as_completed(future_to_var):
-            fractions[future_to_var[future]] = future.result()
+            var_path = future_to_var[future]
+            by_recency = future.result()
+            if by_recency is None:
+                unmeasured.add(var_path)
+            else:
+                fractions[var_path] = by_recency
 
-    # Combine: many info records in the same second are dropped before reaching Sentry.
-    summary = ", ".join(f"{var}={fractions[var]:.6f}" for var in sorted(fractions))
-    log.info(f"NaN fractions: {summary}")
-
-    # An empty selection means the check measured nothing. Its NaN fraction is NaN,
-    # which is not > any threshold, so without this it reports a pass.
-    unmeasured_vars = sorted(
-        var_path
-        for var_path, fraction in fractions.items()
-        if not np.isfinite(fraction)
-    )
-    problem_vars = {
-        var_path: fraction
-        for var_path, fraction in fractions.items()
-        if np.isfinite(fraction) and fraction > max_nan_fraction
-    }
-
-    messages = []
-    if unmeasured_vars:
-        messages.append(
-            "No values selected to compute a NaN fraction for: "
-            + ", ".join(unmeasured_vars)
-        )
-    if problem_vars:
-        messages.append(
-            f"Excessive NaN fraction (> {max_nan_fraction}):\n"
-            + "\n".join(
-                f"- {var}: {fraction:.6f} NaN fraction"
-                for var, fraction in sorted(problem_vars.items())
-            )
-        )
-    if messages:
-        return ValidationResult(passed=False, message="\n".join(messages))
-
-    return ValidationResult(
-        passed=True,
-        message=f"All {len(var_paths)} variables have NaN fraction <= {max_nan_fraction}",
-    )
+    return fractions, unmeasured
 
 
-def _compute_var_nan_fraction(
+def _var_nan_fractions(
     ds: xr.Dataset,
     var_path: str,
     *,
+    append_dim: str,
     skip_lead_time_0_vars: set[str],
-) -> float:
+) -> dict[int, float] | None:
+    """One variable's NaN fraction per append-dim position, keyed by recency, or None
+    when there is nothing to measure."""
     da = ds[var_path]
     if "lead_time" in da.dims and var_path in skip_lead_time_0_vars:
         da = da.isel(lead_time=slice(1, None))
     # Deep copy after slicing to force eager load of just the needed region
     # (helps avoid memory leaks observed iterating null checks across vars).
     da = da.copy(deep=True)
-    return float(da.isnull().mean().compute().item())
+    null = da.isnull()
+
+    reduce_dims = [str(dim) for dim in null.dims if dim not in (append_dim, "point")]
+    if "point" in null.dims:
+        by_point = null.mean(dim=reduce_dims).transpose(append_dim, "point")
+        # A point that is NaN at every position is a structural hole (ocean cell,
+        # outside the domain): it carries no per-position signal, so drop it rather
+        # than let it mask a real gap or fail the threshold on its own.
+        has_signal = (by_point < 1.0).any(dim=append_dim).values
+        if not has_signal.any():
+            return None
+        fractions = by_point.isel(point=np.flatnonzero(has_signal)).mean(dim="point")
+    else:
+        fractions = null.mean(dim=reduce_dims)
+
+    values = [float(value) for value in np.atleast_1d(fractions.compute().values)]
+    # An empty selection measures nothing; its mean is NaN, which is not > any
+    # threshold, so without this it would report a pass.
+    if not all(np.isfinite(value) for value in values):
+        return None
+    # values run oldest-first along the append dim; recency 0 is the newest.
+    return dict(enumerate(reversed(values)))
 
 
 class CheckReplicaMatchesPrimary(Validator):
