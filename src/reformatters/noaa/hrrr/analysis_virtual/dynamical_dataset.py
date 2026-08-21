@@ -100,5 +100,10 @@ class NoaaHrrrAnalysisVirtualDataset(
                 include_vars=hour_0_var_paths,
                 min_present_fraction=(0.0, 1.0),
             ),
-            validation.CheckVirtualDecodeHealth(),
+            validation.CheckVirtualDecodeHealth(
+                allow_all_nan_vars=(
+                    "echo_top",
+                    "percent_frozen_precipitation_surface",
+                )
+            ),
         )

@@ -232,6 +232,10 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
         if isinstance(validator, validation.CheckVirtualDecodeHealth)
     )
     assert (decode_health.positions, decode_health.max_positions) == (1, None)
+    assert decode_health.allow_all_nan_vars == (
+        "echo_top",
+        "percent_frozen_precipitation_surface",
+    )
 
 
 def _resolved_split_size(

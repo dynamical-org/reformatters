@@ -1628,13 +1628,9 @@ def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> N
     assert "entirely NaN" in result.message
 
 
-def test_check_virtual_decode_health_allows_all_nan_semantic_missing_values(
+def test_check_virtual_decode_health_requires_explicit_all_nan_allowlist(
     tmp_path: Path,
 ) -> None:
-    # Same all-NaN refs as detects_unreadable_ref, but the variable declares a non-NaN
-    # fill value, so its NaNs are a source marker it may carry across the whole domain
-    # (HRRR percent frozen precipitation in an hour with no precipitation anywhere).
-    # Decode-health checks it for decode errors only -> passes.
     dataset = _make_dataset(tmp_path)
     _overwrite_messages_with_nan(tmp_path, init_idx=0)
 
@@ -1644,10 +1640,51 @@ def test_check_virtual_decode_health_allows_all_nan_semantic_missing_values(
     ds = xr.open_zarr(store, decode_timedelta=True)
     assert ds["temperature_2m"].encoding["_FillValue"] == -50.0
 
-    result = validation.CheckVirtualDecodeHealth().check(
+    automatic = validation.CheckVirtualDecodeHealth().check(
         _virtual_context(job, store, ds)
     )
-    assert result.passed, result.message
+    assert not automatic.passed
+    assert "entirely NaN" in automatic.message
+
+    explicit = validation.CheckVirtualDecodeHealth(
+        allow_all_nan_vars=("temperature_2m",)
+    ).check(_virtual_context(job, store, ds))
+    assert explicit.passed, explicit.message
+
+
+def test_check_virtual_decode_health_all_nan_allowlist_requires_present_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    monkeypatch.setattr(
+        validation.CheckVirtualDecodeHealth,
+        "_sampled_refs_present",
+        staticmethod(lambda *args: False),
+    )
+
+    result = validation.CheckVirtualDecodeHealth(
+        allow_all_nan_vars=("temperature_2m",)
+    ).check(_virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True)))
+    assert not result.passed
+    assert "sampled chunk reference is missing" in result.message
+
+
+def test_check_virtual_decode_health_rejects_unknown_all_nan_var(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    with pytest.raises(ValueError, match="unknown allow_all_nan_vars"):
+        validation.CheckVirtualDecodeHealth(allow_all_nan_vars=("not_a_var",)).check(
+            _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+        )
 
 
 def test_check_virtual_decode_health_skips_vars_without_reference(

@@ -27,6 +27,7 @@ import zarr.core.sync
 import zarr.storage
 from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
+from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import iterating
 from reformatters.common.logging import get_logger
@@ -34,8 +35,9 @@ from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
 
 if TYPE_CHECKING:
-    from reformatters.common.config_models import BaseInternalAttrs, DataVar
-    from reformatters.common.region_job import SourceFileCoord
+    from reformatters.common.config_models import DataVar
+    from reformatters.common.region_job import CoordinateValue, SourceFileCoord
+    from reformatters.common.types import Dim
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
@@ -194,24 +196,6 @@ def open_flattened_dataset(
         decode_timedelta=True,  # so lead_time selects by pd.Timedelta label
     )
     return iterating.flatten_groups(tree)
-
-
-def uses_semantic_missing_values(
-    da: xr.DataArray, template_var: DataVar[BaseInternalAttrs] | None = None
-) -> bool:
-    """Whether a NaN in this variable can be a valid missing state, not absent data.
-
-    True when the variable's missing marker is a real source value: replaced with NaN as
-    it is written (`source_fill_value`), or declared as a non-NaN `_FillValue` a CF-aware
-    reader masks. Such a variable may read NaN anywhere, up to everywhere — HRRR's
-    percent frozen precipitation is all marker in an hour with no precipitation over the
-    domain — so NaN alone never establishes that data is missing.
-    """
-    fill_value = da.encoding.get("_FillValue")
-    return (
-        template_var is not None
-        and template_var.internal_attrs.source_fill_value is not None
-    ) or (fill_value is not None and not np.isnan(fill_value))
 
 
 def validate_dataset(
@@ -989,10 +973,9 @@ class CheckVirtualDecodeHealth(Validator):
     A variable fails if any sampled chunk errors or all of its sampled chunks decode
     entirely NaN. Fails — never silently passes — when no references are present.
 
-    The all-NaN half of that rule is skipped for a variable with semantic missing values
-    (uses_semantic_missing_values), whose NaNs are a source marker it can carry across the
-    whole domain at once; those are checked for decode errors only, and whether their
-    references exist stays CheckVirtualManifestCompleteness's question.
+    `allow_all_nan_vars` explicitly names variables that may legitimately carry their
+    missing state across every sampled chunk. They still fail on decode errors or missing
+    sampled chunk references.
     """
 
     positions: int | Literal["all"] = 1
@@ -1000,6 +983,7 @@ class CheckVirtualDecodeHealth(Validator):
     sampled_levels: int = 3
     max_positions: int | None = None
     max_workers: int = 32
+    allow_all_nan_vars: Sequence[str] = ()
     # Offline opt-in. Given (var_path, out_loc), returns whether a chunk reference actually
     # exists. When provided, a variable with no reference at a sampled position is skipped
     # (not decoded, not a failure) -- reference existence is the availability check's
@@ -1025,6 +1009,12 @@ class CheckVirtualDecodeHealth(Validator):
         store = context.store
         assert isinstance(store, IcechunkStore)
         ds = context.ds
+        unknown = sorted(set(self.allow_all_nan_vars) - set(context.known_var_paths()))
+        if unknown:
+            raise ValueError(
+                f"{type(self).__name__} names unknown allow_all_nan_vars {unknown}. "
+                f"Known variable paths: {sorted(context.known_var_paths())}"
+            )
         append_dim = region_job.append_dim
         candidates = region_job.source_file_coords()
         if not candidates:
@@ -1052,7 +1042,10 @@ class CheckVirtualDecodeHealth(Validator):
         first_error: dict[str, str] = {}
         no_reference_vars: set[str] = set()
         decoded_refs = 0
-        decode = partial(self._decode_coord, region_job=region_job, ds=ds)
+        group = zarr.open_group(store, mode="r")
+        decode = partial(
+            self._decode_coord, region_job=region_job, store=store, group=group, ds=ds
+        )
         with ThreadPoolExecutor(self.max_workers) as pool:
             for results, skipped in pool.map(decode, to_decode):
                 decoded_refs += len(results)
@@ -1068,9 +1061,10 @@ class CheckVirtualDecodeHealth(Validator):
         problems = []
         for var_path in sorted(min_nan_fraction):
             if var_path in first_error:
-                problems.append(f"{var_path}: decode error ({first_error[var_path]})")
-            elif min_nan_fraction[var_path] >= 1.0 and not uses_semantic_missing_values(
-                ds[var_path]
+                problems.append(f"{var_path}: {first_error[var_path]}")
+            elif (
+                min_nan_fraction[var_path] >= 1.0
+                and var_path not in self.allow_all_nan_vars
             ):
                 problems.append(f"{var_path}: every sampled chunk decoded entirely NaN")
 
@@ -1115,6 +1109,8 @@ class CheckVirtualDecodeHealth(Validator):
         self,
         coord: SourceFileCoord,
         region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        group: zarr.Group,
         ds: xr.Dataset,
     ) -> tuple[list[tuple[str, float, str | None]], set[str]]:
         loc = coord.out_loc()
@@ -1139,10 +1135,61 @@ class CheckVirtualDecodeHealth(Validator):
                     lambda da=da: da.copy(deep=True).load().values,
                     max_attempts=3,
                 )
-                results.append((var.path, float(np.isnan(values).mean()), None))
             except Exception as e:  # noqa: BLE001 - any decode failure is a validation failure
-                results.append((var.path, 1.0, f"{type(e).__name__}: {e}"))
+                results.append(
+                    (
+                        var.path,
+                        1.0,
+                        f"decode error ({type(e).__name__}: {e})",
+                    )
+                )
+                continue
+
+            nan_fraction = float(np.isnan(values).mean())
+            error = None
+            if (
+                nan_fraction >= 1.0
+                and var.path in self.allow_all_nan_vars
+                and not self._sampled_refs_present(
+                    da, loc, var, region_job, store, group
+                )
+            ):
+                error = "sampled chunk reference is missing"
+            results.append((var.path, nan_fraction, error))
         return results, skipped
+
+    @staticmethod
+    def _sampled_refs_present(
+        da: xr.DataArray,
+        out_loc: Mapping[Dim, CoordinateValue],
+        var: DataVar[Any],
+        region_job: VirtualRegionJob[Any, Any],
+        store: IcechunkStore,
+        group: zarr.Group,
+    ) -> bool:
+        locations: list[dict[Dim, CoordinateValue]] = [dict(out_loc)]
+        spatial_dims = {"y", "x", "latitude", "longitude"}
+        for dim_name in da.dims:
+            if dim_name in spatial_dims or dim_name in out_loc:
+                continue
+            dim = cast("Dim", dim_name)
+            locations = [
+                {**location, dim: cast("CoordinateValue", label)}
+                for location in locations
+                for label in da.get_index(dim_name)
+            ]
+
+        array = group[var.path]
+        assert isinstance(array, zarr.Array)
+        metadata = array.metadata
+        assert isinstance(metadata, ArrayV3Metadata)
+        keys = []
+        for location in locations:
+            index = region_job.chunk_key(location, var)
+            assert index is not None
+            encoded = metadata.chunk_key_encoding.encode_chunk_key(index)
+            keys.append(f"{array.path}/{encoded}")
+        return all(zarr.core.sync.sync(store.exists(key)) for key in keys)
 
     def _sample_leads(
         self, coords: Sequence[SourceFileCoord]

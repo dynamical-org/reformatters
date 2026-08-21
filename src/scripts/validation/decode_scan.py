@@ -78,11 +78,21 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         f"(sampled_leads={SAMPLED_LEADS}, sampled_levels={SAMPLED_LEVELS})"
     )
 
-    checker = validation.CheckVirtualDecodeHealth(
-        positions=1,
-        sampled_leads=SAMPLED_LEADS,
-        sampled_levels=SAMPLED_LEVELS,
-        reference_exists=reference_exists,
+    configured_checker = next(
+        (
+            validator
+            for validator in dataset.validators()
+            if isinstance(validator, validation.CheckVirtualDecodeHealth)
+        ),
+        validation.CheckVirtualDecodeHealth(),
+    )
+    checker = configured_checker.model_copy(
+        update={
+            "positions": 1,
+            "sampled_leads": SAMPLED_LEADS,
+            "sampled_levels": SAMPLED_LEVELS,
+            "reference_exists": reference_exists,
+        }
     )
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
@@ -91,6 +101,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
                 store=store,
                 ds=ds,
                 append_dim=dataset.template_config.append_dim,
+                data_vars=dataset.template_config.data_vars,
                 region_job=cast("VirtualRegionJob[Any, Any]", job),
             )
         )

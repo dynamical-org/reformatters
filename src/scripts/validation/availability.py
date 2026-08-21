@@ -23,10 +23,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
-from reformatters.common.validation import (
-    stores_hour_0_values,
-    uses_semantic_missing_values,
-)
+from reformatters.common.validation import stores_hour_0_values
 from scripts.validation.manifest_scan import (
     result_availability_series,
     scan_manifest,
@@ -321,6 +318,16 @@ def _template_data_vars(ctx: RunContext) -> dict[str, DataVar[Any]]:
     return {v.path: v for v in dataset.template_config.data_vars}
 
 
+def _uses_semantic_missing_values(
+    da: xr.DataArray, template_var: DataVar[Any] | None
+) -> bool:
+    fill_value = da.encoding.get("_FillValue")
+    return (
+        template_var is not None
+        and template_var.internal_attrs.source_fill_value is not None
+    ) or (fill_value is not None and not np.isnan(fill_value))
+
+
 def _co_ingested_availability(
     ctx: RunContext, var: str, template_vars: dict[str, DataVar[Any]]
 ) -> AvailabilitySeries | None:
@@ -390,7 +397,7 @@ def run_value_availability(ctx: RunContext) -> None:
     semantic_missing_vars = [
         var
         for var in ctx.variables
-        if uses_semantic_missing_values(ctx.validation_ds[var], template_vars.get(var))
+        if _uses_semantic_missing_values(ctx.validation_ds[var], template_vars.get(var))
     ]
 
     for var in ctx.variables:
