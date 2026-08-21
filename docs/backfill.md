@@ -28,9 +28,11 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble. Virtual: ~30.
-- **max_parallelism** — materialized: 50–200; go higher if needed, but check cluster quotas so operational updates can still schedule. Some sources cap useful parallelism (`s3://ecmwf-forecasts` supports at most 8). Virtual: 10 — higher risks heavy compare-and-set contention.
+- **max_parallelism** — materialized: 20–50. Much higher (~200) is often fine, but verify first that the cluster can fit that many of this dataset's pods: compare both the cpu and the memory one pod requests against available capacity, since either can be the binding constraint and the limit may be a quota rather than a node count. Leave headroom so operational updates can still schedule, and watch for unschedulable pods once the job starts. Some sources cap useful parallelism (`s3://ecmwf-forecasts` supports at most 8). Virtual: 10 — higher risks heavy compare-and-set contention.
 
 For the cpu / memory / shared-memory a dataset's jobs request, see the Kubernetes resource values in [implementation_guide.md](implementation_guide.md) §5.
+
+Parallelism beyond what the cluster can schedule starves it: operational update pods sit Pending, and worker 0 does setup before any other worker proceeds, so if worker 0 is not among the pods that scheduled, the workers that did start log `Waiting for worker 0 to complete setup...` and then exit. Indexed jobs retry those indices, so the backfill still finishes, but the attempts are wasted. To free capacity on a running job without losing progress, lower its parallelism in place — `kubectl patch job <name> -p '{"spec":{"parallelism":N}}'` — which does not evict running pods; capacity frees as they finish.
 
 ## Concurrency with operational updates
 

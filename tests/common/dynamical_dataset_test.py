@@ -14,7 +14,13 @@ import pytest
 import xarray as xr
 from pydantic import Field, ValidationError, computed_field
 
-from reformatters.common import dynamical_dataset, storage, template_utils, validation
+from reformatters.common import (
+    dynamical_dataset,
+    operational,
+    storage,
+    template_utils,
+    validation,
+)
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -749,7 +755,7 @@ class ExampleDatasetWithThreeCronJobs(
 
 def _recording_monitor(
     events: list[tuple[str, str]],
-) -> dynamical_dataset.RunMonitor:
+) -> operational.RunMonitor:
     @contextmanager
     def monitor(
         cron_job: CronJob,
@@ -789,8 +795,8 @@ def test_monitor_noop_without_registered_monitors(
 
 def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
     events: list[tuple[str, str]] = []
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
 
     dataset = ExampleDatasetWithThreeCronJobs()
     # cron_job_name disambiguates among the three crons; the resolved cron reaches monitors.
@@ -804,7 +810,7 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
 
 
 def test_monitor_requires_exactly_one_matching_cron() -> None:
-    dynamical_dataset.register_run_monitor(_recording_monitor([]))
+    operational.register_run_monitor(_recording_monitor([]))
     dataset = ExampleDatasetWithThreeCronJobs()
     # Base CronJob with no name matches all three -> ambiguous.
     with (
@@ -816,7 +822,7 @@ def test_monitor_requires_exactly_one_matching_cron() -> None:
 
 def test_monitor_propagates_errors_to_monitors() -> None:
     events: list[tuple[str, str]] = []
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(), region_job_class=ExampleRegionJob

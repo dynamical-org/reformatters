@@ -52,20 +52,12 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
     EcdsSelection,
     initialization_selections,
 )
+from reformatters.ecmwf.archive_gribs.s2s_archiver import ARCHIVE_BASE_URL
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
 )
 
 log = get_logger(__name__)
-
-ARCHIVE_RCLONE_ROOT = (
-    ":s3:us-west-2.opendata.source.coop/dynamical/ecmwf-ifs-grib/"
-    "ecmwf-ifs-ens-forecast-46-day/"
-)
-ARCHIVE_BASE_URL = (
-    "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
-    "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens-forecast-46-day"
-)
 
 GRID_SHAPE = (121, 240)
 # Radiation and precipitation accumulations deaccumulate to slightly negative rates

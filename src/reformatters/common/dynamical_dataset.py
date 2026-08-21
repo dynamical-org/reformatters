@@ -1,11 +1,10 @@
 import inspect
 import json
 import subprocess
-from collections.abc import Iterator, Sequence
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -32,7 +31,7 @@ from reformatters.common.kubernetes import (
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
-from reformatters.common.pydantic import FrozenBaseModel
+from reformatters.common.operational import OperationalResources
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
@@ -55,7 +54,7 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 log = get_logger(__name__)
 
 
-class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
@@ -807,49 +806,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             - poll_deadline_grace
         )
 
-    def _operational_cron_job(
-        self, cron_type: type[CronJob], cron_job_name: str | None = None
-    ) -> CronJob:
-        """The single cron job of `cron_type` (and name, when given) this dataset defines."""
-        return item(
-            cron_job
-            for cron_job in self.operational_kubernetes_resources(
-                "placeholder-image-tag"
-            )
-            if isinstance(cron_job, cron_type)
-            and (cron_job_name is None or cron_job.name == cron_job_name)
-        )
-
-    @contextmanager
-    def _monitor(
-        self,
-        cron_type: type[CronJob],
-        reformat_job_name: str,
-        cron_job_name: str | None = None,
-        *,
-        send_in_progress: bool = True,
-        send_result: bool = True,
-    ) -> Iterator[None]:
-        # No registered monitors -> nothing to report to, and no need to require
-        # operational_kubernetes_resources to be defined.
-        if not _RUN_MONITORS:
-            yield
-            return
-
-        cron_job = self._operational_cron_job(cron_type, cron_job_name)
-
-        with ExitStack() as stack:
-            for monitor in _RUN_MONITORS:
-                stack.enter_context(
-                    monitor(
-                        cron_job,
-                        reformat_job_name,
-                        send_in_progress=send_in_progress,
-                        send_result=send_result,
-                    )
-                )
-            yield
-
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
         # A virtual region job emits chunk refs into icechunk and needs the source
@@ -902,31 +858,3 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     f"virtual data var {var.name} must declare compressors=()"
                 )
         return self
-
-
-class RunMonitor(Protocol):
-    """Wraps a single operational cron run to report it to a monitoring service.
-
-    The application registers monitors (see `register_run_monitor`); `DynamicalDataset._monitor`
-    enters every registered one around each update/validate run. This keeps
-    DynamicalDataset agnostic of any specific monitoring service — a different
-    deployment registers whatever it uses, or nothing.
-    """
-
-    def __call__(
-        self,
-        cron_job: CronJob,
-        reformat_job_name: str,
-        *,
-        send_in_progress: bool,
-        send_result: bool,
-    ) -> AbstractContextManager[None]: ...
-
-
-_RUN_MONITORS: list[RunMonitor] = []
-
-
-def register_run_monitor(monitor: RunMonitor) -> None:
-    """Register a monitor to wrap every operational cron run. With none registered,
-    monitoring is a no-op."""
-    _RUN_MONITORS.append(monitor)

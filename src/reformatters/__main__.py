@@ -18,8 +18,12 @@ from sentry_sdk.types import Hint, Log
 from reformatters.common import deploy as deploy_module
 from reformatters.common import monitoring
 from reformatters.common.config import Config
-from reformatters.common.dynamical_dataset import DynamicalDataset, register_run_monitor
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.initialize_new_integration import initialize_new_integration
+from reformatters.common.operational import (
+    OperationalResources,
+    register_run_monitor,
+)
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.nasa.smap.level3_36km_v9 import NasaSmapLevel336KmV9Dataset
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
@@ -37,6 +41,7 @@ from reformatters.ecmwf.aifs_single.forecast import (
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     EcmwfAifsSingleForecastVirtualDataset,
 )
+from reformatters.ecmwf.archive_gribs.s2s_archiver import EcmwfS2sGribArchiver
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -290,10 +295,17 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 app.command()(initialize_new_integration)
 
 
+# Source archives that feed a dataset but have no store of their own. They deploy
+# their own cronjobs and are not datasets, so they carry no update/validate/backfill.
+OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfS2sGribArchiver()]
+
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
 
-deploy_module.register_commands(app, DYNAMICAL_DATASETS)
+for archiver in OPERATIONAL_ARCHIVERS:
+    app.add_typer(archiver.get_cli(), name=archiver.dataset_id)
+
+deploy_module.register_commands(app, DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS)
 
 
 if not __debug__:
