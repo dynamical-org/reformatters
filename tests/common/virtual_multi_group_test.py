@@ -538,14 +538,8 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     result = validation.CheckRecentNans(
         include_vars=["pressure_level/temperature"],
         spatial_sampling="all",
-    ).check(
-        validation.ValidationContext(
-            store=store,
-            ds=flat,
-            append_dim="init_time",
-            update_jobs=[_make_region_job(template_ds, region=slice(0, 2))],
-        )
-    )
+        window=2,
+    ).check(validation.ValidationContext(store=store, ds=flat, append_dim="init_time"))
     assert result.passed, result.message
     assert "All 2 checked init_time positions" in result.message
 
@@ -566,7 +560,7 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
     assert "pressure_level/temperature" in ds.data_vars
     result = validation.CheckVirtualDecodeHealth().check(
         validation.ValidationContext(
-            store=store, ds=ds, append_dim=job.append_dim, update_jobs=[job]
+            store=store, ds=ds, append_dim=job.append_dim, region_job=job
         )
     )
     assert result.passed, result.message
@@ -584,7 +578,7 @@ def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:
     job = _make_region_job(template_ds, region=slice(0, 2))
     ds = validation.open_flattened_dataset(store, consolidated=False)
     context = validation.ValidationContext(
-        store=store, ds=ds, append_dim=job.append_dim, update_jobs=[job]
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
     )
 
     # Sampling one of the two pressure levels still exercises the group var and passes.
@@ -904,7 +898,7 @@ def test_completeness_variable_filter_requires_disjoint_source_files(
     ds = validation.open_flattened_dataset(store, consolidated=False)
 
     context = validation.ValidationContext(
-        store=store, ds=ds, append_dim=job.append_dim, update_jobs=[job]
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
     )
     with pytest.raises(AssertionError, match="carries both selected and unselected"):
         validation.CheckVirtualManifestCompleteness(

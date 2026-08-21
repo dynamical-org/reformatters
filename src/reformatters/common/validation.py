@@ -35,7 +35,7 @@ from reformatters.common.retry import retry
 
 if TYPE_CHECKING:
     from reformatters.common.config_models import DataVar
-    from reformatters.common.region_job import RegionJob, SourceFileCoord
+    from reformatters.common.region_job import SourceFileCoord
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
@@ -83,50 +83,16 @@ class ValidationContext:
     # (offline scripts, tests). Lets a check consult config that is not written to
     # the store (has_hour_0_values, internal attrs) and validate variable names.
     data_vars: Sequence[DataVar[Any]] = ()
-    # The jobs one operational update runs. Their regions are the append-dim
-    # positions the update writes, which is what a check must cover.
-    update_jobs: Sequence[RegionJob[Any, Any]] = ()
+    # The operational-window job, present when validating a virtual dataset.
+    region_job: VirtualRegionJob[Any, Any] | None = None
     # The primary store's dataset, present when `store` is a replica.
     primary_ds: xr.Dataset | None = None
 
     def virtual_region_job(self) -> VirtualRegionJob[Any, Any]:
-        assert len(self.update_jobs) == 1, (
-            "a virtual operational update runs a single active-window job, got "
-            f"{len(self.update_jobs)}"
+        assert self.region_job is not None, (
+            "this check requires a virtual dataset's operational-window region job"
         )
-        from reformatters.common.virtual_region_job import (  # noqa: PLC0415
-            VirtualRegionJob,
-        )
-
-        job = self.update_jobs[0]
-        assert isinstance(job, VirtualRegionJob), (
-            f"this check requires a virtual dataset, got {type(job).__name__}"
-        )
-        return job
-
-    def update_written_positions(self) -> int:
-        """How many of the store's newest append-dim positions one operational update
-        writes: those published since the previous fire, the reprocessed newest, and
-        any re-sweep the update's filter_start reaches back over.
-
-        This is the ground truth a value check must cover, so a check does not have to
-        restate it as a hand-maintained number that drifts when a schedule, an append
-        dim frequency, or a re-sweep window changes.
-        """
-        assert self.update_jobs, (
-            "deriving the positions an update writes requires the operational update jobs"
-        )
-        written = np.unique(
-            np.concatenate(
-                [
-                    job.template_ds.coords[self.append_dim].values[job.region]
-                    for job in self.update_jobs
-                ]
-            )
-        )
-        # Regions are contiguous from the update's filter_start, so the count of the
-        # store's positions the update writes is a count of its newest positions.
-        return int(self.ds.get_index(self.append_dim).isin(written).sum())
+        return self.region_job
 
     def known_var_paths(self) -> Sequence[str]:
         """The variable paths a check's include/exclude filters are validated against:
@@ -151,12 +117,6 @@ class Validator(FrozenBaseModel, abc.ABC):
     # True for checks that probe a virtual dataset's manifest; validate_dataset
     # requires a region_job when any listed check sets this.
     requires_virtual_dataset: ClassVar[bool] = False
-
-    @property
-    def requires_update_jobs(self) -> bool:
-        """Whether this check needs the jobs one operational update runs;
-        validate_dataset builds them only when some check asks."""
-        return self.requires_virtual_dataset
 
     @property
     def name(self) -> str:
@@ -244,7 +204,7 @@ def validate_dataset(
     dataset_id: str,
     append_dim_frequency: pd.Timedelta | None = None,
     data_vars: Sequence[DataVar[Any]] = (),
-    update_jobs: Sequence[RegionJob[Any, Any]] = (),
+    region_job: VirtualRegionJob[Any, Any] | None = None,
     primary_ds: xr.Dataset | None = None,
 ) -> None:
     """
@@ -257,8 +217,8 @@ def validate_dataset(
         dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
         append_dim_frequency: the template config's append-dim frequency.
         data_vars: the template config's declared variables (see ValidationContext).
-        update_jobs: the jobs one operational update runs, whose regions are the
-            append-dim positions it writes.
+        region_job: the operational-window job, required when any validator sets
+            requires_virtual_dataset.
         primary_ds: the primary store's dataset, when `store` is a replica.
 
     Raises:
@@ -267,9 +227,8 @@ def validate_dataset(
     log.info(f"Validating zarr {store}")
 
     virtual_checks = [v.name for v in validators if v.requires_virtual_dataset]
-    assert not virtual_checks or update_jobs, (
-        f"{virtual_checks} require the operational update jobs but validate_dataset "
-        "was called without them"
+    assert not virtual_checks or region_job is not None, (
+        f"{virtual_checks} require a region_job but validate_dataset was called without one"
     )
 
     consolidated = not isinstance(store, IcechunkStore)
@@ -285,7 +244,7 @@ def validate_dataset(
             append_dim=append_dim,
             append_dim_frequency=append_dim_frequency,
             data_vars=tuple(data_vars),
-            update_jobs=tuple(update_jobs),
+            region_job=region_job,
             primary_ds=primary_ds,
         )
         result = validator.check(context)
@@ -371,16 +330,12 @@ class CheckCurrentData(Validator):
 class CheckRecentNans(VariableSelection, Validator):
     """Check the NaN fraction of recent append-dim positions, each independently.
 
-    `window` is how many of the newest positions to check, defaulting to every position
-    the operational update writes, read from that update's own jobs
-    (ValidationContext.update_written_positions) so no dataset restates its schedule as
-    a number here. CheckExpectedShards proves a written shard exists; only this check
-    sees the NaNs a transiently failed source file left inside one. Writes are shard
-    granular, so an update rewrites its whole trailing shard — hundreds of positions —
-    which point sampling covers in one pass for about the cost of one position.
-    `"quarter"` and `"all"` read each position separately and cannot afford that depth,
-    so they take an explicit `window`; every result reports how many of the written
-    positions it covered.
+    By default, checks every position in the newest `shards` output shards. Two shards
+    cover the boundary case where an update begins in the previous trailing shard and
+    appends the first position of a new shard. Increase `shards` for an update that
+    deliberately re-sweeps further back. `window` overrides this with an explicit count
+    of newest positions. CheckExpectedShards proves a shard exists; only this check sees
+    the NaNs a transiently failed source file left inside one.
 
     `max_nan_fraction` is one threshold for every checked position, or a tuple indexed
     newest-first with the last value extending through the rest of the window — the
@@ -405,7 +360,8 @@ class CheckRecentNans(VariableSelection, Validator):
     """
 
     max_nan_fraction: float | tuple[float, ...] = 0.0
-    window: int | None = None  # None: every position the update writes
+    window: int | None = None
+    shards: int = 2
     sampled_points: int = 2
     spatial_sampling: SpatialSamplingStrategy = "random_points"
     max_workers: int | None = None
@@ -414,6 +370,7 @@ class CheckRecentNans(VariableSelection, Validator):
     def _validate_thresholds(self) -> CheckRecentNans:
         tiers = self._tiers
         assert self.window is None or self.window >= 1, "window must be >= 1"
+        assert self.shards >= 1, "shards must be >= 1"
         assert self.sampled_points >= 1, "sampled_points must be >= 1"
         assert len(tiers) >= 1, "max_nan_fraction needs at least one threshold"
         assert self.window is None or len(tiers) <= self.window, (
@@ -429,20 +386,18 @@ class CheckRecentNans(VariableSelection, Validator):
         return self
 
     @property
-    def requires_update_jobs(self) -> bool:
-        return self.window is None  # derived from what the update writes
-
-    @property
     def _tiers(self) -> tuple[float, ...]:
         if isinstance(self.max_nan_fraction, tuple):
             return self.max_nan_fraction
         return (self.max_nan_fraction,)
 
     def _resolve_window(self, context: ValidationContext) -> int:
-        """How many of the newest append-dim positions to check."""
-        if self.window is None:
-            return context.update_written_positions()
-        return self.window
+        if self.window is not None:
+            return self.window
+        shard_slices = iterating.dimension_slices(context.ds, context.append_dim)
+        return (
+            context.ds.sizes[context.append_dim] - shard_slices[-self.shards :][0].start
+        )
 
     def check(self, context: ValidationContext) -> ValidationResult:
         ds = context.ds
@@ -473,7 +428,6 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
-        written = context.update_written_positions() if context.update_jobs else None
         positions = min(self._resolve_window(context), size)
         window_ds = ds.isel({append_dim: slice(size - positions, None)})
         max_workers = self.max_workers or _DEFAULT_MAX_WORKERS[self.spatial_sampling]
@@ -520,11 +474,10 @@ class CheckRecentNans(VariableSelection, Validator):
             f"{var_path}={max(by_recency.values(), default=float('nan')):.6f}"
             for var_path, by_recency in sorted(fractions.items())
         )
-        coverage = f", {written} written by one update" if written else ""
         # Combine: many info records in the same second are dropped before reaching Sentry.
         log.info(
             f"NaN fractions (max over {len(compared)} of {positions} recent "
-            f"{append_dim} positions{coverage}): {worst}"
+            f"{append_dim} positions): {worst}"
         )
 
         problems = []
@@ -566,7 +519,7 @@ class CheckRecentNans(VariableSelection, Validator):
         return ValidationResult(
             passed=True,
             message=f"All {len(compared)} checked {append_dim} positions (of the "
-            f"{positions} most recent{coverage}) have NaN fraction within {tiers}",
+            f"{positions} most recent) have NaN fraction within {tiers}",
         )
 
 

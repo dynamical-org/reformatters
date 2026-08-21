@@ -80,5 +80,6 @@ class NoaaHrrrForecast48HourDataset(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.9999,
                 spatial_sampling="quarter",
+                window=2,
             ),
         )

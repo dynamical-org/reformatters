@@ -1,6 +1,5 @@
 import logging
 import warnings
-from dataclasses import dataclass
 from datetime import timedelta
 
 import icechunk
@@ -40,33 +39,26 @@ class NanTestDataVar(DataVar[BaseInternalAttrs]):
     )
 
 
-@dataclass(frozen=True)
-class _StubUpdateJob:
-    """Stands in for a job one operational update runs; the checks read only these."""
-
-    template_ds: xr.Dataset
-    region: slice
-
-
 def _context(
     ds: xr.Dataset,
     append_dim: str,
     store: zarr.storage.StoreLike | None = None,
-    written_positions: int = 2,
+    append_dim_shard_size: int | None = None,
     **kwargs: object,
 ) -> validation.ValidationContext:
-    """A context whose stand-in update writes `written_positions` newest positions,
-    which is what a CheckRecentNans without an explicit window covers."""
-    size = ds.sizes.get(append_dim, 0)
+    for var in ds.data_vars.values():
+        if append_dim not in var.dims:
+            continue
+        if append_dim_shard_size is not None or var.encoding.get("shards") is None:
+            shard_size = append_dim_shard_size or 1
+            var.encoding["shards"] = tuple(
+                shard_size if dim == append_dim else size
+                for dim, size in var.sizes.items()
+            )
     return validation.ValidationContext(
         store=store if store is not None else zarr.storage.MemoryStore(),
         ds=ds,
         append_dim=append_dim,
-        update_jobs=[  # ty: ignore[invalid-argument-type]
-            _StubUpdateJob(
-                template_ds=ds, region=slice(max(0, size - written_positions), size)
-            )
-        ],
         **kwargs,  # ty: ignore[invalid-argument-type]
     )
 
@@ -461,13 +453,11 @@ def test_check_recent_nans_window_catches_older_init(
     forecast_dataset["temperature"].loc[{"init_time": bad_init}] = np.nan
 
     context = _context(forecast_dataset, "init_time")
-    # The default window of 2 only checks the newest two init_times, so it misses it.
+    # The test store has one position per shard, so the default two shards miss it.
     assert validation.CheckRecentNans().check(context).passed
 
     # A window reaching back to it catches the gap and names the offending init_time.
-    result = validation.CheckRecentNans().check(
-        _context(forecast_dataset, "init_time", written_positions=3)
-    )
+    result = validation.CheckRecentNans(shards=3).check(context)
     assert not result.passed
     assert "Excessive NaN fraction" in result.message
     assert pd.Timestamp(bad_init.values).isoformat() in result.message
@@ -477,8 +467,8 @@ def test_check_recent_nans_window_all_clean_passes(
     forecast_dataset: xr.Dataset,
 ) -> None:
     """A clean window passes and reports how many positions were checked."""
-    result = validation.CheckRecentNans().check(
-        _context(forecast_dataset, "init_time", written_positions=3)
+    result = validation.CheckRecentNans(shards=3).check(
+        _context(forecast_dataset, "init_time")
     )
     assert result.passed
     assert "All 3 checked init_time positions" in result.message
@@ -584,65 +574,41 @@ def test_check_recent_nans_checks_each_position_independently(
 def test_check_recent_nans_deep_window_checks_every_position(
     analysis_dataset: xr.Dataset,
 ) -> None:
-    """A window as deep as the update's rewrite depth catches a gap anywhere in it."""
+    """A configured shard depth catches a gap anywhere in its range."""
     context = _context(analysis_dataset, "time")
 
-    # Ruin a deep position the default newest-positions window would never see.
+    # Ruin a deep position the default two-shard range would never see.
     analysis_dataset["temperature"].loc[{"time": "2024-01-01 12:00"}] = np.nan
     assert validation.CheckRecentNans().check(context).passed
 
-    result = validation.CheckRecentNans().check(
-        _context(analysis_dataset, "time", written_positions=48)
-    )
+    result = validation.CheckRecentNans(shards=48).check(context)
     assert not result.passed
     assert "2024-01-01T12:00:00" in result.message
 
 
-def test_check_recent_nans_window_tracks_the_update(
+def test_check_recent_nans_defaults_to_two_trailing_shards(
     analysis_dataset: xr.Dataset,
 ) -> None:
-    """The window is what the update writes, so no dataset restates its schedule."""
-    # Ruin a position 5 back: covered only once the update is known to write that deep.
-    analysis_dataset["temperature"].loc[{"time": "2024-01-02 18:00"}] = np.nan
+    """Two shards cover the previous shard when an update crosses a boundary."""
+    ds = analysis_dataset.isel(time=slice(0, 7))
+    ds["temperature"].loc[{"time": "2024-01-01 03:00"}] = np.nan
+    context = _context(ds, "time", append_dim_shard_size=3)
 
-    assert (
-        validation.CheckRecentNans()
-        .check(_context(analysis_dataset, "time", written_positions=2))
-        .passed
-    )
-    result = validation.CheckRecentNans().check(
-        _context(analysis_dataset, "time", written_positions=6)
-    )
+    assert validation.CheckRecentNans(shards=1).check(context).passed
+    result = validation.CheckRecentNans().check(context)
     assert not result.passed
-    assert "2024-01-02T18:00:00" in result.message
+    assert "2024-01-01T03:00:00" in result.message
 
 
-def test_check_recent_nans_explicit_window_reports_its_coverage(
+def test_check_recent_nans_explicit_window_overrides_shards(
     analysis_dataset: xr.Dataset,
 ) -> None:
-    """An explicit window bounds the read — whole-grid strategies cannot afford a
-    shard-deep one — so the result says how much of the update it covered."""
-    context = _context(analysis_dataset, "time", written_positions=6)
+    """Whole-grid strategies can bound the read to an explicit position count."""
+    context = _context(analysis_dataset, "time", append_dim_shard_size=6)
 
     result = validation.CheckRecentNans(window=2, spatial_sampling="all").check(context)
     assert result.passed
-    assert "2 most recent, 6 written by one update" in result.message
-
-
-def test_check_recent_nans_needs_update_jobs_only_to_derive(
-    analysis_dataset: xr.Dataset,
-) -> None:
-    """An explicit window needs nothing from the update; deriving one has no fallback
-    to a number that could silently under-check, so it fails loudly."""
-    assert not validation.CheckRecentNans(window=2).requires_update_jobs
-    assert validation.CheckRecentNans().requires_update_jobs
-
-    no_jobs = validation.ValidationContext(
-        store=zarr.storage.MemoryStore(), ds=analysis_dataset, append_dim="time"
-    )
-    assert validation.CheckRecentNans(window=2).check(no_jobs).passed
-    with pytest.raises(AssertionError, match="operational update jobs"):
-        validation.CheckRecentNans().check(no_jobs)
+    assert "2 most recent" in result.message
 
 
 def test_check_recent_nans_excludes_structurally_dead_points(
@@ -708,6 +674,8 @@ def test_check_recent_nans_config_validation() -> None:
         validation.CheckRecentNans(max_nan_fraction=(1.0, 1.0), window=2)
     with pytest.raises(pydantic.ValidationError):
         validation.CheckRecentNans(window=0)
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(shards=0)
 
 
 def test_check_nan_fractions_logs_one_record_for_all_variables(
@@ -720,8 +688,8 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
     """
     with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
         assert (
-            validation.CheckRecentNans()
-            .check(_context(analysis_dataset, "time", written_positions=1))
+            validation.CheckRecentNans(window=1)
+            .check(_context(analysis_dataset, "time"))
             .passed
         )
 
@@ -971,12 +939,12 @@ def test_validate_dataset_raises_on_failed_validator(
     )
 
 
-def test_validate_dataset_requires_update_jobs_for_virtual_checks(
+def test_validate_dataset_requires_region_job_for_virtual_checks(
     rng: np.random.Generator,
 ) -> None:
-    """A manifest-probing check without the update's jobs is caught before any check runs."""
+    """A manifest-probing check without a region job is caught before any check runs."""
     store = _write_test_store(rng)
-    with pytest.raises(AssertionError, match="require the operational update jobs"):
+    with pytest.raises(AssertionError, match="require a region_job"):
         validation.validate_dataset(
             [validation.CheckVirtualManifestCompleteness()],
             store=store,

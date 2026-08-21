@@ -1394,7 +1394,7 @@ def _virtual_context(
     job: VirtualTestRegionJob, store: icechunk.IcechunkStore, ds: xr.Dataset
 ) -> validation.ValidationContext:
     return validation.ValidationContext(
-        store=store, ds=ds, append_dim=job.append_dim, update_jobs=[job]
+        store=store, ds=ds, append_dim=job.append_dim, region_job=job
     )
 
 
@@ -1655,12 +1655,12 @@ def test_check_virtual_decode_health_skips_vars_without_reference(
     assert "entirely NaN" in present.message
 
 
-def test_validate_dataset_requires_update_jobs_for_virtual_validator(
+def test_validate_dataset_requires_region_job_for_virtual_validator(
     tmp_path: Path,
 ) -> None:
     dataset = _make_dataset(tmp_path)
     store = _backfilled_store(dataset, _create_template_ds(4), emit=slice(0, 4))
-    with pytest.raises(AssertionError, match="require the operational update jobs"):
+    with pytest.raises(AssertionError, match="require a region_job"):
         validation.validate_dataset(
             [validation.CheckVirtualManifestCompleteness()],
             store=store,

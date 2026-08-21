@@ -50,9 +50,6 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
-        # Every check here reads a quarter grid per position, so each takes an explicit
-        # window covering the newest few rather than the whole shard the update
-        # rewrites.
         return (
             # The hourly update at :03 writes each hour's position (radar-only fields
             # arrive within minutes; pass 2 fills in on later runs); validation fires

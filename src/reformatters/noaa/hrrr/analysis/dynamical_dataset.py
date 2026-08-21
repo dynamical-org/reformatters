@@ -77,8 +77,6 @@ class NoaaHrrrAnalysisDataset(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.999,
                 spatial_sampling="all",
-                # Whole-grid reads are per position, so this covers the newest few
-                # rather than the whole shard the update rewrites.
                 window=4,
             ),
         )
