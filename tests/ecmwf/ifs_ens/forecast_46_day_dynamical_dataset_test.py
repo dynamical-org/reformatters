@@ -1,7 +1,7 @@
 import pytest
 
 from reformatters.common import validation
-from reformatters.ecmwf.archive_gribs.s2s_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )

@@ -41,6 +41,7 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.archive_gribs.archive import format_init_time
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ARCHIVE_BASE_URL
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     INDEX_SUFFIX,
     MessageRecord,
@@ -52,7 +53,6 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
     EcdsSelection,
     initialization_selections,
 )
-from reformatters.ecmwf.archive_gribs.s2s_archiver import ARCHIVE_BASE_URL
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
 )

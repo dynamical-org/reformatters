@@ -3,28 +3,28 @@ import pytest
 from typer.testing import CliRunner
 
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
-from reformatters.ecmwf.archive_gribs.s2s_archiver import (
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EARLIEST_INIT_TIME,
     ECDS_VARIABLES,
-    EcmwfS2sGribArchiver,
+    EcmwfIfsEns46DayGribArchiver,
 )
+from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
 
 runner = CliRunner()
 
 
 def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> None:
-    archiver = EcmwfS2sGribArchiver()
+    archiver = EcmwfIfsEns46DayGribArchiver()
     (cron_job,) = archiver.operational_kubernetes_resources("test-image")
 
-    assert cron_job.name == "ecmwf-s2s-gribs-archive-grib-files"
+    assert cron_job.name == "ecmwf-ifs-ens-forecast-46-day-gribs-archive-grib-files"
     assert cron_job.command == ["archive-grib-files"]
     assert cron_job.dataset_id == archiver.dataset_id
     assert not cron_job.suspend
 
 
 def test_cron_command_matches_a_registered_cli_command() -> None:
-    archiver = EcmwfS2sGribArchiver()
+    archiver = EcmwfIfsEns46DayGribArchiver()
     command_names = {
         (command.name or command.callback.__name__).replace("_", "-")  # ty: ignore[unresolved-attribute]
         for command in archiver.get_cli().registered_commands
@@ -34,7 +34,7 @@ def test_cron_command_matches_a_registered_cli_command() -> None:
 
 
 def test_cli_archive_grib_files_help_works() -> None:
-    result = runner.invoke(EcmwfS2sGribArchiver().get_cli(), ["--help"])
+    result = runner.invoke(EcmwfIfsEns46DayGribArchiver().get_cli(), ["--help"])
     assert result.exit_code == 0, result.output
     assert "archive-grib-files" in result.output
 
@@ -56,13 +56,15 @@ def test_cli_archive_grib_files_help_works() -> None:
     ],
 )
 def test_init_times_to_archive_is_newest_first(now: str, expected: list[str]) -> None:
-    init_times = EcmwfS2sGribArchiver().init_times_to_archive(3, now=pd.Timestamp(now))
+    init_times = EcmwfIfsEns46DayGribArchiver().init_times_to_archive(
+        3, now=pd.Timestamp(now)
+    )
     assert [t.strftime("%Y-%m-%d") for t in init_times] == expected
 
 
 def test_init_times_to_archive_stops_at_the_earliest_initialization() -> None:
     now = EARLIEST_INIT_TIME.tz_localize("UTC") + pd.Timedelta("53h")
-    assert EcmwfS2sGribArchiver().init_times_to_archive(3, now=now) == [
+    assert EcmwfIfsEns46DayGribArchiver().init_times_to_archive(3, now=now) == [
         EARLIEST_INIT_TIME
     ]
 
@@ -76,7 +78,9 @@ def test_ecds_variables_shard_into_the_archived_selections() -> None:
 
 def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
     """The archive has no store, so it must not deploy update or validate crons."""
-    cron_jobs = EcmwfS2sGribArchiver().operational_kubernetes_resources("test-image")
+    cron_jobs = EcmwfIfsEns46DayGribArchiver().operational_kubernetes_resources(
+        "test-image"
+    )
     assert all(
         not isinstance(c, ReformatCronJob | ValidationCronJob) for c in cron_jobs
     )

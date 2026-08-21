@@ -41,7 +41,9 @@ from reformatters.ecmwf.aifs_single.forecast import (
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     EcmwfAifsSingleForecastVirtualDataset,
 )
-from reformatters.ecmwf.archive_gribs.s2s_archiver import EcmwfS2sGribArchiver
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    EcmwfIfsEns46DayGribArchiver,
+)
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -297,7 +299,7 @@ app.command()(initialize_new_integration)
 
 # Source archives that feed a dataset but have no store of their own. They deploy
 # their own cronjobs and are not datasets, so they carry no update/validate/backfill.
-OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfS2sGribArchiver()]
+OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfIfsEns46DayGribArchiver()]
 
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)

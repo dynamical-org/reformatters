@@ -23,7 +23,7 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
         - ecmwf-ifs-ens-forecast-46-day-1-5-degree-update
         - ecmwf-ifs-ens-forecast-46-day-1-5-degree-validate
-        - ecmwf-s2s-gribs-archive-grib-files
+        - ecmwf-ifs-ens-forecast-46-day-gribs-archive-grib-files
         - nasa-imerg-analysis-early-update
         - nasa-imerg-analysis-early-validate
         - nasa-imerg-analysis-late-update

@@ -1,4 +1,4 @@
-"""The operational surface of the ECMWF S2S GRIB archive.
+"""The operational surface of the ECMWF IFS ENS 46-day GRIB archive.
 
 The archive is upstream of every dataset built from it: it has its own bucket, its own
 retrieval schedule and no store, so it deploys as its own cron rather than as part of a
@@ -35,7 +35,7 @@ ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendat
 # 2026-06-26 to 2026-08-11). With the archive cron at 06 UTC, the initialization this
 # selects is one published a couple of hours earlier.
 PUBLICATION_DELAY: Final = pd.Timedelta("53h")
-# ECMWF S2S initializes at 00 UTC only.
+# ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
 EARLIEST_INIT_TIME: Final = pd.Timestamp("2023-06-28")
 
@@ -84,12 +84,12 @@ ECDS_VARIABLES: Final[Sequence[str]] = (
 )
 
 
-class EcmwfS2sGribArchiver(OperationalResources):
-    """Retrieves ECMWF S2S initializations from ECDS into dynamical's GRIB archive."""
+class EcmwfIfsEns46DayGribArchiver(OperationalResources):
+    """Retrieves ECMWF IFS ENS 46-day initializations from ECDS into dynamical's GRIB archive."""
 
     @property
     def dataset_id(self) -> str:
-        return "ecmwf-s2s-gribs"
+        return "ecmwf-ifs-ens-forecast-46-day-gribs"
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
