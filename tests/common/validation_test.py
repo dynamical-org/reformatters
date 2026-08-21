@@ -600,6 +600,26 @@ def test_check_recent_nans_defaults_to_two_trailing_shards(
     assert "2024-01-01T03:00:00" in result.message
 
 
+def test_check_recent_nans_default_window_on_unsharded_store(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """Virtual stores are unsharded, so the shard-derived window falls back to chunks."""
+    ds = analysis_dataset.isel(time=slice(0, 7))
+    for var in ds.data_vars.values():
+        var.encoding["chunks"] = tuple(
+            3 if dim == "time" else size for dim, size in var.sizes.items()
+        )
+        var.encoding["shards"] = None
+    ds["temperature"].loc[{"time": "2024-01-01 03:00"}] = np.nan
+
+    context = validation.ValidationContext(
+        store=zarr.storage.MemoryStore(), ds=ds, append_dim="time"
+    )
+    result = validation.CheckRecentNans().check(context)
+    assert not result.passed
+    assert "2024-01-01T03:00:00" in result.message
+
+
 def test_check_recent_nans_explicit_window_overrides_shards(
     analysis_dataset: xr.Dataset,
 ) -> None:

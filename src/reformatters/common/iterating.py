@@ -55,7 +55,10 @@ def dimension_slices(
 ) -> Sequence[slice]:
     """Returns the integer offset slices which correspond to each shard or chunk along a single `dim` of `ds`."""
     chunk_sizes_set = {
-        var.encoding[kind][var.dims.index(dim)] for var in ds.data_vars.values()
+        # An unsharded array (e.g. a virtual store) has no "shards" encoding; its
+        # shard is its chunk.
+        (var.encoding.get(kind) or var.encoding["chunks"])[var.dims.index(dim)]
+        for var in ds.data_vars.values()
     }
     assert len(chunk_sizes_set) == 1, (
         f"Inconsistent {kind} sizes among data variables along dimension ({dim}): {chunk_sizes_set}"

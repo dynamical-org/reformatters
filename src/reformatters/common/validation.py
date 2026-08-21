@@ -342,10 +342,10 @@ class CheckRecentNans(VariableSelection, Validator):
     same shape as CheckVirtualManifestCompleteness.min_present_fraction. A leading tier
     loosens positions the source is still filling in: `(0.45, 0.0)` allows the newest
     position 45% NaN while every older one must be complete, and a leading `1.0`
-    excuses the newest position entirely (it is skipped, not read). For variables that
-    fill in over several positions on different schedules, separate instances with
-    different include_vars/tiers check each group against what is complete by then,
-    instead of one threshold loose enough for all of them.
+    excuses the newest position entirely (whole-grid strategies skip reading it).
+    For variables that fill in over several positions on different schedules, separate
+    instances with different include_vars/tiers check each group against what is
+    complete by then, instead of one threshold loose enough for all of them.
 
     Default `spatial_sampling="random_points"` reads all non-spatial dims (lead times,
     ensemble members) at `sampled_points` random spatial points per variable, chosen
@@ -391,13 +391,11 @@ class CheckRecentNans(VariableSelection, Validator):
             return self.max_nan_fraction
         return (self.max_nan_fraction,)
 
-    def _resolve_window(self, context: ValidationContext) -> int:
+    def _resolve_window(self, ds: xr.Dataset, append_dim: str) -> int:
         if self.window is not None:
             return self.window
-        shard_slices = iterating.dimension_slices(context.ds, context.append_dim)
-        return (
-            context.ds.sizes[context.append_dim] - shard_slices[-self.shards :][0].start
-        )
+        shard_slices = iterating.dimension_slices(ds, append_dim)
+        return ds.sizes[append_dim] - shard_slices[-self.shards :][0].start
 
     def check(self, context: ValidationContext) -> ValidationResult:
         ds = context.ds
@@ -428,7 +426,9 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
-        positions = min(self._resolve_window(context), size)
+        positions = min(
+            self._resolve_window(cast("xr.Dataset", ds[var_paths]), append_dim), size
+        )
         window_ds = ds.isel({append_dim: slice(size - positions, None)})
         max_workers = self.max_workers or _DEFAULT_MAX_WORKERS[self.spatial_sampling]
         # A tier of 1.0 excuses a position entirely, so never read for it.
@@ -471,12 +471,12 @@ class CheckRecentNans(VariableSelection, Validator):
                 unmeasured |= position_unmeasured
 
         worst = ", ".join(
-            f"{var_path}={max(by_recency.values(), default=float('nan')):.6f}"
+            f"{var_path}={max((by_recency[recency] for recency in compared if recency in by_recency), default=float('nan')):.6f}"
             for var_path, by_recency in sorted(fractions.items())
         )
         # Combine: many info records in the same second are dropped before reaching Sentry.
         log.info(
-            f"NaN fractions (max over {len(compared)} of {positions} recent "
+            f"NaN fractions (max over {len(compared)} compared of {positions} recent "
             f"{append_dim} positions): {worst}"
         )
 

@@ -538,7 +538,6 @@ def test_nan_check_covers_group_vars(tmp_path: Path) -> None:
     result = validation.CheckRecentNans(
         include_vars=["pressure_level/temperature"],
         spatial_sampling="all",
-        window=2,
     ).check(validation.ValidationContext(store=store, ds=flat, append_dim="init_time"))
     assert result.passed, result.message
     assert "All 2 checked init_time positions" in result.message
