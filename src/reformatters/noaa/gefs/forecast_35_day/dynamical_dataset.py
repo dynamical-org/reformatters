@@ -23,11 +23,13 @@ class GefsForecast35DayDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # New 00z init's f384 last perturbed member NOMADS last-modified ~init+6h28m;
-            # +5 min buffer. The prior init (reprocessed each run, see operational_update_jobs)
-            # is by now complete out to f840 (lands ~init+27h).
-            schedule="33 6 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            # A 00z init's lead times through GEFS_PRE_EXTENSION_MAX are all on the
+            # source by ~init+6h40m, occasionally as late as ~init+6h48m; starting at
+            # init+6h45m catches the slowest members instead of racing them. The prior
+            # init (reprocessed each run, see operational_update_jobs) is by now
+            # complete out to f840 (lands ~init+28h).
+            schedule="45 6 * * *",
+            pod_active_deadline=timedelta(minutes=20),  # runs take ~8 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node
@@ -40,7 +42,7 @@ class GefsForecast35DayDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            schedule="3 7 * * *",  # 30m (pod_active_deadline) after reformat at 06:33
+            schedule="5 7 * * *",  # 20m (pod_active_deadline) after reformat at 06:45
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -53,8 +55,8 @@ class GefsForecast35DayDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+6h33m; validation fires at init+7h03m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=3)),
+            # The update ingests each init at init+6h45m; validation fires at init+7h05m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=5)),
             # The newest init_time stops at GEFS_PRE_EXTENSION_MAX, leaving 76 of
             # 181 lead times NaN at any spatial point: 0.42, or 0.422 for a variable
             # with no hour-0 value, whose lead_time=0 slice is dropped before the
