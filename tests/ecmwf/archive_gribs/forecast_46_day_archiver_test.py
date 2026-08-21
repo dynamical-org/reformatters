@@ -17,7 +17,8 @@ def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> N
     archiver = EcmwfIfsEns46DayGribArchiver()
     (cron_job,) = archiver.operational_kubernetes_resources("test-image")
 
-    assert cron_job.name == "ecmwf-ifs-ens-forecast-46-day-gribs-archive-grib-files"
+    assert cron_job.name == "ecmwf-ifs-ens-46-day-gribs-archive-grib-files"
+    assert len(cron_job.name) <= 52
     assert cron_job.command == ["archive-grib-files"]
     assert cron_job.dataset_id == archiver.dataset_id
     assert not cron_job.suspend

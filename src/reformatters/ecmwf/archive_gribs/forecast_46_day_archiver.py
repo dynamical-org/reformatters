@@ -89,7 +89,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
 
     @property
     def dataset_id(self) -> str:
-        return "ecmwf-ifs-ens-forecast-46-day-gribs"
+        return "ecmwf-ifs-ens-46-day-gribs"
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         return [
