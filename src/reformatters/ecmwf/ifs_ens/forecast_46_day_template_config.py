@@ -1,4 +1,4 @@
-"""Shared structure of the ECMWF IFS ENS extended range (S2S) datasets.
+"""Shared structure of the ECMWF IFS ENS 46-day forecast datasets.
 
 They carry the same 1.5 degree global grid, the same 101 member ensemble and the same
 46 day forecast horizon; they differ only in their lead time spacing and variables.
@@ -24,7 +24,9 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ifs_ens.s2s_config_models import EcmwfS2sDataVar
+from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+    EcmwfIfsEns46DayDataVar,
+)
 
 MAXIMUM_LEAD_TIME = pd.Timedelta("1104h")
 ENSEMBLE_SIZE = 101
@@ -32,10 +34,9 @@ LATITUDES = np.arange(90, -90.75, -1.5)
 LONGITUDES = np.arange(-180, 180, 1.5)
 
 
-class EcmwfS2sCommonTemplateConfig(TemplateConfig[EcmwfS2sDataVar]):
+class EcmwfIfsEns46DayCommonTemplateConfig(TemplateConfig[EcmwfIfsEns46DayDataVar]):
     append_dim: AppendDim = "init_time"
-    # The daily, 101 member era of the ECMWF S2S archive. Earlier initializations run
-    # twice a week with 51 members.
+    # The daily, 101 member era of the ECMWF sub-seasonal-range forecast archive.
     append_dim_start: Timestamp = pd.Timestamp("2023-06-28T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
@@ -52,9 +53,7 @@ class EcmwfS2sCommonTemplateConfig(TemplateConfig[EcmwfS2sDataVar]):
             "longitude": LONGITUDES,
         }
 
-    @property
-    def lead_time_frequency(self) -> pd.Timedelta:
-        raise NotImplementedError("Subclasses implement `lead_time_frequency`")
+    lead_time_frequency: Timedelta
 
     def derive_coordinates(
         self, ds: xr.Dataset

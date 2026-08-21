@@ -1,4 +1,4 @@
-"""Reformat ECMWF S2S GRIBs from dynamical's GRIB archive into zarr.
+"""Reformat ECMWF IFS ENS 46-day GRIBs from dynamical's archive into zarr.
 
 The archive is the authoritative source: ECDS has no addressable objects, so
 reading at reformat time would put its request queue into the write path. Every archived
@@ -52,7 +52,9 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
     EcdsSelection,
     initialization_selections,
 )
-from reformatters.ecmwf.ifs_ens.s2s_config_models import EcmwfS2sDataVar
+from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+    EcmwfIfsEns46DayDataVar,
+)
 
 log = get_logger(__name__)
 
@@ -72,7 +74,7 @@ EXPECTED_CLAMP_FRACTION = 0.08
 
 
 def selections_by_variable(
-    data_vars: Sequence[EcmwfS2sDataVar],
+    data_vars: Sequence[EcmwfIfsEns46DayDataVar],
 ) -> dict[tuple[str, str], EcdsSelection]:
     """The ECDS request each variable is archived in, keyed by (variable, forecast type)."""
     ecds_variables = sorted({v.internal_attrs.ecds_variable for v in data_vars})
@@ -83,7 +85,7 @@ def selections_by_variable(
     }
 
 
-class EcmwfS2sSourceFileCoord(SourceFileCoord):
+class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
     """The messages of one archived blob that fill one (init, lead, member) slot.
 
     `levels` is the variable's ECDS level values in output order, `None` where the
@@ -119,8 +121,8 @@ class EcmwfS2sSourceFileCoord(SourceFileCoord):
         return tuple(level for level in self.levels if level is not None)
 
 
-class EcmwfS2sRegionJob(
-    MaterializedRegionJob[EcmwfS2sDataVar, EcmwfS2sSourceFileCoord]
+class EcmwfIfsEns46DayRegionJob(
+    MaterializedRegionJob[EcmwfIfsEns46DayDataVar, EcmwfIfsEns46DaySourceFileCoord]
 ):
     # A pressure level variable's region array is ten times a surface variable's, so
     # one variable per job keeps every job's shared memory buffer to that one array.
@@ -129,11 +131,11 @@ class EcmwfS2sRegionJob(
     @classmethod
     def source_file_var_groups(
         cls,
-        data_vars: Sequence[EcmwfS2sDataVar],
-    ) -> Sequence[Sequence[EcmwfS2sDataVar]]:
+        data_vars: Sequence[EcmwfIfsEns46DayDataVar],
+    ) -> Sequence[Sequence[EcmwfIfsEns46DayDataVar]]:
         """Group variables by the archived blob they were retrieved in."""
         selections = selections_by_variable(data_vars)
-        groups: defaultdict[str, list[EcmwfS2sDataVar]] = defaultdict(list)
+        groups: defaultdict[str, list[EcmwfIfsEns46DayDataVar]] = defaultdict(list)
         for data_var in data_vars:
             selection = selections[
                 (data_var.internal_attrs.ecds_variable, "perturbed_forecast")
@@ -144,15 +146,15 @@ class EcmwfS2sRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[EcmwfS2sDataVar],
-    ) -> Sequence[EcmwfS2sSourceFileCoord]:
+        data_var_group: Sequence[EcmwfIfsEns46DayDataVar],
+    ) -> Sequence[EcmwfIfsEns46DaySourceFileCoord]:
         data_var = item(data_var_group)
         ecds_variable = data_var.internal_attrs.ecds_variable
         selections = selections_by_variable(data_var_group)
         levels = _output_levels(processing_region_ds, ecds_variable, data_var)
 
         return [
-            EcmwfS2sSourceFileCoord(
+            EcmwfIfsEns46DaySourceFileCoord(
                 init_time=init_time,
                 lead_time=lead_time,
                 ensemble_member=int(ensemble_member),
@@ -168,7 +170,7 @@ class EcmwfS2sRegionJob(
             if data_var.has_hour_0_values() or lead_time != np.timedelta64(0)
         ]
 
-    def download_file(self, coord: EcmwfS2sSourceFileCoord) -> Path:
+    def download_file(self, coord: EcmwfIfsEns46DaySourceFileCoord) -> Path:
         index_path = http_download_to_disk(
             coord.get_index_url(), self.dataset_id, disk_cache=True
         )
@@ -185,12 +187,11 @@ class EcmwfS2sRegionJob(
 
     def read_data(
         self,
-        coord: EcmwfS2sSourceFileCoord,
-        data_var: EcmwfS2sDataVar,
+        coord: EcmwfIfsEns46DaySourceFileCoord,
+        data_var: EcmwfIfsEns46DayDataVar,
     ) -> ArrayFloat32:
-        # GDAL's unit normalization converts some temperature parameters to Celsius and
-        # leaves others in Kelvin; disabling it keeps every read in the raw GRIB units
-        # each variable's scale_factor and add_offset are written against.
+        # Disable GDAL's unit normalization on read. Instead,
+        # apply_data_transformations uses a variable's scale_factor and add_offset.
         with (
             Env(GRIB_NORMALIZE_UNITS="NO"),
             rasterio.open(coord.downloaded_path) as reader,
@@ -222,7 +223,7 @@ class EcmwfS2sRegionJob(
         return values
 
     def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: EcmwfS2sDataVar
+        self, data_array: xr.DataArray, data_var: EcmwfIfsEns46DayDataVar
     ) -> None:
         internal_attrs = data_var.internal_attrs
         if internal_attrs.scale_factor is not None:
@@ -232,10 +233,11 @@ class EcmwfS2sRegionJob(
 
         if internal_attrs.deaccumulate_to_rate:
             assert internal_attrs.window_reset_frequency is not None
-            threshold = internal_attrs.deaccumulation_invalid_below_threshold_rate
-            if threshold is None:
+            if internal_attrs.deaccumulation_type == "signed":
                 _deaccumulate_signed_inplace(data_array)
             else:
+                threshold = internal_attrs.deaccumulation_invalid_below_threshold_rate
+                assert threshold is not None
                 deaccumulate_to_rates_inplace(
                     data_array,
                     dim="lead_time",
@@ -243,22 +245,6 @@ class EcmwfS2sRegionJob(
                     invalid_below_threshold_rate=threshold,
                     expected_clamp_fraction=EXPECTED_CLAMP_FRACTION,
                 )
-
-        # Simple packing rounds values a little past the variable's physical range.
-        if internal_attrs.minimum_value is not None:
-            np.clip(
-                data_array.values,
-                internal_attrs.minimum_value,
-                None,
-                out=data_array.values,
-            )
-        if internal_attrs.maximum_value is not None:
-            np.clip(
-                data_array.values,
-                None,
-                internal_attrs.maximum_value,
-                out=data_array.values,
-            )
 
         super().apply_data_transformations(data_array, data_var)
 
@@ -269,10 +255,10 @@ class EcmwfS2sRegionJob(
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
-        all_data_vars: Sequence[EcmwfS2sDataVar],
+        all_data_vars: Sequence[EcmwfIfsEns46DayDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[EcmwfS2sDataVar, EcmwfS2sSourceFileCoord]],
+        Sequence[RegionJob[EcmwfIfsEns46DayDataVar, EcmwfIfsEns46DaySourceFileCoord]],
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
@@ -315,7 +301,9 @@ def _forecast_type(ensemble_member: object) -> str:
 
 
 def _output_levels(
-    processing_region_ds: xr.Dataset, ecds_variable: str, data_var: EcmwfS2sDataVar
+    processing_region_ds: xr.Dataset,
+    ecds_variable: str,
+    data_var: EcmwfIfsEns46DayDataVar,
 ) -> tuple[str | None, ...]:
     if "pressure_level" not in processing_region_ds[data_var.path].dims:
         return ()
@@ -342,7 +330,7 @@ def _index_by_message(
 
 
 def _message_byte_ranges(
-    index_path: Path, coord: EcmwfS2sSourceFileCoord
+    index_path: Path, coord: EcmwfIfsEns46DaySourceFileCoord
 ) -> tuple[list[int], list[int]]:
     index = _index_by_message(index_path)
     lead_hours = whole_hours(pd.Timedelta(coord.lead_time))
@@ -357,7 +345,7 @@ def _message_byte_ranges(
 
 
 def _validate_grib_metadata(
-    reader: rasterio.DatasetReader, data_var: EcmwfS2sDataVar
+    reader: rasterio.DatasetReader, data_var: EcmwfIfsEns46DayDataVar
 ) -> None:
     internal_attrs = data_var.internal_attrs
     for band in range(1, reader.count + 1):

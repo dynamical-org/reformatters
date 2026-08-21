@@ -3,9 +3,9 @@
     1,
     47,
     101,
+    10,
     121,
-    240,
-    10
+    240
   ],
   "data_type": "float32",
   "chunk_grid": {
@@ -15,9 +15,9 @@
         1,
         47,
         101,
-        121,
-        240,
-        1
+        1,
+        125,
+        240
       ]
     }
   },
@@ -36,9 +36,9 @@
           1,
           47,
           101,
-          11,
-          24,
-          1
+          1,
+          25,
+          24
         ],
         "codecs": [
           {
@@ -87,9 +87,9 @@
     "init_time",
     "lead_time",
     "ensemble_member",
+    "pressure_level",
     "latitude",
-    "longitude",
-    "pressure_level"
+    "longitude"
   ],
   "zarr_format": 3,
   "node_type": "array",

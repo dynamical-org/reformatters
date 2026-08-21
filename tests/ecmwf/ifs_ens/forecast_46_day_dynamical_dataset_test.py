@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
+from reformatters.common import validation
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
@@ -26,11 +27,11 @@ def archived_init_times(
     archive = Mock()
     with (
         patch(
-            "reformatters.ecmwf.ifs_ens.s2s_dynamical_dataset.archive_initialization",
+            "reformatters.ecmwf.ifs_ens.forecast_46_day_dynamical_dataset.archive_initialization",
             archive,
         ),
         patch(
-            "reformatters.ecmwf.ifs_ens.s2s_dynamical_dataset.kubernetes.load_secret",
+            "reformatters.ecmwf.ifs_ens.forecast_46_day_dynamical_dataset.kubernetes.load_secret",
             return_value={},
         ),
     ):
@@ -38,6 +39,19 @@ def archived_init_times(
             reformat_job_name="test", init_times_back=init_times_back
         )
     return [call.args[0] for call in archive.call_args_list]
+
+
+def test_validators_check_masked_variables_are_not_all_nan(
+    dataset: EcmwfIfsEnsForecast46Day15DegreeDataset,
+) -> None:
+    validators = tuple(dataset.validators())
+
+    assert len(validators) == 3
+    assert isinstance(validators[1], validation.CheckRecentNans)
+    assert isinstance(validators[2], validation.CheckRecentNans)
+    assert validators[2].include_vars == validators[1].exclude_vars
+    assert validators[2].max_nan_fraction == 0.9999
+    assert validators[2].spatial_sampling == "quarter"
 
 
 def test_initializations_are_archived_newest_first(

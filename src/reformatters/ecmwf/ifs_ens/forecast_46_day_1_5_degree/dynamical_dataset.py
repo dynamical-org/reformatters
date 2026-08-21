@@ -4,21 +4,23 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.ecmwf.ifs_ens.s2s_dynamical_dataset import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_dynamical_dataset import (
     ECDS_API_KEY_SECRET_NAME,
     SOURCE_COOP_SECRET_NAME,
-    EcmwfS2sDynamicalDataset,
+    EcmwfIfsEns46DayCommonDynamicalDataset,
 )
-from reformatters.ecmwf.ifs_ens.s2s_region_job import EcmwfS2sRegionJob
+from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
+    EcmwfIfsEns46DayRegionJob,
+)
 
 from .template_config import EcmwfIfsEnsForecast46Day15DegreeTemplateConfig
 
 
-class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfS2sDynamicalDataset):
+class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfIfsEns46DayCommonDynamicalDataset):
     template_config: EcmwfIfsEnsForecast46Day15DegreeTemplateConfig = (
         EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
     )
-    region_job_class: type[EcmwfS2sRegionJob] = EcmwfS2sRegionJob
+    region_job_class: type[EcmwfIfsEns46DayRegionJob] = EcmwfIfsEns46DayRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
@@ -55,7 +57,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfS2sDynamicalDataset):
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
-            parallelism=min(workers, 10),
+            parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
@@ -75,10 +77,6 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfS2sDynamicalDataset):
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
-        # NaN by construction, at a fraction that varies with where the sampled points
-        # land. Whole-grid sampling would make it stable but reads every lead time of
-        # all 101 members, so they are gated on completeness by CheckExpectedShards
-        # instead.
         masked_vars = (
             *source_fill_value_var_names(self.template_config.data_vars),
             "pressure_level/specific_humidity",
@@ -89,4 +87,10 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(EcmwfS2sDynamicalDataset):
             # leaves room for one missed cycle, which the next day's update fills.
             validation.CheckCurrentData(max_delay=timedelta(days=4)),
             validation.CheckRecentNans(window=3, exclude_vars=masked_vars),
+            validation.CheckRecentNans(
+                window=3,
+                include_vars=masked_vars,
+                max_nan_fraction=0.9999,
+                spatial_sampling="quarter",
+            ),
         )

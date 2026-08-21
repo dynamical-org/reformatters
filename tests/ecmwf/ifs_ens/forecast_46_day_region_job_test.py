@@ -1,4 +1,4 @@
-"""Read and transform real ECMWF S2S messages of the 2026-08-10T00Z initialization."""
+"""Read and transform real ECMWF 46-day messages of the 2026-08-10T00Z initialization."""
 
 from pathlib import Path
 
@@ -12,10 +12,13 @@ from reformatters.ecmwf.archive_gribs.request_shards import DAILY_LEAD_TIMES
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
     EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
 )
-from reformatters.ecmwf.ifs_ens.s2s_config_models import EcmwfS2sDataVar
-from reformatters.ecmwf.ifs_ens.s2s_region_job import (
-    EcmwfS2sRegionJob,
-    EcmwfS2sSourceFileCoord,
+from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+    EcmwfIfsEns46DayDataVar,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
+    EcmwfIfsEns46DayRegionJob,
+    EcmwfIfsEns46DaySourceFileCoord,
+    _deaccumulate_signed_inplace,
     selections_by_variable,
 )
 from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
@@ -24,12 +27,14 @@ INIT_TIME = pd.Timestamp("2026-08-10T00:00")
 DAILY_CONFIG = EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
 
 
-def daily_var(name: str) -> EcmwfS2sDataVar:
+def daily_var(name: str) -> EcmwfIfsEns46DayDataVar:
     return item(v for v in DAILY_CONFIG.data_vars if v.name == name)
 
 
-def region_job(data_var: EcmwfS2sDataVar, tmp_path: Path) -> EcmwfS2sRegionJob:
-    return EcmwfS2sRegionJob(
+def region_job(
+    data_var: EcmwfIfsEns46DayDataVar, tmp_path: Path
+) -> EcmwfIfsEns46DayRegionJob:
+    return EcmwfIfsEns46DayRegionJob(
         tmp_store=tmp_path / "tmp.zarr",
         template_ds=DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start),
         data_vars=[data_var],
@@ -40,13 +45,13 @@ def region_job(data_var: EcmwfS2sDataVar, tmp_path: Path) -> EcmwfS2sRegionJob:
 
 
 def source_file_coord(
-    data_var: EcmwfS2sDataVar,
+    data_var: EcmwfIfsEns46DayDataVar,
     lead_hours: int,
     downloaded_path: Path,
     levels: tuple[str | None, ...] = (),
-) -> EcmwfS2sSourceFileCoord:
+) -> EcmwfIfsEns46DaySourceFileCoord:
     ecds_variable = data_var.internal_attrs.ecds_variable
-    return EcmwfS2sSourceFileCoord(
+    return EcmwfIfsEns46DaySourceFileCoord(
         init_time=INIT_TIME,
         lead_time=pd.Timedelta(hours=lead_hours),
         ensemble_member=0,
@@ -127,7 +132,7 @@ def test_rejects_a_message_of_the_wrong_variable(tmp_path: Path) -> None:
 
 
 def data_array(
-    data_var: EcmwfS2sDataVar,
+    data_var: EcmwfIfsEns46DayDataVar,
     values: np.ndarray,
     lead_times: pd.TimedeltaIndex,  # type: ignore[type-arg]
 ) -> xr.DataArray:
@@ -148,29 +153,6 @@ def test_converts_kelvin_to_celsius(tmp_path: Path) -> None:
 
     # 296.5889 K is 23.4389 C, rounded to 23.5 by keep_mantissa_bits=7.
     assert array.values[0, 60, 120] == pytest.approx(23.5, abs=1e-4)
-
-
-def test_clamps_cloud_cover_to_a_percentage(tmp_path: Path) -> None:
-    data_var = daily_var("total_cloud_cover_atmosphere")
-    values = read_one("total_cloud_cover_atmosphere", 24, tmp_path)[np.newaxis]
-    values[0, 0, 0] = 100.01
-    array = data_array(data_var, values, pd.to_timedelta([pd.Timedelta("24h")]))
-
-    region_job(data_var, tmp_path).apply_data_transformations(array, data_var)
-
-    assert array.values[0, 0, 0] == 100.0
-    assert array.values[0, 60, 120] == pytest.approx(74.0, abs=1e-4)
-
-
-def test_clamps_soil_moisture_to_non_negative(tmp_path: Path) -> None:
-    data_var = daily_var("soil_moisture_0_20cm")
-    values = read_one("soil_moisture_0_20cm", 24, tmp_path)[np.newaxis]
-    values[0, 0, 0] = -6.8e-10
-    array = data_array(data_var, values, pd.to_timedelta([pd.Timedelta("24h")]))
-
-    region_job(data_var, tmp_path).apply_data_transformations(array, data_var)
-
-    assert array.values[0, 0, 0] == 0.0
 
 
 def test_deaccumulates_precipitation_to_a_rate(tmp_path: Path) -> None:
@@ -205,6 +187,61 @@ def test_deaccumulates_precipitation_to_a_rate(tmp_path: Path) -> None:
         (accumulated[2][wettest] - accumulated[1][wettest]) / twenty_four_hours,
         rel=5e-3,
     )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "net_long_wave_radiation_flux_surface",
+        "net_long_wave_radiation_flux_top_of_atmosphere",
+        "downward_latent_heat_flux_surface",
+        "downward_sensible_heat_flux_surface",
+        "eastward_turbulent_surface_stress",
+        "northward_turbulent_surface_stress",
+    ],
+)
+def test_signed_running_totals_select_signed_deaccumulation(name: str) -> None:
+    assert daily_var(name).internal_attrs.deaccumulation_type == "signed"
+
+
+def test_deaccumulates_signed_values_across_irregular_lead_times() -> None:
+    array = xr.DataArray(
+        np.array([[0.0, 21_600.0, -43_200.0], [0.0, -10_800.0, 54_000.0]]),
+        dims=("latitude", "lead_time"),
+        coords={"lead_time": pd.to_timedelta(["0h", "6h", "24h"])},
+    )
+
+    _deaccumulate_signed_inplace(array)
+
+    np.testing.assert_allclose(
+        array.values,
+        [[np.nan, 1.0, -1.0], [np.nan, -0.5, 1.0]],
+        equal_nan=True,
+    )
+
+
+def test_deaccumulating_signed_values_propagates_missing_intervals() -> None:
+    array = xr.DataArray(
+        np.array([0.0, np.nan, 3.0]),
+        dims=("lead_time",),
+        coords={"lead_time": pd.to_timedelta(["0h", "1h", "2h"])},
+    )
+
+    _deaccumulate_signed_inplace(array)
+
+    assert np.isnan(array.values).all()
+
+
+def test_deaccumulating_one_signed_step_returns_nan() -> None:
+    array = xr.DataArray(
+        np.array([4.0]),
+        dims=("lead_time",),
+        coords={"lead_time": pd.to_timedelta(["0h"])},
+    )
+
+    _deaccumulate_signed_inplace(array)
+
+    assert np.isnan(array.values).all()
 
 
 def test_a_24_hour_mean_variable_has_no_lead_time_zero_coord() -> None:

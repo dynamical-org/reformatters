@@ -3,8 +3,8 @@
     "dataset_id": "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
     "dataset_version": "0.1.0",
     "name": "ECMWF IFS ENS forecast, 46 day, 1.5 degree",
-    "description": "Extended range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-    "attribution": "ECMWF IFS ENS extended range forecast data processed by dynamical.org from the S2S archive of the ECMWF Data Store.",
+    "description": "Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
+    "attribution": "ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "1.5 degrees (~165km)",
@@ -34,7 +34,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -54,7 +54,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -127,7 +127,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -147,7 +147,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -220,7 +220,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -240,7 +240,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -313,7 +313,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -333,7 +333,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -406,7 +406,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -426,7 +426,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -499,7 +499,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -519,7 +519,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -592,7 +592,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -612,7 +612,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1072,7 +1072,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -1092,7 +1092,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1165,7 +1165,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -1185,7 +1185,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1258,7 +1258,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -1278,7 +1278,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1351,7 +1351,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -1371,7 +1371,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1444,7 +1444,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -1464,7 +1464,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -1526,8 +1526,8 @@
           "dataset_id": "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
           "dataset_version": "0.1.0",
           "name": "ECMWF IFS ENS forecast, 46 day, 1.5 degree",
-          "description": "Extended range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-          "attribution": "ECMWF IFS ENS extended range forecast data processed by dynamical.org from the S2S archive of the ECMWF Data Store.",
+          "description": "Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
+          "attribution": "ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
           "license": "CC-BY-4.0",
           "spatial_domain": "Global",
           "spatial_resolution": "1.5 degrees (~165km)",
@@ -1658,9 +1658,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -1670,9 +1670,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -1691,9 +1691,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -1741,9 +1741,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2137,9 +2137,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -2149,9 +2149,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -2170,9 +2170,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -2221,9 +2221,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2234,9 +2234,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -2246,9 +2246,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -2267,9 +2267,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -2317,9 +2317,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2388,9 +2388,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -2400,9 +2400,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -2421,9 +2421,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -2471,9 +2471,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2484,9 +2484,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -2496,9 +2496,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -2517,9 +2517,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -2567,9 +2567,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2580,9 +2580,9 @@
           1,
           47,
           101,
+          10,
           121,
-          240,
-          10
+          240
         ],
         "data_type": "float32",
         "chunk_grid": {
@@ -2592,9 +2592,9 @@
               1,
               47,
               101,
-              121,
-              240,
-              1
+              1,
+              125,
+              240
             ]
           }
         },
@@ -2613,9 +2613,9 @@
                 1,
                 47,
                 101,
-                11,
-                24,
-                1
+                1,
+                25,
+                24
               ],
               "codecs": [
                 {
@@ -2663,9 +2663,9 @@
           "init_time",
           "lead_time",
           "ensemble_member",
+          "pressure_level",
           "latitude",
-          "longitude",
-          "pressure_level"
+          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -2687,7 +2687,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -2707,7 +2707,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -2779,7 +2779,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -2799,7 +2799,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -2871,7 +2871,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -2891,7 +2891,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -2964,7 +2964,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -2984,7 +2984,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3057,7 +3057,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3077,7 +3077,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3150,7 +3150,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3170,7 +3170,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3243,7 +3243,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3263,7 +3263,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3336,7 +3336,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3356,7 +3356,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3428,7 +3428,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3448,7 +3448,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3520,7 +3520,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3540,7 +3540,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3613,7 +3613,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3633,7 +3633,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3706,7 +3706,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3726,7 +3726,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3798,7 +3798,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3818,7 +3818,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3890,7 +3890,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -3910,7 +3910,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -3983,7 +3983,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -4003,7 +4003,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -4125,7 +4125,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -4145,7 +4145,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [
@@ -4218,7 +4218,7 @@
               1,
               47,
               101,
-              121,
+              125,
               240
             ]
           }
@@ -4238,7 +4238,7 @@
                 1,
                 47,
                 101,
-                11,
+                25,
                 24
               ],
               "codecs": [

@@ -1,8 +1,10 @@
+from typing import Literal
+
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.types import Timedelta
 
 
-class EcmwfS2sInternalAttrs(BaseInternalAttrs):
+class EcmwfIfsEns46DayInternalAttrs(BaseInternalAttrs):
     """Variable specific attributes used internally to drive processing. Not written to the dataset."""
 
     # The ECDS `variable` this data variable is retrieved as.
@@ -19,15 +21,10 @@ class EcmwfS2sInternalAttrs(BaseInternalAttrs):
     scale_factor: float | None = None
     add_offset: float | None = None
 
-    # Clamp packing artifacts that push values outside the variable's physical range.
-    minimum_value: float | None = None
-    maximum_value: float | None = None
-
-    # None on a deaccumulated variable means its accumulation is signed, so its steps
-    # are differenced without a validity threshold or a clamp to zero.
+    deaccumulation_type: Literal["nonnegative", "signed"] = "nonnegative"
     deaccumulation_invalid_below_threshold_rate: float | None = None
     window_reset_frequency: Timedelta | None = None
 
 
-class EcmwfS2sDataVar(DataVar[EcmwfS2sInternalAttrs]):
+class EcmwfIfsEns46DayDataVar(DataVar[EcmwfIfsEns46DayInternalAttrs]):
     pass

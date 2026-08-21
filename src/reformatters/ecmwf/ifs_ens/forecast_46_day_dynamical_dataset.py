@@ -1,9 +1,3 @@
-"""Shared operational surface of the ECMWF IFS ENS extended range (S2S) datasets.
-
-Each dataset retrieves the ECDS variables it needs into dynamical's GRIB archive with its
-own `archive-grib-files` command, then reformats from that archive.
-"""
-
 import os
 from collections.abc import Sequence
 from typing import Annotated, Any, Final
@@ -20,10 +14,12 @@ from reformatters.ecmwf.archive_gribs.archive import (
     archive_initialization,
 )
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
-from reformatters.ecmwf.ifs_ens.s2s_config_models import EcmwfS2sDataVar
-from reformatters.ecmwf.ifs_ens.s2s_region_job import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+    EcmwfIfsEns46DayDataVar,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     ARCHIVE_RCLONE_ROOT,
-    EcmwfS2sSourceFileCoord,
+    EcmwfIfsEns46DaySourceFileCoord,
 )
 
 log = get_logger(__name__)
@@ -38,8 +34,8 @@ SOURCE_COOP_SECRET_NAME: Final = "source-coop-storage-options-key"  # noqa: S105
 ECDS_API_KEY_SECRET_NAME: Final = "ecmwf-ecds-api-key"  # noqa: S105
 
 
-class EcmwfS2sDynamicalDataset(
-    DynamicalDataset[EcmwfS2sDataVar, EcmwfS2sSourceFileCoord]
+class EcmwfIfsEns46DayCommonDynamicalDataset(
+    DynamicalDataset[EcmwfIfsEns46DayDataVar, EcmwfIfsEns46DaySourceFileCoord]
 ):
     def archive_grib_files(
         self,

@@ -18,22 +18,26 @@ from reformatters.common.deaccumulation import (
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
 )
-from reformatters.common.types import Dim, Dims
+from reformatters.common.types import Dim, Dims, Timedelta
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ifs_ens.s2s_config_models import (
-    EcmwfS2sDataVar,
-    EcmwfS2sInternalAttrs,
+from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+    EcmwfIfsEns46DayDataVar,
+    EcmwfIfsEns46DayInternalAttrs,
 )
-from reformatters.ecmwf.ifs_ens.s2s_template_config import EcmwfS2sCommonTemplateConfig
+from reformatters.ecmwf.ifs_ens.forecast_46_day_template_config import (
+    EcmwfIfsEns46DayCommonTemplateConfig,
+)
 
 PRESSURE_LEVELS = [1000, 925, 850, 700, 500, 300, 200, 100, 50, 10]
 
 
-class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfig):
-    """The 24 hourly variables of the ECMWF IFS ENS extended range forecast."""
+class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
+    EcmwfIfsEns46DayCommonTemplateConfig
+):
+    """The 24 hourly variables of the ECMWF IFS ENS sub-seasonal-range forecast."""
 
     dims: Dims = {
         ROOT: (
@@ -47,15 +51,13 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
             "init_time",
             "lead_time",
             "ensemble_member",
+            "pressure_level",
             "latitude",
             "longitude",
-            "pressure_level",
         ),
     }
 
-    @property
-    def lead_time_frequency(self) -> pd.Timedelta:
-        return pd.Timedelta("24h")
+    lead_time_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field
     @property
@@ -64,8 +66,8 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
             dataset_id="ecmwf-ifs-ens-forecast-46-day-1-5-degree",
             dataset_version="0.1.0",
             name="ECMWF IFS ENS forecast, 46 day, 1.5 degree",
-            description="Extended range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-            attribution="ECMWF IFS ENS extended range forecast data processed by dynamical.org from the S2S archive of the ECMWF Data Store.",
+            description="Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
+            attribution="ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
             license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="1.5 degrees (~165km)",
@@ -111,21 +113,21 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
 
     @computed_field
     @property
-    def data_vars(self) -> Sequence[EcmwfS2sDataVar]:
-        # Roughly ~5.0MB uncompressed
+    def data_vars(self) -> Sequence[EcmwfIfsEns46DayDataVar]:
+        # Roughly ~10.0MB uncompressed
         root_chunks: dict[Dim, int] = {
             "init_time": 1,
             "lead_time": 47,  # All lead times
             "ensemble_member": 101,  # All ensemble members
-            "latitude": 11,  # 11 chunks over 121 pixels
+            "latitude": 25,  # 5 chunks over 121 pixels
             "longitude": 24,  # 10 chunks over 240 pixels
         }
-        # Roughly ~551MB uncompressed
+        # Roughly ~570MB uncompressed
         root_shards: dict[Dim, int] = {
             "init_time": root_chunks["init_time"],
             "lead_time": root_chunks["lead_time"],
             "ensemble_member": root_chunks["ensemble_member"],
-            "latitude": root_chunks["latitude"] * 11,
+            "latitude": root_chunks["latitude"] * 5,
             "longitude": root_chunks["longitude"] * 10,
         }
         pressure_level_chunks: dict[Dim, int] = root_chunks | {"pressure_level": 1}
@@ -147,7 +149,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
         )
 
         return [
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="pressure_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -157,7 +159,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="Pa",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_pressure",
                     grib_element="PRES",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -165,7 +167,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=11,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="pressure_reduced_to_mean_sea_level",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -175,7 +177,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="Pa",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="mean_sea_level_pressure",
                     grib_element="PRES",
                     grib_description='0[-] MSL="Mean sea level"',
@@ -183,7 +185,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=11,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="precipitation_convective_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -194,7 +196,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="convective_precipitation",
                     grib_element="CPRAT",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -206,7 +208,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="snowfall_water_equivalent_rate_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -217,7 +219,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average snowfall water equivalent rate over the previous 24 hours. Units equivalent to mm/s.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_fall_water_equivalent",
                     grib_element="TSRWE",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -229,7 +231,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="runoff_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -240,7 +242,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_runoff",
                     grib_element="SFCWRO",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -253,7 +255,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="runoff_water_equivalent_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -264,7 +266,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average runoff water equivalent rate (surface plus subsurface) over the previous 24 hours. Units equivalent to mm/s. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="water_runoff_and_drainage",
                     grib_element="WROD",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -277,7 +279,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="downward_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -288,7 +290,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface downward short-wave radiation flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_solar_radiation_downwards",
                     grib_element="DSWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -300,7 +302,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="downward_long_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -311,7 +313,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface downward long-wave radiation flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_thermal_radiation_downwards",
                     grib_element="DLWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -323,7 +325,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="net_short_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -334,7 +336,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface net short-wave radiation flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_net_solar_radiation",
                     grib_element="NSWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -346,7 +348,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="net_long_wave_radiation_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -357,18 +359,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface net long-wave radiation flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_net_thermal_radiation",
                     grib_element="NLWRF",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[W/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="net_long_wave_radiation_flux_top_of_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -379,18 +382,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average top net long-wave radiation flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="top_net_thermal_radiation",
                     grib_element="NLWRF",
                     grib_description='0[-] NTAT="Nominal top of atmosphere"',
                     grib_unit="[W/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="downward_latent_heat_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -401,18 +405,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface downward latent heat flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_latent_heat_flux",
                     grib_element="LHTFL",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[W/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="downward_sensible_heat_flux_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -423,18 +428,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average surface downward sensible heat flux over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_sensible_heat_flux",
                     grib_element="SHTFL",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[W/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="eastward_turbulent_surface_stress",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -445,18 +451,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average eastward turbulent surface stress over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="eastward_turbulent_surface_stress",
                     grib_element="ETSS",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[1/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="northward_turbulent_surface_stress",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -467,18 +474,19 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Average northward turbulent surface stress over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="northward_turbulent_surface_stress",
                     grib_element="NTSS",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[1/(m^2)]",
                     keep_mantissa_bits=7,
                     deaccumulate_to_rate=True,
+                    deaccumulation_type="signed",
                     window_reset_frequency=pd.Timedelta.max,
                     hour_0_values_override=True,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="average_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -489,7 +497,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean temperature at 2 metres over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="2_m_temperature",
                     grib_element="TMP",
                     grib_description='2[m] HTGL="Specified height level above ground"',
@@ -498,7 +506,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     add_offset=-273.15,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="average_dew_point_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -509,7 +517,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean 2 metre dewpoint temperature over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="2_m_dewpoint_temperature",
                     grib_element="DPT",
                     grib_description='2[m] HTGL="Specified height level above ground"',
@@ -518,7 +526,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     add_offset=-273.15,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="skin_temperature_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -529,7 +537,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean skin temperature over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="skin_temperature",
                     grib_element="SKINT",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -538,7 +546,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     add_offset=-273.15,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="sea_surface_temperature",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -549,7 +557,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean sea surface temperature over the previous 24 hours. Sea points only; land points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="sea_surface_temperature",
                     grib_element="WTMP",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -559,7 +567,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="sea_ice_area_fraction",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -570,7 +578,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean sea ice area fraction over the previous 24 hours. Sea points only; land points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="sea_ice_area_fraction",
                     grib_element="ICEC",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -579,7 +587,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="soil_temperature_0_20cm",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -590,7 +598,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean soil temperature 0-20 cm over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="soil_temperature_top_20_cm",
                     grib_element="TSOIL",
                     grib_description='0-0.2[m] DBLL="Depth below land surface"',
@@ -600,7 +608,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="soil_temperature_0_100cm",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -611,7 +619,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean soil temperature 0-100 cm over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="soil_temperature_top_100_cm",
                     grib_element="TSOIL",
                     grib_description='0-1[m] DBLL="Depth below land surface"',
@@ -621,7 +629,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="soil_moisture_0_20cm",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -631,17 +639,16 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean soil moisture 0-20 cm over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="soil_moisture_top_20_cm",
                     grib_element="SOILM",
                     grib_description='0-0.2[m] DBLL="Depth below land surface"',
                     grib_unit="[kg/m^3]",
                     keep_mantissa_bits=7,
-                    minimum_value=0.0,
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="soil_moisture_0_100cm",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -651,17 +658,16 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean soil moisture 0-100 cm over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="soil_moisture_top_100_cm",
                     grib_element="SOILM",
                     grib_description='0-1[m] DBLL="Depth below land surface"',
                     grib_unit="[kg/m^3]",
                     keep_mantissa_bits=7,
-                    minimum_value=0.0,
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="snow_water_equivalent_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -672,7 +678,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean snow depth water equivalent over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_depth_water_equivalent",
                     grib_element="SDWE",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -681,7 +687,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     scale_factor=0.001,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="snow_density_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -691,7 +697,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean snow density over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_density",
                     grib_element="SDEN",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -700,7 +706,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="snow_albedo_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -710,7 +716,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean snow albedo over the previous 24 hours. Land points only; sea points are missing.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_albedo",
                     grib_element="SALBD",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -719,7 +725,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     source_fill_value=9999.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="total_cloud_cover_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -730,16 +736,15 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean total cloud cover over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="total_cloud_cover",
                     grib_element="TCDC",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[%]",
                     keep_mantissa_bits=7,
-                    maximum_value=100.0,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="total_column_water_atmosphere",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -750,7 +755,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="avg",
                     comment="Mean total column water over the previous 24 hours.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="total_column_water",
                     grib_element="TCWAT",
                     grib_description='0[-] SFC="Ground or water surface"',
@@ -758,7 +763,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=7,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="temperature",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -769,7 +774,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="degree_Celsius",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="temperature",
                     grib_element="TMP",
                     grib_description="",
@@ -778,7 +783,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     add_offset=-273.15,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="specific_humidity",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -790,7 +795,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     step_type="instant",
                     comment="The source provides no 10, 50 or 100 hPa levels for this variable; those levels are always NaN.",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="specific_humidity",
                     grib_element="SPFH",
                     grib_description="",
@@ -798,7 +803,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=7,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="wind_u",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -809,7 +814,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="m s-1",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="u_component_of_wind",
                     grib_element="UGRD",
                     grib_description="",
@@ -817,7 +822,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=6,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="wind_v",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -828,7 +833,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="m s-1",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="v_component_of_wind",
                     grib_element="VGRD",
                     grib_description="",
@@ -836,7 +841,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=6,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="geopotential_height",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -847,7 +852,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="m",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="geopotential_height",
                     grib_element="HGT",
                     grib_description="",
@@ -855,7 +860,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     keep_mantissa_bits=11,
                 ),
             ),
-            EcmwfS2sDataVar(
+            EcmwfIfsEns46DayDataVar(
                 name="vertical_velocity",
                 group="pressure_level",
                 encoding=encoding_float32_pressure_level,
@@ -866,7 +871,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(EcmwfS2sCommonTemplateConfi
                     units="Pa s-1",
                     step_type="instant",
                 ),
-                internal_attrs=EcmwfS2sInternalAttrs(
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="vertical_velocity",
                     grib_element="VVEL",
                     grib_description="",
