@@ -34,14 +34,16 @@ List all pods with their status, sorted by creation time.
 
 Anyone with write access to this repository can trigger these workflows.
 
-### How the Dropdown Auto-Updates
+### How the Dropdowns Auto-Update
 
-The cronjob dropdown in `manual-create-job-from-cronjob.yml` is automatically generated:
+The cronjob dropdown in `manual-create-job-from-cronjob.yml` and dataset dropdown in
+`manual-backfill.yml` are automatically updated:
 
 1. **Generator Script:** `src/scripts/generate_manual_workflows.py`
    - Scans `DYNAMICAL_DATASETS` in `src/reformatters/__main__.py`
-   - Extracts all `CronJob` instances from `operational_kubernetes_resources()`
-   - Generates workflow YAML with dropdown choices
+   - Computes the available cronjobs and backfillable datasets
+   - Updates only the dropdown choices in the checked-in workflows
+   - Leaves the rest of each workflow unchanged so Dependabot owns action versions
 
 2. **Prek Hook:** Configured in `.pre-commit-config.yaml`
    - Automatically runs generator when relevant files change
@@ -52,7 +54,7 @@ The cronjob dropdown in `manual-create-job-from-cronjob.yml` is automatically ge
 
 ### Manual Regeneration
 
-If needed, you can manually regenerate the workflow files:
+If needed, you can manually update the workflow choices:
 
 ```bash
 uv run src/scripts/generate_manual_workflows.py
