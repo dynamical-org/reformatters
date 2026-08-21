@@ -21,8 +21,8 @@ GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
 # 00z cycle then extends to 840h, arriving over the following ~21h. Requesting the
 # extension before it exists is thousands of futile requests, so only ask for it once
 # a cycle is GEFS_EXTENSION_REQUEST_MIN_AGE old. That age must fall between the two
-# init times an operational update touches -- the newest, 6h33m old at cron time, and
-# the previous, 30h33m -- which test_extension_request_age_splits_the_updates_inits
+# init times an operational update touches -- the newest, 6h45m old at cron time, and
+# the previous, 30h45m -- which test_extension_request_age_splits_the_updates_inits
 # pins. It sits near the top of that range so a mid-cycle catch-up run skips the
 # extension rather than writing a partial one.
 GEFS_PRE_EXTENSION_MAX = pd.Timedelta(hours=384)
