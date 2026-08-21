@@ -35,12 +35,8 @@ class NoaaHrrrAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=hrrr_virtual_chunk_containers(),
-            # The analysis carries one lead per time position where the 48-hour
-            # product carries 49 per init, so its splits scale up ~49x to keep full
-            # manifest byte sizes comparable: at ~16.4 bytes/ref, single-level
-            # 30000 x 1 ref/time ~= 0.47 MiB, pressure 4500 x 39 ~= 2.7 MiB, model
-            # 4000 x 50 ~= 3.1 MiB; see "Manifest splitting" in
-            # docs/virtual_datasets.md for the cost model.
+            # At ~16.4 bytes/ref, each manifest holds about 0.47 MiB for single-level,
+            # 2.7 MiB for pressure-level, or 3.1 MiB for model-level arrays.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 4500,

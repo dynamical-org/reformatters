@@ -26,14 +26,7 @@ from reformatters.noaa.hrrr.virtual_template_config import (
 
 
 class NoaaHrrrAnalysisVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
-    """Virtual HRRR analysis: each hour's shortest-lead forecast data.
-
-    Hour-0-valued variables read f00 of the same hour's cycle. The rest read f01 of
-    the prior hour's cycle: their f00 entries exist in the GRIB index but carry no
-    usable data - a windowed or accumulated variable's f00 window is zero-length,
-    and the categorical and percent-frozen fields are uniformly zero or the -50
-    sentinel at analysis time. Matches the materialized noaa-hrrr-analysis.
-    """
+    """Virtual HRRR analysis with hourly valid times."""
 
     dims: Dims = {
         ROOT: ("time", "y", "x"),
@@ -41,8 +34,7 @@ class NoaaHrrrAnalysisVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
         "model_level": ("time", "y", "x", "model_level"),
     }
     append_dim: AppendDim = "time"
-    # HRRR operational start is 2014-09-30; start a day later to skip the incomplete
-    # first day, matching the materialized noaa-hrrr-analysis.
+    # HRRR operational start is 2014-09-30; skip the incomplete first day.
     append_dim_start: Timestamp = pd.Timestamp("2014-10-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 

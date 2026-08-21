@@ -29,6 +29,7 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisVirtualSourceFileCoord]:
+        """Use the shortest present lead for each variable: f00 if available, f01 otherwise."""
         times = pd.to_datetime(processing_region_ds["time"].values)
         var_groups = group_by(
             data_var_group,

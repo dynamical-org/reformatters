@@ -90,8 +90,6 @@ def test_dataset_attributes() -> None:
 
 
 def test_template_starts_at_hrrr_operational_start() -> None:
-    # Matches the materialized noaa-hrrr-analysis rather than the virtual forecast
-    # datasets' HRRR v3 start; the whole NODD archive is reachable virtually.
     assert CONFIG.append_dim_start == pd.Timestamp("2014-10-01T00:00")
     template = CONFIG.get_template(pd.Timestamp("2014-10-01T03:00"))
     times = template.to_dataset().get_index("time")
