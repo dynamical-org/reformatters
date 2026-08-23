@@ -10,6 +10,7 @@ import numpy as np
 import xarray as xr
 from zarr.abc.store import Store
 
+from reformatters.common.config_models import split_var_path
 from reformatters.common.iterating import consume, shard_slice_indexers
 from reformatters.common.logging import get_logger
 from reformatters.common.types import AppendDim, ArrayFloat32
@@ -47,7 +48,7 @@ def make_shared_buffer(ds: xr.Dataset) -> Generator[SharedMemory]:
 
 def create_data_array_and_template(
     processing_region_ds: xr.Dataset,
-    data_var_name: str,
+    data_var_path: str,
     shared_buffer: SharedMemory,
     fill_value: float | bool,
 ) -> tuple[xr.DataArray, xr.DataArray]:
@@ -62,8 +63,9 @@ def create_data_array_and_template(
     ----------
     processing_region_ds : xr.Dataset
         Template dataset covering the region of the dataset to process.
-    data_var_name : str
-        Name of the variable within `processing_region_ds` to use.
+    data_var_path : str
+        Path of the variable within `processing_region_ds` to use:
+        `group/name`, or `name` at root.
     shared_buffer : SharedMemory
         A shared memory buffer to use as backing for the data array.
 
@@ -73,12 +75,12 @@ def create_data_array_and_template(
         A data array whose `.data` is a NumPy view
         into the shared memory, initialized to NaN.
     data_array_template : xr.DataArray
-        processing_region_ds[data_var_name] with non-dimension coordinates dropped.
+        processing_region_ds[data_var_path] with non-dimension coordinates dropped.
         This is lightweight and can be passed between processes.
     """
 
     # This template is small and we will pass it between processes
-    data_array_template = processing_region_ds[data_var_name]
+    data_array_template = processing_region_ds[data_var_path]
 
     # This data array will be assigned actual, shared memory
     data_array = data_array_template.copy()
@@ -129,6 +131,9 @@ def write_shards(
     """
     Write the shards of a data array as zarr to `store`. The data array is
     reconstructed from `processing_region_da_template` and the `shared_buffer`.
+
+    `processing_region_da_template` is named by the variable's zarr path
+    (`group/name`, or `name` at root), which is also its key in `output_region_ds`.
 
     `processing_region_da_template` may include additional, padded steps along `append_dim`,
     while `output_region_ds` has exactly the output size and coordinates along
@@ -203,4 +208,7 @@ def write_shard_to_zarr(
             message="In a future version of xarray decode_timedelta will default to False rather than None.",
             category=FutureWarning,
         )
-        data_array[shard_indexer].to_zarr(store, region="auto", write_empty_chunks=True)
+        group, name = split_var_path(str(processing_region_da_template.name))
+        data_array[shard_indexer].rename(name).to_zarr(
+            store, group=group, region="auto", write_empty_chunks=True
+        )

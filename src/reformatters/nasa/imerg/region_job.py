@@ -10,6 +10,7 @@ import requests
 import xarray as xr
 from zarr.abc.store import Store
 
+from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.download import get_local_path
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
@@ -198,7 +199,7 @@ class NasaImergAnalysisMaterializedRegionJob(
 
         # Mask the exact source sentinel to NaN, then apply the units scale as a plain
         # multiply.
-        data[data == np.float32(data_var.internal_attrs.source_fill_value)] = np.nan
+        mask_source_fill_value_inplace(data, data_var.internal_attrs)
         source_scale = data_var.internal_attrs.source_scale
         if source_scale != 1.0:
             data *= np.float32(source_scale)

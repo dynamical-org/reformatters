@@ -55,11 +55,11 @@ class ExampleTemporalDynamicalDataset(
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
+        """Return the operational validation checks to run on this dataset."""
         # return (
-        #     validation.check_analysis_current_data,
-        #     validation.check_analysis_recent_nans,
+        #     validation.CheckCurrentData(max_delay=timedelta(hours=2)),
+        #     validation.CheckRecentNans(),
         # )
         raise NotImplementedError(
             f"Implement `validators` on {self.__class__.__name__}"

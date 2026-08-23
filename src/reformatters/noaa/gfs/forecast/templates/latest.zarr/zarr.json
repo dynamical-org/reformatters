@@ -43,7 +43,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -136,7 +136,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -229,7 +229,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -322,7 +322,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -415,7 +415,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -504,7 +504,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -648,7 +648,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -697,6 +697,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1014,7 +1015,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1103,7 +1104,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1192,7 +1193,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1240,6 +1241,7 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
+          "comment": "Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1279,7 +1281,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1367,7 +1369,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1456,7 +1458,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1544,7 +1546,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1632,7 +1634,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1720,7 +1722,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1857,7 +1859,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1945,7 +1947,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2033,7 +2035,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2180,7 +2182,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2268,7 +2270,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2356,7 +2358,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2444,7 +2446,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2532,7 +2534,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2620,7 +2622,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",

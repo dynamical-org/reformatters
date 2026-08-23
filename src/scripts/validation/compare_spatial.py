@@ -14,8 +14,10 @@ from scripts.validation.utils import (
     align_longitude_convention,
     end_date_option,
     get_two_random_points,
+    init_time_option,
     is_forecast_dataset,
     is_virtual_store,
+    lead_time_option,
     level_label,
     level_option,
     load_retried,
@@ -29,6 +31,7 @@ from scripts.validation.utils import (
     select_var_level,
     select_variables_for_plotting,
     start_date_option,
+    time_option,
     var_slug,
     variables_option,
 )
@@ -298,12 +301,7 @@ def _reference_data(
     return load_retried(ref_data)
 
 
-def run_compare_spatial(
-    ctx: RunContext,
-    init_time: str | None = None,
-    lead_time: str | None = None,
-    time: str | None = None,
-) -> None:
+def run_compare_spatial(ctx: RunContext) -> None:
     """Produce per-variable spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
 
@@ -324,11 +322,11 @@ def run_compare_spatial(
 
     if is_forecast:
         ds, ref_ds = align_to_valid_time_forecast(
-            validation_ds, spatially_aligned_ref, init_time, lead_time
+            validation_ds, spatially_aligned_ref, ctx.init_time, ctx.lead_time
         )
     else:
         ds, ref_ds = align_to_valid_time_analysis(
-            validation_ds, spatially_aligned_ref, time
+            validation_ds, spatially_aligned_ref, ctx.time
         )
     ds = _downsample_for_plot(ds)
 
@@ -405,9 +403,9 @@ def compare_spatial(
     reference_url: str | None = reference_url_option,
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
-    init_time: str | None = None,
-    lead_time: str | None = None,
-    time: str | None = None,
+    init_time: str | None = init_time_option,
+    lead_time: str | None = lead_time_option,
+    time: str | None = time_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
@@ -452,8 +450,11 @@ def compare_spatial(
         variables=selected_vars,
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
+        init_time=init_time,
+        lead_time=lead_time,
+        time=time,
     )
-    run_compare_spatial(ctx, init_time=init_time, lead_time=lead_time, time=time)
+    run_compare_spatial(ctx)
 
     if show_plot:
         plt.show()

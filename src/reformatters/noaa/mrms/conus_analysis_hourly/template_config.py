@@ -40,8 +40,6 @@ class NoaaMrmsInternalAttrs(BaseInternalAttrs):
     # For deaccumulation: MRMS hourly QPE is a 1-hour fixed window accumulation
     window_reset_frequency: Timedelta | None = None
     expected_invalid_fraction: float = 0.07
-    # Source files use this value instead of NaN for missing/out-of-coverage pixels
-    nodata_sentinel: float | None = None
 
 
 class NoaaMrmsDataVar(DataVar[NoaaMrmsInternalAttrs]):
@@ -329,7 +327,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     long_name="FLASH QPE-to-FFG percentage maximum",
                     units="percent",
                     step_type="instant",
-                    comment="Maximum percentage of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Percentage where values > 100 indicate QPE exceeds FFG. Available from October 2020 onward.",
+                    comment="Maximum percentage of Quantitative Precipitation Estimate (QPE) to Flash Flood Guidance (FFG) from the FLASH system. Percentage where values > 100 indicate QPE exceeds FFG. NaN outside the area the FLASH system covers. Available from October 2020 onward.",
                 ),
                 internal_attrs=NoaaMrmsInternalAttrs(
                     mrms_product="FLASH_QPE_FFGMAX",
@@ -338,7 +336,7 @@ class NoaaMrmsConusAnalysisHourlyTemplateConfig(TemplateConfig[NoaaMrmsDataVar])
                     available_from=MRMS_V12_START,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     expected_invalid_fraction=0.65,
-                    nodata_sentinel=-999.0,
+                    source_fill_value=-999.0,
                 ),
             ),
         ]

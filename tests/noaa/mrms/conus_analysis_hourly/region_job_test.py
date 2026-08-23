@@ -270,6 +270,7 @@ def test_download_from_source_uses_var_name_suffix(
 
 def test_read_data_pre_v12_two_band_selects_discipline_209(
     monkeypatch: pytest.MonkeyPatch,
+    template_config: NoaaMrmsConusAnalysisHourlyTemplateConfig,
 ) -> None:
     region_job = NoaaMrmsRegionJob.model_construct(
         template_ds=Mock(),
@@ -307,6 +308,9 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
         lambda _path: [1, 1],
     )
 
+    precipitation_surface = next(
+        v for v in template_config.data_vars if v.name == "precipitation_surface"
+    )
     result = region_job.read_data(
         NoaaMrmsSourceFileCoord(
             time=pd.Timestamp("2019-06-15T12:00"),
@@ -316,7 +320,7 @@ def test_read_data_pre_v12_two_band_selects_discipline_209(
             data_var_name="precipitation_surface",
             downloaded_path=Path("fake.grib2"),
         ),
-        Mock(),
+        precipitation_surface,
     )
 
     np.testing.assert_array_equal(result, data)

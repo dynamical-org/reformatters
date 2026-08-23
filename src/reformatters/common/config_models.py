@@ -3,11 +3,13 @@ from typing import Annotated, Generic, Literal, TypeVar
 
 import numcodecs
 import numcodecs.abc
+import numpy as np
 import pydantic
 
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import (
     ROOT,
+    ArrayFloat32,
     CodecConfig,
     Group,
     TimedeltaUnits,
@@ -22,6 +24,12 @@ def var_path(group: Group, name: str) -> str:
     return f"{group}/{name}"
 
 
+def split_var_path(path: str) -> tuple[str | None, str]:
+    """Inverse of `var_path`: the zarr group (None at root) and the bare variable name."""
+    group, _, name = path.rpartition("/")
+    return group or None, name
+
+
 type AttributeStr = Annotated[str, pydantic.Field(pattern=r"^[A-Z0-9].*[^.]$")]
 type Sentence = Annotated[str, pydantic.Field(pattern=r"^[A-Z].*\.$")]
 type SpatialResolution = Literal[
@@ -30,6 +38,7 @@ type SpatialResolution = Literal[
     "0.0625 degrees (~7km)",
     "0.1 degrees (~10km)",
     "0.25 degrees (~20km)",
+    "1.5 degrees (~165km)",
     "0-240 hours: 0.25 degrees (~20km), 246-840 hours: 0.5 degrees (~40km)",
     "2.5 km",
     "3 km",
@@ -66,6 +75,7 @@ type EnsembleStatistic = Literal["avg"]  # "spr" (spread) is also available
 
 
 class DataVarAttrs(FrozenBaseModel):
+    # CF _FillValue is set from Encoding.fill_value by assign_var_metadata
     # Use ECMWF parameter `name` if one is applicable
     long_name: Annotated[str, pydantic.Field(min_length=1)]
     # Use ECMWF parameter `shortname` if one is applicable
@@ -75,9 +85,6 @@ class DataVarAttrs(FrozenBaseModel):
     # Must follow CF Conventions if CF defines a standard name for this variable
     units: Annotated[str, pydantic.Field(min_length=1)]
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
-    # CF missing_value: a sentinel the source stores in the data which CF-aware
-    # readers such as xarray mask to NaN on read.
-    missing_value: float | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
     # CF flag attributes for categorical variables, see CF Conventions section 3.5.
@@ -218,6 +225,7 @@ class BaseInternalAttrs(FrozenBaseModel):
     # If None, defers to attrs.step_type. Useful when an instantaneous variable does not have hour 0 values.
     # Access via data_var.has_hour_0_values(), not directly.
     hour_0_values_override: bool | None = None
+    source_fill_value: float | None = None
 
 
 INTERNAL_ATTRS_co = TypeVar(
@@ -237,7 +245,7 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
         return var_path(self.group, self.name)
 
     def has_hour_0_values(self) -> bool:
-        """Whether this variable has values at lead_time=0 (the analysis step).
+        """Whether the source provides values for this variable at lead_time=0 (the analysis step).
 
         Providers with different lead-0 semantics override this default.
         Per-variable exceptions set internal_attrs.hour_0_values_override.
@@ -246,12 +254,29 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
             return self.internal_attrs.hour_0_values_override
         return self.attrs.step_type == "instant"
 
-    @pydantic.model_validator(mode="after")
-    def validate_missing_value_matches_fill_value(self) -> DataVar[INTERNAL_ATTRS_co]:
-        if self.attrs.missing_value is not None:
-            assert self.attrs.missing_value == self.encoding.fill_value, (
-                f"{self.name}: missing_value ({self.attrs.missing_value}) must equal "
-                f"encoding.fill_value ({self.encoding.fill_value}) — xarray requires "
-                "_FillValue and missing_value to agree when both are set"
-            )
-        return self
+    def stores_hour_0_values(self) -> bool:
+        """Whether the written store holds a value for this variable at lead_time=0.
+
+        A rate deaccumulated from a running total has none even where the source
+        provides a lead-0 accumulation: differencing has no prior step there.
+        """
+        return self.has_hour_0_values() and not self.internal_attrs.deaccumulate_to_rate
+
+
+def source_fill_value_var_names(
+    data_vars: Sequence[DataVar[BaseInternalAttrs]],
+) -> tuple[str, ...]:
+    return tuple(
+        data_var.name
+        for data_var in data_vars
+        if data_var.internal_attrs.source_fill_value is not None
+    )
+
+
+def mask_source_fill_value_inplace(
+    values: ArrayFloat32, internal_attrs: BaseInternalAttrs
+) -> None:
+    source_fill_value = internal_attrs.source_fill_value
+    if source_fill_value is None:
+        return
+    values[values == np.float32(source_fill_value)] = np.nan

@@ -571,6 +571,15 @@ def _repository_config_and_credentials(
     """Build the icechunk `RepositoryConfig` override for a dataset, plus the anonymous
     authorize map for a virtual one (`None` for a materialized one)."""
     config = icechunk.RepositoryConfig.default()
+    config.storage = icechunk.StorageSettings(
+        timeouts=icechunk.StorageTimeoutSettings(
+            connect_timeout_ms=3_000,
+            read_timeout_ms=15_000,
+            operation_attempt_timeout_ms=15_000,
+            operation_timeout_ms=30_000,
+        ),
+        retries=icechunk.StorageRetriesSettings(max_tries=10, max_backoff_ms=5_000),
+    )
     config.manifest = icechunk.ManifestConfig(
         splitting=virtual_config.manifest_split if virtual_config is not None else None,
         max_concurrent_manifest_fetches_during_commit=16,

@@ -11,14 +11,19 @@ with contextlib.suppress(RuntimeError):  # skip if already set
 
 import sentry_sdk
 import typer
+from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.typer import TyperIntegration
 from sentry_sdk.types import Hint, Log
 
 from reformatters.common import deploy as deploy_module
 from reformatters.common import monitoring
 from reformatters.common.config import Config
-from reformatters.common.dynamical_dataset import DynamicalDataset, register_run_monitor
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.initialize_new_integration import initialize_new_integration
+from reformatters.common.operational import (
+    OperationalResources,
+    register_run_monitor,
+)
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.contrib.nasa.smap.level3_36km_v9 import NasaSmapLevel336KmV9Dataset
 from reformatters.contrib.noaa.ndvi_cdr.analysis import (
@@ -36,8 +41,14 @@ from reformatters.ecmwf.aifs_single.forecast import (
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     EcmwfAifsSingleForecastVirtualDataset,
 )
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    EcmwfIfsEns46DayGribArchiver,
+)
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
 from reformatters.google.weathernext2.forecast_virtual import (
     GoogleWeathernext2ForecastVirtualDataset,
@@ -175,31 +186,31 @@ class UpstreamGriddedZarrsIcechunkDatasetStorageConfig(
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
     NoaaGfsForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaGfsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast35DayDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     GefsForecast10DaySpatialDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrAnalysisDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -208,19 +219,20 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()],
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
+    ),
+    EcmwfIfsEnsForecast46Day15DegreeDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     EcmwfAifsSingleForecastDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
-        replica_storage_configs=[
-            EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig()
-        ],
+        primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
+        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfAifsSingleForecastVirtualDataset(
         primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -260,6 +272,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
 ]
 
 register_run_monitor(monitoring.monitor_cron)
+monitoring.install_sigterm_logger()
 
 if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
@@ -281,9 +294,11 @@ if Config.is_sentry_enabled:
         project_root="src/",
         in_app_include=["reformatters"],
         default_integrations=True,
-        enable_logs=True,
+        # Connection idles cause us to lose events after quiet periods
+        keep_alive=True,
         before_send_log=before_log,
         integrations=[
+            LoggingIntegration(capture_sentry_logs=True),
             TyperIntegration(),
         ],
     )
@@ -297,10 +312,17 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 app.command()(initialize_new_integration)
 
 
+# Source archives that feed a dataset but have no store of their own. They deploy
+# their own cronjobs and are not datasets, so they carry no update/validate/backfill.
+OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfIfsEns46DayGribArchiver()]
+
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
 
-deploy_module.register_commands(app, DYNAMICAL_DATASETS)
+for archiver in OPERATIONAL_ARCHIVERS:
+    app.add_typer(archiver.get_cli(), name=archiver.dataset_id)
+
+deploy_module.register_commands(app, DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS)
 
 
 if not __debug__:

@@ -1,7 +1,6 @@
 import re
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -199,10 +198,9 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
     (current_data,) = [
         validator
         for validator in validators
-        if isinstance(validator, partial)
-        and validator.func is validation.check_forecast_current_data
+        if isinstance(validator, validation.CheckCurrentData)
     ]
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=2)}
+    assert current_data.max_delay == timedelta(hours=1, minutes=49)
     completeness = next(
         validator
         for validator in validators

@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
+from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
@@ -14,7 +14,6 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
-from .validators import HRRR_EXPECTED_HOUR_0_NAN_VARS, check_forecast_completeness
 
 
 class NoaaHrrrForecast48HourDataset(
@@ -63,18 +62,26 @@ class NoaaHrrrForecast48HourDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
+        # Source-fill-value vars are NaN wherever the source's missing state applies
+        # (e.g. percent frozen precipitation where nothing is falling), so they get a
+        # looser check: not entirely NaN.
+        source_fill_value_vars = source_fill_value_var_names(
+            self.template_config.data_vars
+        )
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=7),
+            # The update ingests each init at init+1h53m (f048 publishes ~init+1h50m);
+            # validation fires at init+2h03m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=3)),
+            # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
+            # forecast is caught even after newer cycles land.
+            validation.CheckRecentNans(
+                exclude_vars=source_fill_value_vars, append_dim_window=4
             ),
-            check_forecast_completeness,
-            partial(
-                validation.check_forecast_recent_nans,
-                additional_skip_lead_time_0_vars=HRRR_EXPECTED_HOUR_0_NAN_VARS,
-                # CF-masks its -50 "no precipitation" sentinel to NaN, so the field
-                # is legitimately all/mostly NaN wherever no precipitation is falling.
-                exclude_vars=("percent_frozen_precipitation_surface",),
+            validation.CheckRecentNans(
+                include_vars=source_fill_value_vars,
+                max_nan_fraction=0.9999,
+                spatial_sampling="quarter",
+                append_dim_window=2,
             ),
         )

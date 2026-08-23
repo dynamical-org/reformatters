@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
+from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
@@ -58,18 +58,25 @@ class NoaaHrrrAnalysisDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        max_expected_delay = timedelta(hours=4)
+    def validators(self) -> Sequence[validation.Validator]:
+        # Source-fill-value vars are NaN wherever the source's missing state applies
+        # (e.g. percent frozen precipitation where nothing is falling), so they get a
+        # looser check: not entirely NaN.
+        source_fill_value_vars = source_fill_value_var_names(
+            self.template_config.data_vars
+        )
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # CF-masks its -50 "no precipitation" sentinel to NaN, so the field
-                # is legitimately all/mostly NaN wherever no precipitation is falling.
-                exclude_vars=("percent_frozen_precipitation_surface",),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4)),
+            validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
+            # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
+            # coverage is small and clustered: a sampled quadrant is regularly all
+            # marker, while whole-grid coverage stays well clear of the threshold
+            # (percent frozen precipitation, the sparser of the two, peaks near 0.996
+            # in the driest hours of the year).
+            validation.CheckRecentNans(
+                include_vars=source_fill_value_vars,
+                max_nan_fraction=0.999,
+                spatial_sampling="all",
+                append_dim_window=4,
             ),
         )

@@ -28,6 +28,7 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
+from reformatters.ecmwf.aifs_single.template_config import aifs_single_stream_path
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
 from reformatters.ecmwf.ecmwf_utils import (
@@ -36,9 +37,6 @@ from reformatters.ecmwf.ecmwf_utils import (
 )
 
 log = get_logger(__name__)
-
-# Path changed from aifs/ to aifs-single/ on this date
-AIFS_SINGLE_PATH_CHANGE_DATE = pd.Timestamp("2025-02-26T00:00")
 
 # GRIB master table version changes caused metadata differences for precipitation.
 # Early data (table v27): generic product template codes.
@@ -70,12 +68,8 @@ class EcmwfAifsSingleForecastSourceFileCoord(SourceFileCoord):
         init_hour_str = self.init_time.strftime("%H")
         lead_time_hour_str = whole_hours(self.lead_time)
 
-        if self.init_time >= AIFS_SINGLE_PATH_CHANGE_DATE:
-            model_dir = "aifs-single"
-        else:
-            model_dir = "aifs"
-
-        directory_path = f"{init_time_str}/{init_hour_str}z/{model_dir}/0p25/oper"
+        stream_path = aifs_single_stream_path(self.init_time)
+        directory_path = f"{init_time_str}/{init_hour_str}z/{stream_path}"
         filename = f"{init_time_str}{init_hour_str}0000-{lead_time_hour_str}h-oper-fc"
         return f"{root_url}/{directory_path}/{filename}"
 

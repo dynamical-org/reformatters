@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -11,7 +10,12 @@ from .region_job import (
     UarizonaSwannAnalysisSourceFileCoord,
 )
 from .template_config import UarizonaSwannAnalysisTemplateConfig, UarizonaSwannDataVar
-from .validators import MAX_NAN_FRACTION, check_random_time_within_last_year_nans
+
+# For regions outside of CONUS, the values in this dataset are expected
+# to be NaNs. We sampled various times across the dataset and determined
+# the expected fraction of NaNs to be ~0.46425.
+EXPECTED_NAN_FRACTION = 0.46425
+MAX_NAN_FRACTION = EXPECTED_NAN_FRACTION + 0.00001
 
 
 class UarizonaSwannAnalysisDataset(
@@ -24,23 +28,26 @@ class UarizonaSwannAnalysisDataset(
         UarizonaSwannAnalysisRegionJob
     )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        # SWANN data is usually published daily with just over a day lag.
-        # There are occasional longer lags, allow them without alerting because this is a contrib dataset.
-        max_expected_delay = timedelta(days=5)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
+            # SWANN data is usually published daily with just over a day lag.
+            # There are occasional longer lags, allow them without alerting because
+            # this is a contrib dataset.
+            validation.CheckCurrentData(max_delay=timedelta(days=5)),
+            validation.CheckRecentNans(
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
+                append_dim_window=2,
             ),
-            check_random_time_within_last_year_nans,
+            validation.CheckRecentNans(
+                # UArizona restates a year of files as they go early -> provisional ->
+                # stable. The two-shard default covers that re-sweep.
+                # Outside CONUS every position is NaN, so sample extra to ensure some
+                # points land in CONUS.
+                max_nan_fraction=0.0,
+                sampled_points=8,
+            ),
         )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

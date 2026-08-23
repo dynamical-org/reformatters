@@ -13,11 +13,11 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import (
     Array1D,
     Array2D,
+    Timedelta,
 )
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -30,6 +30,11 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 
 
 class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
+    # Snowfall accumulates from forecast start and never resets within a forecast. A forecast
+    # dataset reads a growing lead time, so the window never resets; an analysis reads a fixed
+    # lead time from each init, so every step is an independent window.
+    run_total_window_reset_frequency: Timedelta = pd.Timedelta.max
+
     @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
@@ -247,6 +252,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     grib_index_level="surface",
                     index_position=84,
                     deaccumulate_to_rate=True,
+                    include_lead_time_suffix=True,
                     window_reset_frequency=default_window_reset_frequency,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
@@ -317,6 +323,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Visible Beam Downward Solar Flux",
                     units="W m-2",
                     step_type="instant",
+                    comment="Direct normal irradiance — the flux perpendicular to the solar beam, so it exceeds the horizontal downward shortwave flux when the sun is low. Values inflate without bound in a narrow band of grid cells at sunrise, reaching 10000. Mask values > 1361, the solar constant.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VBDSF",
@@ -369,14 +376,13 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
             ),
             NoaaHrrrDataVar(
                 name="percent_frozen_precipitation_surface",
-                encoding=replace(encoding, fill_value=-50.0),
+                encoding=encoding,
                 attrs=DataVarAttrs(
                     short_name="cpofp",
                     long_name="Percent frozen precipitation",
                     units="percent",
                     step_type="instant",
-                    comment="-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
-                    missing_value=-50.0,
+                    comment="NaN where there is no precipitation.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="CPOFP",
@@ -386,6 +392,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
                     hour_0_values_override=False,
+                    source_fill_value=-50.0,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -523,6 +530,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="Geopotential height",
                     units="m",
                     step_type="instant",
+                    comment="NaN where no cloud ceiling was detected.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="HGT",
@@ -531,6 +539,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=117,
                     keep_mantissa_bits=8,
                     hrrr_file_type="sfc",
+                    source_fill_value=9_999.0,
                 ),
             ),
             # HRRR provides 80m but not 100m winds
@@ -687,7 +696,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=65,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     deaccumulate_to_rate=True,
-                    window_reset_frequency=pd.Timedelta.max,
+                    window_reset_frequency=self.run_total_window_reset_frequency,
                     hrrr_file_type="sfc",
                 ),
             ),

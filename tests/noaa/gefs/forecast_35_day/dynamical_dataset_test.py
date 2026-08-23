@@ -31,7 +31,7 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "33 6 * * *"
+    assert update_cron_job.schedule == "45 6 * * *"
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert update_cron_job.cpu == "6"
     assert update_cron_job.memory.endswith("G")
@@ -40,7 +40,7 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 
     # Check validation job
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "3 7 * * *"
+    assert validation_cron_job.schedule == "5 7 * * *"
     assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert validation_cron_job.cpu == "3"
     assert validation_cron_job.memory == "30G"
@@ -48,10 +48,11 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
 
 def test_validators(dataset: GefsForecast35DayDataset) -> None:
     """Test that validators are properly configured."""
-    validators = tuple(dataset.validators())
-    assert len(validators) == 3
-    assert validation.check_forecast_current_data in validators
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    current_data, recent_nans = dataset.validators()
+    assert isinstance(current_data, validation.CheckCurrentData)
+    assert current_data.max_delay == timedelta(hours=7, minutes=5)
+    assert isinstance(recent_nans, validation.CheckRecentNans)
+    assert recent_nans.max_nan_fraction == (0.45, 0.0)
 
 
 def test_template_config(dataset: GefsForecast35DayDataset) -> None:

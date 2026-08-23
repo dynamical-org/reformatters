@@ -12,6 +12,9 @@ from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.ecmwf.aifs_single.forecast.template_config import (
     EcmwfAifsSingleForecastTemplateConfig,
 )
+from reformatters.ecmwf.aifs_single.template_config import (
+    AIFS_SINGLE_FORMAT_CHANGE_DATE,
+)
 
 
 def test_template_config_attrs() -> None:
@@ -92,7 +95,7 @@ def test_dimension_coordinates_shapes_and_values() -> None:
 
 def test_data_vars_date_available() -> None:
     config = EcmwfAifsSingleForecastTemplateConfig()
-    expanded_date = pd.Timestamp("2025-02-26T00:00")
+    expanded_date = AIFS_SINGLE_FORMAT_CHANGE_DATE
 
     vars_with_date = [
         v for v in config.data_vars if v.internal_attrs.date_available is not None

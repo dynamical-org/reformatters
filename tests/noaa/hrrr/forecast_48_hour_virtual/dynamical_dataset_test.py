@@ -1,7 +1,6 @@
 import re
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -270,12 +269,10 @@ def test_current_data_validator_allows_8_hours(
     dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     (current_data,) = [
-        v
-        for v in dataset.validators()
-        if isinstance(v, partial) and v.func is validation.check_forecast_current_data
+        v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
     # 6h cycle + ~2h publication slack.
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=8)}
+    assert current_data.max_delay == timedelta(hours=2, minutes=40)
 
 
 def _resolved_split_size(

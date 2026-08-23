@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -54,15 +53,8 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        max_expected_delay = timedelta(hours=7)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-            ),
+            validation.CheckCurrentData(max_delay=timedelta(hours=7)),
+            validation.CheckRecentNans(),
         )

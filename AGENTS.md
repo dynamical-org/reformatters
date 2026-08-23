@@ -80,11 +80,30 @@ Run these tests after updating a template: `uv run pytest tests/common/common_te
 Metadata attributes for variables and coordinates must follow CF Conventions.
 The `standard_name` and `units` fields must match CF definitions if one exists for that variable; if one doesn't, use SI `units` and leave `standard_name` unset.
 Use ECMWF variable name for `long_name` and ECMWF short name for `short_name`.  `long_name`, `short_name`, `standard_name` and `units` all describe the quantity as a reader of our archive sees it, after any transformation we apply (scaling, unit conversion, deaccumulation) — not the raw source quantity.  When adding a variable, search to see if another dataset already has an equivalent variable (e.g. `temperature_2m`), match those names and metadata exactly.
+An accumulated or deaccumulated variable carries a `comment` naming its window: the reset frequency for a running total, or that it is an average since the previous forecast step for a rate. Match an existing equivalent variable's wording.
+
 Categorical / flag variables set `flag_values` (the coded values) and `flag_meanings` (a blank separated label per value) per CF Conventions section 3.5. Verify the codes against the authoritative source table for that product (e.g. GRIB2 code table 4.201/4.222, the NSSL MRMS flag tables) rather than guessing.
 
 Comment vs. review note. Put intrinsic, always-true variable facts (quirks, sentinel values, what the variable physically represents if not clear in the name/long_name) in the variable's `comment` attr so they travel with the data — these get no validation-report review note. Most common variables need no `comment` unless their interpretation is unusual. Put time-windowed characteristics of a specific archive (version-boundary behavior changes, historical low-quality windows, source outages) in the validation report's `### Review notes` (see [docs/validation.md](docs/validation.md) §3e) — these get no `comment`, since they would go stale in static template metadata as the archive grows. Each fact lives in exactly one place based on its kind.
 
 Set each data variable's `keep_mantissa_bits` (float32 rounding for compression, or `"no-rounding"` to keep all 23) by convention: use 7 unless the variable is wind (6), a precipitation flux/rate (8), or a pressure variable with `units="Pa"` (11); match an existing equivalent variable rather than re-deriving.
+
+#### Missing values
+
+For floating-point data variables Zarr `fill_value` equals CF `_FillValue`. When read with a CF-aware library, the materialized and virtual products built from one source must return NaN at the same cells.
+
+Whether a variable's missing values can be normalized is a test on real source messages: read them through the library materialized `read_data` uses (e.g. rasterio) and through the virtual codec (gribberish), and check whether each decoder represents the complete missing-cell set with one stable output — NaN or one exact value — across all supported source eras. The two may return different values — rasterio a sentinel where gribberish already returns NaN — but both must call the same cells missing.
+
+When one value covers every missing cell in both reads:
+
+- Materialized either already receives NaN from rasterio or records rasterio's exact non-NaN value in `internal_attrs.source_fill_value` and replaces it with NaN. It writes physical NaN and uses NaN for both metadata fields.
+- Virtual sets `fill_value` and `_FillValue` to gribberish's value, or leaves both NaN when gribberish already returns NaN.
+
+When no single value does, neither product changes any value and the variable's `comment` records what the raw values mean and ends with the range to mask, such as "Mask values < -0.1." Never normalize part of a variable's invalid set — masking some invalid values claims the rest are good. Treat an equivalent variable the same way across models where you can, but the single-value test overrides.
+
+A `comment` states what NaN means when the answer is not "data we do not have": that the quantity does not apply there, such as no cloud ceiling because there is no cloud, or percent frozen where there is no precipitation. Without it a reader takes those cells for an outage and reads the NaN fraction as an availability statistic. A variable whose NaN does mean missing data needs no `comment`. Where the marker is a declared `fill_value`, write the sentence about the NaN rather than the marker — a CF-aware reader only ever sees NaN, and the materialized and virtual products then describe the variable identically — and say nothing about masking, which `fill_value` already handles. Only an undeclared marker, the no-single-value case above, is named by its raw value and paired with the range to mask.
+
+Materialized scaling is applied before values are written. Virtual scaling uses Zarr's `ScaleOffset` filter, which decodes as `encoded / scale + offset`.
 
 
 ### RegionJob
@@ -100,9 +119,9 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 **Brings together** a `TemplateConfig` and `RegionJob` class, plus storage and operational configuration. Key responsibilities:
 - Declare `template_config` and `region_job_class`
-- Configure `primary_storage_config` and optional `replica_storage_configs`
+- Configure `primary_storage_config` and optional `replica_storage_configs`. Every new store is icechunk; zarr v3 is deprecated and the remaining zarr v3 stores are only ever replicas of an icechunk primary.
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
-- Implement `validators()` - return validation functions for the dataset
+- Implement `validators()` - return the operational validation checks for the dataset
 
 ## Dataset structures
 
@@ -110,7 +129,7 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 2. **Analysis dataset** Dimensions time, latitude/y, longitude/x [, ensemble_member]. When creating an analysis dataset from a forecast archive we take the shortest available lead time, flattening the init_time and lead_time dims into a single time dim.
 
-**Vertical levels:** Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted. A variable's group is a per-variable property (it sets the variable's zarr path and dims), not a job boundary. The materialized write path is not yet group-aware, so multi-group datasets are currently virtual only (a `DynamicalDataset` guard rejects a materialized dataset with any non-root variable); materialized multi-group support is planned.
+**Vertical levels:** Single-level and surface variables live at the dataset root with the level encoded in the variable name (e.g. `temperature_2m`, `pressure_surface`). A variable available on a dense, comparable set of vertical levels does not have a level suffix and instead lives in a zarr group named after its vertical dimension — the group name and dimension name are the same (`pressure_level`, `model_level`; others may be added as needed), e.g. `pressure_level/temperature` is a variable with dimensions (time, latitude, longitude, pressure_level). Dimension coordinates shared with the root (time, lead time, latitude/longitude, ensemble_member, spatial_ref) are duplicated into each group so a group can be opened on its own. A group with no variables is omitted. A variable's group is a per-variable property (it sets the variable's zarr path and dims), not a job boundary. Both materialized and virtual datasets support vertical groups; the write paths key variables by `DataVar.path` (`group/name`, or `name` at root), which is also the variable's zarr store path.
 
 **Variable naming:** A single-level or surface variable encodes its level in the name as `<var>_<level>` (e.g. `temperature_2m`); a variable carried on a vertical dimension is just `<var>` (the level lives in the dimension). Names also encode any aggregation; match an existing equivalent variable's name across datasets exactly (see Metadata conventions). Spell aggregation prefixes out in full — `maximum_`/`minimum_` (e.g. `maximum_wind_speed_10m`), not `max_`/`min_`. When a name spans a layer between two levels, order the two numbers to match the source GRIB level string (a `100-1000 mb` layer is `..._100_1000mb`; a `5000-2000 m` layer is `..._5000_2000m`).
 
@@ -196,3 +215,64 @@ Mechanics, when a comment does earn its place:
 * An assert or validator with a clear message documents itself; don't add a comment restating it.
 
 The spirit outranks the letter: a rare exception that truly serves the year-later reader is fine — use judgement. What is never fine is accumulation: individually-reasonable "helpful" notes compounding across changes into a codebase readers must wade through and learn to distrust. An agent's in-the-moment helpfulness is precisely this failure mode. Before ending a turn and before committing, reread every comment and docstring you added or edited, apply the bolded test to each sentence, and delete what fails — expect that to be most of it.
+
+## Public catalog and backward compatibility
+
+Zarr datasets created by the canonical deployment of this repository are published by dynamical.org. The production catalog at `https://stac.dynamical.org/catalog.json` is the source of truth. The staging catalog at `https://stac-staging.dynamical.org/catalog.json` is a superset that includes datasets that may be published soon. Only datasets in the production catalog are subject to this backward-compatibility policy. Datasets under `contrib/` are not published in these catalogs.
+
+We do not control downstream readers of published datasets. Do not make a potentially breaking change without extremely explicit user approval and discussion of a migration and communication plan.
+
+Breaking changes include:
+
+- Renaming or removing existing variables, coordinates, Zarr groups, or dimensions.
+- Changing dimension names or lengths.
+- Changing existing coordinate values, labels, ordering, dtype, or encoding. The only routine exception is appending new values to the end of the append dimension (`time` or `init_time`).
+- Removing or changing dataset, group, variable, or coordinate attributes, including `dataset_id`, `standard_name`, and `units`.
+- Changing dtype, chunk or shard layout, dimension metadata, compression codecs or settings, `fill_value`, or `_FillValue`. The only exception is adjusting lossy rounding while preserving the variable's meaning and maintaining a precision level explicitly accepted by the user.
+- Changing the interpretation of retrieved values, including their units, scaling, aggregation, sign convention, missing-data behavior, or physical meaning.
+
+Additions are allowed, including new variables, coordinates, Zarr groups, and attributes. Adding a coordinate must not change existing dimensions or coordinates.
+
+Published data values are not immutable and may be updated to reflect source corrections. Demonstrably incorrect data, metadata, or encodings may also be corrected, including incorrect units or missing fill-value metadata. The error must be established by inspecting real data. These corrections remain subject to the approval, migration, and communication rule above. When in doubt about any aspect of the compatibility rules, discuss the change with the user.
+
+## Inspecting a published dataset
+
+Use the production STAC catalog to inspect a dataset's current metadata, values, and Icechunk snapshot ancestry:
+
+```python
+import httpx
+import icechunk
+import xarray as xr
+
+catalog = httpx.get("https://stac.dynamical.org/catalog.json").json()
+collection_url = next(
+    link["href"]
+    for link in catalog["links"]
+    if link["rel"] == "child" and "/<dataset-id>/" in link["href"]
+)
+collection = httpx.get(collection_url).json()
+
+asset = collection["assets"]["icechunk-https"]
+repo = icechunk.Repository.open(icechunk.http_storage(asset["href"]))
+session = repo.readonly_session("main")
+ds = xr.open_zarr(session.store, chunks=None)
+
+repo.ancestry(branch="main")  # Iterator[SnapshotInfo]
+```
+
+Virtual datasets also require `authorize_virtual_chunk_access`. Build it from the STAC asset and pass it to `Repository.open`:
+
+```python
+authorize = icechunk.containers_credentials(
+    {
+        container["url_prefix"]: icechunk.s3_anonymous_credentials()
+        for container in asset["icechunk:virtual_chunk_containers"]
+    }
+)
+repo = icechunk.Repository.open(
+    icechunk.http_storage(asset["href"]),
+    authorize_virtual_chunk_access=authorize,
+)
+```
+
+For a dataset not yet in the production or staging catalog, run `uv run main <dataset-id> dataset-urls` and open an `s3://` URL with `icechunk.s3_storage(bucket="<bucket>", prefix="<prefix>", anonymous=True)` instead of `icechunk.http_storage`. For a virtual dataset without STAC metadata, get its container prefixes from its `dynamical_dataset.py` or from `icechunk.Repository.fetch_config(storage).virtual_chunk_containers` and authorize anonymous access as above.

@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from pydantic import Field
 
@@ -90,14 +89,11 @@ class GoogleWeathernext2ForecastVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         # Validation fires at init+7h55m, after the update's fire and deadline; the newest
         # ingested init is then 7h55m old, so 9h leaves an hour of cron/pod start slack.
         return (
-            partial(
-                validation.check_forecast_current_data,
-                max_latest_init_time_age=timedelta(hours=9),
-            ),
+            validation.CheckCurrentData(max_delay=timedelta(hours=9)),
             # A store is published behind a success marker written last, so an ingested
             # init is a whole one. Positions past the store's extent are skipped, which
             # covers the window's newest, not-yet-published cycle.

@@ -1,11 +1,3 @@
-"""Object-store-listing source-file discovery for virtual datasets that opt into it.
-
-A `VirtualRegionJob.discover_available` implementation for sources listable with
-obstore (S3, GCS, Azure, local filesystem, ...), generic over the backend — the
-caller passes the built store. Sources obstore can't list (an HTML directory index,
-a frontier to probe) implement `discover_available` another way and never import this.
-"""
-
 import obstore
 
 from reformatters.common.region_job import SOURCE_FILE_COORD

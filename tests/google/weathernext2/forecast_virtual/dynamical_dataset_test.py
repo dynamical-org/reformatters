@@ -1,6 +1,5 @@
 import re
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 
 import icechunk
@@ -60,12 +59,10 @@ def test_current_data_validator_allows_9_hours(
     dataset: GoogleWeathernext2ForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
-        v
-        for v in dataset.validators()
-        if isinstance(v, partial) and v.func is validation.check_forecast_current_data
+        v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
     # Validation fires at init+7h55m, so the threshold must exceed that.
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=9)}
+    assert current_data.max_delay == timedelta(hours=9)
 
 
 def _resolved_split_size(

@@ -10,7 +10,7 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.template_config import (
     NoaaHrrrForecast18HourVirtualTemplateConfig,
 )
-from reformatters.noaa.hrrr.forecast_virtual_region_job import (
+from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
 

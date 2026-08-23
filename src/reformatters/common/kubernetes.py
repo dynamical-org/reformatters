@@ -177,7 +177,7 @@ class Job(pydantic.BaseModel):
                         "securityContext": {
                             "fsGroup": 999,  # this is the `app` group our app runs under
                         },
-                        "terminationGracePeriodSeconds": 5,
+                        "terminationGracePeriodSeconds": 30,
                         "activeDeadlineSeconds": int(
                             self.pod_active_deadline.total_seconds()
                         ),
@@ -227,7 +227,7 @@ class Job(pydantic.BaseModel):
 
 
 class CronJob(Job):
-    name: Annotated[str, pydantic.Field(min_length=1)]
+    name: Annotated[str, pydantic.Field(min_length=1, max_length=52)]
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False

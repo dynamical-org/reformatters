@@ -15,6 +15,8 @@ from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
 from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_EXTENSION_REQUEST_MIN_AGE,
+    GEFS_PRE_EXTENSION_MAX,
     GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSFileType,
@@ -73,6 +75,7 @@ class GefsForecast35DayRegionJob(
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 
+        now = pd.Timestamp.now()
         return [
             GefsForecast35DaySourceFileCoord(
                 init_time=pd.Timestamp(init_time),
@@ -83,6 +86,8 @@ class GefsForecast35DayRegionJob(
             for init_time in processing_region_ds["init_time"].values
             for lead_time in processing_region_ds["lead_time"].values
             for ensemble_member in processing_region_ds["ensemble_member"].values
+            if pd.Timedelta(lead_time) <= GEFS_PRE_EXTENSION_MAX
+            or now - pd.Timestamp(init_time) >= GEFS_EXTENSION_REQUEST_MIN_AGE
         ]
 
     def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:

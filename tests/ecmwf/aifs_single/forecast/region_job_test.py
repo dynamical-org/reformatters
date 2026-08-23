@@ -14,12 +14,14 @@ from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.types import ArrayFloat32
 from reformatters.ecmwf.aifs_single.forecast.region_job import (
-    AIFS_SINGLE_PATH_CHANGE_DATE,
     EcmwfAifsSingleForecastRegionJob,
     EcmwfAifsSingleForecastSourceFileCoord,
 )
 from reformatters.ecmwf.aifs_single.forecast.template_config import (
     EcmwfAifsSingleForecastTemplateConfig,
+)
+from reformatters.ecmwf.aifs_single.template_config import (
+    AIFS_SINGLE_FORMAT_CHANGE_DATE,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
@@ -41,29 +43,37 @@ def test_source_file_coord_url_before_path_change() -> None:
     )
 
 
-def test_source_file_coord_url_after_path_change() -> None:
+@pytest.mark.parametrize(
+    ("init_time", "expected_stream_path"),
+    [
+        ("2025-02-24T00:00", "aifs/0p25/oper"),
+        ("2025-02-24T06:00", "aifs-single/0p25/experimental/oper"),
+        ("2025-02-25T00:00", "aifs-single/0p25/experimental/oper"),
+        ("2025-02-25T06:00", "aifs-single/0p25/oper"),
+        ("2025-02-26T00:00", "aifs-single/0p25/oper"),
+    ],
+)
+def test_source_file_coord_url_spans_the_three_source_stream_paths(
+    init_time: str, expected_stream_path: str
+) -> None:
+    """The aifs-single stream is served from an experimental/ path for its first 36 hours."""
     config = EcmwfAifsSingleForecastTemplateConfig()
+    stamp = pd.Timestamp(init_time)
     coord = EcmwfAifsSingleForecastSourceFileCoord(
-        init_time=AIFS_SINGLE_PATH_CHANGE_DATE,
+        init_time=stamp,
         lead_time=pd.Timedelta("12h"),
         data_var_group=list(config.data_vars[:1]),
     )
-    assert coord.get_url() == (
-        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
-        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.grib2"
+    path = (
+        f"/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/{expected_stream_path}"
+        f"/{stamp.strftime('%Y%m%d%H')}0000-12h-oper-fc"
     )
-    assert coord.get_index_url() == (
-        "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
-        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.index"
-    )
-    assert coord.get_url("gcs") == (
-        "https://storage.googleapis.com/ecmwf-open-data"
-        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.grib2"
-    )
-    assert coord.get_index_url("gcs") == (
-        "https://storage.googleapis.com/ecmwf-open-data"
-        "/20250226/00z/aifs-single/0p25/oper/20250226000000-12h-oper-fc.index"
-    )
+    s3_root = "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
+    gcs_root = "https://storage.googleapis.com/ecmwf-open-data"
+    assert coord.get_url() == f"{s3_root}{path}.grib2"
+    assert coord.get_index_url() == f"{s3_root}{path}.index"
+    assert coord.get_url("gcs") == f"{gcs_root}{path}.grib2"
+    assert coord.get_index_url("gcs") == f"{gcs_root}{path}.index"
 
 
 def test_source_file_coord_url_00z_init() -> None:
@@ -79,17 +89,17 @@ def test_source_file_coord_url_00z_init() -> None:
     )
 
 
-def test_source_file_coord_url_day_before_path_change() -> None:
-    """The day before the path change should still use 'aifs'."""
+def test_source_file_coord_url_last_init_before_format_change() -> None:
+    """The last init before the format change still uses 'aifs'."""
     config = EcmwfAifsSingleForecastTemplateConfig()
     coord = EcmwfAifsSingleForecastSourceFileCoord(
-        init_time=AIFS_SINGLE_PATH_CHANGE_DATE - pd.Timedelta("12h"),
+        init_time=AIFS_SINGLE_FORMAT_CHANGE_DATE - pd.Timedelta("6h"),
         lead_time=pd.Timedelta("6h"),
         data_var_group=list(config.data_vars[:1]),
     )
     assert coord.get_url() == (
         "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com"
-        "/20250225/12z/aifs/0p25/oper/20250225120000-6h-oper-fc.grib2"
+        "/20250224/00z/aifs/0p25/oper/20250224000000-6h-oper-fc.grib2"
     )
 
 
@@ -413,7 +423,7 @@ def test_read_data_alt_precip_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     precip_var = item(v for v in config.data_vars if v.name == "precipitation_surface")
     coord = EcmwfAifsSingleForecastSourceFileCoord(
         # v34+ alt metadata is the current "aifs-single" format, so use a current-era init.
-        init_time=AIFS_SINGLE_PATH_CHANGE_DATE,
+        init_time=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         lead_time=pd.Timedelta("6h"),
         data_var_group=[precip_var],
         downloaded_path=Path("fake/path.grib2"),
@@ -482,14 +492,14 @@ def _precip_read_data_mock(
 def test_read_data_legacy_precip_scaled(monkeypatch: pytest.MonkeyPatch) -> None:
     """Legacy 'aifs' precip is stored in metres and scaled x1000 to mm (kg m-2)."""
     result = _precip_read_data_mock(
-        monkeypatch, AIFS_SINGLE_PATH_CHANGE_DATE - pd.Timedelta("6h")
+        monkeypatch, AIFS_SINGLE_FORMAT_CHANGE_DATE - pd.Timedelta("6h")
     )
     np.testing.assert_array_equal(result, 1.0)  # 0.001 m * 1000
 
 
 def test_read_data_current_precip_not_scaled(monkeypatch: pytest.MonkeyPatch) -> None:
     """Current 'aifs-single' precip is already in mm (kg m-2) and is not rescaled."""
-    result = _precip_read_data_mock(monkeypatch, AIFS_SINGLE_PATH_CHANGE_DATE)
+    result = _precip_read_data_mock(monkeypatch, AIFS_SINGLE_FORMAT_CHANGE_DATE)
     np.testing.assert_allclose(result, 0.001, rtol=1e-6)
 
 

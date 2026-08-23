@@ -10,6 +10,7 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
@@ -185,12 +186,13 @@ class NoaaHrrrRegionJob(
             data_var.internal_attrs.grib_element,
             *data_var.internal_attrs.grib_element_alternatives,
         }
-        # grib element has the accumulation window as a suffix in the grib file attributes, but not in the .idx file
-        # Running-total variables (window_reset_frequency=pd.Timedelta.max, e.g. ASNOW) don't get this suffix
-        if (
-            reset_freq := data_var.internal_attrs.window_reset_frequency
-        ) is not None and reset_freq != pd.Timedelta.max:
-            suffix = f"{whole_hours(reset_freq):02d}"
+        # The grib file attributes suffix the element with its accumulation window, while the
+        # .idx file does not. An f06 file holds both APCP06 (the run total) and APCP01 (that
+        # hour's bucket), so the suffix is what selects between them.
+        if data_var.internal_attrs.include_lead_time_suffix:
+            reset_frequency = data_var.internal_attrs.window_reset_frequency
+            assert reset_frequency is not None
+            suffix = f"{whole_hours(reset_frequency):02d}"
             grib_elements = {f"{e}{suffix}" for e in grib_elements}
 
         with rasterio.open(coord.downloaded_path) as reader:
@@ -218,6 +220,7 @@ class NoaaHrrrRegionJob(
         self, data_array: xr.DataArray, data_var: NoaaHrrrDataVar
     ) -> None:
         """Apply in-place data transformations to the output data array for a given data variable."""
+        mask_source_fill_value_inplace(data_array.values, data_var.internal_attrs)
         if data_var.internal_attrs.deaccumulate_to_rate:
             assert data_var.internal_attrs.window_reset_frequency is not None
             deaccum_dim = "lead_time" if "lead_time" in data_array.dims else "time"

@@ -49,9 +49,8 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
+            validation.CheckRecentNans(),
         )

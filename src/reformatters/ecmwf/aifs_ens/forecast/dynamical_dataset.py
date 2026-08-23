@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -58,8 +57,10 @@ class EcmwfAifsEnsForecastDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.check_forecast_current_data,
-            partial(validation.check_forecast_recent_nans, num_recent_init_times=3),
+            # The update's append_dim_end is now-5.5h, so each init is ingested by the
+            # first update fired after init+5.5h, at init+7h; validation fires at init+7h30m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=30)),
+            validation.CheckRecentNans(append_dim_window=3),
         )

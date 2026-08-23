@@ -43,7 +43,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -136,7 +136,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -229,7 +229,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -322,7 +322,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -415,7 +415,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -503,7 +503,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -591,7 +591,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -679,7 +679,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -822,7 +822,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -871,6 +871,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no cloud ceiling was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1192,7 +1193,7 @@
             "separator": "/"
           }
         },
-        "fill_value": -50.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1240,11 +1241,10 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "-50 encodes no/undefined frozen precipitation; CF-aware readers mask it to NaN.",
-          "missing_value": -50.0,
+          "comment": "NaN where there is no precipitation.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAAScA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time",
@@ -1281,7 +1281,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1369,7 +1369,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1458,7 +1458,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1546,7 +1546,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1634,7 +1634,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1722,7 +1722,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1810,7 +1810,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1898,7 +1898,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -1986,7 +1986,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2132,7 +2132,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2220,7 +2220,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2366,7 +2366,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2414,6 +2414,7 @@
           "long_name": "Visible Beam Downward Solar Flux",
           "short_name": "vbdsf",
           "units": "W m-2",
+          "comment": "Direct normal irradiance \u2014 the flux perpendicular to the solar beam, so it exceeds the horizontal downward shortwave flux when the sun is low. Values inflate without bound in a narrow band of grid cells at sunrise, reaching 10000. Mask values > 1361, the solar constant.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2453,7 +2454,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2541,7 +2542,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2629,7 +2630,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2717,7 +2718,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",
@@ -2805,7 +2806,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "sharding_indexed",

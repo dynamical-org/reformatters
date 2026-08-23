@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
@@ -146,7 +147,7 @@ def test_as_kubernetes_object_comprehensive() -> None:
                 "securityContext": {
                     "fsGroup": 999,
                 },
-                "terminationGracePeriodSeconds": 5,
+                "terminationGracePeriodSeconds": 30,
                 "activeDeadlineSeconds": 21600,  # default 6 hours
                 "volumes": [
                     {
@@ -172,6 +173,26 @@ def test_as_kubernetes_object_comprehensive() -> None:
     }
 
     assert k8s_obj["spec"] == expected_spec
+
+
+def _cron_job_with_name(name: str) -> CronJob:
+    return CronJob(
+        name=name,
+        schedule="0 * * * *",
+        command=["archive-grib-files"],
+        image="img:v1",
+        dataset_id="archive",
+        cpu="1",
+        memory="1Gi",
+        workers_total=1,
+        parallelism=1,
+    )
+
+
+def test_cron_job_name_respects_kubernetes_length_limit() -> None:
+    _cron_job_with_name("a" * 52)
+    with pytest.raises(ValidationError, match="at most 52 characters"):
+        _cron_job_with_name("a" * 53)
 
 
 def test_do_not_disrupt_annotation_only_on_reformat_jobs() -> None:

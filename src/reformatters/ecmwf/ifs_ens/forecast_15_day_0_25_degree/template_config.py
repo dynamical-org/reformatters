@@ -522,6 +522,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     long_name="Surface downward long-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
+                    comment="Average flux since the previous forecast step.",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Downward long-wave radiation flux [W/(m^2)]",
@@ -547,6 +548,7 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     long_name="Surface downward short-wave radiation flux",
                     units="W m-2",
                     step_type="avg",
+                    comment="Average flux since the previous forecast step.",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Downward short-wave radiation flux [W/(m^2)]",

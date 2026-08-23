@@ -213,7 +213,7 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: DwdIconEuForecast5DayDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    assert all(isinstance(v, validation.Validator) for v in validators)
 
 
 def test_archive_grib_files_calls_copy_for_each_init_hour(

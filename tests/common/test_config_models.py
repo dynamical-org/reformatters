@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from pydantic import ValidationError
 
@@ -12,6 +13,8 @@ from reformatters.common.config_models import (
     Encoding,
     Group,
     codecs_to_dicts,
+    mask_source_fill_value_inplace,
+    split_var_path,
     var_path,
 )
 
@@ -22,6 +25,21 @@ class TestGroupAndVarPath:
 
     def test_vertical_group_var_path_is_group_slash_name(self) -> None:
         assert var_path("pressure_level", "temperature") == "pressure_level/temperature"
+
+    def test_split_root_var_path_has_no_group(self) -> None:
+        assert split_var_path("temperature_2m") == (None, "temperature_2m")
+
+    def test_split_vertical_group_var_path(self) -> None:
+        assert split_var_path("pressure_level/temperature") == (
+            "pressure_level",
+            "temperature",
+        )
+
+    def test_split_nested_var_path_keeps_full_group(self) -> None:
+        assert split_var_path("foo/bar/baz/temperature") == (
+            "foo/bar/baz",
+            "temperature",
+        )
 
     def _data_var(self, group: Group = ROOT) -> DataVar:  # type: ignore[type-arg]
         attrs = DataVarAttrs(
@@ -132,6 +150,55 @@ class TestEncodingValidation:
             serializer=serializer,
         )
         assert enc.serializer == serializer
+
+
+class TestHourZeroValues:
+    def _data_var(
+        self,
+        step_type: str,
+        deaccumulate_to_rate: bool = False,
+        hour_0_values_override: bool | None = None,
+    ) -> DataVar:  # type: ignore[type-arg]
+        return DataVar(
+            name="precipitation_surface",
+            encoding=Encoding(
+                dtype="float32", chunks=(1,), shards=None, fill_value=np.nan
+            ),
+            attrs=DataVarAttrs(
+                long_name="Precipitation rate",
+                short_name="prate",
+                units="kg m-2 s-1",
+                step_type=step_type,  # ty: ignore[invalid-argument-type]
+            ),
+            internal_attrs=BaseInternalAttrs(
+                keep_mantissa_bits="no-rounding",
+                deaccumulate_to_rate=deaccumulate_to_rate,
+                hour_0_values_override=hour_0_values_override,
+            ),
+        )
+
+    def test_instant_var_stores_hour_0_values(self) -> None:
+        assert self._data_var("instant").stores_hour_0_values() is True
+
+    def test_deaccumulated_var_stores_no_hour_0_values(self) -> None:
+        """The source's lead-0 accumulation still leaves the rate undefined there."""
+        var = self._data_var(
+            "avg", deaccumulate_to_rate=True, hour_0_values_override=True
+        )
+        assert var.has_hour_0_values() is True
+        assert var.stores_hour_0_values() is False
+
+
+def test_mask_source_fill_value_requires_exact_float32_match() -> None:
+    attrs = BaseInternalAttrs(keep_mantissa_bits="no-rounding", source_fill_value=-50.0)
+    values = np.array([-50.0, -50.000008, -49.9, 0.0], dtype=np.float32)
+
+    mask_source_fill_value_inplace(values, attrs)
+
+    np.testing.assert_array_equal(
+        values,
+        np.array([np.nan, -50.000008, -49.9, 0.0], dtype=np.float32),
+    )
 
 
 class TestDatasetAttributes:

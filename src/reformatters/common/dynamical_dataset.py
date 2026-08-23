@@ -1,11 +1,10 @@
+import inspect
 import json
 import subprocess
-from collections.abc import Iterator, Sequence
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from collections.abc import Sequence
 from datetime import datetime
-from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Protocol, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -22,7 +21,7 @@ from reformatters.common import (
     validation,
 )
 from reformatters.common.config import Config
-from reformatters.common.config_models import ROOT, DataVar
+from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import (
     CronJob,
@@ -32,7 +31,7 @@ from reformatters.common.kubernetes import (
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
-from reformatters.common.pydantic import FrozenBaseModel
+from reformatters.common.operational import OperationalResources
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
@@ -55,7 +54,7 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 log = get_logger(__name__)
 
 
-class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
+class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
@@ -102,15 +101,15 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )
 
-    def validators(self) -> Sequence[validation.DataValidator]:
+    def validators(self) -> Sequence[validation.Validator]:
         """
-        Return a sequence of DataValidators to run on this dataset.
+        Return the operational validation checks to run on this dataset.
 
         Implementations should look similar to this:
         ```
         return (
-            validation.check_analysis_current_data,
-            validation.check_analysis_recent_nans,
+            validation.CheckCurrentData(max_delay=timedelta(hours=2)),
+            validation.CheckRecentNans(),
         )
         ```
         """
@@ -162,13 +161,8 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         ):
             tmp_store = self._tmp_store()
 
-            all_jobs, template_ds = self.region_job_class.operational_update_jobs(
-                primary_store=self.store_factory.primary_store(),
-                tmp_store=tmp_store,
-                get_template_fn=self._get_template,
-                append_dim=self.template_config.append_dim,
-                all_data_vars=self.template_config.data_vars,
-                reformat_job_name=reformat_job_name,
+            all_jobs, template_ds = self._operational_update_jobs(
+                reformat_job_name, tmp_store
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
@@ -573,79 +567,97 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
     ) -> None:
-        """Validate the dataset, raising an exception if it is invalid."""
-        # validators() lists both validator kinds; validate_dataset dispatches by type.
-        # check_for_expected_shards / compare_replica_and_primary are materialized-only
-        # and appended below.
+        """Validate the dataset, raising an exception if it is invalid.
+
+        Runs the dataset's validators() plus the always-on structural checks:
+        CheckExpectedShards on every materialized store (a virtual store holds chunk
+        references rather than shards), and CheckReplicaMatchesPrimary on every
+        replica.
+        """
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
-        base_validators = list(self.validators())
+        validators = list(self.validators())
+        if not is_virtual:
+            validators.append(validation.CheckExpectedShards())
         with self._monitor(ValidationCronJob, reformat_job_name):
             region_job = self._virtual_validation_region_job(
-                base_validators, reformat_job_name
+                validators, reformat_job_name
             )
 
             primary_store = self.store_factory.primary_store()
-            primary_store_validators = list(base_validators)
-            if not is_virtual:
-                primary_store_validators.append(
-                    partial(validation.check_for_expected_shards, primary_store)
-                )
-
             validation.validate_dataset(
-                primary_store,
-                validators=primary_store_validators,
+                validators,
+                store=primary_store,
+                append_dim=self.template_config.append_dim,
+                append_dim_frequency=self.template_config.append_dim_frequency,
+                data_vars=self.template_config.data_vars,
+                dataset_id=self.dataset_id,
                 region_job=region_job,
             )
             log.info(f"Done validating {primary_store}")
 
-            for replica_store in self.store_factory.replica_stores():
-                replica_store_validators = list(base_validators)
-                if not is_virtual:
-                    replica_store_validators.append(
-                        partial(validation.check_for_expected_shards, replica_store)
-                    )
-                    replica_store_validators.append(
-                        partial(  # ty: ignore[invalid-argument-type]
-                            validation.compare_replica_and_primary,
-                            self.template_config.append_dim,
-                            validation.open_flattened_dataset(
-                                replica_store,
-                                consolidated=not isinstance(
-                                    replica_store, IcechunkStore
-                                ),
-                            ),
-                        )
-                    )
+            replica_stores = self.store_factory.replica_stores()
+            if not replica_stores:
+                return
 
+            replica_validators = [
+                *validators,
+                validation.CheckReplicaMatchesPrimary(),
+            ]
+            primary_ds = validation.open_flattened_dataset(
+                primary_store,
+                consolidated=not isinstance(primary_store, IcechunkStore),
+            )
+            for replica_store in replica_stores:
                 validation.validate_dataset(
-                    replica_store,
-                    validators=replica_store_validators,
+                    replica_validators,
+                    store=replica_store,
+                    append_dim=self.template_config.append_dim,
+                    append_dim_frequency=self.template_config.append_dim_frequency,
+                    data_vars=self.template_config.data_vars,
+                    dataset_id=self.dataset_id,
                     region_job=region_job,
+                    primary_ds=primary_ds,
                 )
                 log.info(f"Done validating {replica_store}")
 
-    def _virtual_validation_region_job(
-        self,
-        validators: Sequence[validation.DataValidator],
-        reformat_job_name: str,
-    ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
-        """The operational-window job a VirtualDataValidator probes against, or None if
-        none of the validators need it. Built once and shared across primary + replica
-        (the job is store-independent; validate_dataset passes each validator the store)."""
-        if not any(isinstance(v, validation.VirtualDataValidator) for v in validators):
-            return None
-        jobs, _template_ds = self.region_job_class.operational_update_jobs(
+    def _operational_update_jobs(
+        self, reformat_job_name: str, tmp_store: Path
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
+        """The jobs an operational update runs, and the template they write against."""
+        operational_update_jobs = self.region_job_class.operational_update_jobs
+        fire_time_kwarg: dict[str, Any] = {}
+        if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
+            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
+                ReformatCronJob
+            ).previous_fire_time(pd.Timestamp.now())
+
+        return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
-            tmp_store=self._tmp_store(),
+            tmp_store=tmp_store,
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
+            **fire_time_kwarg,
+        )
+
+    def _virtual_validation_region_job(
+        self,
+        validators: Sequence[validation.Validator],
+        reformat_job_name: str,
+    ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
+        """The operational-window job a manifest-probing check runs against, or None if
+        none of the validators need it. Built once and shared across primary + replica
+        (the job is store-independent; validate_dataset passes each check the store)."""
+        if not any(v.requires_virtual_dataset for v in validators):
+            return None
+        jobs, _template_ds = self._operational_update_jobs(
+            reformat_job_name, self._tmp_store()
         )
         job = item(jobs)
         assert isinstance(job, VirtualRegionJob), (
-            f"validators() returned a VirtualDataValidator but {self.region_job_class.__name__} "
-            "is not a VirtualRegionJob"
+            f"validators() includes a check that requires a virtual dataset but "
+            f"{self.region_job_class.__name__} is not a VirtualRegionJob"
         )
         return job
 
@@ -794,49 +806,6 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             - poll_deadline_grace
         )
 
-    def _operational_cron_job(
-        self, cron_type: type[CronJob], cron_job_name: str | None = None
-    ) -> CronJob:
-        """The single cron job of `cron_type` (and name, when given) this dataset defines."""
-        return item(
-            cron_job
-            for cron_job in self.operational_kubernetes_resources(
-                "placeholder-image-tag"
-            )
-            if isinstance(cron_job, cron_type)
-            and (cron_job_name is None or cron_job.name == cron_job_name)
-        )
-
-    @contextmanager
-    def _monitor(
-        self,
-        cron_type: type[CronJob],
-        reformat_job_name: str,
-        cron_job_name: str | None = None,
-        *,
-        send_in_progress: bool = True,
-        send_result: bool = True,
-    ) -> Iterator[None]:
-        # No registered monitors -> nothing to report to, and no need to require
-        # operational_kubernetes_resources to be defined.
-        if not _RUN_MONITORS:
-            yield
-            return
-
-        cron_job = self._operational_cron_job(cron_type, cron_job_name)
-
-        with ExitStack() as stack:
-            for monitor in _RUN_MONITORS:
-                stack.enter_context(
-                    monitor(
-                        cron_job,
-                        reformat_job_name,
-                        send_in_progress=send_in_progress,
-                        send_result=send_result,
-                    )
-                )
-            yield
-
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
         # A virtual region job emits chunk refs into icechunk and needs the source
@@ -896,41 +865,4 @@ class DynamicalDataset(FrozenBaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     "with no serializer and the source's own compressors (e.g. a "
                     "blosc-encoded zarr chunk)"
                 )
-        else:
-            # The materialized chunk-write path (zarr.copy_data_var, write_shards) is
-            # not yet group-aware; only virtual datasets support vertical groups today.
-            grouped = [
-                v.path for v in self.template_config.data_vars if v.group is not ROOT
-            ]
-            assert not grouped, (
-                f"materialized datasets do not yet support vertical groups: {grouped}"
-            )
         return self
-
-
-class RunMonitor(Protocol):
-    """Wraps a single operational cron run to report it to a monitoring service.
-
-    The application registers monitors (see `register_run_monitor`); `DynamicalDataset._monitor`
-    enters every registered one around each update/validate run. This keeps
-    DynamicalDataset agnostic of any specific monitoring service — a different
-    deployment registers whatever it uses, or nothing.
-    """
-
-    def __call__(
-        self,
-        cron_job: CronJob,
-        reformat_job_name: str,
-        *,
-        send_in_progress: bool,
-        send_result: bool,
-    ) -> AbstractContextManager[None]: ...
-
-
-_RUN_MONITORS: list[RunMonitor] = []
-
-
-def register_run_monitor(monitor: RunMonitor) -> None:
-    """Register a monitor to wrap every operational cron run. With none registered,
-    monitoring is a no-op."""
-    _RUN_MONITORS.append(monitor)

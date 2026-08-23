@@ -135,8 +135,17 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrAnalysisDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 2
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    assert len(validators) == 3
+    assert all(isinstance(v, validation.Validator) for v in validators)
+    assert isinstance(validators[1], validation.CheckRecentNans)
+    assert validators[1].exclude_vars == (
+        "percent_frozen_precipitation_surface",
+        "geopotential_height_cloud_ceiling",
+    )
+    assert isinstance(validators[2], validation.CheckRecentNans)
+    assert validators[2].include_vars == validators[1].exclude_vars
+    assert validators[2].max_nan_fraction == 0.999
+    assert validators[2].spatial_sampling == "all"
 
 
 @pytest.mark.slow

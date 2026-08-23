@@ -16,7 +16,7 @@ from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common.config import Config
-from reformatters.common.config_models import Coordinate, DataVar
+from reformatters.common.config_models import BaseInternalAttrs, Coordinate, DataVar
 from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
@@ -445,15 +445,22 @@ def make_empty_variable(
     return xr.Variable(dims, array)
 
 
+def _should_write_cf_fill_value(var_config: DataVar[BaseInternalAttrs]) -> bool:
+    return np.issubdtype(np.dtype(var_config.encoding.dtype), np.floating) and (
+        np.isnan(var_config.encoding.fill_value)
+        or var_config.internal_attrs.source_fill_value is not None
+        or var_config.encoding.serializer is not None
+    )
+
+
 def assign_var_metadata(
-    var: xr.DataArray, var_config: DataVar[Any] | Coordinate
+    var: xr.DataArray, var_config: DataVar[BaseInternalAttrs] | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
 
-    # xarray defaults a float variable's _FillValue attribute to NaN on write; a var
-    # with a missing_value sentinel must write _FillValue == missing_value (CF
-    # requires them equal and xarray refuses to encode them unequal).
-    if getattr(var_config.attrs, "missing_value", None) is not None:
+    if not isinstance(var_config, Coordinate) and _should_write_cf_fill_value(
+        var_config
+    ):
         var.encoding["_FillValue"] = var_config.encoding.fill_value
 
     # Encoding time data requires a `units` key in `encoding`.

@@ -403,6 +403,12 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # ECMWF S2S soil moisture is a mass per soil volume (kg m-3), snow albedo a
+    # percentage and snow density a mass per snow volume; CF names none of them.
+    "soil_moisture_0_20cm",
+    "soil_moisture_0_100cm",
+    "snow_albedo_surface",
+    "snow_density_surface",
     # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",
@@ -475,6 +481,7 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     # dimensionless "1" (mass of constituent per mass of dry air).
     ("cloud_ice_mixing_ratio", "kg kg-1"),
     ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
+    ("sea_surface_temperature", "degree_Celsius"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.

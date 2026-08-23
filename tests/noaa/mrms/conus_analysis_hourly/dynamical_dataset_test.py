@@ -227,5 +227,22 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaMrmsConusAnalysisHourlyDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 5
-    assert all(isinstance(v, validation.DataValidator) for v in validators)
+    assert len(validators) == 6
+    assert all(isinstance(v, validation.Validator) for v in validators)
+
+    # The variables whose newest timestamp is empty by design get a leading 1.0 tier
+    # excusing the newest position, so their thresholds describe coverage, not late
+    # arrival.
+    leading_tiers = {
+        var: v.max_nan_fraction[0]
+        if isinstance(v.max_nan_fraction, tuple)
+        else v.max_nan_fraction
+        for v in validators
+        if isinstance(v, validation.CheckRecentNans) and v.include_vars != "all"
+        for var in v.include_vars
+    }
+    assert leading_tiers["precipitation_pass_1_surface"] == 1.0
+    assert leading_tiers["precipitation_pass_2_surface"] == 1.0
+    assert leading_tiers["flash_qpe_ffg_max_surface"] == 1.0
+    assert leading_tiers["precipitation_radar_only_surface"] < 1.0
+    assert leading_tiers["categorical_precipitation_type_surface"] < 1.0

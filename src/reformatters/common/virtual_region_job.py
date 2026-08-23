@@ -94,14 +94,16 @@ class VirtualRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[DATA_VAR],
         reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """A single polling job over the operational_update_window of recent steps.
 
         Polls until every expected file is ingested or the caller's poll_deadline
         passes; filter_already_present derives the remaining work from the manifest.
+        The window ends at `job_fire_time`, or at now for a caller with no schedule.
         See "Operational updates" in docs/virtual_datasets.md.
         """
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = job_fire_time or pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
         append_dim_index = template_ds.to_dataset().get_index(append_dim)
         window_start = int(
@@ -167,6 +169,22 @@ class VirtualRegionJob(
             file_vars[0],
         )
 
+    def representative_probe_loc(
+        self, coord: SOURCE_FILE_COORD, var: DataVar[Any]
+    ) -> Mapping[Dim, CoordinateValue]:
+        """The cell whose manifest presence means `coord`'s file is ingested: its
+        out_loc plus the first label along each multi-chunk dim of `var` that out_loc
+        leaves unpinned. Override when a file covers only part of such a dim.
+        """
+        loc = dict(coord.out_loc())
+        template_var = self.template_ds[var.path]
+        chunks = tuple(template_var.encoding["chunks"])
+        for dim_name, chunk_size in zip(template_var.dims, chunks, strict=True):
+            dim = cast("Dim", str(dim_name))
+            if dim not in loc and chunk_size < int(template_var.sizes[dim]):
+                loc[dim] = template_var.get_index(dim)[0]
+        return loc
+
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -181,7 +199,7 @@ class VirtualRegionJob(
         rep_vars = [self.representative_var(coord) for coord in candidates]
         indices = self._resolve_chunk_keys(
             [
-                (coord.out_loc(), var)
+                (self.representative_probe_loc(coord, var), var)
                 for coord, var in zip(candidates, rep_vars, strict=True)
             ]
         )
@@ -216,6 +234,7 @@ class VirtualRegionJob(
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 tick_start = time.monotonic()
@@ -241,6 +260,7 @@ class VirtualRegionJob(
                         f"{len(pending)} still pending "
                         f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
                     )
+                    last_log = time.monotonic()
                     if batch:
                         yield batch
                 if self.processing_mode == "backfill":
@@ -258,6 +278,10 @@ class VirtualRegionJob(
                             f"(first: {pending[0].get_url()})"
                         )
                         return
+                    # Break the silence under the 350s network idle timeout.
+                    if time.monotonic() - last_log >= 4 * 60:
+                        log.info(f"Waiting on {len(pending)} source files")
+                        last_log = time.monotonic()
                     elapsed = time.monotonic() - tick_start
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
@@ -374,18 +398,19 @@ class VirtualRegionJob(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
     ) -> None:
         """A file's refs must cover the chunk filter_already_present probes
-        (representative_var at the file's out_loc)."""
+        (representative_var at the file's representative_probe_loc)."""
         assert file_refs, f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
-        probe = self.chunk_key(coord.out_loc(), rep)
+        probe_loc = self.representative_probe_loc(coord, rep)
+        probe = self.chunk_key(probe_loc, rep)
         assert any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
         ), (
             f"refs for {coord} do not cover representative chunk "
-            f"({rep.name}, {dict(coord.out_loc())}); the filter would re-ingest "
-            "this file forever. Override representative_var to pick a variable "
-            "the file actually contains."
+            f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
+            "this file forever. Override representative_var or "
+            "representative_probe_loc to name a cell the file actually contains."
         )
 
     def _emit_refs(

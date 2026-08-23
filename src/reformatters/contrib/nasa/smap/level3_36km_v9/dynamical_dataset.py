@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -53,21 +52,16 @@ class NasaSmapLevel336KmV9Dataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
-        # We've seen < 5 days, giving a little buffer to suppress inactionable alert noise
-        max_expected_delay = timedelta(days=6)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
+            # We've seen < 5 days, giving a little buffer to suppress inactionable
+            # alert noise
+            validation.CheckCurrentData(max_delay=timedelta(days=6)),
+            validation.CheckRecentNans(
                 # Oceans and about half of land (due to swaths) are expected to be NaNs
                 # This value sounds very loose but has been tuned based on real values
                 max_nan_fraction=0.995,
                 spatial_sampling="quarter",
+                append_dim_window=2,
             ),
         )

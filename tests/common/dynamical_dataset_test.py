@@ -2,7 +2,6 @@ import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-from functools import partial
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -15,7 +14,13 @@ import pytest
 import xarray as xr
 from pydantic import Field, ValidationError, computed_field
 
-from reformatters.common import dynamical_dataset, storage, template_utils, validation
+from reformatters.common import (
+    dynamical_dataset,
+    operational,
+    storage,
+    template_utils,
+    validation,
+)
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -53,29 +58,22 @@ NOOP_STORAGE_CONFIG = StorageConfig(
 )
 
 
-_RECENCY_VALIDATORS = (
-    validation.check_forecast_current_data,
-    validation.check_analysis_current_data,
-)
-
-
 def assert_configured_validators(dataset: DynamicalDataset) -> None:
     """Run a dataset's configured validators (plus the shard-presence check that
     validate_dataset adds) against the store its e2e test built.
 
     Every validator must return a ValidationResult rather than raising — this catches
-    validator config bugs that would silently crash the validation cronjob (a partial()
-    with a wrong signature, or a validator that errors on the dataset's real dimension
-    structure). The recency validators (check_*_current_data) must additionally pass:
-    we patch pd.Timestamp.now() to the store's latest append-dim coordinate so "now"
-    lines up with the freshest data the e2e test wrote.
+    validator config bugs that would silently crash the validation cronjob (a variable
+    name not in the template, or a check that errors on the dataset's real dimension
+    structure). CheckCurrentData must additionally pass: we patch pd.Timestamp.now()
+    to the store's latest append-dim coordinate so "now" lines up with the freshest
+    data the e2e test wrote.
 
     Content validators (NaN fraction, shard presence) are only checked for not raising,
     not for passing: e2e stores are partial (a subset of variables), so they legitimately
     report failure.
 
-    Mirrors validate_dataset: virtual datasets are opted out of check_for_expected_shards
-    (manifest-aware validators for them are a separate planned phase).
+    Mirrors validate_dataset: virtual datasets are opted out of CheckExpectedShards.
     """
     store = dataset.store_factory.primary_store()
     ds = validation.open_flattened_dataset(
@@ -86,12 +84,10 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
 
     validators = list(dataset.validators())
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
-        validators.append(partial(validation.check_for_expected_shards, store))
+        validators.append(validation.CheckExpectedShards())
 
-    # Mirror validate_dataset: VirtualDataValidators get a context (region job + store),
-    # the rest get the opened dataset.
     region_job = None
-    if any(isinstance(v, validation.VirtualDataValidator) for v in validators):
+    if any(v.requires_virtual_dataset for v in validators):
         jobs, _ = dataset.region_job_class.operational_update_jobs(
             primary_store=store,
             tmp_store=dataset._tmp_store(),
@@ -103,24 +99,24 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
         region_job = jobs[0]
         assert isinstance(region_job, VirtualRegionJob)
 
+    context = validation.ValidationContext(
+        store=store,
+        ds=ds,
+        append_dim=dataset.template_config.append_dim,
+        append_dim_frequency=dataset.template_config.append_dim_frequency,
+        data_vars=tuple(dataset.template_config.data_vars),
+        region_job=region_job,
+    )
     with patch.object(pd.Timestamp, "now", classmethod(lambda cls, *a, **k: latest)):
         for validator in validators:
-            if isinstance(validator, validation.VirtualDataValidator):
-                assert region_job is not None
-                assert isinstance(store, icechunk.store.IcechunkStore)
-                result = validator(region_job, store, ds)
-            else:
-                result = validator(ds)
+            result = validator.check(context)
             assert isinstance(result, validation.ValidationResult), (
-                f"Validator {getattr(validator, 'func', validator)!r} returned "
+                f"Validator {validator.name} returned "
                 f"{type(result)!r}, expected ValidationResult"
             )
-            underlying = getattr(validator, "func", validator)
-            if underlying in _RECENCY_VALIDATORS:
-                name = getattr(underlying, "__name__", underlying)
+            if isinstance(validator, validation.CheckCurrentData):
                 assert result.passed, (
-                    f"Recency validator {name} should pass with now={latest}: "
-                    f"{result.message}"
+                    f"{validator.name} should pass with now={latest}: {result.message}"
                 )
 
 
@@ -298,11 +294,11 @@ class GroupedVarDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
         return ()
 
 
-def test_materialized_dataset_rejects_vertical_group_var() -> None:
-    # The materialized chunk-write path is not group-aware, so DynamicalDataset's
-    # _validate_virtual_storage rejects a materialized dataset with any non-root var.
-    with pytest.raises(ValidationError, match="do not yet support vertical groups"):
-        GroupedVarDataset()
+def test_materialized_dataset_accepts_vertical_group_var() -> None:
+    dataset = GroupedVarDataset()
+    assert [v.path for v in dataset.template_config.data_vars] == [
+        "pressure_level/temperature"
+    ]
 
 
 class ExampleVirtualConfig(ExampleConfig):
@@ -527,10 +523,26 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert '"my-docker-image"' in input_str
 
 
+class StubCheckA(validation.Validator):
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
+    ) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=True, message="ok")
+
+
+class StubCheckB(validation.Validator):
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002
+    ) -> validation.ValidationResult:
+        return validation.ValidationResult(passed=True, message="ok")
+
+
 def test_validate_dataset_calls_validators(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    configured_validators = [Mock(), Mock()]
+    configured_validators = [StubCheckA(), StubCheckB()]
     monkeypatch.setattr(
         ExampleDataset, "validators", lambda self: configured_validators
     )
@@ -558,11 +570,11 @@ def test_validate_dataset_calls_validators(
     mock_replica_store = Mock()
     monkeypatch.setattr(store_factory, "replica_stores", lambda: [mock_replica_store])
 
-    mock_replica_store_ds = Mock()
+    mock_primary_ds = Mock()
     monkeypatch.setattr(
         validation,
         "open_flattened_dataset",
-        lambda store, *, consolidated: mock_replica_store_ds,
+        lambda store, *, consolidated: mock_primary_ds,
     )
 
     dataset.validate_dataset("example-job-name")
@@ -571,47 +583,46 @@ def test_validate_dataset_calls_validators(
     assert mock_validate.call_count == 2
 
     # Check the first call (primary store)
-    positional_args, keyword_args = mock_validate.call_args_list[0]
-    assert positional_args == (mock_store,)
-    primary_store_validators = keyword_args["validators"]
+    primary_call, replica_call = mock_validate.call_args_list
+    primary_validators = primary_call.args[0]
+    assert primary_call.kwargs["store"] == mock_store
+    assert primary_call.kwargs["append_dim"] == dataset.template_config.append_dim
+    assert primary_call.kwargs["dataset_id"] == dataset.dataset_id
+    assert primary_call.kwargs["region_job"] is None
+    assert primary_validators == [
+        *configured_validators,
+        validation.CheckExpectedShards(),
+    ]
 
-    assert primary_store_validators[:-1] == configured_validators
-    assert isinstance(primary_store_validators[-1], partial)
-    assert primary_store_validators[-1].func == validation.check_for_expected_shards
-    assert primary_store_validators[-1].args == (mock_store,)
-
-    # Check the second call (replica store)
-    positional_args, keyword_args = mock_validate.call_args_list[1]
-    assert positional_args == (mock_replica_store,)
-    replica_validators = keyword_args["validators"]
-
-    # Verify replica validators = base validators + compare_replica_and_primary partial
-    assert len(replica_validators) == len(configured_validators) + 2
-    assert replica_validators[:-2] == configured_validators
-
-    assert replica_validators[-2].func == validation.check_for_expected_shards
-    assert replica_validators[-2].args == (mock_replica_store,)
-
-    assert replica_validators[-1].func == validation.compare_replica_and_primary
-    assert replica_validators[-1].args == (
-        dataset.template_config.append_dim,
-        mock_replica_store_ds,
-    )
+    # Check the second call (replica store): the same checks plus the replica compare,
+    # with the primary's dataset to compare against.
+    replica_validators = replica_call.args[0]
+    assert replica_call.kwargs["store"] == mock_replica_store
+    assert replica_validators == [
+        *configured_validators,
+        validation.CheckExpectedShards(),
+        validation.CheckReplicaMatchesPrimary(),
+    ]
+    assert replica_call.kwargs["primary_ds"] == mock_primary_ds
 
 
-def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
+def test_validate_dataset_virtual_replica_compares_but_skips_shard_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # check_for_expected_shards and compare_replica_and_primary are
-    # materialized-only; a virtual dataset's replica gets the base validators.
-    configured_validators = [Mock(), Mock()]
+    # CheckExpectedShards is materialized-only; CheckReplicaMatchesPrimary
+    # applies to every dataset with a replica.
+    configured_validators = [StubCheckA(), StubCheckB()]
     monkeypatch.setattr(
         ExampleVirtualDataset, "validators", lambda self: configured_validators
     )
     mock_validate = Mock()
     monkeypatch.setattr(validation, "validate_dataset", mock_validate)
-    mock_open = Mock()
-    monkeypatch.setattr(validation, "open_flattened_dataset", mock_open)
+    mock_primary_ds = Mock()
+    monkeypatch.setattr(
+        validation,
+        "open_flattened_dataset",
+        lambda store, *, consolidated: mock_primary_ds,
+    )
 
     dataset = ExampleVirtualDataset(
         replica_storage_configs=[
@@ -633,15 +644,17 @@ def test_validate_dataset_virtual_with_replica_uses_base_validators_only(
 
     assert mock_validate.call_count == 2
     primary_call, replica_call = mock_validate.call_args_list
-    assert primary_call.args == (mock_store,)
-    assert primary_call.kwargs["validators"] == configured_validators
-    assert replica_call.args == (mock_replica_store,)
-    assert replica_call.kwargs["validators"] == configured_validators
-    # No VirtualDataValidator configured, so no operational-window job is built.
+    assert primary_call.kwargs["store"] == mock_store
+    assert primary_call.args[0] == configured_validators
+    assert replica_call.kwargs["store"] == mock_replica_store
+    assert replica_call.args[0] == [
+        *configured_validators,
+        validation.CheckReplicaMatchesPrimary(),
+    ]
+    assert replica_call.kwargs["primary_ds"] == mock_primary_ds
+    # No manifest-probing check configured, so no operational-window job is built.
     assert primary_call.kwargs["region_job"] is None
     assert replica_call.kwargs["region_job"] is None
-    # compare_replica_and_primary's replica dataset is never opened.
-    mock_open.assert_not_called()
 
 
 def test_run_virtual_operational_update_asserts_single_writer() -> None:
@@ -744,7 +757,7 @@ class ExampleDatasetWithThreeCronJobs(
 
 def _recording_monitor(
     events: list[tuple[str, str]],
-) -> dynamical_dataset.RunMonitor:
+) -> operational.RunMonitor:
     @contextmanager
     def monitor(
         cron_job: CronJob,
@@ -784,8 +797,8 @@ def test_monitor_noop_without_registered_monitors(
 
 def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
     events: list[tuple[str, str]] = []
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
 
     dataset = ExampleDatasetWithThreeCronJobs()
     # cron_job_name disambiguates among the three crons; the resolved cron reaches monitors.
@@ -799,7 +812,7 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
 
 
 def test_monitor_requires_exactly_one_matching_cron() -> None:
-    dynamical_dataset.register_run_monitor(_recording_monitor([]))
+    operational.register_run_monitor(_recording_monitor([]))
     dataset = ExampleDatasetWithThreeCronJobs()
     # Base CronJob with no name matches all three -> ambiguous.
     with (
@@ -811,7 +824,7 @@ def test_monitor_requires_exactly_one_matching_cron() -> None:
 
 def test_monitor_propagates_errors_to_monitors() -> None:
     events: list[tuple[str, str]] = []
-    dynamical_dataset.register_run_monitor(_recording_monitor(events))
+    operational.register_run_monitor(_recording_monitor(events))
 
     dataset = ExampleDataset(
         template_config=ExampleConfig(), region_job_class=ExampleRegionJob

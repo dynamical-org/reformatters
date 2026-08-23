@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob, ValidationCronJob
+from reformatters.common.storage import DatasetFormat
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 runner = CliRunner()
@@ -287,3 +288,29 @@ def test_store_factory_k8s_secret_names_not_empty_for_datasets_with_replicas(
         assert len(secret_names) >= 1, (
             f"{dataset.dataset_id}: has replicas but no k8s secret names"
         )
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_no_zarr3_primary_with_icechunk_replica(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Zarr v3 is deprecated: an existing zarr v3 store may only be a replica of an
+    icechunk primary. Finalize publishes zarr v3 stores before icechunk ones, so a
+    zarr v3 primary would advance before its icechunk replica."""
+    if dataset.primary_storage_config.format != DatasetFormat.ZARR3:
+        return
+
+    icechunk_replicas = [
+        config.base_path
+        for config in dataset.replica_storage_configs
+        if config.format == DatasetFormat.ICECHUNK
+    ]
+    assert not icechunk_replicas, (
+        f"{dataset.dataset_id}: zarr v3 primary with icechunk replica(s) "
+        f"{icechunk_replicas}; make the icechunk store the primary and the zarr v3 "
+        "store its replica"
+    )

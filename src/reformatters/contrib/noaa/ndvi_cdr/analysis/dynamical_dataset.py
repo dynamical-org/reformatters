@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -20,16 +19,8 @@ class NoaaNdviCdrAnalysisDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # Suspended: the data disappeared from the source. Neither NOAA access path
-        # (s3://noaa-cdr-ndvi-pds, NCEI's HTTP archive) serves files after 2024-12-31
-        # anymore, so there is nothing to update from. We've asked NOAA's data contact
-        # what happened and are waiting to hear back; resume both cron jobs once the
-        # source serves recent files again.
-        suspend = True
-
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            suspend=suspend,
             schedule="0 20 * * *",
             pod_active_deadline=timedelta(minutes=30),  # runs take <24 min
             image=image_tag,
@@ -42,7 +33,6 @@ class NoaaNdviCdrAnalysisDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            suspend=suspend,
             schedule="30 20 * * *",  # 30m (pod_active_deadline) after reformat at :00
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
@@ -54,23 +44,26 @@ class NoaaNdviCdrAnalysisDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        """Return a sequence of DataValidators to run on this dataset."""
-        # There's usually a ~3 day lag for this data's availability, occasionally much longer.
-        max_expected_delay = timedelta(days=30)
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
+            # There's usually a ~3 day lag for this data's availability, occasionally
+            # much longer.
+            validation.CheckCurrentData(max_delay=timedelta(days=30)),
+            validation.CheckRecentNans(
                 # Large NaN fraction is expected: oceans and water bodies are always NaN
                 # (~93% baseline, observed up to ~96%). Use full-grid sampling because
                 # structural NaN makes random_points bimodal/unstable.
                 max_nan_fraction=0.97,
                 include_vars=["ndvi_usable"],
                 spatial_sampling="all",
+                append_dim_window=2,
+            ),
+            validation.CheckRecentNans(
+                # ndvi_raw has no measured stable NaN baseline; this threshold still
+                # catches a position written entirely NaN.
+                max_nan_fraction=1.0 - 1e-9,
+                include_vars=["ndvi_raw"],
+                spatial_sampling="all",
+                append_dim_window=2,
             ),
         )

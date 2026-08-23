@@ -1,8 +1,6 @@
 import re
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import timedelta
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +9,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from reformatters.common import storage, validation
+from reformatters.common import validation
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     DatasetFormat,
-    IcechunkVirtualConfig,
     StorageConfig,
 )
 from reformatters.ecmwf.aifs_single.forecast_virtual.dynamical_dataset import (
@@ -72,30 +70,6 @@ def test_backfill_local_and_operational_update(
 ) -> None:
     dataset = make_dataset(tmp_path)
 
-    # Give virtual reads icechunk's default retry policy. icechunk hands a repo's own
-    # storage settings to its virtual chunk fetchers, and the local filesystem backend
-    # this test writes to defaults to max_tries=1 with no backoff — so a 503 SlowDown
-    # from s3://ecmwf-forecasts fails the read outright here, where the production
-    # S3-backed store would retry it 10 times.
-    orig_repository_config = storage._repository_config_and_credentials
-
-    def repository_config_with_retries(
-        virtual_config: IcechunkVirtualConfig | None,
-    ) -> tuple[icechunk.RepositoryConfig, dict[str, Any] | None]:
-        config, credentials = orig_repository_config(virtual_config)
-        config.storage = icechunk.StorageSettings(
-            # Keep max_backoff well under icechunk's 3 minute default: a source bucket
-            # throttling every attempt should fail the test, not stall it.
-            retries=icechunk.StorageRetriesSettings(
-                max_tries=10, initial_backoff_ms=100, max_backoff_ms=5_000
-            )
-        )
-        return config, credentials
-
-    monkeypatch.setattr(
-        storage, "_repository_config_and_credentials", repository_config_with_retries
-    )
-
     # Trim to leads 0h and 6h to limit work (virtual backfill downloads only .index
     # sidecars; decode happens when the snapshot cells are read).
     orig_get_template = dataset.template_config.get_template
@@ -135,11 +109,11 @@ def test_backfill_local_and_operational_update(
     )
     assert np.isnan(f6["geopotential_height_surface"].values)
 
-    # 2. Operational update: "now" during the 06z publication window.
+    # 2. Operational update: "now" at the update cron fire that covers the 06z init.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T08:00")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T11:20")),
     )
     orig_update_jobs = (
         EcmwfAifsSingleForecastVirtualRegionJob.operational_update_jobs.__func__  # type: ignore[attr-defined]
@@ -169,7 +143,7 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         EcmwfAifsSingleForecastVirtualRegionJob,
         "operational_update_window",
-        pd.Timedelta("3h"),
+        pd.Timedelta("6h"),
     )
 
     dataset.update("test-update")
@@ -177,7 +151,7 @@ def test_backfill_local_and_operational_update(
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
-    # The update window (3h before 08:00) ingests the 06z init.
+    # The update window (6h before the 11:20 fire) ingests the 06z init.
     assert updated.init_time.values[-1] == np.datetime64("2025-03-01T06:00")
     new_cell = updated.sel(
         latitude=_LAT,
@@ -242,12 +216,10 @@ def test_current_data_validator_allows_7_hours(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
-        v
-        for v in dataset.validators()
-        if isinstance(v, partial) and v.func is validation.check_forecast_current_data
+        v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    # Validation fires at init+6h20m, so the threshold must exceed that.
-    assert current_data.keywords == {"max_latest_init_time_age": timedelta(hours=7)}
+    # Each init is due when its validation fires, at init+6h20m.
+    assert current_data.max_delay == timedelta(hours=6, minutes=20)
 
 
 def _resolved_split_size(

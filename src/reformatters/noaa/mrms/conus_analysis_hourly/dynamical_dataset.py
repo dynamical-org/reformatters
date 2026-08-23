@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -50,55 +49,57 @@ class NoaaMrmsConusAnalysisHourlyDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
-    def validators(self) -> Sequence[validation.DataValidator]:
-        max_expected_delay = timedelta(hours=3, minutes=30)
-        # Pass 1 and Pass 2 have gauge-collection latency (~60 min); all other vars are always current.
-        gauge_latency_vars = [
-            "precipitation_pass_1_surface",
-            "precipitation_pass_2_surface",
-        ]
-        radar_only_var = ["precipitation_radar_only_surface"]
-        flash_var = ["flash_qpe_ffg_max_surface"]
+    def validators(self) -> Sequence[validation.Validator]:
         return (
-            partial(
-                validation.check_analysis_current_data,
-                max_expected_delay=max_expected_delay,
-            ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # precipitation_surface worst-case quarter-sampled NaN is ~36% (most recent
-                # timestamp falls back to radar-only with ~34% structural coverage gaps).
-                # categorical (PrecipFlag) is radar-derived with no gauge latency, similar coverage to radar_only.
-                max_nan_fraction=0.40,
+            # The hourly update at :03 writes each hour's position (radar-only fields
+            # arrive within minutes; pass 2 fills in on later runs); validation fires
+            # at :13.
+            validation.CheckCurrentData(max_delay=timedelta(minutes=13)),
+            validation.CheckRecentNans(
+                # Gauge-corrected values arrive an hour late, leaving the newest
+                # timestamp entirely NaN (excused by the leading 1.0). Measured
+                # quarter-sampled NaN from the second-newest onward is 18.4% (6.2%
+                # over the whole domain), constant across timestamps.
+                max_nan_fraction=(1.0, 0.25),
                 spatial_sampling="quarter",
-                exclude_vars=gauge_latency_vars + radar_only_var + flash_var,
+                append_dim_window=5,
+                include_vars=[
+                    "precipitation_pass_1_surface",
+                    "precipitation_pass_2_surface",
+                ],
             ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # pass_1 and pass_2 worst-case quarter-sampled NaN is ~45.5% (1 of 3 checked
-                # timestamps is 100% NaN due to gauge-collection latency, rest are ~6%).
-                max_nan_fraction=0.48,
+            validation.CheckRecentNans(
+                # The newest precipitation_surface is the radar-only field until gauge
+                # data lands, so it carries radar-only's coverage gaps (52.9% in the
+                # worst quarter), not the 18.4% its gauge-corrected older timestamps
+                # show.
+                max_nan_fraction=(0.63, 0.25),
                 spatial_sampling="quarter",
-                include_vars=gauge_latency_vars,
+                append_dim_window=5,
+                include_vars=["precipitation_surface"],
             ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # Radar only is ~34% NaN always. With quarter sampling this can get as
-                # high as 62.2%. It is available at all timestamps.
+            validation.CheckRecentNans(
+                # Radar coverage gaps only, identical at every timestamp: 34.1% over
+                # the domain, 52.9% in the worst quarter.
                 max_nan_fraction=0.63,
                 spatial_sampling="quarter",
-                include_vars=radar_only_var,
+                append_dim_window=5,
+                include_vars=["precipitation_radar_only_surface"],
             ),
-            partial(
-                validation.check_analysis_recent_nans,
-                max_expected_delay=max_expected_delay,
-                # FLASH QPE/FFG ratio has ~64% structural NaN (outside radar/FFG coverage).
-                # With quarter sampling this can reach ~86%.
-                max_nan_fraction=0.86,
+            validation.CheckRecentNans(
+                # PrecipFlag is populated everywhere the grid is, measuring 0% NaN
+                # across the domain at every timestamp.
                 spatial_sampling="quarter",
-                include_vars=flash_var,
+                append_dim_window=5,
+                include_vars=["categorical_precipitation_type_surface"],
+            ),
+            validation.CheckRecentNans(
+                # Outside radar/FFG coverage this is NaN: 64.2% over the domain, 77.3%
+                # in the worst quarter. Its newest timestamp lands late like the
+                # gauge-corrected fields (excused by the leading 1.0).
+                max_nan_fraction=(1.0, 0.86),
+                spatial_sampling="quarter",
+                append_dim_window=5,
+                include_vars=["flash_qpe_ffg_max_surface"],
             ),
         )

@@ -23,6 +23,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
+from reformatters.common.validation import stores_hour_0_values
 from scripts.validation.manifest_scan import (
     result_availability_series,
     scan_manifest,
@@ -309,13 +310,15 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     return filename
 
 
-def _is_sentinel_masked(da: xr.DataArray) -> bool:
-    """A masked sentinel (CF missing_value, equal to the fill value) makes a value scan
-    ambiguous: an unwritten chunk and a legitimately-all-sentinel field both read NaN."""
+def _uses_semantic_missing_values(
+    da: xr.DataArray, template_var: DataVar[Any] | None
+) -> bool:
+    """Semantic NaNs cannot distinguish an unwritten value from a valid missing state."""
+    fill_value = da.encoding.get("_FillValue")
     return (
-        da.attrs.get("missing_value") is not None
-        or da.encoding.get("missing_value") is not None
-    )
+        template_var is not None
+        and template_var.internal_attrs.source_fill_value is not None
+    ) or (fill_value is not None and not np.isnan(fill_value))
 
 
 def _template_data_vars(ctx: RunContext) -> dict[str, DataVar[Any]]:
@@ -331,11 +334,9 @@ def _co_ingested_availability(
 ) -> AvailabilitySeries | None:
     """Availability of `var`'s source-file group, from its value-scanned co-members.
 
-    A sentinel-masked variable can't be value-scanned (see _is_sentinel_masked), but it
-    is written from the same source files as its RegionJob source_file_var_groups
-    co-members, so the mean of their availability measures whether its data was
-    ingested. None when nothing co-ingested was scanned (unregistered store, or a
-    variable-filtered run).
+    A variable with semantic NaNs cannot be value-scanned, but it is written from the
+    same source files as its source-file-group co-members. None means no co-ingested
+    variable was scanned.
     """
     dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
     if dataset is None or var not in template_vars:
@@ -363,14 +364,16 @@ def _co_ingested_availability(
     )
 
 
-def _apply_sentinel_availability(
-    ctx: RunContext, sentinel_vars: list[str], template_vars: dict[str, DataVar[Any]]
+def _apply_semantic_missing_availability(
+    ctx: RunContext,
+    semantic_missing_vars: list[str],
+    template_vars: dict[str, DataVar[Any]],
 ) -> None:
-    for var in sentinel_vars:
+    for var in semantic_missing_vars:
         series = _co_ingested_availability(ctx, var, template_vars)
         if series is None:
             log.info(
-                f"  nulls {var}: not measured (masked sentinel, "
+                f"  nulls {var}: not measured (semantic missing values, "
                 "nothing co-ingested scanned)"
             )
             continue
@@ -392,8 +395,10 @@ def run_value_availability(ctx: RunContext) -> None:
     log.info(f"availability: {len(ctx.variables)} variables at {p1_label} / {p2_label}")
 
     template_vars = _template_data_vars(ctx)
-    sentinel_vars = [
-        var for var in ctx.variables if _is_sentinel_masked(ctx.validation_ds[var])
+    semantic_missing_vars = [
+        var
+        for var in ctx.variables
+        if _uses_semantic_missing_values(ctx.validation_ds[var], template_vars.get(var))
     ]
 
     for var in ctx.variables:
@@ -411,15 +416,10 @@ def run_value_availability(ctx: RunContext) -> None:
         da_p2 = load_retried(da_p2)
         ctx.loaded_point_data[var] = (da_p1, da_p2)
 
-        if var in sentinel_vars:
+        if var in semantic_missing_vars:
             continue
 
-        template_var = template_vars.get(var)
-        has_hour_0 = (
-            template_var.has_hour_0_values()
-            if template_var is not None
-            else da_p1.attrs.get("step_type") == "instant"
-        )
+        has_hour_0 = stores_hour_0_values(template_vars.get(var), da_p1)
         null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(
             da_p1, has_hour_0=has_hour_0
         )
@@ -444,7 +444,7 @@ def run_value_availability(ctx: RunContext) -> None:
         p2_fmt = _format_unavailable_summary(unavailable_p2)
         log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
 
-    _apply_sentinel_availability(ctx, sentinel_vars, template_vars)
+    _apply_semantic_missing_availability(ctx, semantic_missing_vars, template_vars)
 
     # Heatmap rows render in scan order.
     ctx.availability = {

@@ -1,0 +1,11 @@
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 0, "variable": "2_m_temperature"}
+{"ensemble_member": 0, "lead_hours": 48, "length": 58286, "level": "", "offset": 58286, "variable": "2_m_temperature"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 23476, "level": "", "offset": 116572, "variable": "soil_moisture_top_20_cm"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58262, "level": "500_hpa", "offset": 140048, "variable": "temperature"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 198310, "variable": "total_cloud_cover"}
+{"ensemble_member": 0, "lead_hours": 0, "length": 206, "level": "", "offset": 256596, "variable": "total_precipitation"}
+{"ensemble_member": 0, "lead_hours": 6, "length": 58286, "level": "", "offset": 256802, "variable": "total_precipitation"}
+{"ensemble_member": 0, "lead_hours": 12, "length": 58286, "level": "", "offset": 315088, "variable": "total_precipitation"}
+{"ensemble_member": 0, "lead_hours": 0, "length": 206, "level": "", "offset": 373374, "variable": "convective_precipitation"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 373580, "variable": "convective_precipitation"}
+{"ensemble_member": 0, "lead_hours": 48, "length": 58286, "level": "", "offset": 431866, "variable": "convective_precipitation"}

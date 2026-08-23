@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from functools import partial
 from typing import Any
 
 import numpy as np
@@ -88,11 +87,11 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     assert point["total_precipitation_surface"].sel(lead_time="0h").isnull().all()
     assert point["temperature_2m"].sel(lead_time="0h").notnull().all()
 
-    # 2. Operational update: "now" is during the 06z publication window.
+    # 2. Operational update: "now" at the update cron fire that covers the 06z init.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-01-01T07:00")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-01-01T09:43")),
     )
     # Updates process all variables; filter to the test's two.
     orig_update_jobs = (
@@ -166,8 +165,7 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: GefsForecast10DaySpatialDataset) -> None:
     lag, completeness, decode_health = dataset.validators()
-    assert isinstance(lag, partial)
-    assert lag.func is validation.check_forecast_current_data
-    assert lag.keywords == {"max_latest_init_time_age": timedelta(hours=10)}
+    assert isinstance(lag, validation.CheckCurrentData)
+    assert lag.max_delay == timedelta(hours=5, minutes=53)
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode_health, validation.CheckVirtualDecodeHealth)

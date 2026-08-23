@@ -110,9 +110,7 @@ def get_shared_data_var_configs(
 
     encoding_float32 = Encoding(
         dtype="float32",
-        # While in general we use nan as a fill_value, these datasets were backfilled
-        # with fill_value = 0 and write_missing_chunks defaulting to false so we retain the 0 fill value
-        fill_value=0,
+        fill_value=np.nan,
         chunks=chunks,
         shards=shards,
         compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
@@ -403,7 +401,7 @@ def get_shared_data_var_configs(
                 short_name="cpofp",
                 long_name="Percent frozen precipitation",
                 units="percent",
-                comment="Contains the value -50 when there is no precipitation.",
+                comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
                 step_type="instant",
             ),
             internal_attrs=GEFSInternalAttrs(
@@ -573,6 +571,7 @@ def get_shared_data_var_configs(
                 short_name="gh",
                 long_name="Geopotential height",
                 units="m",
+                comment="Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
                 step_type="instant",
                 standard_name="geopotential_height",
             ),

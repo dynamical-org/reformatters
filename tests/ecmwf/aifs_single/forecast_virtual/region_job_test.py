@@ -150,19 +150,23 @@ def test_source_file_coord_url_spans_the_three_source_stream_paths(
     )
 
 
-def test_out_loc_with_root_vars_excludes_level() -> None:
+def test_out_loc_pins_init_and_lead_only(template_ds: xr.DataTree) -> None:
     coord = _coord([get_var("temperature_2m"), get_var("pressure_level/temperature")])
     assert dict(coord.out_loc()) == {
         "init_time": _ERA2_INIT,
         "lead_time": _LEAD_6H,
     }
-
-
-def test_out_loc_group_only_carries_representative_level() -> None:
-    # A coord holding only pressure_level vars needs a concrete level so the per-file
-    # manifest probe resolves to a single chunk.
-    coord = _coord([get_var("pressure_level/temperature")])
-    assert dict(coord.out_loc())["pressure_level"] == 1000
+    # A group-only coord's manifest probe supplements the first level.
+    group_only = _coord([get_var("pressure_level/temperature")])
+    job = make_job(template_ds, data_vars=group_only.data_vars)
+    probe_loc = job.representative_probe_loc(
+        group_only, job.representative_var(group_only)
+    )
+    assert dict(probe_loc) == {
+        "init_time": _ERA2_INIT,
+        "lead_time": _LEAD_6H,
+        "pressure_level": 1000,
+    }
 
 
 # --- file_refs ---

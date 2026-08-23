@@ -184,7 +184,9 @@ class GefsAnalysisRegionJob(
                 except ValueError:
                     log.exception(f"Error deaccumulating {data_var.name}")
 
-        if expected_missing.any():
+        # Interpolating between a flag variable's codes produces values that are not
+        # codes, so its expected-missing steps stay unset.
+        if expected_missing.any() and data_var.attrs.flag_values is None:
             linear_interpolate_1d_inplace(
                 data_array, dim="time", where=expected_missing
             )

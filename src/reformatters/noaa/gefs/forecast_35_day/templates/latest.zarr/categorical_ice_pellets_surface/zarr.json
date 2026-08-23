@@ -25,7 +25,7 @@
       "separator": "/"
     }
   },
-  "fill_value": 0.0,
+  "fill_value": "NaN",
   "codecs": [
     {
       "name": "sharding_indexed",
@@ -74,7 +74,7 @@
     "long_name": "Categorical ice pellets",
     "short_name": "cicep",
     "units": "1",
-    "comment": "0=no; 1=yes",
+    "comment": "0=no; 1=yes. Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to this 0.25 degree grid mixes neighboring 0 and 1 values, so values between 0 and 1 occur and give the flagged fraction of the neighborhood.",
     "step_type": "avg",
     "flag_values": [
       0,
