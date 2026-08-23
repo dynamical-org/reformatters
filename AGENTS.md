@@ -123,8 +123,6 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 - Implement `operational_kubernetes_resources()` - define update/validate cron jobs
 - Implement `validators()` - return the operational validation checks for the dataset
 
-Operational validation conventions. `CheckCurrentData(max_delay=...)` sets when each append-dim position is due, counted from that position's own timestamp (typically the validation cron's offset after the cycle it validates), so a tight deadline holds even on an off-schedule run. `CheckRecentNans` defaults to covering the two newest output shards: the current trailing shard and the previous one in case an update crossed a shard boundary. Increase its `shards` value when an update deliberately re-sweeps further back. `CheckExpectedShards` proves a written shard exists; only the NaN check sees NaNs left *inside* a shard by a transiently failed source file. With the default `spatial_sampling="random_points"`, points are drawn once and read across the whole window in one pass. `"quarter"` and `"all"` read each position separately, so use `window` to set an explicit position count.
-
 ## Dataset structures
 
 1. **Forecast dataset** Dimensions init_time, lead_time, latitude/y, longitude/x [, ensemble_member].

@@ -38,7 +38,7 @@ class UarizonaSwannAnalysisDataset(
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
-                window=2,
+                append_dim_window=2,
             ),
             validation.CheckRecentNans(
                 # UArizona restates a year of files as they go early -> provisional ->

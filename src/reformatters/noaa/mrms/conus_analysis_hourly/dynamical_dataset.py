@@ -62,7 +62,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # over the whole domain), constant across timestamps.
                 max_nan_fraction=(1.0, 0.25),
                 spatial_sampling="quarter",
-                window=5,
+                append_dim_window=5,
                 include_vars=[
                     "precipitation_pass_1_surface",
                     "precipitation_pass_2_surface",
@@ -75,7 +75,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # show.
                 max_nan_fraction=(0.63, 0.25),
                 spatial_sampling="quarter",
-                window=5,
+                append_dim_window=5,
                 include_vars=["precipitation_surface"],
             ),
             validation.CheckRecentNans(
@@ -83,14 +83,14 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # the domain, 52.9% in the worst quarter.
                 max_nan_fraction=0.63,
                 spatial_sampling="quarter",
-                window=5,
+                append_dim_window=5,
                 include_vars=["precipitation_radar_only_surface"],
             ),
             validation.CheckRecentNans(
                 # PrecipFlag is populated everywhere the grid is, measuring 0% NaN
                 # across the domain at every timestamp.
                 spatial_sampling="quarter",
-                window=5,
+                append_dim_window=5,
                 include_vars=["categorical_precipitation_type_surface"],
             ),
             validation.CheckRecentNans(
@@ -99,7 +99,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # gauge-corrected fields (excused by the leading 1.0).
                 max_nan_fraction=(1.0, 0.86),
                 spatial_sampling="quarter",
-                window=5,
+                append_dim_window=5,
                 include_vars=["flash_qpe_ffg_max_surface"],
             ),
         )

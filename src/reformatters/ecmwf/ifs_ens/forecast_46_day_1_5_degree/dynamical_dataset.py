@@ -69,9 +69,9 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
             # runs at 09 UTC, so an initialization lands about 57 hours out. Four days
             # leaves room for one missed cycle, which the next day's update fills.
             validation.CheckCurrentData(max_delay=timedelta(days=4)),
-            validation.CheckRecentNans(window=3, exclude_vars=masked_vars),
+            validation.CheckRecentNans(append_dim_window=3, exclude_vars=masked_vars),
             validation.CheckRecentNans(
-                window=3,
+                append_dim_window=3,
                 include_vars=masked_vars,
                 max_nan_fraction=0.9999,
                 spatial_sampling="quarter",

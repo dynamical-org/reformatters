@@ -68,6 +68,6 @@ class NasaImergAnalysisMaterializedDataset(
                 # 0.05 leaves margin for seasonal polar variation the sample can't see.
                 max_nan_fraction=0.05,
                 spatial_sampling="quarter",
-                window=3,
+                append_dim_window=3,
             ),
         )

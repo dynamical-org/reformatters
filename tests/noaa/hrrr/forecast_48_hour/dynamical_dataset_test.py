@@ -190,7 +190,7 @@ def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:
     )
     # A day of 6-hourly cycles, so a truncated or missing forecast is caught even
     # after newer cycles land.
-    assert validators[1].window == 4
+    assert validators[1].append_dim_window == 4
     assert isinstance(validators[2], validation.CheckRecentNans)
     assert validators[2].include_vars == validators[1].exclude_vars
     assert validators[2].max_nan_fraction == 0.9999

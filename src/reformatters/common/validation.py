@@ -52,6 +52,9 @@ _DEFAULT_MAX_WORKERS: dict[SpatialSamplingStrategy, int] = {
     "all": 2,
 }
 _NUM_RANDOM_POINTS = 2
+# The current trailing shard plus the previous one, so a check still covers an update
+# that began in the previous shard and appended the first position of a new one.
+_DEFAULT_APPEND_DIM_SHARDS = 2
 
 
 class ValidationResult(pydantic.BaseModel):
@@ -330,12 +333,13 @@ class CheckCurrentData(Validator):
 class CheckRecentNans(VariableSelection, Validator):
     """Check the NaN fraction of recent append-dim positions, each independently.
 
-    By default, checks every position in the newest `shards` output shards. Two shards
-    cover the boundary case where an update begins in the previous trailing shard and
-    appends the first position of a new shard. Increase `shards` for an update that
-    deliberately re-sweeps further back. `window` overrides this with an explicit count
-    of newest positions. CheckExpectedShards proves a shard exists; only this check sees
-    the NaNs a transiently failed source file left inside one.
+    Set at most one of `append_dim_shards` (check every position in that many newest
+    output shards) and `append_dim_window` (check that many newest positions). Neither
+    means two shards, which covers the boundary case where an update begins in the
+    previous trailing shard and appends the first position of a new one; raise
+    `append_dim_shards` for an update that deliberately re-sweeps further back.
+    CheckExpectedShards proves a shard exists; only this check sees the NaNs a
+    transiently failed source file left inside one.
 
     `max_nan_fraction` is one threshold for every checked position, or a tuple indexed
     newest-first with the last value extending through the rest of the window — the
@@ -360,8 +364,8 @@ class CheckRecentNans(VariableSelection, Validator):
     """
 
     max_nan_fraction: float | tuple[float, ...] = 0.0
-    window: int | None = None
-    shards: int = 2
+    append_dim_window: int | None = None
+    append_dim_shards: int | None = None
     sampled_points: int = 2
     spatial_sampling: SpatialSamplingStrategy = "random_points"
     max_workers: int | None = None
@@ -369,12 +373,21 @@ class CheckRecentNans(VariableSelection, Validator):
     @pydantic.model_validator(mode="after")
     def _validate_thresholds(self) -> CheckRecentNans:
         tiers = self._tiers
-        assert self.window is None or self.window >= 1, "window must be >= 1"
-        assert self.shards >= 1, "shards must be >= 1"
+        assert self.append_dim_window is None or self.append_dim_shards is None, (
+            "append_dim_window and append_dim_shards both bound how many append-dim "
+            "positions are checked; set at most one"
+        )
+        assert self.append_dim_window is None or self.append_dim_window >= 1, (
+            "append_dim_window must be >= 1"
+        )
+        assert self.append_dim_shards is None or self.append_dim_shards >= 1, (
+            "append_dim_shards must be >= 1"
+        )
         assert self.sampled_points >= 1, "sampled_points must be >= 1"
         assert len(tiers) >= 1, "max_nan_fraction needs at least one threshold"
-        assert self.window is None or len(tiers) <= self.window, (
-            f"max_nan_fraction has {len(tiers)} tiers which must fit in window={self.window}"
+        assert self.append_dim_window is None or len(tiers) <= self.append_dim_window, (
+            f"max_nan_fraction has {len(tiers)} tiers which must fit in "
+            f"append_dim_window={self.append_dim_window}"
         )
         assert all(0.0 <= t <= 1.0 for t in tiers), (
             f"max_nan_fraction values must be within [0, 1], got {tiers}"
@@ -392,10 +405,23 @@ class CheckRecentNans(VariableSelection, Validator):
         return (self.max_nan_fraction,)
 
     def _resolve_window(self, ds: xr.Dataset, append_dim: str) -> int:
-        if self.window is not None:
-            return self.window
-        shard_slices = iterating.dimension_slices(ds, append_dim)
-        return ds.sizes[append_dim] - shard_slices[-self.shards :][0].start
+        if self.append_dim_window is not None:
+            return self.append_dim_window
+        shards = self.append_dim_shards or _DEFAULT_APPEND_DIM_SHARDS
+        shard_slices = iterating.dimension_slices(ds, append_dim, "shards")
+        return ds.sizes[append_dim] - shard_slices[-shards:][0].start
+
+    def _reads(
+        self, positions: int, compared: Sequence[int]
+    ) -> list[tuple[slice | list[int], int]]:
+        """The append-dim selections to read, each with the recency of its oldest
+        position (results come back keyed by recency within the selection)."""
+        if self.spatial_sampling == "random_points":
+            # Points are drawn once and every position read in a single selection, so
+            # each zarr chunk is fetched once no matter how deep the window.
+            return [(slice(None), 0)]
+        # Spatial slabs are too big to hold for a whole window, so read per position.
+        return [([positions - 1 - recency], recency) for recency in compared]
 
     def check(self, context: ValidationContext) -> ValidationResult:
         ds = context.ds
@@ -408,6 +434,17 @@ class CheckRecentNans(VariableSelection, Validator):
                 passed=False,
                 message="None of the selected variables are in the store",
             )
+        non_float = sorted(
+            var_path
+            for var_path in var_paths
+            if not np.issubdtype(ds[var_path].dtype, np.floating)
+        )
+        if non_float:
+            raise ValueError(
+                f"{type(self).__name__} selects {non_float}, which cannot hold NaN. "
+                "Exclude them; a NaN fraction is not defined for an integer variable."
+            )
+
         template_vars = {var.path: var for var in context.data_vars}
         skip_lead_time_0_vars = {
             var_path
@@ -426,11 +463,9 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
-        positions = min(
-            self._resolve_window(cast("xr.Dataset", ds[var_paths]), append_dim), size
-        )
-        window_ds = ds.isel({append_dim: slice(size - positions, None)})
-        max_workers = self.max_workers or _DEFAULT_MAX_WORKERS[self.spatial_sampling]
+        selected_ds = cast("xr.Dataset", ds[var_paths])
+        positions = min(self._resolve_window(selected_ds, append_dim), size)
+        window_ds = selected_ds.isel({append_dim: slice(size - positions, None)})
         # A tier of 1.0 excuses a position entirely, so never read for it.
         compared = [
             recency
@@ -438,41 +473,45 @@ class CheckRecentNans(VariableSelection, Validator):
             if tiers[min(recency, len(tiers) - 1)] < 1.0
         ]
 
-        if self.spatial_sampling == "random_points":
-            # One pass over the whole window: points are drawn once and every position
-            # read in a single selection, so each zarr chunk is fetched once no matter
-            # how deep the window.
-            fractions, unmeasured = _nan_fractions_by_position(
+        max_workers = self.max_workers or _DEFAULT_MAX_WORKERS[self.spatial_sampling]
+        fractions: dict[str, dict[int, float]] = {}
+        unmeasured: set[str] = set()
+        for indexer, oldest_recency in self._reads(positions, compared):
+            read_fractions, read_unmeasured = _nan_fractions_by_position(
                 _apply_spatial_sampling(
-                    window_ds, "random_points", num_points=self.sampled_points
+                    window_ds.isel({append_dim: indexer}),
+                    self.spatial_sampling,
+                    num_points=self.sampled_points,
                 ),
                 append_dim=append_dim,
                 var_paths=var_paths,
                 skip_lead_time_0_vars=skip_lead_time_0_vars,
                 max_workers=max_workers,
             )
-        else:
-            # Spatial slabs are too big to hold for a whole window, so read per position.
-            fractions = {var_path: {} for var_path in var_paths}
-            unmeasured = set()
-            for recency in compared:
-                position_fractions, position_unmeasured = _nan_fractions_by_position(
-                    _apply_spatial_sampling(
-                        window_ds.isel({append_dim: [positions - 1 - recency]}),
-                        self.spatial_sampling,
-                    ),
-                    append_dim=append_dim,
-                    var_paths=var_paths,
-                    skip_lead_time_0_vars=skip_lead_time_0_vars,
-                    max_workers=max_workers,
+            for var_path, by_recency in read_fractions.items():
+                fractions.setdefault(var_path, {}).update(
+                    {
+                        oldest_recency + recency: fraction
+                        for recency, fraction in by_recency.items()
+                    }
                 )
-                for var_path, by_recency in position_fractions.items():
-                    fractions[var_path][recency] = by_recency[0]
-                unmeasured |= position_unmeasured
+            unmeasured |= read_unmeasured
 
+        compared_set = set(compared)
+        worst_by_var = {
+            var_path: max(
+                (
+                    fraction
+                    for recency, fraction in by_recency.items()
+                    if recency in compared_set
+                ),
+                default=float("nan"),
+            )
+            for var_path, by_recency in fractions.items()
+        }
         worst = ", ".join(
-            f"{var_path}={max((by_recency[recency] for recency in compared if recency in by_recency), default=float('nan')):.6f}"
-            for var_path, by_recency in sorted(fractions.items())
+            f"{var_path}={fraction:.6f}"
+            for var_path, fraction in sorted(worst_by_var.items())
         )
         # Combine: many info records in the same second are dropped before reaching Sentry.
         log.info(
