@@ -77,5 +77,6 @@ class NoaaHrrrAnalysisDataset(
                 include_vars=source_fill_value_vars,
                 max_nan_fraction=0.999,
                 spatial_sampling="all",
+                append_dim_window=4,
             ),
         )

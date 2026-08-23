@@ -43,8 +43,18 @@ def _context(
     ds: xr.Dataset,
     append_dim: str,
     store: zarr.storage.StoreLike | None = None,
+    append_dim_shard_size: int | None = None,
     **kwargs: object,
 ) -> validation.ValidationContext:
+    for var in ds.data_vars.values():
+        if append_dim not in var.dims:
+            continue
+        if append_dim_shard_size is not None or var.encoding.get("shards") is None:
+            shard_size = append_dim_shard_size or 1
+            var.encoding["shards"] = tuple(
+                shard_size if dim == append_dim else size
+                for dim, size in var.sizes.items()
+            )
     return validation.ValidationContext(
         store=store if store is not None else zarr.storage.MemoryStore(),
         ds=ds,
@@ -405,7 +415,7 @@ def test_check_recent_nans_leading_tier_excuses_newest(
 
     # A leading 1.0 tier excuses the still-filling newest init_time and passes
     assert (
-        validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0), window=2)
+        validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0), append_dim_window=2)
         .check(context)
         .passed
     )
@@ -423,12 +433,12 @@ def test_check_recent_nans_intermediate_tier(forecast_dataset: xr.Dataset) -> No
 
     context = _context(forecast_dataset, "init_time")
     assert (
-        validation.CheckRecentNans(max_nan_fraction=(0.6, 0.0), window=2)
+        validation.CheckRecentNans(max_nan_fraction=(0.6, 0.0), append_dim_window=2)
         .check(context)
         .passed
     )
     assert (
-        not validation.CheckRecentNans(max_nan_fraction=(0.3, 0.0), window=2)
+        not validation.CheckRecentNans(max_nan_fraction=(0.3, 0.0), append_dim_window=2)
         .check(context)
         .passed
     )
@@ -443,11 +453,11 @@ def test_check_recent_nans_window_catches_older_init(
     forecast_dataset["temperature"].loc[{"init_time": bad_init}] = np.nan
 
     context = _context(forecast_dataset, "init_time")
-    # The default window of 2 only checks the newest two init_times, so it misses it.
+    # The test store has one position per shard, so the default two shards miss it.
     assert validation.CheckRecentNans().check(context).passed
 
     # A window reaching back to it catches the gap and names the offending init_time.
-    result = validation.CheckRecentNans(window=3).check(context)
+    result = validation.CheckRecentNans(append_dim_shards=3).check(context)
     assert not result.passed
     assert "Excessive NaN fraction" in result.message
     assert pd.Timestamp(bad_init.values).isoformat() in result.message
@@ -457,11 +467,11 @@ def test_check_recent_nans_window_all_clean_passes(
     forecast_dataset: xr.Dataset,
 ) -> None:
     """A clean window passes and reports how many positions were checked."""
-    result = validation.CheckRecentNans(window=3).check(
+    result = validation.CheckRecentNans(append_dim_shards=3).check(
         _context(forecast_dataset, "init_time")
     )
     assert result.passed
-    assert "All 3 checked recent init_time positions" in result.message
+    assert "All 3 checked init_time positions" in result.message
 
 
 def test_check_recent_nans_empty_selection_fails(
@@ -517,9 +527,9 @@ def test_check_recent_nans_fewer_positions_than_tiers_fails(
             "longitude": np.linspace(-180, 180, 4),
         },
     )
-    result = validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0), window=2).check(
-        _context(ds, "time")
-    )
+    result = validation.CheckRecentNans(
+        max_nan_fraction=(1.0, 0.0), append_dim_window=2
+    ).check(_context(ds, "time"))
     assert not result.passed
     assert "need at least 2" in result.message
 
@@ -553,41 +563,198 @@ def test_check_recent_nans_checks_each_position_independently(
     """
     analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
 
-    result = validation.CheckRecentNans(window=2, max_nan_fraction=0.4).check(
-        _context(analysis_dataset, "time")
-    )
+    result = validation.CheckRecentNans(
+        append_dim_window=2, max_nan_fraction=0.4
+    ).check(_context(analysis_dataset, "time"))
 
     assert not result.passed
-    assert "1 of 2 recent positions" in result.message
+    assert "2024-01-02T23:00:00 exceeds 0.4" in result.message
 
 
-def test_check_recent_nans_sampled_positions(analysis_dataset: xr.Dataset) -> None:
-    """sampled_positions spot-checks randomly chosen positions within the window."""
+def test_check_recent_nans_deep_window_checks_every_position(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """A configured shard depth catches a gap anywhere in its range."""
     context = _context(analysis_dataset, "time")
-    assert (
-        validation.CheckRecentNans(window=48, sampled_positions=1).check(context).passed
-    )
 
-    # Ruin a deep position the default newest-positions check would never see.
+    # Ruin a deep position the default two-shard range would never see.
     analysis_dataset["temperature"].loc[{"time": "2024-01-01 12:00"}] = np.nan
     assert validation.CheckRecentNans().check(context).passed
 
-    # Sampling every position in the window is deterministic and catches it.
-    result = validation.CheckRecentNans(window=48, sampled_positions=48).check(context)
+    result = validation.CheckRecentNans(append_dim_shards=48).check(context)
     assert not result.passed
     assert "2024-01-01T12:00:00" in result.message
 
 
-def test_check_recent_nans_sampled_positions_config_validation() -> None:
-    with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(window=10, sampled_positions=11)
-    with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(window=10, sampled_positions=0)
-    # Sampled positions are randomly chosen, so per-recency tiers do not apply.
-    with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(
-            window=10, sampled_positions=1, max_nan_fraction=(1.0, 0.0)
+def test_check_recent_nans_defaults_to_two_trailing_shards(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """Two shards cover the previous shard when an update crosses a boundary."""
+    ds = analysis_dataset.isel(time=slice(0, 7))
+    ds["temperature"].loc[{"time": "2024-01-01 03:00"}] = np.nan
+    context = _context(ds, "time", append_dim_shard_size=3)
+
+    assert validation.CheckRecentNans(append_dim_shards=1).check(context).passed
+    result = validation.CheckRecentNans().check(context)
+    assert not result.passed
+    assert "2024-01-01T03:00:00" in result.message
+
+
+def test_check_recent_nans_explicit_window_bounds_the_read(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """Whole-grid strategies can bound the read to an explicit position count."""
+    context = _context(analysis_dataset, "time", append_dim_shard_size=6)
+
+    result = validation.CheckRecentNans(
+        append_dim_window=2, spatial_sampling="all"
+    ).check(context)
+    assert result.passed
+    assert "2 most recent" in result.message
+
+
+def test_check_recent_nans_partial_trailing_shard(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """The operational norm: an update has appended part of a new shard.
+
+    The window must reach back over the whole previous shard, not just the positions
+    written into the partial one.
+    """
+    ds = analysis_dataset.isel(time=slice(0, 8))  # shards of 3 -> 3, 3, 2
+    ds["temperature"].loc[{"time": "2024-01-01 03:00"}] = np.nan  # oldest of shard 2
+    context = _context(ds, "time", append_dim_shard_size=3)
+
+    result = validation.CheckRecentNans().check(context)
+    assert not result.passed
+    assert "2024-01-01T03:00:00" in result.message
+    # Shards 2 and 3 span positions 3..7, so five positions are checked.
+    assert validation.CheckRecentNans()._resolve_window(ds, "time") == 5
+
+
+def test_check_recent_nans_shards_deeper_than_the_store(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """A young store holds fewer shards than asked for; check all of it, don't fail."""
+    ds = analysis_dataset.isel(time=slice(0, 4))
+    context = _context(ds, "time", append_dim_shard_size=3)
+
+    assert (
+        validation.CheckRecentNans(append_dim_shards=10)._resolve_window(ds, "time")
+        == 4
+    )
+    assert validation.CheckRecentNans(append_dim_shards=10).check(context).passed
+
+
+def test_check_recent_nans_window_deeper_than_the_store(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """An explicit window past the store's extent is clamped to what exists."""
+    ds = analysis_dataset.isel(time=slice(0, 3))
+    result = validation.CheckRecentNans(append_dim_window=100).check(
+        _context(ds, "time")
+    )
+    assert result.passed
+    assert "3 most recent" in result.message
+
+
+def test_check_recent_nans_window_from_selected_vars_shards(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """Shard size is read from the selected variables, so a store whose variables
+    shard differently along the append dim still resolves a window."""
+    ds = analysis_dataset.isel(time=slice(0, 6))
+    context = _context(ds, "time", append_dim_shard_size=3)
+    # humidity shards differently; a check over both variables could not resolve.
+    ds["humidity"].encoding["shards"] = tuple(
+        2 if dim == "time" else size for dim, size in ds["humidity"].sizes.items()
+    )
+
+    assert (
+        validation.CheckRecentNans(include_vars=["temperature"]).check(context).passed
+    )
+    with pytest.raises(AssertionError, match="Inconsistent shards sizes"):
+        validation.CheckRecentNans().check(context)
+
+
+def test_check_recent_nans_rejects_non_float_vars(
+    analysis_dataset: xr.Dataset,
+) -> None:
+    """An integer variable holds no NaN, so a NaN check on one would always pass."""
+    ds = analysis_dataset.copy()
+    ds["flags"] = ds["temperature"].astype("int16")
+    with pytest.raises(ValueError, match="cannot hold NaN"):
+        validation.CheckRecentNans(include_vars=["flags"]).check(_context(ds, "time"))
+    # Excluding it leaves the float variables checkable.
+    assert (
+        validation.CheckRecentNans(exclude_vars=["flags"])
+        .check(_context(ds, "time"))
+        .passed
+    )
+
+
+def test_check_recent_nans_logged_worst_excludes_excused_positions(
+    caplog: pytest.LogCaptureFixture, analysis_dataset: xr.Dataset
+) -> None:
+    """Point sampling reads an excused position anyway (one pass), so the logged
+    worst fraction must still ignore it, or a still-filling newest position looks
+    like a problem in the logs."""
+    analysis_dataset["temperature"].loc[{"time": "2024-01-02 23:00"}] = np.nan
+    context = _context(analysis_dataset, "time", append_dim_shard_size=6)
+
+    with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
+        assert (
+            validation.CheckRecentNans(max_nan_fraction=(1.0, 0.0))
+            .check(context)
+            .passed
         )
+
+    (record,) = [r for r in caplog.records if "NaN fractions" in r.message]
+    assert "temperature=0.000000" in record.message
+
+
+def test_check_recent_nans_excludes_structurally_dead_points(
+    rng: np.random.Generator,
+) -> None:
+    """A point that is NaN at every position is a structural hole, not a gap.
+
+    Without excluding it, an ocean/out-of-domain cell would fail every run; with only
+    dead points sampled there is nothing to measure, which must fail rather than pass.
+    """
+    times = pd.date_range("2024-01-01", periods=6, freq="1h")
+    ds = xr.Dataset(
+        {
+            "temperature": (
+                ["time", "latitude", "longitude"],
+                rng.standard_normal((len(times), 2, 2)),
+            )
+        },
+        coords={
+            "time": times,
+            "latitude": [10.0, 20.0],
+            "longitude": [30.0, 40.0],
+        },
+    )
+    # One column is NaN at every position (structural), the rest is clean.
+    ds["temperature"].loc[{"latitude": 10.0, "longitude": 30.0}] = np.nan
+    context = _context(ds, "time")
+
+    # 4 points over a 2x2 grid pairs every index, so the dead cell is always sampled.
+    assert validation.CheckRecentNans(sampled_points=4).check(context).passed
+
+    # With every sampled point dead there is nothing measurable: fail, don't pass.
+    all_dead = ds.copy(deep=True)
+    all_dead["temperature"].values[:] = np.nan
+    result = validation.CheckRecentNans(sampled_points=4).check(
+        _context(all_dead, "time")
+    )
+    assert not result.passed
+    assert "No values selected" in result.message
+
+
+def test_check_recent_nans_sampled_points_config_validation() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(sampled_points=0)
 
 
 def test_check_recent_nans_config_validation() -> None:
@@ -600,15 +767,25 @@ def test_check_recent_nans_config_validation() -> None:
         validation.CheckRecentNans(spatial_sampling="invalid")  # ty: ignore[invalid-argument-type]
     # More tiers than window
     with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(max_nan_fraction=(1.0, 0.5, 0.0), window=2)
+        validation.CheckRecentNans(
+            max_nan_fraction=(1.0, 0.5, 0.0), append_dim_window=2
+        )
     # Threshold out of range
     with pytest.raises(pydantic.ValidationError):
         validation.CheckRecentNans(max_nan_fraction=1.5)
     # All tiers 1.0 would check nothing
     with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(max_nan_fraction=(1.0, 1.0), window=2)
+        validation.CheckRecentNans(max_nan_fraction=(1.0, 1.0), append_dim_window=2)
     with pytest.raises(pydantic.ValidationError):
-        validation.CheckRecentNans(window=0)
+        validation.CheckRecentNans(append_dim_window=0)
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(append_dim_shards=0)
+    # Both bounds set at once is ambiguous
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(append_dim_window=2, append_dim_shards=2)
+    # No thresholds to check against
+    with pytest.raises(pydantic.ValidationError):
+        validation.CheckRecentNans(max_nan_fraction=())
 
 
 def test_check_nan_fractions_logs_one_record_for_all_variables(
@@ -621,13 +798,13 @@ def test_check_nan_fractions_logs_one_record_for_all_variables(
     """
     with caplog.at_level(logging.INFO, logger="reformatters.common.validation"):
         assert (
-            validation.CheckRecentNans(window=1)
+            validation.CheckRecentNans(append_dim_window=1)
             .check(_context(analysis_dataset, "time"))
             .passed
         )
 
     fraction_records = [
-        r.getMessage() for r in caplog.records if "NaN fractions:" in r.getMessage()
+        r.getMessage() for r in caplog.records if "NaN fractions" in r.getMessage()
     ]
     assert len(fraction_records) == 1
     assert "temperature=0.000000" in fraction_records[0]
@@ -875,7 +1052,7 @@ def test_validate_dataset_raises_on_failed_validator(
 def test_validate_dataset_requires_region_job_for_virtual_checks(
     rng: np.random.Generator,
 ) -> None:
-    """A manifest-probing check without a region_job is caught before any check runs."""
+    """A manifest-probing check without a region job is caught before any check runs."""
     store = _write_test_store(rng)
     with pytest.raises(AssertionError, match="require a region_job"):
         validation.validate_dataset(
@@ -934,10 +1111,6 @@ def test_validator_name() -> None:
     assert (
         validation.CheckVirtualManifestCompleteness().name
         == "CheckVirtualManifestCompleteness"
-    )
-    assert (
-        validation.CheckRecentNans(window=365, sampled_positions=1).name
-        == "CheckRecentNans(sampled_positions=1, window=365)"
     )
 
 

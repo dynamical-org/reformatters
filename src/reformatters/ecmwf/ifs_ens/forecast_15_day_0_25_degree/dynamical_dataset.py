@@ -63,5 +63,5 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         return (
             # The update ingests each init at init+8h05m; validation fires at init+8h40m.
             validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=40)),
-            validation.CheckRecentNans(window=3),
+            validation.CheckRecentNans(append_dim_window=3),
         )

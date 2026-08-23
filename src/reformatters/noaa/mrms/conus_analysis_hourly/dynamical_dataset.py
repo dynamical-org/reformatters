@@ -61,8 +61,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # quarter-sampled NaN from the second-newest onward is 18.4% (6.2%
                 # over the whole domain), constant across timestamps.
                 max_nan_fraction=(1.0, 0.25),
-                window=3,
                 spatial_sampling="quarter",
+                append_dim_window=5,
                 include_vars=[
                     "precipitation_pass_1_surface",
                     "precipitation_pass_2_surface",
@@ -74,8 +74,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # worst quarter), not the 18.4% its gauge-corrected older timestamps
                 # show.
                 max_nan_fraction=(0.63, 0.25),
-                window=3,
                 spatial_sampling="quarter",
+                append_dim_window=5,
                 include_vars=["precipitation_surface"],
             ),
             validation.CheckRecentNans(
@@ -83,12 +83,14 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # the domain, 52.9% in the worst quarter.
                 max_nan_fraction=0.63,
                 spatial_sampling="quarter",
+                append_dim_window=5,
                 include_vars=["precipitation_radar_only_surface"],
             ),
             validation.CheckRecentNans(
                 # PrecipFlag is populated everywhere the grid is, measuring 0% NaN
                 # across the domain at every timestamp.
                 spatial_sampling="quarter",
+                append_dim_window=5,
                 include_vars=["categorical_precipitation_type_surface"],
             ),
             validation.CheckRecentNans(
@@ -96,8 +98,8 @@ class NoaaMrmsConusAnalysisHourlyDataset(
                 # in the worst quarter. Its newest timestamp lands late like the
                 # gauge-corrected fields (excused by the leading 1.0).
                 max_nan_fraction=(1.0, 0.86),
-                window=3,
                 spatial_sampling="quarter",
+                append_dim_window=5,
                 include_vars=["flash_qpe_ffg_max_surface"],
             ),
         )

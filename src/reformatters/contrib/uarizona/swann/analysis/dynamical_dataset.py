@@ -38,15 +38,15 @@ class UarizonaSwannAnalysisDataset(
                 # Check the full grid for a stable NaN fraction.
                 max_nan_fraction=MAX_NAN_FRACTION,
                 spatial_sampling="all",
+                append_dim_window=2,
             ),
             validation.CheckRecentNans(
-                # The operational update rewrites a year of data, so spot-check one
-                # random position in that window each run to verify older timesteps
-                # remain healthy.
-                max_nan_fraction=MAX_NAN_FRACTION,
-                spatial_sampling="all",
-                window=365,
-                sampled_positions=1,
+                # UArizona restates a year of files as they go early -> provisional ->
+                # stable. The two-shard default covers that re-sweep.
+                # Outside CONUS every position is NaN, so sample extra to ensure some
+                # points land in CONUS.
+                max_nan_fraction=0.0,
+                sampled_points=8,
             ),
         )
 
