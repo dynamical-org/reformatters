@@ -53,9 +53,6 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset imp
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
-from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
-    GefsForecast10DaySpatialDataset,
-)
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -189,9 +186,6 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     GefsForecast35DayDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
-    ),
-    GefsForecast10DaySpatialDataset(
-        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),

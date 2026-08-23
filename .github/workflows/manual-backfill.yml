@@ -19,7 +19,6 @@ name: 'Manual: Backfill'
         - nasa-imerg-analysis-late
         - nasa-smap-level3-36km-v9
         - noaa-gefs-analysis
-        - noaa-gefs-forecast-10-day-spatial-dev
         - noaa-gefs-forecast-35-day
         - noaa-gfs-analysis
         - noaa-gfs-forecast
