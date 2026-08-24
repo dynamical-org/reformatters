@@ -42,8 +42,8 @@
     "axis": "X",
     "units": "degree_east",
     "statistics_approximate": {
-      "min": 0.0,
-      "max": 359.75
+      "min": -180.0,
+      "max": 179.75
     },
     "_FillValue": "AAAAAAAA+H8="
   },

@@ -10,7 +10,6 @@ from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
-    align_longitude_convention,
     end_date_option,
     get_two_random_points,
     init_time_option,
@@ -175,9 +174,7 @@ def _load_timeseries_for_var(
     ):
         assert "latitude" in reference_subset.dims
         assert "longitude" in reference_subset.dims
-        # ctx's point longitudes come from the validation dataset, so the reference must
-        # be in the same convention or a nearest-selection clamps to its longitude edge.
-        ref = align_longitude_convention(validation_subset, reference_subset)[var]
+        ref = reference_subset[var]
         if level_sel:
             ref = ref.sel(level_sel, method="nearest")
         ref_p1 = load_retried(

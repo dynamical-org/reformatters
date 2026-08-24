@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import computed_field
-from zarr.codecs import BloscCodec, ScaleOffset
+from zarr.codecs import BytesCodec, ScaleOffset
 
 from reformatters.common.config_models import (
     ROOT,
@@ -32,22 +32,10 @@ from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 _GRID_NLAT = 721
 _GRID_NLON = 1440
 
-# Descending, matching our other pressure_level groups. The source stores them
-# ascending; each level is its own chunk, so the order is a per-reference index
-# mapping (see region_job).
 PRESSURE_LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 
-# The source reorganized on this date: from one store per calendar year to one store
-# per init time, and from all 13 pressure levels packed into a single chunk to one
-# chunk per level. A virtual reference addresses a whole source chunk, so only the
-# per-level era can back the pressure_level group.
 PER_INIT_STORE_DATE = pd.Timestamp("2025-01-01T00:00")
 
-# The blosc codec the source encoded every chunk with. Referenced bytes are decoded,
-# never re-encoded, so this must match the source exactly.
-_SOURCE_BLOSC = BloscCodec(
-    typesize=4, cname="lz4", clevel=5, shuffle="shuffle", blocksize=0
-).to_dict()
 
 # ScaleOffset decodes on read as value / scale + offset. Temperatures are served in
 # degree_Celsius and geopotential is divided by standard gravity to serve geopotential
@@ -56,11 +44,6 @@ _SOURCE_BLOSC = BloscCodec(
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
 _GEOPOTENTIAL_TO_HEIGHT = ScaleOffset(offset=0.0, scale=9.80665).to_dict()
 _METRES_TO_KG_M2 = ScaleOffset(offset=0.0, scale=0.001).to_dict()
-
-_MEAN_WIND_SPEED_COMMENT = (
-    "The ensemble mean of the members' wind speeds, not the speed of the mean wind "
-    "vector, so it exceeds the speed computed from the archived u and v components."
-)
 
 
 class GoogleWeathernext2InternalAttrs(BaseInternalAttrs):
@@ -80,19 +63,20 @@ class GoogleWeathernext2DataVar(DataVar[GoogleWeathernext2InternalAttrs]):
 class GoogleWeathernext2ForecastVirtualTemplateConfig(
     TemplateConfig[GoogleWeathernext2DataVar]
 ):
-    """Virtual, spatially-chunked (map-optimized) Google WeatherNext 2 forecast template.
-
-    Chunks are references to chunk objects in Google's zarr v2 archive of the
-    ensemble-mean product, blosc-decoded at read time. Unlike our other global 0.25
-    degree datasets this one serves ascending latitude and 0-360 longitude: both live
-    inside a source chunk, and a virtual dataset hands the decoded bytes to the reader
-    untransformed. See docs/virtual_datasets.md.
-    """
+    """Virtual Google WeatherNext 2 ensemble forecast served through the authenticated
+    chunk proxy."""
 
     dims: Dims = {
-        ROOT: ("init_time", "lead_time", "latitude", "longitude"),
+        ROOT: (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+        ),
         "pressure_level": (
             "init_time",
+            "ensemble_member",
             "lead_time",
             "latitude",
             "longitude",
@@ -110,9 +94,23 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             dataset_id="google-weathernext2-forecast-virtual",
             dataset_version="0.1.0",
             name="Google WeatherNext 2 forecast, virtual",
-            description="Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
-            attribution="Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
-            license="LicenseRef-Google-WeatherNext",
+            description="Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
+            attribution=(
+                "Google requires this attribution: © 2025 DeepMind Technologies "
+                "Limited's machine learning models "
+                "used to create the experimental data made available at "
+                "https://developers.google.com/earth-engine/datasets/catalog/"
+                "projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under "
+                "CC BY 4.0 licence terms. This data is intended for experimental "
+                "modelling only and is not intended, validated, or approved for real "
+                "world use. Use of the third-party materials referred to in the "
+                "Acknowledgements section may be governed by separate terms and "
+                "conditions or license provisions. Your use of the third-party "
+                "materials is subject to any such terms and you should check that you "
+                "can comply with any applicable restrictions or terms and conditions "
+                "before use."
+            ),
+            license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
@@ -128,8 +126,9 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             ),
             # The source publishes no lead time 0.
             "lead_time": pd.timedelta_range("6h", "360h", freq="6h"),
-            "latitude": np.arange(-90, 90.25, 0.25),
-            "longitude": np.arange(0, 360, 0.25),
+            "ensemble_member": np.arange(64),
+            "latitude": np.arange(90, -90.25, -0.25),
+            "longitude": np.arange(-180, 180, 0.25),
             "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.int64),
         }
 
@@ -173,6 +172,24 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=dim_coords[self.append_dim].min().isoformat(), max="Present"
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ensemble_member",
+                encoding=Encoding(
+                    dtype="int16",
+                    fill_value=-1,
+                    chunks=len(dim_coords["ensemble_member"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Ensemble member",
+                    standard_name="realization",
+                    units="1",
+                    statistics_approximate=StatisticsApproximate(
+                        min=int(dim_coords["ensemble_member"].min()),
+                        max=int(dim_coords["ensemble_member"].max()),
                     ),
                 ),
             ),
@@ -311,18 +328,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
-                    crs_wkt='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-                    semi_major_axis=6371229.0,
-                    semi_minor_axis=6371229.0,
-                    inverse_flattening=0.0,
-                    reference_ellipsoid_name="unknown",
-                    longitude_of_prime_meridian=0.0,
-                    prime_meridian_name="Greenwich",
-                    geographic_crs_name="unknown",
-                    horizontal_datum_name="unknown",
                     grid_mapping_name="latitude_longitude",
-                    spatial_ref='GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]',
-                    comment="This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
                 ),
             ),
         ]
@@ -334,20 +340,17 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
 
 
 def _virtual_encoding(group: Group, filters: Sequence[CodecConfig]) -> Encoding:
-    """One chunk per source chunk object: chunk 1 along init_time/lead_time/
-    pressure_level, full latitude/longitude, no shards. The referenced bytes are the
-    source's blosc buffer, and any array->array filter (K->C, geopotential->height,
-    m->kg m-2) chains on read."""
     if group is ROOT:
-        chunks: tuple[int, ...] = (1, 1, _GRID_NLAT, _GRID_NLON)
+        chunks: tuple[int, ...] = (1, 1, 1, _GRID_NLAT, _GRID_NLON)
     else:
-        chunks = (1, 1, _GRID_NLAT, _GRID_NLON, 1)
+        chunks = (1, 1, 1, _GRID_NLAT, _GRID_NLON, 1)
     return Encoding(
         dtype="float32",
         fill_value=np.nan,
         chunks=chunks,
         shards=None,
-        compressors=(_SOURCE_BLOSC,),
+        serializer=BytesCodec(endian="little").to_dict(),
+        compressors=(),
         filters=filters,
     )
 
@@ -434,7 +437,7 @@ def _pressure_var(
         standard_name=standard_name,
         step_type="instant",
         comment=None,
-        date_available=PER_INIT_STORE_DATE,
+        date_available=None,
         filters=filters,
     )
 
@@ -475,15 +478,6 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             standard_name="northward_wind",
         ),
         _root_var(
-            "wind_speed_10m",
-            source_name="10m_wind_speed",
-            short_name="10si",
-            long_name="10 metre wind speed",
-            units="m s-1",
-            standard_name="wind_speed",
-            comment=_MEAN_WIND_SPEED_COMMENT,
-        ),
-        _root_var(
             "wind_u_100m",
             source_name="100m_u_component_of_wind",
             short_name="100u",
@@ -500,21 +494,13 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             standard_name="northward_wind",
         ),
         _root_var(
-            "wind_speed_100m",
-            source_name="100m_wind_speed",
-            short_name="100si",
-            long_name="100 metre wind speed",
-            units="m s-1",
-            standard_name="wind_speed",
-            comment=_MEAN_WIND_SPEED_COMMENT,
-        ),
-        _root_var(
             "sea_surface_temperature",
             source_name="sea_surface_temperature",
             short_name="sst",
             long_name="Sea surface temperature",
             units="degree_Celsius",
             standard_name="sea_surface_temperature",
+            comment="NaN over land where sea surface temperature does not apply.",
             filters=[_KELVIN_TO_CELSIUS],
         ),
         _root_var(
@@ -525,7 +511,10 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             units="kg m-2",
             standard_name="precipitation_amount",
             step_type="accum",
-            comment="Accumulated over the 6 hours ending at the valid time.",
+            comment=(
+                "Accumulated over a six-hour forecast interval. Small "
+                "negative values are raw model artifacts; set values < 0 to zero."
+            ),
             filters=[_METRES_TO_KG_M2],
         ),
     ]

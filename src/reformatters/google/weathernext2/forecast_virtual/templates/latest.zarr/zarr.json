@@ -3,9 +3,9 @@
     "dataset_id": "google-weathernext2-forecast-virtual",
     "dataset_version": "0.1.0",
     "name": "Google WeatherNext 2 forecast, virtual",
-    "description": "Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
-    "attribution": "Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
-    "license": "LicenseRef-Google-WeatherNext",
+    "description": "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
+    "attribution": "Google requires this attribution: \u00a9 2025 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.",
+    "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
     "time_domain": "Forecasts initialized 2022-01-01 00:00:00 UTC to Present",
@@ -18,6 +18,57 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
+      "ensemble_member": {
+        "shape": [
+          64
+        ],
+        "data_type": "int16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              64
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": -1,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 0,
+              "checksum": false
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Ensemble member",
+          "standard_name": "realization",
+          "units": "1",
+          "statistics_approximate": {
+            "min": 0,
+            "max": 63
+          }
+        },
+        "dimension_names": [
+          "ensemble_member"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "expected_forecast_length": {
         "shape": [
           1
@@ -284,8 +335,8 @@
           "axis": "X",
           "units": "degree_east",
           "statistics_approximate": {
-            "min": 0.0,
-            "max": 359.75
+            "min": -180.0,
+            "max": 179.75
           },
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -301,9 +352,9 @@
           "dataset_id": "google-weathernext2-forecast-virtual",
           "dataset_version": "0.1.0",
           "name": "Google WeatherNext 2 forecast, virtual",
-          "description": "Ensemble mean weather forecasts from the Google DeepMind WeatherNext 2 model.",
-          "attribution": "Google DeepMind WeatherNext 2 forecast data processed by dynamical.org from Google Cloud Storage.",
-          "license": "LicenseRef-Google-WeatherNext",
+          "description": "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
+          "attribution": "Google requires this attribution: \u00a9 2025 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.",
+          "license": "CC-BY-4.0",
           "spatial_domain": "Global",
           "spatial_resolution": "0.25 degrees (~20km)",
           "time_domain": "Forecasts initialized 2022-01-01 00:00:00 UTC to Present",
@@ -318,6 +369,57 @@
           "metadata": {}
         },
         "node_type": "group"
+      },
+      "pressure_level/ensemble_member": {
+        "shape": [
+          64
+        ],
+        "data_type": "int16",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              64
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": -1,
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 0,
+              "checksum": false
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Ensemble member",
+          "standard_name": "realization",
+          "units": "1",
+          "statistics_approximate": {
+            "min": 0,
+            "max": 63
+          }
+        },
+        "dimension_names": [
+          "ensemble_member"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
       },
       "pressure_level/expected_forecast_length": {
         "shape": [
@@ -377,6 +479,7 @@
       "pressure_level/geopotential_height": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -387,6 +490,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -414,16 +518,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -437,6 +531,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -657,8 +752,8 @@
           "axis": "X",
           "units": "degree_east",
           "statistics_approximate": {
-            "min": 0.0,
-            "max": 359.75
+            "min": -180.0,
+            "max": 179.75
           },
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -757,18 +852,7 @@
           }
         ],
         "attributes": {
-          "comment": "This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
-          "crs_wkt": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]",
-          "semi_major_axis": 6371229.0,
-          "semi_minor_axis": 6371229.0,
-          "inverse_flattening": 0.0,
-          "reference_ellipsoid_name": "unknown",
-          "longitude_of_prime_meridian": 0.0,
-          "prime_meridian_name": "Greenwich",
-          "geographic_crs_name": "unknown",
-          "horizontal_datum_name": "unknown",
-          "grid_mapping_name": "latitude_longitude",
-          "spatial_ref": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]"
+          "grid_mapping_name": "latitude_longitude"
         },
         "zarr_format": 3,
         "node_type": "array",
@@ -777,6 +861,7 @@
       "pressure_level/specific_humidity": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -787,6 +872,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -808,16 +894,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -831,6 +907,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -843,6 +920,7 @@
       "pressure_level/temperature": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -853,6 +931,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -880,16 +959,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -903,6 +972,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -973,6 +1043,7 @@
       "pressure_level/vertical_velocity": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -983,6 +1054,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1003,16 +1075,6 @@
             "name": "bytes",
             "configuration": {
               "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
             }
           }
         ],
@@ -1027,6 +1089,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -1039,6 +1102,7 @@
       "pressure_level/wind_u": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -1049,6 +1113,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1069,16 +1134,6 @@
             "name": "bytes",
             "configuration": {
               "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
             }
           }
         ],
@@ -1093,6 +1148,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -1105,6 +1161,7 @@
       "pressure_level/wind_v": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440,
@@ -1115,6 +1172,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1136,16 +1194,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1159,6 +1207,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude",
@@ -1171,6 +1220,7 @@
       "pressure_reduced_to_mean_sea_level": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1180,6 +1230,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1200,16 +1251,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1223,6 +1264,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1234,6 +1276,7 @@
       "sea_surface_temperature": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1243,6 +1286,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1269,16 +1313,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1286,12 +1320,14 @@
           "short_name": "sst",
           "standard_name": "sea_surface_temperature",
           "units": "degree_Celsius",
+          "comment": "NaN over land where sea surface temperature does not apply.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1332,18 +1368,7 @@
           }
         ],
         "attributes": {
-          "comment": "This coordinate reference system matches the source data which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
-          "crs_wkt": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]",
-          "semi_major_axis": 6371229.0,
-          "semi_minor_axis": 6371229.0,
-          "inverse_flattening": 0.0,
-          "reference_ellipsoid_name": "unknown",
-          "longitude_of_prime_meridian": 0.0,
-          "prime_meridian_name": "Greenwich",
-          "geographic_crs_name": "unknown",
-          "horizontal_datum_name": "unknown",
-          "grid_mapping_name": "latitude_longitude",
-          "spatial_ref": "GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",6371229,0]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AXIS[\"Longitude\",EAST],AXIS[\"Latitude\",NORTH]]"
+          "grid_mapping_name": "latitude_longitude"
         },
         "zarr_format": 3,
         "node_type": "array",
@@ -1352,6 +1377,7 @@
       "temperature_2m": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1361,6 +1387,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1387,16 +1414,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1410,6 +1427,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1421,6 +1439,7 @@
       "total_precipitation_surface": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1430,6 +1449,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1456,16 +1476,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1473,13 +1483,14 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the 6 hours ending at the valid time.",
+          "comment": "Accumulated over a six-hour forecast interval. Small negative values are raw model artifacts; set values < 0 to zero.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1546,137 +1557,10 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "wind_speed_100m": {
-        "shape": [
-          1,
-          60,
-          721,
-          1440
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              721,
-              1440
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "100 metre wind speed",
-          "short_name": "100si",
-          "standard_name": "wind_speed",
-          "units": "m s-1",
-          "comment": "The ensemble mean of the members' wind speeds, not the speed of the mean wind vector, so it exceeds the speed computed from the archived u and v components.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "wind_speed_10m": {
-        "shape": [
-          1,
-          60,
-          721,
-          1440
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              721,
-              1440
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "10 metre wind speed",
-          "short_name": "10si",
-          "standard_name": "wind_speed",
-          "units": "m s-1",
-          "comment": "The ensemble mean of the members' wind speeds, not the speed of the mean wind vector, so it exceeds the speed computed from the archived u and v components.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "latitude",
-          "longitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "wind_u_100m": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1686,6 +1570,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1705,16 +1590,6 @@
             "name": "bytes",
             "configuration": {
               "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
             }
           }
         ],
@@ -1729,6 +1604,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1740,6 +1616,7 @@
       "wind_u_10m": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1749,6 +1626,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1768,16 +1646,6 @@
             "name": "bytes",
             "configuration": {
               "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
             }
           }
         ],
@@ -1792,6 +1660,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1803,6 +1672,7 @@
       "wind_v_100m": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1812,6 +1682,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1831,16 +1702,6 @@
             "name": "bytes",
             "configuration": {
               "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
             }
           }
         ],
@@ -1855,6 +1716,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"
@@ -1866,6 +1728,7 @@
       "wind_v_10m": {
         "shape": [
           1,
+          64,
           60,
           721,
           1440
@@ -1875,6 +1738,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
+              1,
               1,
               1,
               721,
@@ -1895,16 +1759,6 @@
             "configuration": {
               "endian": "little"
             }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "lz4",
-              "clevel": 5,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
           }
         ],
         "attributes": {
@@ -1918,6 +1772,7 @@
         },
         "dimension_names": [
           "init_time",
+          "ensemble_member",
           "lead_time",
           "latitude",
           "longitude"

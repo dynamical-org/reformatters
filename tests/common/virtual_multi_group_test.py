@@ -49,7 +49,6 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from tests.common.virtual_region_job_test import RAW_BYTES_SERIALIZER
 
 pytestmark = pytest.mark.slow
 
@@ -202,7 +201,6 @@ class RootDataVar(DataVar[BaseInternalAttrs]):
         shards=None,
         compressors=(),
         filters=None,
-        serializer=RAW_BYTES_SERIALIZER,
     )
     attrs: DataVarAttrs = DataVarAttrs(
         units="K",
@@ -224,7 +222,6 @@ class PressureDataVar(DataVar[BaseInternalAttrs]):
         shards=None,
         compressors=(),
         filters=None,
-        serializer=RAW_BYTES_SERIALIZER,
     )
     attrs: DataVarAttrs = DataVarAttrs(
         units="K",

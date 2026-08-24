@@ -1,6 +1,7 @@
 {
   "shape": [
     1,
+    64,
     60,
     721,
     1440
@@ -10,6 +11,7 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
+        1,
         1,
         1,
         721,
@@ -36,16 +38,6 @@
       "configuration": {
         "endian": "little"
       }
-    },
-    {
-      "name": "blosc",
-      "configuration": {
-        "typesize": 4,
-        "cname": "lz4",
-        "clevel": 5,
-        "shuffle": "shuffle",
-        "blocksize": 0
-      }
     }
   ],
   "attributes": {
@@ -53,13 +45,14 @@
     "short_name": "tp",
     "standard_name": "precipitation_amount",
     "units": "kg m-2",
-    "comment": "Accumulated over the 6 hours ending at the valid time.",
+    "comment": "Accumulated over a six-hour forecast interval. Small negative values are raw model artifacts; set values < 0 to zero.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
     "init_time",
+    "ensemble_member",
     "lead_time",
     "latitude",
     "longitude"

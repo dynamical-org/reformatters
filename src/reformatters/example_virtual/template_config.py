@@ -305,13 +305,10 @@ class ExampleSpatialTemplateConfig(TemplateConfig[ExampleDataVar]):
            with shards=None. The geometry of these chunks is what the write loop uses to
            place each reference, so it must match the source file layout exactly.
 
-        2. We never re-encode the bytes for storage; the declared codecs must be exactly
-           what decodes the referenced bytes. For a GRIB source that is `compressors=()`
-           plus a per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g.
-           GribberishCodec) that decodes the raw message; a source that is already a zarr
-           archive instead declares the source's own compressor and no serializer, so a
-           reference points at a whole source chunk object. Declare `dtype` as whatever
-           the pipeline produces (GribberishCodec decodes to float64) to avoid a cast.
+        2. We never re-encode the bytes for storage (no compressors of our own); a
+           per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g. GribberishCodec)
+           decodes the raw GRIB message at read time. Declare `dtype` as whatever that
+           codec produces (GribberishCodec decodes to float64) to avoid a cast.
 
         Served values are otherwise the RAW source values. A transform the materialized
         pipeline applies splits two ways here:

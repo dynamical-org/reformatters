@@ -45,10 +45,8 @@ type SpatialResolution = Literal[
     "4 km",
     "36 km",
 ]
-# Only SPDX license identifiers (https://spdx.org/licenses/) should be added to this
-# type. A source whose terms are not a listed SPDX license takes a LicenseRef- custom
-# reference identifier.
-type License = Literal["CC-BY-4.0", "LicenseRef-Google-WeatherNext"]
+# Only SPDX license identifiers (https://spdx.org/licenses/) should be added to this type.
+type License = Literal["CC-BY-4.0"]
 
 
 class DatasetAttributes(FrozenBaseModel):

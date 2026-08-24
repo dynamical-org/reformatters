@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import numcodecs
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,7 +9,6 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.config_models import ROOT
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
-    PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
@@ -24,10 +22,29 @@ def get_var(path: str) -> GoogleWeathernext2DataVar:
 
 
 def test_group_structure_and_counts() -> None:
+    assert CONFIG.dims["pressure_level"] == (
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude",
+        "pressure_level",
+    )
+    assert {coord.name for coord in CONFIG.coords} == {
+        "expected_forecast_length",
+        "init_time",
+        "ensemble_member",
+        "lead_time",
+        "latitude",
+        "longitude",
+        "spatial_ref",
+        "valid_time",
+        "pressure_level",
+    }
     by_group: dict[object, int] = {}
     for var in CONFIG.data_vars:
         by_group[var.group] = by_group.get(var.group, 0) + 1
-    assert by_group[ROOT] == 10
+    assert by_group[ROOT] == 8
     assert by_group["pressure_level"] == 6
 
 
@@ -38,37 +55,25 @@ def test_pressure_levels_descend() -> None:
     assert PRESSURE_LEVELS == sorted(PRESSURE_LEVELS, reverse=True)
 
 
-def test_one_chunk_per_source_chunk_root() -> None:
+def test_one_output_chunk_per_member_root() -> None:
     var = get_var("temperature_2m")
-    assert var.encoding.chunks == (1, 1, 721, 1440)
+    assert var.encoding.chunks == (1, 1, 1, 721, 1440)
     assert var.encoding.shards is None
     assert var.encoding.dtype == "float32"
-    # No custom serializer: the referenced bytes are a zarr chunk, decoded by the
-    # standard bytes codec plus the source's own blosc compressor.
-    assert var.encoding.serializer is None
+    assert var.encoding.serializer is not None
+    assert var.encoding.serializer["name"] == "bytes"
+    assert var.encoding.serializer["configuration"] == {"endian": "little"}
 
 
-def test_one_chunk_per_source_chunk_group_includes_level() -> None:
+def test_one_output_chunk_per_member_and_level() -> None:
     var = get_var("pressure_level/temperature")
-    assert var.encoding.chunks == (1, 1, 721, 1440, 1)
+    assert var.encoding.chunks == (1, 1, 1, 721, 1440, 1)
     assert var.encoding.shards is None
 
 
-def test_every_var_declares_the_source_blosc_compressor() -> None:
-    # A reference points at the source's blosc buffer, so the array must decode with the
-    # exact codec the source encoded it under.
+def test_every_var_accepts_raw_proxy_bytes() -> None:
     for var in CONFIG.data_vars:
-        compressors = var.encoding.compressors
-        assert compressors is not None
-        (blosc,) = compressors
-        assert blosc["name"] == "blosc"
-        assert blosc["configuration"] == {
-            "typesize": 4,
-            "cname": "lz4",
-            "clevel": 5,
-            "shuffle": "shuffle",
-            "blocksize": 0,
-        }
+        assert var.encoding.compressors == ()
 
 
 def test_temperatures_have_kelvin_to_celsius_filter() -> None:
@@ -98,9 +103,19 @@ def test_precipitation_serves_kg_m2_from_metres() -> None:
     var = get_var("total_precipitation_surface")
     assert var.attrs.units == "kg m-2"
     assert var.attrs.step_type == "accum"
+    assert var.attrs.comment == (
+        "Accumulated over a six-hour forecast interval. Small negative "
+        "values are raw model artifacts; set values < 0 to zero."
+    )
     filters = var.encoding.filters
     assert filters is not None
     assert filters[0]["configuration"]["scale"] == 0.001
+
+
+def test_sea_surface_temperature_documents_land_mask() -> None:
+    assert get_var("sea_surface_temperature").attrs.comment == (
+        "NaN over land where sea surface temperature does not apply."
+    )
 
 
 def test_non_converted_var_has_no_filter() -> None:
@@ -109,31 +124,26 @@ def test_non_converted_var_has_no_filter() -> None:
     assert var.attrs.units == "m s-1"
 
 
-def test_wind_speed_vars_document_the_jensen_gap() -> None:
-    for path in ("wind_speed_10m", "wind_speed_100m"):
-        comment = get_var(path).attrs.comment
-        assert comment is not None
-        assert "not the speed of the mean wind vector" in comment
+def test_mean_only_wind_speed_vars_are_absent() -> None:
+    assert "wind_speed_10m" not in {var.name for var in CONFIG.data_vars}
+    assert "wind_speed_100m" not in {var.name for var in CONFIG.data_vars}
 
 
-def test_coords_match_the_source_grid_orientation() -> None:
-    # Latitude and longitude live inside a source chunk, so a virtual dataset serves
-    # them exactly as the source stored them: ascending latitude and 0-360 longitude,
-    # unlike our other global 0.25 degree datasets.
+def test_coords_follow_canonical_global_grid_orientation() -> None:
     dim_coords = CONFIG.dimension_coordinates()
     latitude, longitude = dim_coords["latitude"], dim_coords["longitude"]
     assert len(latitude) == 721
     assert len(longitude) == 1440
-    assert np.all(np.diff(latitude) > 0)
-    assert (latitude[0], latitude[-1]) == (-90, 90)
-    assert (longitude.min(), longitude.max()) == (0, 359.75)
+    assert np.all(np.diff(latitude) < 0)
+    assert (latitude[0], latitude[-1]) == (90, -90)
+    assert (longitude.min(), longitude.max()) == (-180, 179.75)
+    np.testing.assert_array_equal(dim_coords["ensemble_member"], np.arange(64))
     assert (dim_coords["pressure_level"] == PRESSURE_LEVELS).all()
 
 
-def test_pressure_level_vars_start_at_the_per_init_store_era() -> None:
+def test_every_var_covers_the_full_archive() -> None:
     for var in CONFIG.data_vars:
-        expected = None if var.group is ROOT else PER_INIT_STORE_DATE
-        assert var.internal_attrs.date_available == expected, var.path
+        assert var.internal_attrs.date_available is None, var.path
 
 
 def test_no_rounding_since_virtual_chunks_are_never_rewritten() -> None:
@@ -153,20 +163,16 @@ def test_lead_times_start_at_6h_and_append_dim() -> None:
 
 @pytest.mark.parametrize("path", ["temperature_2m", "pressure_level/temperature"])
 def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path, path: str) -> None:
-    """A referenced chunk is the source's own numcodecs-blosc buffer, so the variable's
-    zarr v3 codec pipeline must decode those exact bytes (and apply the read-time unit
-    conversion). Proving it here means the real-source integration test is confirming
-    values, not the codec chain.
+    """The proxy's raw plane is decoded and receives the read-time unit conversion.
 
-    The pressure-level case additionally pins that the trailing size-1 pressure_level
-    dim leaves the chunk's memory layout identical to the source's (lat, lon) buffer."""
+    The pressure-level case pins that the trailing size-1 pressure_level dim leaves the
+    chunk's memory layout identical to the proxy's (lat, lon) buffer."""
     var = get_var(path)
     chunks = var.encoding.chunks
     assert isinstance(chunks, tuple)
     kelvin = (200 + np.arange(721 * 1440, dtype=np.float32) % 130).reshape(721, 1440)
-    source_bytes = numcodecs.Blosc(
-        cname="lz4", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE, blocksize=0
-    ).encode(kelvin)
+    assert var.encoding.serializer is not None
+    source_bytes = kelvin.tobytes(order="C")
 
     array = zarr.create_array(
         zarr.storage.LocalStore(str(tmp_path)),
@@ -176,6 +182,7 @@ def test_encoding_decodes_bytes_the_source_wrote(tmp_path: Path, path: str) -> N
         dtype=var.encoding.dtype,
         fill_value=var.encoding.fill_value,
         filters=var.encoding.filters,
+        serializer=var.encoding.serializer,
         compressors=var.encoding.compressors,
     )
     metadata = array.metadata
@@ -192,3 +199,26 @@ def test_dataset_attributes() -> None:
     attrs = CONFIG.dataset_attributes
     assert attrs.dataset_id == "google-weathernext2-forecast-virtual"
     assert attrs.name == "Google WeatherNext 2 forecast, virtual"
+    assert attrs.license == "CC-BY-4.0"
+    assert attrs.attribution == (
+        "Google requires this attribution: © 2025 DeepMind Technologies Limited's "
+        "machine learning models used to "
+        "create the experimental data made available at "
+        "https://developers.google.com/earth-engine/datasets/catalog/"
+        "projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY "
+        "4.0 licence terms. This data is intended for experimental modelling only "
+        "and is not intended, validated, or approved for real world use. Use of the "
+        "third-party materials referred to in the Acknowledgements section may be "
+        "governed by separate terms and conditions or license provisions. Your use of "
+        "the third-party materials is subject to any such terms and you should check "
+        "that you can comply with any applicable restrictions or terms and conditions "
+        "before use."
+    )
+
+
+def test_spatial_reference_does_not_claim_an_unpublished_datum() -> None:
+    spatial_ref = next(coord for coord in CONFIG.coords if coord.name == "spatial_ref")
+    assert spatial_ref.attrs.grid_mapping_name == "latitude_longitude"
+    assert spatial_ref.attrs.crs_wkt is None
+    assert spatial_ref.attrs.semi_major_axis is None
+    assert spatial_ref.attrs.spatial_ref is None

@@ -1,19 +1,24 @@
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from itertools import takewhile
+from pathlib import Path
 from typing import ClassVar
 
+import httpx
 import icechunk
-import obstore
 import pandas as pd
 import xarray as xr
+from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
-from reformatters.common.download import gcs_store
-from reformatters.common.logging import get_logger
-from reformatters.common.region_job import CoordinateValue, SourceFileCoord
-from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.region_job import CoordinateValue, RegionJob, SourceFileCoord
+from reformatters.common.types import (
+    AppendDim,
+    DatetimeLike,
+    Dim,
+    Timedelta,
+    Timestamp,
+)
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
 from .template_config import (
@@ -22,47 +27,33 @@ from .template_config import (
     GoogleWeathernext2DataVar,
 )
 
-log = get_logger(__name__)
-
 SOURCE_LOCATION_PREFIX = "gs://weathernext/"
-_SOURCE_BUCKET_URL = SOURCE_LOCATION_PREFIX.removesuffix("/")
-# The ensemble-mean product; the 64 member product lives under weathernext_2_0_0/.
-_SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0_mean/zarr/"
-
-# The source stores levels ascending; our pressure_level dimension is descending, so
-# each reference maps its level label to the level's index in the source chunk grid.
+AVAILABILITY_LOCATION_PREFIX = "https://wn.dynamical.org/available/"
+PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
+_SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {
     level: index for index, level in enumerate(sorted(PRESSURE_LEVELS))
 }
-
-# A coord is a whole zarr store, which has no single data-file length. Each reference's
-# length is the size of its own chunk object, read from the store listing in file_refs.
 _NO_SINGLE_FILE_SIZE = 0
-
-# A coord covers every lead time of one init, so out_loc names one lead for the per-file
-# manifest probe; the whole store commits atomically, so that lead's presence implies
-# the init's. See docs/virtual_datasets.md.
-_PROBE_LEAD_TIME = pd.Timedelta("6h")
+_PUBLICATION_LAG = pd.Timedelta("48h")
+OUTPUT_CHUNK_LENGTH = 721 * 1440 * 4
+ROOT_MANIFEST_INIT_SPLIT = 32
+PRESSURE_MANIFEST_INIT_SPLIT = 4
 
 
 def weathernext2_virtual_chunk_containers() -> tuple[
     icechunk.VirtualChunkContainer, ...
 ]:
-    """Fresh container objects per call; icechunk containers can't be shared
-    pydantic defaults."""
     return (
-        icechunk.VirtualChunkContainer(SOURCE_LOCATION_PREFIX, icechunk.gcs_store()),
+        icechunk.VirtualChunkContainer(PROXY_LOCATION_PREFIX, icechunk.http_store()),
     )
 
 
 class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
-    """One init time's source zarr store and the vars it contributes.
-
-    Before PER_INIT_STORE_DATE the store spans a whole calendar year and the init is a
-    position along its leading dimension; from that date each init has its own store.
-    """
+    """One forecast lead from an annual or per-init source Zarr store."""
 
     init_time: Timestamp
+    lead_time: Timedelta
     data_vars: Sequence[GoogleWeathernext2DataVar]
 
     @property
@@ -79,30 +70,54 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
         return f"{_SOURCE_ZARR_PREFIX}{year}_to_{year + 1}/predictions.zarr"
 
     def get_success_marker_url(self) -> str:
-        """The zero-byte marker the source writes beside a store once it is complete."""
         return self.get_url().removesuffix("predictions.zarr") + "success"
 
-    def chunk_key_prefix(self, var: GoogleWeathernext2DataVar) -> str:
-        """The store-relative key prefix shared by every chunk object this coord needs
-        of `var` — the whole variable in a per-init store, one init's slice of it in a
-        yearly store."""
-        source_name = var.internal_attrs.source_name
-        if self.is_per_init_store:
-            return f"{source_name}/"
+    def get_availability_url(self) -> str:
+        return AVAILABILITY_LOCATION_PREFIX + _store_key(self.get_success_marker_url())
+
+    @property
+    def lead_index(self) -> int:
+        return int(self.lead_time // pd.Timedelta("6h")) - 1
+
+    @property
+    def annual_init_index(self) -> int:
+        assert not self.is_per_init_store
         year_start = pd.Timestamp(f"{self.init_time.year}-01-01")
-        store_init_index = (self.init_time - year_start) // pd.Timedelta("6h")
-        return f"{source_name}/{store_init_index}."
+        return int((self.init_time - year_start) // pd.Timedelta("6h"))
 
     def chunk_key(
-        self, var: GoogleWeathernext2DataVar, lead_index: int, level_index: int | None
+        self,
+        var: GoogleWeathernext2DataVar,
+        ensemble_member: int,
+        pressure_level: int | None,
     ) -> str:
-        """The store-relative key of one source chunk object."""
-        indices = [lead_index] if level_index is None else [lead_index, level_index]
-        # Latitude and longitude are single-chunk in every source array.
-        return self.chunk_key_prefix(var) + ".".join(str(i) for i in [*indices, 0, 0])
+        if self.is_per_init_store:
+            indices = [ensemble_member, self.lead_index]
+            if pressure_level is not None:
+                indices.append(_SOURCE_LEVEL_INDEX[pressure_level])
+        else:
+            indices = [self.annual_init_index, ensemble_member // 4, self.lead_index]
+            if pressure_level is not None:
+                indices.append(0)
+        indices.extend((0, 0))
+        return f"{var.internal_attrs.source_name}/" + ".".join(map(str, indices))
+
+    def plane_index(
+        self,
+        var: GoogleWeathernext2DataVar,
+        ensemble_member: int,
+        pressure_level: int | None,
+    ) -> int:
+        if self.is_per_init_store:
+            return 0
+        member_plane = ensemble_member % 4
+        if var.group is ROOT:
+            return member_plane
+        assert pressure_level is not None
+        return member_plane * len(PRESSURE_LEVELS) + _SOURCE_LEVEL_INDEX[pressure_level]
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
-        return {"init_time": self.init_time, "lead_time": _PROBE_LEAD_TIME}
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
 class GoogleWeathernext2ForecastVirtualRegionJob(
@@ -110,10 +125,43 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
-    # At the update cron's fire time the newest published init plus the three prior
-    # cycles sit 6h55m to 24h55m back; 30h covers all four, so a couple of missed runs
-    # still self-heal. See the cron schedule in dynamical_dataset.py.
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("30h")
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18D")
+    publication_cutoff: Timestamp = pd.Timestamp.max
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[GoogleWeathernext2DataVar],
+        reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
+    ) -> tuple[
+        Sequence[
+            RegionJob[
+                GoogleWeathernext2DataVar,
+                GoogleWeathernext2ForecastVirtualSourceFileCoord,
+            ]
+        ],
+        xr.DataTree,
+    ]:
+        jobs, template_ds = super().operational_update_jobs(
+            primary_store=primary_store,
+            tmp_store=tmp_store,
+            get_template_fn=get_template_fn,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            job_fire_time=job_fire_time,
+        )
+        (job,) = jobs
+        assert isinstance(job, cls)
+        fire_time = job_fire_time or pd.Timestamp.now()
+        return [
+            job.model_copy(update={"publication_cutoff": fire_time - _PUBLICATION_LAG})
+        ], template_ds
 
     def generate_source_file_coords(
         self,
@@ -121,17 +169,17 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         data_var_group: Sequence[GoogleWeathernext2DataVar],
     ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
         coords = []
-        for init_time in pd.to_datetime(processing_region_ds["init_time"].values):
-            available_vars = [
-                var
-                for var in data_var_group
-                if (date := var.internal_attrs.date_available) is None
-                or date <= init_time
-            ]
-            if available_vars:
+        for init_time_value in processing_region_ds["init_time"].values:
+            init_time = pd.Timestamp(init_time_value)
+            for lead_time_value in processing_region_ds["lead_time"].values:
+                lead_time = pd.Timedelta(lead_time_value)
+                if init_time + lead_time >= self.publication_cutoff:
+                    continue
                 coords.append(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
-                        init_time=init_time, data_vars=available_vars
+                        init_time=init_time,
+                        lead_time=lead_time,
+                        data_vars=data_var_group,
                     )
                 )
         return coords
@@ -139,84 +187,92 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
     def discover_available(
         self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
     ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
-        """The pending coords whose store has its success marker.
-
-        The marker is written last, so its presence means every chunk object of the
-        store has landed. Yearly-store coords share one marker, so it is probed once.
-        """
-        store = gcs_store(_SOURCE_BUCKET_URL)
-        marker_keys = sorted(
-            {_store_key(coord.get_success_marker_url()) for coord in pending}
-        )
-        with ThreadPoolExecutor(self.download_concurrency) as pool:
-            landed = {
-                key
-                for key, exists in zip(
-                    marker_keys,
-                    pool.map(partial(_object_exists, store), marker_keys),
+        availability_urls = sorted({coord.get_availability_url() for coord in pending})
+        with (
+            httpx.Client(timeout=30) as client,
+            ThreadPoolExecutor(self.download_concurrency) as pool,
+        ):
+            available_leads = dict(
+                zip(
+                    availability_urls,
+                    pool.map(partial(_available_lead_count, client), availability_urls),
                     strict=True,
                 )
-                if exists
-            }
+            )
         return [
             (coord, _NO_SINGLE_FILE_SIZE)
             for coord in pending
-            if _store_key(coord.get_success_marker_url()) in landed
+            if (lead_count := available_leads[coord.get_availability_url()]) is not None
+            and coord.lead_index < lead_count
         ]
+
+    def process_virtual_refs(
+        self,
+        remaining: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
+    ) -> Iterator[
+        Sequence[
+            tuple[
+                GoogleWeathernext2ForecastVirtualSourceFileCoord,
+                Sequence[VirtualRef],
+            ]
+        ]
+    ]:
+        if self.processing_mode == "update":
+            yield from super().process_virtual_refs(remaining)
+            return
+
+        coords_by_manifest: dict[
+            int, list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
+        ] = {}
+        init_times = self.template_ds.to_dataset().get_index("init_time")
+        for coord in remaining:
+            init_index = init_times.get_loc(coord.init_time)
+            assert isinstance(init_index, int)
+            manifest_index = init_index // PRESSURE_MANIFEST_INIT_SPLIT
+            coords_by_manifest.setdefault(manifest_index, []).append(coord)
+        for coords in coords_by_manifest.values():
+            coords.sort(key=lambda coord: (coord.init_time, coord.lead_time))
+            yield from super().process_virtual_refs(coords)
 
     def file_refs(
         self,
         coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
-        file_size: int,  # noqa: ARG002 - a store has no single length, see _NO_SINGLE_FILE_SIZE
+        file_size: int,  # noqa: ARG002 - the coord spans many source chunk objects
     ) -> list[VirtualRef]:
-        store = gcs_store(_SOURCE_BUCKET_URL)
-        store_key_prefix = _store_key(coord.get_url()) + "/"
         refs = []
+        store_key_prefix = _store_key(coord.get_url()) + "/"
+        ensemble_members = self.template_ds.to_dataset().get_index("ensemble_member")
         for var in coord.data_vars:
-            sizes = _list_chunk_sizes(
-                store, store_key_prefix, coord.chunk_key_prefix(var)
-            )
             template_var = self.template_ds[var.path]
-            levels: Sequence[tuple[int | None, int | None]] = (
-                [(None, None)]
+            pressure_levels: Sequence[int | None] = (
+                [None]
                 if var.group is ROOT
-                else [
-                    (int(level), _SOURCE_LEVEL_INDEX[int(level)])
-                    for level in template_var.get_index("pressure_level")
-                ]
+                else [int(level) for level in template_var.get_index("pressure_level")]
             )
-            lead_times = template_var.get_index("lead_time")
-            var_refs = []
-            # The template's lead_time axis is the source's lead axis in the same order,
-            # so a lead's position is its index in the source chunk grid.
-            for lead_index, lead_time in enumerate(lead_times):
-                for level, level_index in levels:
-                    key = coord.chunk_key(var, lead_index, level_index)
-                    if (size := sizes.get(key)) is None:
-                        continue
+            for member_value in ensemble_members:
+                member = int(member_value)
+                for level in pressure_levels:
+                    key = coord.chunk_key(var, member, level)
                     out_loc: dict[Dim, CoordinateValue] = {
                         "init_time": coord.init_time,
-                        "lead_time": lead_time,
+                        "ensemble_member": member,
+                        "lead_time": coord.lead_time,
                     }
                     if level is not None:
                         out_loc["pressure_level"] = level
-                    var_refs.append(
+                    plane = coord.plane_index(var, member, level)
+                    refs.append(
                         VirtualRef(
                             data_var=var,
                             out_loc=out_loc,
-                            location=SOURCE_LOCATION_PREFIX + store_key_prefix + key,
+                            location=(
+                                f"{PROXY_LOCATION_PREFIX}plane/{plane}/"
+                                f"{store_key_prefix}{key}"
+                            ),
                             offset=0,
-                            length=size,
+                            length=OUTPUT_CHUNK_LENGTH,
                         )
                     )
-            expected_refs = len(lead_times) * len(levels)
-            assert len(var_refs) == expected_refs, (
-                f"{var.path} at {coord.init_time}: listed {len(var_refs)} of "
-                f"{expected_refs} expected source chunks under "
-                f"{store_key_prefix + coord.chunk_key_prefix(var)}. A partial listing "
-                "would commit the init while silently serving fill values."
-            )
-            refs.extend(var_refs)
         return refs
 
 
@@ -224,45 +280,11 @@ def _store_key(url: str) -> str:
     return url.removeprefix(SOURCE_LOCATION_PREFIX)
 
 
-def _object_exists(store: obstore.store.ObjectStore, key: str) -> bool:
-    # obstore lists only *under* a prefix, so an exact object path is not listable and
-    # existence has to be a head request.
-    try:
-        obstore.head(store, key)
-    except FileNotFoundError:
-        return False
-    return True
-
-
-def _list_chunk_sizes(
-    store: obstore.store.ObjectStore, store_key_prefix: str, chunk_key_prefix: str
-) -> dict[str, int]:
-    """Every source chunk object under `chunk_key_prefix`, keyed store-relative, mapped
-    to its size — a source chunk is a whole object, so its size is a reference length.
-
-    obstore matches a listing prefix by whole path component, so a yearly store's
-    `<var>/<init>.` prefix is not listable on its own. The variable's directory is
-    listed from an offset just below the wanted keys, which are lexicographically
-    contiguous, and the scan stops at the first non-match rather than walking the rest
-    of the year. That truncation assumes the store lists keys in lexicographic order,
-    which GCS guarantees but the object store API does not; a store that does not is
-    caught by the chunk count assert in file_refs.
-    """
-    full_prefix = store_key_prefix + chunk_key_prefix
-    variable_dir = (
-        store_key_prefix + chunk_key_prefix[: chunk_key_prefix.index("/") + 1]
-    )
-    offset = None if full_prefix == variable_dir else full_prefix.removesuffix(".")
-    listed = takewhile(
-        lambda item: item[0].startswith(full_prefix),
-        _list_objects(store, variable_dir, offset),
-    )
-    return {key.removeprefix(store_key_prefix): size for key, size in listed}
-
-
-def _list_objects(
-    store: obstore.store.ObjectStore, prefix: str, offset: str | None
-) -> Iterator[tuple[str, int]]:
-    for batch in obstore.list(store, prefix=prefix, offset=offset, chunk_size=10_000):
-        for meta in batch:
-            yield meta["path"], meta["size"]
+def _available_lead_count(client: httpx.Client, url: str) -> int | None:
+    response = client.head(url)
+    if response.status_code in {403, 404}:
+        return None
+    response.raise_for_status()
+    lead_count = int(response.headers["X-WeatherNext-Available-Lead-Count"])
+    assert 1 <= lead_count <= 60, f"invalid available lead count: {lead_count}"
+    return lead_count

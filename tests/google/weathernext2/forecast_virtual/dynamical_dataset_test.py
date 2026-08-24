@@ -49,20 +49,17 @@ def test_validators(dataset: GoogleWeathernext2ForecastVirtualDataset) -> None:
         for v in validators
         if isinstance(v, validation.CheckVirtualManifestCompleteness)
     ]
-    # A store is published behind a success marker written last, so an ingested init is
-    # never half-published and the default whole-position threshold holds.
     assert completeness.min_present_fraction == (1.0,)
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_allows_9_hours(
+def test_current_data_validator_allows_publication_lag(
     dataset: GoogleWeathernext2ForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    # Validation fires at init+7h55m, so the threshold must exceed that.
-    assert current_data.max_delay == timedelta(hours=9)
+    assert current_data.max_delay == timedelta(hours=60)
 
 
 def _resolved_split_size(
@@ -82,14 +79,13 @@ def test_manifest_split_size_resolves_per_group(
     dataset: GoogleWeathernext2ForecastVirtualDataset,
 ) -> None:
     split = dataset.icechunk_virtual_config.manifest_split
-    assert _resolved_split_size(split, "/pressure_level/temperature") == 200
-    assert _resolved_split_size(split, "/temperature_2m") == 600
+    assert _resolved_split_size(split, "/pressure_level/temperature") == 4
+    assert _resolved_split_size(split, "/temperature_2m") == 32
 
 
 def test_virtual_container_matches_ref_prefix(
     dataset: GoogleWeathernext2ForecastVirtualDataset,
 ) -> None:
     (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "gs://weathernext/"
-    # The source bucket is private, so refs resolve credentials from the environment.
-    assert isinstance(container.store, icechunk.ObjectStoreConfig.Gcs)
+    assert container.url_prefix == "https://wn.dynamical.org/chunks/"
+    assert isinstance(container.store, icechunk.ObjectStoreConfig.Http)

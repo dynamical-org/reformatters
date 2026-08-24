@@ -394,25 +394,6 @@ def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
     return "y", "x"
 
 
-def align_longitude_convention(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
-    """`reference_ds` relabelled into `ds`'s longitude convention (0-360 or -180-180),
-    re-sorted ascending. A no-op when both already share a convention or either lacks a
-    longitude dimension. Without this, selecting or slicing the reference at a
-    longitude from the other convention silently lands on the wrong side of the globe.
-    """
-    if "longitude" not in ds.dims or "longitude" not in reference_ds.dims:
-        return reference_ds
-    ds_is_0_360 = float(ds.longitude.max()) > 180.0
-    if ds_is_0_360 == (float(reference_ds.longitude.max()) > 180.0):
-        return reference_ds
-    longitude = (
-        reference_ds.longitude % 360
-        if ds_is_0_360
-        else (reference_ds.longitude + 180) % 360 - 180
-    )
-    return reference_ds.assign_coords(longitude=longitude).sortby("longitude")
-
-
 def _two_spread_indices(rng: np.random.Generator, lo: int, hi: int) -> tuple[int, int]:
     """Two indices within the middle 50% of [lo, hi), one in each half of that band.
 

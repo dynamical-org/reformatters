@@ -468,7 +468,7 @@ class TestIcechunkVirtualConfig:
         assert caching is not None
         assert caching.num_chunk_refs == 1_000_000
 
-    def test_unsupported_container_rejected(self) -> None:
+    def test_http_container_accepted(self) -> None:
         http_container = icechunk.VirtualChunkContainer(
             "https://example.com/", icechunk.http_store()
         )
@@ -483,11 +483,12 @@ class TestIcechunkVirtualConfig:
                 manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
             ),
         )
-        with pytest.raises(AssertionError, match="unsupported store"):
-            factory.icechunk_repos(sort="primary-first")
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert "https://example.com/" in containers
 
-    def test_gcs_container_accepted(self) -> None:
-        # GCS sources are private, so they resolve credentials from the environment.
+    def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
             "gs://bucket/", icechunk.gcs_store()
         )
@@ -502,10 +503,8 @@ class TestIcechunkVirtualConfig:
                 manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
             ),
         )
-        repo = factory.icechunk_repos(sort="primary-first")[0][1]
-        containers = repo.config.virtual_chunk_containers
-        assert containers is not None
-        assert "gs://bucket/" in containers
+        with pytest.raises(AssertionError, match="unsupported store"):
+            factory.icechunk_repos(sort="primary-first")
 
     def test_local_filesystem_container_accepted(self) -> None:
         # Local-filesystem containers (dev/test sources) need no credentials.
