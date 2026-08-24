@@ -192,7 +192,7 @@
           "short_name": "cape",
           "standard_name": "atmosphere_convective_available_potential_energy",
           "units": "J kg-1",
-          "comment": "Values of -1, over roughly half the domain, and -999, a handful of cells per forecast step, are source markers rather than energies. Mask values < -0.1.",
+          "comment": "Negative values are source markers rather than energies and cover roughly half the domain. Mask values < -0.1.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

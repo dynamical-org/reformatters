@@ -1,9 +1,7 @@
-import functools
 from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
-import pyproj
 from pydantic import computed_field
 
 from reformatters.common.config_models import (
@@ -13,6 +11,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.projection import latitude_longitude_grids, y_x_coordinates
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import (
     Array1D,
@@ -726,35 +725,10 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
 
     def _y_x_coordinates(self) -> tuple[Array1D[np.float64], Array1D[np.float64]]:
         shape, bounds, resolution, _crs = self._spatial_info()
-        dx, dy = resolution
-        left, _bottom, _right, top = bounds
-        ny, nx = shape
-        # add 1/2 a pixel to corner of bounds to get pixel center
-        y_coords = (top + (0.5 * dy)) + (np.arange(ny) * dy)
-        x_coords = (left + (0.5 * dx)) + (np.arange(nx) * dx)
-        # astype is no-op for type checker
-        return y_coords.astype(np.float64), x_coords.astype(np.float64)
+        return y_x_coordinates(shape, bounds, resolution)
 
     def _latitude_longitude_coordinates(
         self, x_coords: Array1D[np.float64], y_coords: Array1D[np.float64]
     ) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
         _, _, _, crs = self._spatial_info()
-        return _latitude_longitude_grids(crs, x_coords.tobytes(), y_coords.tobytes())
-
-
-# The inverse transform costs ~250ms on the full HRRR grid and every HRRR dataset
-# shares one grid, while a template build requests it once per zarr group. Callers
-# must not mutate the returned (cached) arrays.
-@functools.cache
-def _latitude_longitude_grids(
-    crs: str, x_bytes: bytes, y_bytes: bytes
-) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
-    x_coords = np.frombuffer(x_bytes, dtype=np.float64)
-    y_coords = np.frombuffer(y_bytes, dtype=np.float64)
-    xs, ys = np.meshgrid(x_coords, y_coords)
-    lons, lats = pyproj.Proj(crs)(xs, ys, inverse=True)
-    # Dropping to 32 bit precision still gets us < 1 meter precision and
-    # makes each array about 6MB vs 15MB for float64.
-    lats = lats.astype(np.float32)
-    lons = lons.astype(np.float32)
-    return lats, lons
+        return latitude_longitude_grids(crs, x_coords, y_coords)

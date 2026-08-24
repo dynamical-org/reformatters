@@ -44,5 +44,13 @@ Measured against `dd.weather.gc.ca` in August 2026, over ~850 requests at concur
 connection resets, every request 200. Aggregate throughput plateaued at 8 concurrent
 downloads (~20-45 MB/s) and did not improve above it, while per-request p50 latency
 grew from 0.12s at 4 concurrent to 0.67s at 32. So the region job downloads 8 files at
-a time: past that we add load without gaining throughput. An update fetches 17
-variables x 48 lead times, about 1.5 GB, well inside the daily request allowance.
+a time: past that we add load without gaining throughput.
+
+Each update reprocesses the newest init time and the one before it, 828 files per init
+time (12 variables x 49 lead times, plus 5 that start at lead time 1), so about 1,656
+files and 3 GB per update and 6,624 requests per day across the four updates. The
+archive job dominates our footprint by comparison: it copies every field of every run,
+about 20,000 files per run and 80,000 per day. The two together sit just under ECCC's
+86,400 requests per day threshold for getting in touch with them, so weigh that before
+adding runs, lowering the update schedule's period, or widening what the archive job
+copies.

@@ -123,7 +123,9 @@ class EcccHrdpsForecastRegionJob(
         try:
             return http_download_to_disk(primary_url, self.dataset_id)
         except FALLBACK_EXCEPTIONS as e:
-            log.debug(f"Failed to download '{primary_url}': {e}")
+            # An update that falls back to the archive gets the previous run at best,
+            # because the archive lags the Datamart by hours.
+            log.info(f"Failed to download '{primary_url}', falling back: {e}")
             return http_download_to_disk(fallback_url, self.dataset_id)
 
     def read_data(

@@ -1,10 +1,8 @@
-import functools
 from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 import pandas as pd
-import pyproj
 import xarray as xr
 from pydantic import computed_field
 
@@ -23,6 +21,7 @@ from reformatters.common.deaccumulation import (
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
 )
+from reformatters.common.projection import latitude_longitude_grids, y_x_coordinates
 from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
@@ -652,7 +651,7 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     units="J kg-1",
                     step_type="instant",
                     standard_name="atmosphere_convective_available_potential_energy",
-                    comment="Values of -1, over roughly half the domain, and -999, a handful of cells per forecast step, are source markers rather than energies. Mask values < -0.1.",
+                    comment="Negative values are source markers rather than energies and cover roughly half the domain. Mask values < -0.1.",
                 ),
                 internal_attrs=EcccHrdpsInternalAttrs(
                     grib_field="CAPE",
@@ -704,38 +703,14 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
 
     def _y_x_coordinates(self) -> tuple[Array1D[np.float64], Array1D[np.float64]]:
         shape, bounds, resolution, _crs = self._spatial_info()
-        dx, dy = resolution
-        left, _bottom, _right, top = bounds
-        ny, nx = shape
-        # add 1/2 a pixel to corner of bounds to get pixel center
-        y_coords = (top + (0.5 * dy)) + (np.arange(ny) * dy)
-        x_coords = (left + (0.5 * dx)) + (np.arange(nx) * dx)
-        # astype is no-op for type checker
-        return y_coords.astype(np.float64), x_coords.astype(np.float64)
+        return y_x_coordinates(shape, bounds, resolution)
 
     def _latitude_longitude_coordinates(
         self, x_coords: Array1D[np.float64], y_coords: Array1D[np.float64]
     ) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
         _, _, _, crs = self._spatial_info()
-        return _latitude_longitude_grids(crs, x_coords.tobytes(), y_coords.tobytes())
+        # The grid's coordinates are rotated degrees, not metres.
+        return latitude_longitude_grids(crs, x_coords, y_coords, degree_units=True)
 
 
 _CRS_WKT = 'GEOGCRS["Coordinate System imported from GRIB file",BASEGEOGCRS["Coordinate System imported from GRIB file",DATUM["unnamed",ELLIPSOID["Sphere",6371229,0,LENGTHUNIT["metre",1,ID["EPSG",9001]]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]]],DERIVINGCONVERSION["Pole rotation (GRIB convention)",METHOD["Pole rotation (GRIB convention)"],PARAMETER["Latitude of the southern pole (GRIB convention)",-36.08852,ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]],PARAMETER["Longitude of the southern pole (GRIB convention)",-114.694858,ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]],PARAMETER["Axis rotation (GRIB convention)",0,ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]]],CS[ellipsoidal,2],AXIS["latitude",north,ORDER[1],ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]],AXIS["longitude",east,ORDER[2],ANGLEUNIT["degree",0.0174532925199433,ID["EPSG",9122]]]]'
-
-
-# The inverse transform costs ~1s on the full HRDPS grid while a template build
-# requests it once per zarr group. Callers must not mutate the returned (cached) arrays.
-@functools.cache
-def _latitude_longitude_grids(
-    crs: str, x_bytes: bytes, y_bytes: bytes
-) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
-    x_coords = np.frombuffer(x_bytes, dtype=np.float64)
-    y_coords = np.frombuffer(y_bytes, dtype=np.float64)
-    xs, ys = np.meshgrid(x_coords, y_coords)
-    # PROJ's ob_tran takes and returns radians, not the degrees the grid is defined in.
-    lons, lats = pyproj.Proj(crs)(np.radians(xs), np.radians(ys), inverse=True)
-    # Dropping to 32 bit precision still gets us < 1 meter precision and
-    # makes each array about 13MB vs 26MB for float64.
-    lats = lats.astype(np.float32)
-    lons = lons.astype(np.float32)
-    return lats, lons
