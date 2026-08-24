@@ -28,6 +28,22 @@ class NoaaHrrrAnalysisVirtualRegionJob(
 ):
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("12h")
 
+    def representative_var(
+        self, coord: NoaaHrrrAnalysisVirtualSourceFileCoord
+    ) -> NoaaHrrrDataVar:
+        if coord.file_type == "nat":
+            cloud_mixing_ratio = next(
+                (
+                    var
+                    for var in coord.data_vars
+                    if var.path == "model_level/cloud_mixing_ratio"
+                ),
+                None,
+            )
+            if cloud_mixing_ratio is not None:
+                return cloud_mixing_ratio
+        return super().representative_var(coord)
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
