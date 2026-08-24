@@ -1,14 +1,14 @@
 {
   "attributes": {
     "dataset_id": "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-    "dataset_version": "0.0.1",
+    "dataset_version": "0.1.0",
     "name": "ECMWF IFS ENS forecast, 46 day, 1.5 degree",
     "description": "Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
     "attribution": "ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "1.5 degrees (~165km)",
-    "time_domain": "Forecasts initialized 2026-07-25 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2023-06-28 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours",
     "forecast_domain": "Forecast lead time 0-1104 hours (0-46 days) ahead",
     "forecast_resolution": "Forecast step 24 hourly"
@@ -732,7 +732,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -787,7 +787,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -842,7 +842,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -875,7 +875,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2026-07-25T00:00:00",
+            "min": "2023-06-28T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -1524,14 +1524,14 @@
       "pressure_level": {
         "attributes": {
           "dataset_id": "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-          "dataset_version": "0.0.1",
+          "dataset_version": "0.1.0",
           "name": "ECMWF IFS ENS forecast, 46 day, 1.5 degree",
           "description": "Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
           "attribution": "ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
           "license": "CC-BY-4.0",
           "spatial_domain": "Global",
           "spatial_resolution": "1.5 degrees (~165km)",
-          "time_domain": "Forecasts initialized 2026-07-25 00:00:00 UTC to Present",
+          "time_domain": "Forecasts initialized 2023-06-28 00:00:00 UTC to Present",
           "time_resolution": "Forecasts initialized every 24 hours",
           "forecast_domain": "Forecast lead time 0-1104 hours (0-46 days) ahead",
           "forecast_resolution": "Forecast step 24 hourly"
@@ -1607,7 +1607,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -1758,7 +1758,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -1813,7 +1813,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110
+              6205
             ]
           }
         },
@@ -1846,7 +1846,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2026-07-25T00:00:00",
+            "min": "2023-06-28T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -2335,7 +2335,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110,
+              6205,
               47
             ]
           }
@@ -2369,7 +2369,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2026-07-25T00:00:00",
+            "min": "2023-06-28T00:00:00",
             "max": "Present + 46 days"
           },
           "units": "seconds since 1970-01-01",
@@ -4305,7 +4305,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              5110,
+              6205,
               47
             ]
           }
@@ -4339,7 +4339,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2026-07-25T00:00:00",
+            "min": "2023-06-28T00:00:00",
             "max": "Present + 46 days"
           },
           "units": "seconds since 1970-01-01",

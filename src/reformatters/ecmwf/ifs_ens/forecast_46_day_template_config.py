@@ -36,10 +36,8 @@ LONGITUDES = np.arange(-180, 180, 1.5)
 
 class EcmwfIfsEns46DayCommonTemplateConfig(TemplateConfig[EcmwfIfsEns46DayDataVar]):
     append_dim: AppendDim = "init_time"
-    # Narrowed to a one month window for the test backfill in
-    # https://github.com/dynamical-org/reformatters/issues/932. The daily, 101 member
-    # era of the ECMWF sub-seasonal-range forecast archive starts 2023-06-28.
-    append_dim_start: Timestamp = pd.Timestamp("2026-07-25T00:00")
+    # The daily, 101 member era of the ECMWF sub-seasonal-range forecast archive.
+    append_dim_start: Timestamp = pd.Timestamp("2023-06-28T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
 
     def dimension_coordinates(self) -> dict[str, Any]:
