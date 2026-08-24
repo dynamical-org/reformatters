@@ -25,6 +25,13 @@ S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
 S3_BUCKET_REGION = "us-east-1"
 _S3_HTTPS_PREFIX = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
 
+# These uploads ended mid-file: the data file and its .idx stop after a handful of
+# messages. Treated as never published, like the hours the archive is missing entirely.
+_TRUNCATED_SOURCE_FILES = (
+    S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t10z.wrfnatf00.grib2",
+    S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t12z.wrfnatf00.grib2",
+)
+
 
 def hrrr_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
     """Fresh container objects per call; icechunk containers can't be shared
@@ -63,12 +70,17 @@ class NoaaHrrrVirtualRegionJob(
     def discover_available(
         self, pending: list[HRRR_VIRTUAL_COORD]
     ) -> list[tuple[HRRR_VIRTUAL_COORD, int]]:
-        return discover_available_by_obstore_listing(
+        available = discover_available_by_obstore_listing(
             pending,
             store=s3_store(S3_LOCATION_PREFIX, region=S3_BUCKET_REGION),
             location_prefix=S3_LOCATION_PREFIX,
             require_index=True,
         )
+        return [
+            (coord, size)
+            for coord, size in available
+            if coord.get_url() not in _TRUNCATED_SOURCE_FILES
+        ]
 
     def file_refs(self, coord: HRRR_VIRTUAL_COORD, file_size: int) -> list[VirtualRef]:
         index_path = s3_download_to_disk(

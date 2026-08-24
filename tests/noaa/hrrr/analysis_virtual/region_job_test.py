@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.noaa.hrrr import virtual_region_job as region_job_module
 from reformatters.noaa.hrrr.analysis_virtual.region_job import (
     NoaaHrrrAnalysisVirtualRegionJob,
     NoaaHrrrAnalysisVirtualSourceFileCoord,
@@ -43,6 +44,15 @@ def make_job(
     )
 
 
+def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+        path = tmp_path / url.rsplit("/", 1)[-1]
+        path.write_text(content)
+        return path
+
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+
+
 def test_source_file_coord_url_and_out_loc() -> None:
     coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
         init_time=pd.Timestamp("2024-06-01T06:00"),
@@ -75,6 +85,73 @@ def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> N
         "time": pd.Timestamp("2014-10-01T01:00"),
         "pressure_level": 1000,
     }
+
+
+def test_truncated_source_files_are_never_available(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 2016-08-05 native uploads that end mid-file never reach the write loop."""
+    data_vars = [get_var("model_level/temperature")]
+    coords = [
+        NoaaHrrrAnalysisVirtualSourceFileCoord(
+            init_time=pd.Timestamp(f"2016-08-05T{hour:02d}:00"),
+            lead_time=pd.Timedelta(0),
+            domain="conus",
+            file_type="nat",
+            data_vars=data_vars,
+        )
+        for hour in (9, 10, 12)
+    ]
+    monkeypatch.setattr(
+        region_job_module,
+        "discover_available_by_obstore_listing",
+        lambda pending, **kwargs: [(coord, 100) for coord in pending],
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    assert [coord.get_url() for coord, _ in job.discover_available(coords)] == [
+        "s3://noaa-hrrr-bdp-pds/hrrr.20160805/conus/hrrr.t09z.wrfnatf00.grib2"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "element", "level"),
+    [
+        ("pressure_level/cloud_ice_mixing_ratio", "CICE", "1000 mb"),
+        ("pressure_level/cloud_ice_mixing_ratio", "CIMIXR", "1000 mb"),
+        ("model_level/cloud_ice_mixing_ratio", "CICE", "1 hybrid level"),
+        ("model_level/cloud_ice_mixing_ratio", "CIMIXR", "1 hybrid level"),
+    ],
+)
+def test_cloud_ice_index_spellings_emit_refs(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    path: str,
+    element: str,
+    level: str,
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        f"1:0:d=2024060100:{element}:{level}:anl:\n",
+    )
+    var = get_var(path)
+    file_type = "prs" if var.group == "pressure_level" else "nat"
+    coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2024-06-01T00:00"),
+        lead_time=pd.Timedelta(0),
+        domain="conus",
+        file_type=file_type,
+        data_vars=[var],
+    )
+    job = make_job(template_ds, data_vars=[var])
+
+    refs = job.file_refs(coord, file_size=1000)
+
+    assert [(ref.data_var.path, ref.offset, ref.length) for ref in refs] == [
+        (path, 0, 1000)
+    ]
 
 
 def test_generate_source_file_coords_shortest_available_lead(

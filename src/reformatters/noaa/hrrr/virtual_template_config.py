@@ -1889,6 +1889,7 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
         pressure_var(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
+            element_alternatives=("CICE",),
             short_name="cdcimr",
             long_name="Cloud ice mixing ratio",
             units="kg kg-1",
@@ -2075,6 +2076,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
         model_var(
             "cloud_ice_mixing_ratio",
             element="CIMIXR",
+            element_alternatives=("CICE",),
             short_name="cdcimr",
             long_name="Cloud ice mixing ratio",
             units="kg kg-1",
