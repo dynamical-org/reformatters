@@ -8,7 +8,11 @@ import pytest
 import xarray as xr
 
 from reformatters.common.iterating import item
-from reformatters.ecmwf.archive_gribs.request_shards import DAILY_LEAD_TIMES
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.request_shards import (
+    DAILY_LEAD_TIMES,
+    initialization_selections,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
     EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
 )
@@ -57,9 +61,7 @@ def source_file_coord(
         ensemble_member=0,
         ecds_variable=ecds_variable,
         levels=levels,
-        selection=selections_by_variable([data_var])[
-            (ecds_variable, "control_forecast")
-        ],
+        selection=selections_by_variable()[(ecds_variable, "control_forecast")],
         downloaded_path=downloaded_path,
     )
 
@@ -252,3 +254,30 @@ def test_a_24_hour_mean_variable_has_no_lead_time_zero_coord() -> None:
     assert not mean_var.has_hour_0_values()
     assert point_var.has_hour_0_values()
     assert DAILY_LEAD_TIMES[0] == "0"
+
+
+def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
+    """Every source file URL must name a blob the archiver wrote.
+
+    A blob's file name identifies the request group it was retrieved in, so deriving it
+    from anything narrower than the archive's whole manifest names a file that does not
+    exist, and the variable silently reads as all NaN.
+    """
+    archived_file_names = {
+        selection.file_name for selection in initialization_selections(ECDS_VARIABLES)
+    }
+
+    for data_var in DAILY_CONFIG.data_vars:
+        job = region_job(data_var, tmp_path)
+        processing_region_ds, _ = job._get_region_datasets()
+        coords = job.generate_source_file_coords(
+            processing_region_ds.isel(lead_time=slice(1, 3), ensemble_member=[0, 1]),
+            [data_var],
+        )
+
+        file_names = {coord.get_url().rsplit("/", 1)[-1] for coord in coords}
+        assert file_names <= archived_file_names, (
+            f"{data_var.path} reads {sorted(file_names - archived_file_names)}"
+        )
+        # The control member and the perturbed members are archived separately.
+        assert len(file_names) == 2

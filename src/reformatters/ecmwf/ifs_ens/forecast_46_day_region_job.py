@@ -41,7 +41,10 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.ecmwf.archive_gribs.archive import format_init_time
-from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ARCHIVE_BASE_URL
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    ARCHIVE_BASE_URL,
+    ECDS_VARIABLES,
+)
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     INDEX_SUFFIX,
     MessageRecord,
@@ -65,14 +68,17 @@ GRID_SHAPE = (121, 240)
 EXPECTED_CLAMP_FRACTION = 0.08
 
 
-def selections_by_variable(
-    data_vars: Sequence[EcmwfIfsEns46DayDataVar],
-) -> dict[tuple[str, str], EcdsSelection]:
-    """The ECDS request each variable is archived in, keyed by (variable, forecast type)."""
-    ecds_variables = sorted({v.internal_attrs.ecds_variable for v in data_vars})
+@lru_cache
+def selections_by_variable() -> Mapping[tuple[str, str], EcdsSelection]:
+    """The ECDS request each variable is archived in, keyed by (variable, forecast type).
+
+    The grouping is over the archive's whole variable manifest. A request's file name
+    identifies the group it was retrieved in, so grouping any subset names blobs that
+    do not exist.
+    """
     return {
         (variable, selection.forecast_type): selection
-        for selection in initialization_selections(ecds_variables)
+        for selection in initialization_selections(ECDS_VARIABLES)
         for variable in selection.variables
     }
 
@@ -126,7 +132,7 @@ class EcmwfIfsEns46DayRegionJob(
         data_vars: Sequence[EcmwfIfsEns46DayDataVar],
     ) -> Sequence[Sequence[EcmwfIfsEns46DayDataVar]]:
         """Group variables by the archived blob they were retrieved in."""
-        selections = selections_by_variable(data_vars)
+        selections = selections_by_variable()
         groups: defaultdict[str, list[EcmwfIfsEns46DayDataVar]] = defaultdict(list)
         for data_var in data_vars:
             selection = selections[
@@ -142,7 +148,7 @@ class EcmwfIfsEns46DayRegionJob(
     ) -> Sequence[EcmwfIfsEns46DaySourceFileCoord]:
         data_var = item(data_var_group)
         ecds_variable = data_var.internal_attrs.ecds_variable
-        selections = selections_by_variable(data_var_group)
+        selections = selections_by_variable()
         levels = _output_levels(processing_region_ds, ecds_variable, data_var)
 
         return [

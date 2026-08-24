@@ -71,10 +71,27 @@ def test_init_times_to_archive_stops_at_the_earliest_initialization() -> None:
 
 
 def test_ecds_variables_shard_into_the_archived_selections() -> None:
-    """One initialization is 12 blobs; the archive's layout is what readers index."""
+    """One initialization is these 12 blobs; the archive's layout is what readers index.
+
+    The names are pinned because a reformatter addresses a blob by name: resharding or
+    changing ECDS_VARIABLES renames files that every reader already indexes by.
+    """
     selections = initialization_selections(ECDS_VARIABLES)
-    assert len(selections) == 12
     assert {v for s in selections for v in s.variables} == set(ECDS_VARIABLES)
+    assert {selection.file_name for selection in selections} == {
+        "pressure-control_forecast-geopotential_height-1526e788.grib2",
+        "pressure-control_forecast-specific_humidity-4cb6cf32.grib2",
+        "pressure-perturbed_forecast-geopotential_height-6b24c498.grib2",
+        "pressure-perturbed_forecast-specific_humidity-4cb6cf32.grib2",
+        "pressure-perturbed_forecast-temperature-f62b6585.grib2",
+        "pressure-perturbed_forecast-u_component_of_wind-09d82879.grib2",
+        "pressure-perturbed_forecast-v_component_of_wind-b41ec9c0.grib2",
+        "pressure-perturbed_forecast-vertical_velocity-6a845ed1.grib2",
+        "single_level-control_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-control_forecast-convective_precipitation-c91f8c5b.grib2",
+        "single_level-perturbed_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-perturbed_forecast-convective_precipitation-c91f8c5b.grib2",
+    }
 
 
 def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
