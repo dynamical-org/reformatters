@@ -191,7 +191,7 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 4
+    assert len(validators) == 3
     current_data = next(
         validator
         for validator in validators
@@ -199,32 +199,17 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
     )
     assert current_data.max_delay == timedelta(hours=2)
 
-    # One completeness instance per source-file publication schedule, each held to a
-    # whole 1.0 from the position where its variables are expected to be present.
-    completeness = [
+    # discover_available extends time only to an hour holding every file it needs, so
+    # one instance covering every variable at a whole 1.0 is the right check: no
+    # ingested position is ever partially published.
+    completeness = next(
         validator
         for validator in validators
         if isinstance(validator, validation.CheckVirtualManifestCompleteness)
-    ]
-    f01_check = next(c for c in completeness if c.include_vars == "all")
-    f00_check = next(c for c in completeness if c.include_vars != "all")
-    hour_0_paths = {
-        var.path for var in dataset.template_config.data_vars if var.has_hour_0_values()
-    }
-    other_paths = {
-        var.path
-        for var in dataset.template_config.data_vars
-        if not var.has_hour_0_values()
-    }
-    assert hour_0_paths, "the f00-sourced partition must be non-empty"
-    assert other_paths, "the f01-sourced partition must be non-empty"
-
-    assert set(f01_check.exclude_vars) == hour_0_paths
-    assert f01_check.include_vars == "all"
-    assert f01_check.min_present_fraction == (1.0,)
-
-    assert set(f00_check.include_vars) == hour_0_paths
-    assert f00_check.min_present_fraction == (0.0, 1.0)
+    )
+    assert completeness.include_vars == "all"
+    assert completeness.exclude_vars == ()
+    assert completeness.min_present_fraction == (1.0,)
 
     decode_health = next(
         validator

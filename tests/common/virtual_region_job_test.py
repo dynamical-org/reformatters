@@ -1234,6 +1234,49 @@ def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
         )
 
 
+def test_driver_receives_the_stores_ingested_through(tmp_path: Path) -> None:
+    # A dataset's discover_available uses ingested_through to tell a coord that fills in
+    # an existing position from one that extends the array, so the loop must hand it the
+    # store's newest label rather than the template's.
+    seen: list[Timestamp | None] = []
+
+    class RecordingJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            seen.append(self.ingested_through)
+            yield from super().process_virtual_refs(remaining)
+
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    full_template = _create_template_ds(4)
+    RecordingJob.backfill_batch_files = 2 * N_LEADS
+
+    for region in (slice(0, 2), slice(2, 4)):
+        RecordingJob.process_worker_jobs(
+            [
+                RecordingJob(
+                    tmp_store=Path("unused-tmp.zarr"),
+                    template_ds=full_template,
+                    data_vars=[VirtualTestDataVar(name="temperature_2m")],
+                    append_dim="init_time",
+                    region=region,
+                    reformat_job_name="test",
+                    processing_mode="backfill",
+                )
+            ],
+            dataset.store_factory,
+            "main",
+            worker_index=0,
+        )
+
+    init_times = full_template.to_dataset().get_index("init_time")
+    assert seen == [None, init_times[1]]
+
+
 # --- driver fork integration (operational + backfill routing) ---
 
 

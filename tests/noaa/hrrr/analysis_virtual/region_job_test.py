@@ -14,6 +14,7 @@ from reformatters.noaa.hrrr.analysis_virtual.template_config import (
     NoaaHrrrAnalysisVirtualTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.virtual_region_job import NoaaHrrrVirtualRegionJob
 
 TEMPLATE_CONFIG = NoaaHrrrAnalysisVirtualTemplateConfig()
 
@@ -147,3 +148,99 @@ def test_operational_update_jobs_single_polling_job(
     assert job.processing_mode == "update"
     times = template_ds.to_dataset().get_index("time")
     assert job.region == slice(len(times) - 12, len(times))
+
+
+def hour_0_and_hour_1_coords(
+    template_ds: xr.DataTree, times: Sequence[pd.Timestamp]
+) -> list[NoaaHrrrAnalysisVirtualSourceFileCoord]:
+    data_vars = [
+        get_var("temperature_2m"),  # sfc, has hour-0 values
+        get_var("total_precipitation_surface"),  # sfc, accum (no hour 0)
+    ]
+    job = make_job(template_ds, data_vars=data_vars)
+    region_ds = template_ds.to_dataset().sel(time=list(times))
+    return list(job.generate_source_file_coords(region_ds, data_vars))
+
+
+def discover(
+    job: NoaaHrrrAnalysisVirtualRegionJob,
+    pending: Sequence[NoaaHrrrAnalysisVirtualSourceFileCoord],
+    published: Sequence[NoaaHrrrAnalysisVirtualSourceFileCoord],
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[pd.Timedelta, pd.Timestamp]]:
+    """Run the gate over `pending` with `published` listed by the source."""
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        lambda self, pending: [(c, 100) for c in pending if c in published],
+    )
+    return [
+        (coord.lead_time, coord.valid_time())
+        for coord, _ in job.discover_available(list(pending))
+    ]
+
+
+def test_hour_1_file_withheld_until_the_hour_0_file_publishes(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    time = pd.Timestamp("2014-10-01T02:00")
+    coords = hour_0_and_hour_1_coords(template_ds, [time])
+    (hour_0,) = [c for c in coords if c.lead_time == pd.Timedelta("0h")]
+    (hour_1,) = [c for c in coords if c.lead_time == pd.Timedelta("1h")]
+    job = make_job(
+        template_ds, data_vars=list(hour_0.data_vars) + list(hour_1.data_vars)
+    ).model_copy(update={"ingested_through": time - pd.Timedelta("1h")})
+
+    # f01 publishes an hour before the f00 that authorizes the same valid time.
+    assert discover(job, coords, [hour_1], monkeypatch) == []
+    assert sorted(discover(job, coords, [hour_1, hour_0], monkeypatch)) == [
+        (pd.Timedelta("0h"), time),
+        (pd.Timedelta("1h"), time),
+    ]
+
+
+def test_only_the_hour_with_its_hour_0_file_is_released(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A tick carrying two hours' files extends to the newer hour only if it is whole."""
+    times = [pd.Timestamp("2014-10-01T01:00"), pd.Timestamp("2014-10-01T02:00")]
+    coords = hour_0_and_hour_1_coords(template_ds, times)
+    published = [
+        c
+        for c in coords
+        if c.valid_time() == times[0] or c.lead_time == pd.Timedelta("1h")
+    ]
+    job = make_job(template_ds, data_vars=list(coords[0].data_vars)).model_copy(
+        update={"ingested_through": times[0] - pd.Timedelta("1h")}
+    )
+
+    assert sorted(discover(job, coords, published, monkeypatch)) == [
+        (pd.Timedelta("0h"), times[0]),
+        (pd.Timedelta("1h"), times[0]),
+    ]
+
+
+def test_a_time_the_store_already_covers_is_never_withheld(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An f00 the archive never published must not block the f01 beside it forever."""
+    time = pd.Timestamp("2014-10-01T02:00")
+    coords = hour_0_and_hour_1_coords(template_ds, [time])
+    (hour_1,) = [c for c in coords if c.lead_time == pd.Timedelta("1h")]
+    job = make_job(template_ds, data_vars=list(hour_1.data_vars)).model_copy(
+        update={"ingested_through": time}
+    )
+
+    assert discover(job, coords, [hour_1], monkeypatch) == [(pd.Timedelta("1h"), time)]
+
+
+def test_an_empty_store_waits_for_an_hour_0_file(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    time = pd.Timestamp("2014-10-01T02:00")
+    coords = hour_0_and_hour_1_coords(template_ds, [time])
+    (hour_1,) = [c for c in coords if c.lead_time == pd.Timedelta("1h")]
+    job = make_job(template_ds, data_vars=list(hour_1.data_vars))
+    assert job.ingested_through is None
+
+    assert discover(job, coords, [hour_1], monkeypatch) == []

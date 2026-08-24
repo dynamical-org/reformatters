@@ -82,20 +82,13 @@ class NoaaHrrrAnalysisVirtualDataset(
         return [operational_update_cron_job, validation_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
-        hour_0_var_paths = tuple(
-            var.path
-            for var in self.template_config.data_vars
-            if var.has_hour_0_values()
-        )
         return (
+            # An hour is ingested when its own f00 files publish, ~1h after its
+            # timestamp. Two hours leaves room for one cycle to roll to the next fire.
             validation.CheckCurrentData(max_delay=timedelta(hours=2)),
-            validation.CheckVirtualManifestCompleteness(exclude_vars=hour_0_var_paths),
-            # A cycle running past the update's poll deadline leaves the newest hour
-            # without its own f00 files until the next fire.
-            validation.CheckVirtualManifestCompleteness(
-                include_vars=hour_0_var_paths,
-                min_present_fraction=(0.0, 1.0),
-            ),
+            # discover_available extends time only to an hour holding every file it
+            # needs, so every ingested position is whole.
+            validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(
                 allow_all_nan_vars=(
                     "echo_top",
