@@ -959,7 +959,7 @@ def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field pa
     return Encoding(**{**defaults, **overrides})
 
 
-def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
+def test_virtual_dataset_rejects_shards_and_implicit_compressor(
     tmp_path: Path,
 ) -> None:
     class ShardedTemplateConfig(VirtualTestTemplateConfig):
@@ -992,8 +992,39 @@ def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
     class CompressedDataset(VirtualTestDataset):
         template_config: CompressedTemplateConfig = CompressedTemplateConfig()
 
-    with pytest.raises(ValidationError, match="must declare compressors="):
+    with pytest.raises(ValidationError, match="must explicitly declare compressors"):
         _construct_dataset(tmp_path, CompressedDataset)
+
+    class SourceCompressedTemplateConfig(VirtualTestTemplateConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[VirtualTestDataVar]:
+            return [
+                VirtualTestDataVar(
+                    name="temperature_2m",
+                    encoding=_encoding(
+                        compressors=[
+                            {
+                                "name": "blosc",
+                                "configuration": {
+                                    "typesize": 8,
+                                    "cname": "lz4",
+                                    "clevel": 5,
+                                    "shuffle": "shuffle",
+                                    "blocksize": 0,
+                                },
+                            }
+                        ]
+                    ),
+                )
+            ]
+
+    class SourceCompressedDataset(VirtualTestDataset):
+        template_config: SourceCompressedTemplateConfig = (
+            SourceCompressedTemplateConfig()
+        )
+
+    _construct_dataset(tmp_path, SourceCompressedDataset)
 
 
 # --- process_virtual integration (real value read-back) ---

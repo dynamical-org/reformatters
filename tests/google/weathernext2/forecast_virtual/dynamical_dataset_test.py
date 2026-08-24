@@ -3,70 +3,24 @@ from datetime import timedelta
 from pathlib import Path
 
 import icechunk
-import pytest
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.google.weathernext2.forecast_virtual.dynamical_dataset import (
-    GoogleWeathernext2ForecastVirtualDataset,
+from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_dataset import (
+    GoogleWeathernext2ForecastHistoricalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
+    GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
 
 
-@pytest.fixture
-def dataset(tmp_path: Path) -> GoogleWeathernext2ForecastVirtualDataset:
-    return GoogleWeathernext2ForecastVirtualDataset(
-        primary_storage_config=StorageConfig(
-            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-        ),
-    )
-
-
-def test_operational_kubernetes_resources(
-    dataset: GoogleWeathernext2ForecastVirtualDataset,
-) -> None:
-    cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
-
-    assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    # Single-writer virtual update: no fan-out.
-    assert update_cron_job.workers_total == 1
-    assert update_cron_job.parallelism == 1
-    # A fire must not outlive the next one.
-    assert update_cron_job.pod_active_deadline < timedelta(hours=6)
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert len(update_cron_job.secret_names) > 0
-    # Nothing is backfilled yet.
-    assert update_cron_job.suspend is True
-    assert validation_cron_job.suspend is True
-
-
-def test_validators(dataset: GoogleWeathernext2ForecastVirtualDataset) -> None:
-    validators = tuple(dataset.validators())
-    assert len(validators) == 3
-    (completeness,) = [
-        v
-        for v in validators
-        if isinstance(v, validation.CheckVirtualManifestCompleteness)
-    ]
-    assert completeness.min_present_fraction == (1.0,)
-    assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
-
-
-def test_current_data_validator_allows_publication_lag(
-    dataset: GoogleWeathernext2ForecastVirtualDataset,
-) -> None:
-    (current_data,) = [
-        v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
-    ]
-    assert current_data.max_delay == timedelta(hours=60)
+def _storage(tmp_path: Path) -> StorageConfig:
+    return StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK)
 
 
 def _resolved_split_size(
     split: icechunk.ManifestSplittingConfig, array_path: str
 ) -> int:
-    # Mirror icechunk's first-to-last rule matching: a path_matches condition
-    # matches by regex search; the AnyArray catch-all matches every array.
     for condition, dim_splits in split.split_sizes:
         regex = getattr(condition, "regex", None)
         if regex is None or re.search(regex, array_path):
@@ -75,17 +29,71 @@ def _resolved_split_size(
     raise AssertionError(f"no split rule matched {array_path}")
 
 
-def test_manifest_split_size_resolves_per_group(
-    dataset: GoogleWeathernext2ForecastVirtualDataset,
+def test_historical_product_is_fixed_and_has_virtual_health_checks(
+    tmp_path: Path,
 ) -> None:
+    dataset = GoogleWeathernext2ForecastHistoricalVirtualDataset(
+        primary_storage_config=_storage(tmp_path)
+    )
+
+    update, validate = dataset.operational_kubernetes_resources("test")
+    assert update.name == f"{dataset.dataset_id}-update"
+    assert update.suspend is True
+    assert validate.name == f"{dataset.dataset_id}-validate"
+    assert validate.suspend is True
+    assert not any(
+        isinstance(item, validation.CheckCurrentData) for item in dataset.validators()
+    )
+    assert any(
+        isinstance(item, validation.CheckVirtualManifestCompleteness)
+        for item in dataset.validators()
+    )
+    assert any(
+        isinstance(item, validation.CheckVirtualDecodeHealth)
+        for item in dataset.validators()
+    )
+    assert (
+        _resolved_split_size(
+            dataset.icechunk_virtual_config.manifest_split,
+            "/pressure_level/temperature",
+        )
+        == 32
+    )
+
+
+def test_operational_product_has_lag_aware_crons_and_splits(tmp_path: Path) -> None:
+    dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
+        primary_storage_config=_storage(tmp_path)
+    )
+
+    update, validate = dataset.operational_kubernetes_resources("test")
+    assert update.name == f"{dataset.dataset_id}-update"
+    assert update.workers_total == 1
+    assert update.parallelism == 1
+    assert update.pod_active_deadline < timedelta(hours=6)
+    assert update.suspend is True
+    assert validate.suspend is True
+    (current,) = [
+        item
+        for item in dataset.validators()
+        if isinstance(item, validation.CheckCurrentData)
+    ]
+    assert current.max_delay == timedelta(hours=60)
     split = dataset.icechunk_virtual_config.manifest_split
     assert _resolved_split_size(split, "/pressure_level/temperature") == 4
     assert _resolved_split_size(split, "/temperature_2m") == 32
 
 
-def test_virtual_container_matches_ref_prefix(
-    dataset: GoogleWeathernext2ForecastVirtualDataset,
-) -> None:
-    (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "https://wn.dynamical.org/chunks/"
-    assert isinstance(container.store, icechunk.ObjectStoreConfig.Http)
+def test_both_products_use_the_raw_http_chunk_container(tmp_path: Path) -> None:
+    datasets = (
+        GoogleWeathernext2ForecastHistoricalVirtualDataset(
+            primary_storage_config=_storage(tmp_path / "historical")
+        ),
+        GoogleWeathernext2ForecastOperationalVirtualDataset(
+            primary_storage_config=_storage(tmp_path / "operational")
+        ),
+    )
+    for dataset in datasets:
+        (container,) = dataset.icechunk_virtual_config.containers
+        assert container.url_prefix == "https://wn.dynamical.org/chunks/"
+        assert isinstance(container.store, icechunk.ObjectStoreConfig.Http)

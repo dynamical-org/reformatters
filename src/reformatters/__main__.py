@@ -50,8 +50,11 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset im
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
-from reformatters.google.weathernext2.forecast_virtual import (
-    GoogleWeathernext2ForecastVirtualDataset,
+from reformatters.google.weathernext2.forecast_historical_virtual import (
+    GoogleWeathernext2ForecastHistoricalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_operational_virtual import (
+    GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
@@ -249,7 +252,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
     ),
     # Google
-    GoogleWeathernext2ForecastVirtualDataset(
+    GoogleWeathernext2ForecastHistoricalVirtualDataset(
+        primary_storage_config=UpstreamGriddedZarrsIcechunkDatasetStorageConfig(),
+    ),
+    GoogleWeathernext2ForecastOperationalVirtualDataset(
         primary_storage_config=UpstreamGriddedZarrsIcechunkDatasetStorageConfig(),
     ),
     # NASA

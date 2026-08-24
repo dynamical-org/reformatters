@@ -1,3 +1,3 @@
-from .dynamical_dataset import (
-    GoogleWeathernext2ForecastVirtualDataset as GoogleWeathernext2ForecastVirtualDataset,
+from .template_config import (
+    GoogleWeathernext2DataVar as GoogleWeathernext2DataVar,
 )

@@ -2,12 +2,13 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, NamedTuple, Self
 
 import httpx
 import icechunk
 import pandas as pd
 import xarray as xr
+from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
@@ -25,18 +26,15 @@ from .template_config import (
     PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
+    SourceLayout,
 )
 
 SOURCE_LOCATION_PREFIX = "gs://weathernext/"
-AVAILABILITY_LOCATION_PREFIX = "https://wn.dynamical.org/available/"
 PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
+OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
-_SOURCE_LEVEL_INDEX = {
-    level: index for index, level in enumerate(sorted(PRESSURE_LEVELS))
-}
-_NO_SINGLE_FILE_SIZE = 0
+_SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _PUBLICATION_LAG = pd.Timedelta("48h")
-OUTPUT_CHUNK_LENGTH = 721 * 1440 * 4
 ROOT_MANIFEST_INIT_SPLIT = 32
 PRESSURE_MANIFEST_INIT_SPLIT = 4
 
@@ -50,30 +48,24 @@ def weathernext2_virtual_chunk_containers() -> tuple[
 
 
 class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
-    """One forecast lead from an annual or per-init source Zarr store."""
+    """One forecast lead from one native annual or per-init source Zarr store."""
 
+    source_layout: SourceLayout
     init_time: Timestamp
     lead_time: Timedelta
     data_vars: Sequence[GoogleWeathernext2DataVar]
-
-    @property
-    def is_per_init_store(self) -> bool:
-        return self.init_time >= PER_INIT_STORE_DATE
+    chunk_lengths: dict[str, int] = Field(default_factory=dict, frozen=False)
 
     def get_url(self) -> str:
-        if self.is_per_init_store:
+        if self.source_layout == "operational":
+            assert self.init_time >= PER_INIT_STORE_DATE
             return (
                 f"{_SOURCE_ZARR_PREFIX}2025_to_present/"
                 f"{self.init_time:%Y%m%d}_{self.init_time:%H}hr_01_preds/predictions.zarr"
             )
+        assert self.init_time < PER_INIT_STORE_DATE
         year = self.init_time.year
         return f"{_SOURCE_ZARR_PREFIX}{year}_to_{year + 1}/predictions.zarr"
-
-    def get_success_marker_url(self) -> str:
-        return self.get_url().removesuffix("predictions.zarr") + "success"
-
-    def get_availability_url(self) -> str:
-        return AVAILABILITY_LOCATION_PREFIX + _store_key(self.get_success_marker_url())
 
     @property
     def lead_index(self) -> int:
@@ -81,7 +73,7 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
 
     @property
     def annual_init_index(self) -> int:
-        assert not self.is_per_init_store
+        assert self.source_layout == "historical"
         year_start = pd.Timestamp(f"{self.init_time.year}-01-01")
         return int((self.init_time - year_start) // pd.Timedelta("6h"))
 
@@ -91,7 +83,7 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
         ensemble_member: int,
         pressure_level: int | None,
     ) -> str:
-        if self.is_per_init_store:
+        if self.source_layout == "operational":
             indices = [ensemble_member, self.lead_index]
             if pressure_level is not None:
                 indices.append(_SOURCE_LEVEL_INDEX[pressure_level])
@@ -102,22 +94,19 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
         indices.extend((0, 0))
         return f"{var.internal_attrs.source_name}/" + ".".join(map(str, indices))
 
-    def plane_index(
-        self,
-        var: GoogleWeathernext2DataVar,
-        ensemble_member: int,
-        pressure_level: int | None,
-    ) -> int:
-        if self.is_per_init_store:
-            return 0
-        member_plane = ensemble_member % 4
-        if var.group is ROOT:
-            return member_plane
-        assert pressure_level is not None
-        return member_plane * len(PRESSURE_LEVELS) + _SOURCE_LEVEL_INDEX[pressure_level]
-
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"init_time": self.init_time, "lead_time": self.lead_time}
+
+
+class NativeSourceChunk(NamedTuple):
+    data_var: GoogleWeathernext2DataVar
+    out_loc: Mapping[Dim, CoordinateValue]
+    location: str
+
+
+class ObjectListingQuery(NamedTuple):
+    prefix: str
+    match_glob: str | None = None
 
 
 class GoogleWeathernext2ForecastVirtualRegionJob(
@@ -125,8 +114,38 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18D")
+    source_layout: ClassVar[SourceLayout]
+    manifest_init_split: ClassVar[int]
     publication_cutoff: Timestamp = pd.Timestamp.max
+
+    @classmethod
+    def get_jobs(
+        cls,
+        tmp_store: Path,
+        template_ds: xr.DataTree,
+        append_dim: AppendDim,
+        all_data_vars: Sequence[GoogleWeathernext2DataVar],
+        reformat_job_name: str,
+        filter_start: Timestamp | None = None,
+        filter_end: Timestamp | None = None,
+        filter_contains: list[Timestamp] | None = None,
+        filter_variable_names: list[str] | None = None,
+    ) -> Sequence[Self]:
+        jobs = super().get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=filter_start,
+            filter_end=filter_end,
+            filter_contains=filter_contains,
+            filter_variable_names=filter_variable_names,
+        )
+        if cls.source_layout == "historical":
+            return jobs
+        cutoff = _current_publication_cutoff()
+        return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
     def operational_update_jobs(
@@ -147,6 +166,16 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         ],
         xr.DataTree,
     ]:
+        if cls.source_layout == "historical":
+            return super().operational_update_jobs(
+                primary_store=primary_store,
+                tmp_store=tmp_store,
+                get_template_fn=get_template_fn,
+                append_dim=append_dim,
+                all_data_vars=all_data_vars,
+                reformat_job_name=reformat_job_name,
+                job_fire_time=PER_INIT_STORE_DATE,
+            )
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -171,12 +200,20 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         coords = []
         for init_time_value in processing_region_ds["init_time"].values:
             init_time = pd.Timestamp(init_time_value)
+            if (init_time >= PER_INIT_STORE_DATE) != (
+                self.source_layout == "operational"
+            ):
+                continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
-                if init_time + lead_time >= self.publication_cutoff:
+                if (
+                    self.source_layout == "operational"
+                    and init_time + lead_time >= self.publication_cutoff
+                ):
                     continue
                 coords.append(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
+                        source_layout=self.source_layout,
                         init_time=init_time,
                         lead_time=lead_time,
                         data_vars=data_var_group,
@@ -184,27 +221,99 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 )
         return coords
 
+    def _source_chunks(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> list[NativeSourceChunk]:
+        assert coord.source_layout == self.source_layout
+        store_key_prefix = _store_key(coord.get_url()) + "/"
+        ensemble_members = [
+            int(value)
+            for value in self.template_ds.to_dataset().get_index("ensemble_member")
+        ]
+        chunks = []
+        for var in coord.data_vars:
+            if self.source_layout == "historical":
+                members = ensemble_members[::4]
+                levels: Sequence[int | None] = (
+                    [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
+                )
+            else:
+                members = ensemble_members
+                levels = [None] if var.group is ROOT else PRESSURE_LEVELS
+            for member in members:
+                for level in levels:
+                    key = coord.chunk_key(var, member, level)
+                    out_loc: dict[Dim, CoordinateValue] = {
+                        "init_time": coord.init_time,
+                        "ensemble_member": member,
+                        "lead_time": coord.lead_time,
+                    }
+                    if level is not None:
+                        out_loc["pressure_level"] = level
+                    chunks.append(
+                        NativeSourceChunk(
+                            data_var=var,
+                            out_loc=out_loc,
+                            location=f"{PROXY_LOCATION_PREFIX}{store_key_prefix}{key}",
+                        )
+                    )
+        return chunks
+
+    def _listing_queries(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> list[ObjectListingQuery]:
+        store_key_prefix = _store_key(coord.get_url()) + "/"
+        queries = []
+        for var in coord.data_vars:
+            prefix = f"{store_key_prefix}{var.internal_attrs.source_name}/"
+            if self.source_layout == "historical":
+                queries.append(
+                    ObjectListingQuery(f"{prefix}{coord.annual_init_index}.")
+                )
+            else:
+                queries.append(
+                    ObjectListingQuery(
+                        prefix=prefix,
+                        match_glob=f"{prefix}*.{coord.lead_index}.*",
+                    )
+                )
+        return queries
+
     def discover_available(
         self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
     ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
-        availability_urls = sorted({coord.get_availability_url() for coord in pending})
+        queries = sorted(
+            {query for coord in pending for query in self._listing_queries(coord)}
+        )
         with (
             httpx.Client(timeout=30) as client,
             ThreadPoolExecutor(self.download_concurrency) as pool,
         ):
-            available_leads = dict(
+            listed = dict(
                 zip(
-                    availability_urls,
-                    pool.map(partial(_available_lead_count, client), availability_urls),
+                    queries,
+                    pool.map(partial(_list_objects, client), queries),
                     strict=True,
                 )
             )
-        return [
-            (coord, _NO_SINGLE_FILE_SIZE)
-            for coord in pending
-            if (lead_count := available_leads[coord.get_availability_url()]) is not None
-            and coord.lead_index < lead_count
-        ]
+
+        available = []
+        for coord in pending:
+            coord_objects: dict[str, int] = {}
+            for query in self._listing_queries(coord):
+                objects = listed[query]
+                if objects is None:
+                    break
+                coord_objects.update(objects)
+            else:
+                locations = {chunk.location for chunk in self._source_chunks(coord)}
+                if locations <= coord_objects.keys():
+                    coord.chunk_lengths.clear()
+                    coord.chunk_lengths.update(
+                        {location: coord_objects[location] for location in locations}
+                    )
+                    available.append((coord, 0))
+        return available
 
     def process_virtual_refs(
         self,
@@ -228,7 +337,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         for coord in remaining:
             init_index = init_times.get_loc(coord.init_time)
             assert isinstance(init_index, int)
-            manifest_index = init_index // PRESSURE_MANIFEST_INIT_SPLIT
+            manifest_index = init_index // self.manifest_init_split
             coords_by_manifest.setdefault(manifest_index, []).append(coord)
         for coords in coords_by_manifest.values():
             coords.sort(key=lambda coord: (coord.init_time, coord.lead_time))
@@ -237,54 +346,72 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
     def file_refs(
         self,
         coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
-        file_size: int,  # noqa: ARG002 - the coord spans many source chunk objects
+        file_size: int,  # noqa: ARG002 - each coord covers several native objects
     ) -> list[VirtualRef]:
-        refs = []
-        store_key_prefix = _store_key(coord.get_url()) + "/"
-        ensemble_members = self.template_ds.to_dataset().get_index("ensemble_member")
-        for var in coord.data_vars:
-            template_var = self.template_ds[var.path]
-            pressure_levels: Sequence[int | None] = (
-                [None]
-                if var.group is ROOT
-                else [int(level) for level in template_var.get_index("pressure_level")]
+        chunks = self._source_chunks(coord)
+        assert set(coord.chunk_lengths) == {chunk.location for chunk in chunks}
+        return [
+            VirtualRef(
+                data_var=chunk.data_var,
+                out_loc=chunk.out_loc,
+                location=chunk.location,
+                offset=0,
+                length=coord.chunk_lengths[chunk.location],
             )
-            for member_value in ensemble_members:
-                member = int(member_value)
-                for level in pressure_levels:
-                    key = coord.chunk_key(var, member, level)
-                    out_loc: dict[Dim, CoordinateValue] = {
-                        "init_time": coord.init_time,
-                        "ensemble_member": member,
-                        "lead_time": coord.lead_time,
-                    }
-                    if level is not None:
-                        out_loc["pressure_level"] = level
-                    plane = coord.plane_index(var, member, level)
-                    refs.append(
-                        VirtualRef(
-                            data_var=var,
-                            out_loc=out_loc,
-                            location=(
-                                f"{PROXY_LOCATION_PREFIX}plane/{plane}/"
-                                f"{store_key_prefix}{key}"
-                            ),
-                            offset=0,
-                            length=OUTPUT_CHUNK_LENGTH,
-                        )
-                    )
-        return refs
+            for chunk in chunks
+        ]
+
+
+class GoogleWeathernext2ForecastHistoricalVirtualRegionJob(
+    GoogleWeathernext2ForecastVirtualRegionJob
+):
+    source_layout: ClassVar[SourceLayout] = "historical"
+    manifest_init_split: ClassVar[int] = ROOT_MANIFEST_INIT_SPLIT
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("1D")
+
+
+class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
+    GoogleWeathernext2ForecastVirtualRegionJob
+):
+    source_layout: ClassVar[SourceLayout] = "operational"
+    manifest_init_split: ClassVar[int] = PRESSURE_MANIFEST_INIT_SPLIT
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18D")
 
 
 def _store_key(url: str) -> str:
     return url.removeprefix(SOURCE_LOCATION_PREFIX)
 
 
-def _available_lead_count(client: httpx.Client, url: str) -> int | None:
-    response = client.head(url)
-    if response.status_code in {403, 404}:
-        return None
-    response.raise_for_status()
-    lead_count = int(response.headers["X-WeatherNext-Available-Lead-Count"])
-    assert 1 <= lead_count <= 60, f"invalid available lead count: {lead_count}"
-    return lead_count
+def _current_publication_cutoff() -> Timestamp:
+    return pd.Timestamp.now(tz="UTC").tz_localize(None) - _PUBLICATION_LAG
+
+
+def _list_objects(
+    client: httpx.Client, query: ObjectListingQuery
+) -> dict[str, int] | None:
+    objects: dict[str, int] = {}
+    page_token: str | None = None
+    while True:
+        params = {"prefix": query.prefix, "maxResults": "1000"}
+        if query.match_glob is not None:
+            params.update({"matchGlob": query.match_glob, "delimiter": "/"})
+        if page_token is not None:
+            params["pageToken"] = page_token
+        response = client.get(OBJECTS_LOCATION, params=params)
+        if response.status_code in {403, 404}:
+            return None
+        response.raise_for_status()
+        payload = response.json()
+        for item in payload.get("items", []):
+            key = str(item["name"])
+            assert key.startswith(query.prefix), (
+                f"listed object escaped prefix {query.prefix}: {key}"
+            )
+            size = int(item["size"])
+            assert size > 0, f"invalid object size for {key}: {size}"
+            location = f"{PROXY_LOCATION_PREFIX}{key}"
+            assert location not in objects, f"duplicate listed object: {key}"
+            objects[location] = size
+        page_token = payload.get("nextPageToken")
+        if page_token is None:
+            return objects

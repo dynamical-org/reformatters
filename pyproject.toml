@@ -40,6 +40,9 @@ exclude-newer = "5 days"
 [project.scripts]
 main = "reformatters.__main__:app"
 
+[project.entry-points."zarr.codecs"]
+"dynamicalorg.latitude_longitude" = "reformatters.common.latitude_longitude_codec:LatitudeLongitudeCodec"
+
 [dependency-groups]
 dev = [
     "boto3>=1.42.49",

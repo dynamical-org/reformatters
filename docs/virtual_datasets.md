@@ -145,4 +145,12 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 
 Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
+The reader must also have every non-core codec named by array metadata installed before
+opening the dataset. Zarr discovers these codecs through the `zarr.codecs` entry-point
+group. WeatherNext's native-chunk products use
+`dynamicalorg.latitude_longitude` to present the repository's canonical spatial
+orientation without rewriting source chunks; it is registered by the `reformatters`
+distribution. A client environment without that distribution fails explicitly when Zarr
+resolves the codec rather than returning misoriented values.
+
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).

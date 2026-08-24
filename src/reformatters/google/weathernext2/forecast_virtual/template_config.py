@@ -1,11 +1,11 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, ClassVar, Literal
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import computed_field
-from zarr.codecs import BytesCodec, ScaleOffset
+from zarr.codecs import BloscCodec, BytesCodec, ScaleOffset, TransposeCodec
 
 from reformatters.common.config_models import (
     ROOT,
@@ -19,6 +19,7 @@ from reformatters.common.config_models import (
     Group,
     StatisticsApproximate,
 )
+from reformatters.common.latitude_longitude_codec import LatitudeLongitudeCodec
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import (
     AppendDim,
@@ -32,7 +33,7 @@ from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 _GRID_NLAT = 721
 _GRID_NLON = 1440
 
-PRESSURE_LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
+PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
 
 PER_INIT_STORE_DATE = pd.Timestamp("2025-01-01T00:00")
 
@@ -44,6 +45,19 @@ PER_INIT_STORE_DATE = pd.Timestamp("2025-01-01T00:00")
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
 _GEOPOTENTIAL_TO_HEIGHT = ScaleOffset(offset=0.0, scale=9.80665).to_dict()
 _METRES_TO_KG_M2 = ScaleOffset(offset=0.0, scale=0.001).to_dict()
+_SOURCE_BLOSC = BloscCodec(
+    typesize=4,
+    cname="lz4",
+    clevel=5,
+    shuffle="shuffle",
+).to_dict()
+_PRESSURE_TRANSPOSE = TransposeCodec(order=(0, 1, 2, 5, 3, 4)).to_dict()
+_CANONICAL_SPATIAL_ORIENTATION = LatitudeLongitudeCodec(
+    latitude_axis=3,
+    longitude_axis=4,
+).to_dict()
+
+type SourceLayout = Literal["historical", "operational"]
 
 
 class GoogleWeathernext2InternalAttrs(BaseInternalAttrs):
@@ -63,8 +77,14 @@ class GoogleWeathernext2DataVar(DataVar[GoogleWeathernext2InternalAttrs]):
 class GoogleWeathernext2ForecastVirtualTemplateConfig(
     TemplateConfig[GoogleWeathernext2DataVar]
 ):
-    """Virtual Google WeatherNext 2 ensemble forecast served through the authenticated
-    chunk proxy."""
+    """Shared schema for native-chunk WeatherNext 2 virtual products."""
+
+    source_layout: SourceLayout
+    dataset_id_value: ClassVar[str]
+    dataset_name_value: ClassVar[str]
+    time_domain_end: ClassVar[str]
+    init_time_statistics_max: ClassVar[str] = "Present"
+    valid_time_statistics_max: ClassVar[str] = "Present + 15 days"
 
     dims: Dims = {
         ROOT: (
@@ -91,9 +111,9 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     @property
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
-            dataset_id="google-weathernext2-forecast-virtual",
+            dataset_id=self.dataset_id_value,
             dataset_version="0.1.0",
-            name="Google WeatherNext 2 forecast, virtual",
+            name=self.dataset_name_value,
             description="Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
             attribution=(
                 "Google requires this attribution: © 2025 DeepMind Technologies "
@@ -113,7 +133,10 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
-            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_domain=(
+                f"Forecasts initialized {self.append_dim_start} UTC to "
+                f"{self.time_domain_end}"
+            ),
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 6-360 hours (0.25-15 days) ahead",
             forecast_resolution="6 hourly",
@@ -171,7 +194,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     standard_name="forecast_reference_time",
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
-                        min=dim_coords[self.append_dim].min().isoformat(), max="Present"
+                        min=dim_coords[self.append_dim].min().isoformat(),
+                        max=self.init_time_statistics_max,
                     ),
                 ),
             ),
@@ -294,7 +318,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="seconds since 1970-01-01 00:00:00",
                     statistics_approximate=StatisticsApproximate(
                         min=self.append_dim_start.isoformat(),
-                        max="Present + 15 days",
+                        max=self.valid_time_statistics_max,
                     ),
                 ),
             ),
@@ -336,22 +360,38 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     @computed_field
     @property
     def data_vars(self) -> Sequence[GoogleWeathernext2DataVar]:
-        return [*_root_data_vars(), *_pressure_data_vars()]
+        return [
+            *_root_data_vars(self.source_layout),
+            *_pressure_data_vars(self.source_layout),
+        ]
 
 
-def _virtual_encoding(group: Group, filters: Sequence[CodecConfig]) -> Encoding:
-    if group is ROOT:
-        chunks: tuple[int, ...] = (1, 1, 1, _GRID_NLAT, _GRID_NLON)
+def _virtual_encoding(
+    group: Group, filters: Sequence[CodecConfig], source_layout: SourceLayout
+) -> Encoding:
+    if source_layout == "historical":
+        chunks = (
+            (1, 4, 1, _GRID_NLAT, _GRID_NLON)
+            if group is ROOT
+            else (1, 4, 1, _GRID_NLAT, _GRID_NLON, len(PRESSURE_LEVELS))
+        )
     else:
-        chunks = (1, 1, 1, _GRID_NLAT, _GRID_NLON, 1)
+        chunks = (
+            (1, 1, 1, _GRID_NLAT, _GRID_NLON)
+            if group is ROOT
+            else (1, 1, 1, _GRID_NLAT, _GRID_NLON, 1)
+        )
+    encoding_filters = [*filters, _CANONICAL_SPATIAL_ORIENTATION]
+    if source_layout == "historical" and group is not ROOT:
+        encoding_filters.append(_PRESSURE_TRANSPOSE)
     return Encoding(
         dtype="float32",
         fill_value=np.nan,
         chunks=chunks,
         shards=None,
         serializer=BytesCodec(endian="little").to_dict(),
-        compressors=(),
-        filters=filters,
+        compressors=[_SOURCE_BLOSC],
+        filters=encoding_filters,
     )
 
 
@@ -368,11 +408,12 @@ def _var(
     comment: str | None,
     date_available: Timestamp | None,
     filters: Sequence[CodecConfig],
+    source_layout: SourceLayout,
 ) -> GoogleWeathernext2DataVar:
     return GoogleWeathernext2DataVar(
         name=name,
         group=group,
-        encoding=_virtual_encoding(group, filters),
+        encoding=_virtual_encoding(group, filters, source_layout),
         attrs=DataVarAttrs(
             short_name=short_name,
             long_name=long_name,
@@ -397,6 +438,7 @@ def _root_var(
     short_name: str,
     long_name: str,
     units: str,
+    source_layout: SourceLayout,
     standard_name: str | None = None,
     step_type: str = "instant",
     comment: str | None = None,
@@ -414,6 +456,7 @@ def _root_var(
         comment=comment,
         date_available=None,
         filters=filters,
+        source_layout=source_layout,
     )
 
 
@@ -424,6 +467,7 @@ def _pressure_var(
     short_name: str,
     long_name: str,
     units: str,
+    source_layout: SourceLayout,
     standard_name: str | None = None,
     filters: Sequence[CodecConfig] = (),
 ) -> GoogleWeathernext2DataVar:
@@ -439,10 +483,11 @@ def _pressure_var(
         comment=None,
         date_available=None,
         filters=filters,
+        source_layout=source_layout,
     )
 
 
-def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
+def _root_data_vars(source_layout: SourceLayout) -> list[GoogleWeathernext2DataVar]:
     return [
         _root_var(
             "temperature_2m",
@@ -452,6 +497,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
             filters=[_KELVIN_TO_CELSIUS],
+            source_layout=source_layout,
         ),
         _root_var(
             "pressure_reduced_to_mean_sea_level",
@@ -460,6 +506,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
+            source_layout=source_layout,
         ),
         _root_var(
             "wind_u_10m",
@@ -468,6 +515,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="10 metre U wind component",
             units="m s-1",
             standard_name="eastward_wind",
+            source_layout=source_layout,
         ),
         _root_var(
             "wind_v_10m",
@@ -476,6 +524,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="10 metre V wind component",
             units="m s-1",
             standard_name="northward_wind",
+            source_layout=source_layout,
         ),
         _root_var(
             "wind_u_100m",
@@ -484,6 +533,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="100 metre U wind component",
             units="m s-1",
             standard_name="eastward_wind",
+            source_layout=source_layout,
         ),
         _root_var(
             "wind_v_100m",
@@ -492,6 +542,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="100 metre V wind component",
             units="m s-1",
             standard_name="northward_wind",
+            source_layout=source_layout,
         ),
         _root_var(
             "sea_surface_temperature",
@@ -502,6 +553,7 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
             standard_name="sea_surface_temperature",
             comment="NaN over land where sea surface temperature does not apply.",
             filters=[_KELVIN_TO_CELSIUS],
+            source_layout=source_layout,
         ),
         _root_var(
             "total_precipitation_surface",
@@ -516,11 +568,14 @@ def _root_data_vars() -> list[GoogleWeathernext2DataVar]:
                 "negative values are raw model artifacts; set values < 0 to zero."
             ),
             filters=[_METRES_TO_KG_M2],
+            source_layout=source_layout,
         ),
     ]
 
 
-def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
+def _pressure_data_vars(
+    source_layout: SourceLayout,
+) -> list[GoogleWeathernext2DataVar]:
     return [
         _pressure_var(
             "geopotential_height",
@@ -530,6 +585,7 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             units="m",
             standard_name="geopotential_height",
             filters=[_GEOPOTENTIAL_TO_HEIGHT],
+            source_layout=source_layout,
         ),
         _pressure_var(
             "temperature",
@@ -539,6 +595,7 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
             filters=[_KELVIN_TO_CELSIUS],
+            source_layout=source_layout,
         ),
         _pressure_var(
             "wind_u",
@@ -547,6 +604,7 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            source_layout=source_layout,
         ),
         _pressure_var(
             "wind_v",
@@ -555,6 +613,7 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            source_layout=source_layout,
         ),
         _pressure_var(
             "vertical_velocity",
@@ -563,6 +622,7 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="Vertical velocity",
             units="Pa s-1",
             standard_name="lagrangian_tendency_of_air_pressure",
+            source_layout=source_layout,
         ),
         _pressure_var(
             "specific_humidity",
@@ -571,5 +631,6 @@ def _pressure_data_vars() -> list[GoogleWeathernext2DataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            source_layout=source_layout,
         ),
     ]
