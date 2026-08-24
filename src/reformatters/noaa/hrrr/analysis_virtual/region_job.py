@@ -32,6 +32,9 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         self, coord: NoaaHrrrAnalysisVirtualSourceFileCoord
     ) -> NoaaHrrrDataVar:
         if coord.file_type == "nat":
+            # Some truncated historical wrfnat files contain CLMR but not the default
+            # TMP probe. Prefer CLMR when this job writes it; filtered jobs must probe
+            # one of their own vars.
             cloud_mixing_ratio = next(
                 (
                     var
