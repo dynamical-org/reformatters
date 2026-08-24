@@ -10,6 +10,7 @@ name: 'Manual: Backfill'
         type: choice
         options:
         - dwd-icon-eu-forecast-5-day
+        - eccc-hrdps-forecast
         - ecmwf-aifs-ens-forecast
         - ecmwf-aifs-single-forecast
         - ecmwf-aifs-single-forecast-virtual

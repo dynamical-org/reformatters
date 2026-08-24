@@ -31,7 +31,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
-from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastTemporalDynamicalDataset
+from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDynamicalDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
 )
@@ -155,6 +155,14 @@ class NasaImergIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """ECCC HRDPS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-eccc-hrdps"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -240,8 +248,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # ECCC
-    EcccHrdpsForecastTemporalDynamicalDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+    EcccHrdpsForecastDynamicalDataset(
+        primary_storage_config=EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # NASA
     NasaImergAnalysisEarlyDataset(

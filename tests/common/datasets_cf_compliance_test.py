@@ -173,20 +173,32 @@ def test_cf_latitude_longitude_recognized(
                 f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
             )
 
-    # For projected datasets, check x and y have correct CF attributes
+    # For projected datasets, check x and y have correct CF attributes.
+    # CF names the axes of a rotated pole grid grid_longitude/grid_latitude,
+    # in degrees, rather than the projection_[xy]_coordinate of a metre based grid.
     if is_projected:
+        rotated_pole = (
+            ds["spatial_ref"].attrs.get("grid_mapping_name")
+            == "rotated_latitude_longitude"
+        )
+        expected_x_standard_name = (
+            "grid_longitude" if rotated_pole else "projection_x_coordinate"
+        )
+        expected_y_standard_name = (
+            "grid_latitude" if rotated_pole else "projection_y_coordinate"
+        )
         if "x" in ds.coords:
             x_attrs = ds["x"].attrs
-            assert x_attrs.get("standard_name") == "projection_x_coordinate", (
-                f"x missing standard_name='projection_x_coordinate', got: {x_attrs.get('standard_name')}"
+            assert x_attrs.get("standard_name") == expected_x_standard_name, (
+                f"x missing standard_name='{expected_x_standard_name}', got: {x_attrs.get('standard_name')}"
             )
             assert x_attrs.get("axis") == "X", (
                 f"x missing axis='X', got: {x_attrs.get('axis')}"
             )
         if "y" in ds.coords:
             y_attrs = ds["y"].attrs
-            assert y_attrs.get("standard_name") == "projection_y_coordinate", (
-                f"y missing standard_name='projection_y_coordinate', got: {y_attrs.get('standard_name')}"
+            assert y_attrs.get("standard_name") == expected_y_standard_name, (
+                f"y missing standard_name='{expected_y_standard_name}', got: {y_attrs.get('standard_name')}"
             )
             assert y_attrs.get("axis") == "Y", (
                 f"y missing axis='Y', got: {y_attrs.get('axis')}"
@@ -601,11 +613,13 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "aswdifd_s",
     "aswdir_s",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR, ECCC HRDPS)
     "80u",
     "80v",
     "80t",
     "80sp",
+    "80si",
+    "80wdir",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
     # NASA IMERG quality index (no ECMWF equivalent)
@@ -651,11 +665,13 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Soil Moisture (PM)",
     # NASA IMERG quality index (no ECMWF equivalent)
     "Quality index for precipitation",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR, ECCC HRDPS)
     "80 metre U wind component",
     "80 metre V wind component",
     "80 metre temperature",
     "80 metre pressure",
+    "80 metre wind speed",
+    "80 metre wind direction",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
@@ -834,6 +850,19 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
+    # maximum since the previous post-processing; each names the quantity it carries.
+    ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
+    ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
+    # HRDPS is on a rotated pole grid, whose CF axes are grid_longitude/grid_latitude in
+    # degrees, rather than the metre based projection_[xy]_coordinate of the other
+    # projected datasets.
+    ("x", "long_name", "eccc-hrdps-forecast"),
+    ("x", "standard_name", "eccc-hrdps-forecast"),
+    ("x", "units", "eccc-hrdps-forecast"),
+    ("y", "long_name", "eccc-hrdps-forecast"),
+    ("y", "standard_name", "eccc-hrdps-forecast"),
+    ("y", "units", "eccc-hrdps-forecast"),
 }
 
 

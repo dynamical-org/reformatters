@@ -127,6 +127,8 @@ class CoordinateAttrs(FrozenBaseModel):
     geographic_crs_name: str | None = None
     horizontal_datum_name: str | None = None
     grid_mapping_name: str | None = None
+    grid_north_pole_latitude: float | None = None
+    grid_north_pole_longitude: float | None = None
     spatial_ref: str | None = None
     GeoTransform: str | None = None
     false_easting: float | None = None

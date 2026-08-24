@@ -21,3 +21,28 @@ uv run main eccc-hrdps-forecast archive-grib-files --dst-root-path=/local/path
 
 To test uploading to a cloud bucket, `--dst-root-path` can start with an `rclone`
 remote, in the form `--dst-root-path=remote:path`.
+
+## Reformatting HRDPS to Zarr
+
+`hrdps/forecast` reformats 17 HRDPS continental variables into the
+`eccc-hrdps-forecast` dataset. Backfills read the Source Co-Op archive, the only
+source that reaches back beyond the Datamart's rolling ~30 day window. Operational
+updates read the Datamart directly, which has each complete run about 4 hours after
+its init time, hours before the archive job above mirrors it.
+
+### MSC Datamart request limits
+
+ECCC's [MSC Open Data usage policy](https://eccc-msc.github.io/open-data/usage-policy/readme_en/)
+states no concurrency or bandwidth limit. It asks users of 86,400 requests per day or
+more (about 1 request per second sustained) to contact them, requires a meaningful
+HTTP `User-Agent` (`http_download_to_disk` sends one), and directs systematic
+retrieval away from directory listings — we construct every URL from the init time,
+lead time and variable, and never list.
+
+Measured against `dd.weather.gc.ca` in August 2026, over ~850 requests at concurrency
+4, 8, 16 and 32, in both ascending and descending order: no 429, no 503, no
+connection resets, every request 200. Aggregate throughput plateaued at 8 concurrent
+downloads (~20-45 MB/s) and did not improve above it, while per-request p50 latency
+grew from 0.12s at 4 concurrent to 0.67s at 32. So the region job downloads 8 files at
+a time: past that we add load without gaining throughput. An update fetches 17
+variables x 48 lead times, about 1.5 GB, well inside the daily request allowance.

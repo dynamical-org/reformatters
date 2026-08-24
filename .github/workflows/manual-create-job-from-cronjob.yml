@@ -13,6 +13,8 @@ name: 'Manual: Create Job from CronJob'
         - dwd-icon-eu-forecast-5-day-update
         - dwd-icon-eu-forecast-5-day-validate
         - eccc-hrdps-forecast-archive-grib-files
+        - eccc-hrdps-forecast-update
+        - eccc-hrdps-forecast-validate
         - ecmwf-aifs-ens-forecast-update
         - ecmwf-aifs-ens-forecast-validate
         - ecmwf-aifs-single-forecast-update
