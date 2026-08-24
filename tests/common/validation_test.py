@@ -714,7 +714,7 @@ def test_check_recent_nans_logged_worst_excludes_excused_positions(
 
 
 def test_check_recent_nans_excludes_structurally_dead_points(
-    rng: np.random.Generator,
+    rng: np.random.Generator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A point that is NaN at every position is a structural hole, not a gap.
 
@@ -739,15 +739,26 @@ def test_check_recent_nans_excludes_structurally_dead_points(
     ds["temperature"].loc[{"latitude": 10.0, "longitude": 30.0}] = np.nan
     context = _context(ds, "time")
 
-    # 4 points over a 2x2 grid pairs every index, so the dead cell is always sampled.
-    assert validation.CheckRecentNans(sampled_points=4).check(context).passed
+    # Sample every cell: points are drawn independently, so a 2x2 draw can land wholly
+    # on the dead cell, which is the case below rather than this one.
+    def sample_every_cell(
+        ds: xr.Dataset,
+        sampling_strategy: validation.SpatialSamplingStrategy,
+        num_points: int = 0,
+    ) -> xr.Dataset:
+        return ds.isel(
+            longitude=xr.DataArray([0, 0, 1, 1], dims="point"),
+            latitude=xr.DataArray([0, 1, 0, 1], dims="point"),
+        )
+
+    monkeypatch.setattr(validation, "_apply_spatial_sampling", sample_every_cell)
+
+    assert validation.CheckRecentNans().check(context).passed
 
     # With every sampled point dead there is nothing measurable: fail, don't pass.
     all_dead = ds.copy(deep=True)
     all_dead["temperature"].values[:] = np.nan
-    result = validation.CheckRecentNans(sampled_points=4).check(
-        _context(all_dead, "time")
-    )
+    result = validation.CheckRecentNans().check(_context(all_dead, "time"))
     assert not result.passed
     assert "No values selected" in result.message
 
