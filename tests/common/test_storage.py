@@ -486,7 +486,7 @@ class TestIcechunkVirtualConfig:
         repo = factory.icechunk_repos(sort="primary-first")[0][1]
         containers = repo.config.virtual_chunk_containers
         assert containers is not None
-        assert "https://example.com/" in containers
+        assert set(containers) == {"https://example.com/"}
 
     def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
