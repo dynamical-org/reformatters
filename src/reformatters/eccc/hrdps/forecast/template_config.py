@@ -57,6 +57,7 @@ class EcccHrdpsInternalAttrs(BaseInternalAttrs):
     deaccumulation_invalid_below_threshold_rate: float = (
         PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD
     )
+    deaccumulation_expected_clamp_fraction: float = 0.05
 
 
 class EcccHrdpsDataVar(DataVar[EcccHrdpsInternalAttrs]):
@@ -92,7 +93,6 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        """Returns a dictionary of dimension names to coordinates for the dataset."""
         y_coords, x_coords = self._y_x_coordinates()
         return {
             self.append_dim: self.append_dim_coordinates(
@@ -106,10 +106,7 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        """
-        Return a dictionary of non-dimension coordinates for the dataset.
-        Called whenever len(ds.append_dim) changes.
-        """
+        """Called whenever len(ds.append_dim) changes."""
         latitudes, longitudes = self._latitude_longitude_coordinates(
             ds["x"].values, ds["y"].values
         )
@@ -131,7 +128,6 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
     @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
-        """Define metadata and encoding for each coordinate."""
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
         y_coords, x_coords = dim_coords["y"], dim_coords["x"]
@@ -352,7 +348,6 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
     @computed_field
     @property
     def data_vars(self) -> Sequence[EcccHrdpsDataVar]:
-        """Define metadata and encoding for each data variable."""
         # ~12MB uncompressed, ~2.5MB compressed
         var_chunks: dict[Dim, int] = {
             "init_time": 1,
@@ -602,6 +597,11 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     deaccumulate_to_rate=True,
                     window_reset_frequency=pd.Timedelta.max,
                     deaccumulation_invalid_below_threshold_rate=RADIATION_INVALID_BELOW_THRESHOLD,
+                    # The run total is flat wherever the sun is down, so GRIB precision
+                    # jitter clamps those steps to 0: 4.6% of an August run's values, and
+                    # more as nights lengthen over a domain reaching 70N. Long wave, which
+                    # accumulates day and night, clamps none.
+                    deaccumulation_expected_clamp_fraction=0.4,
                 ),
             ),
             EcccHrdpsDataVar(

@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common.download import FALLBACK_EXCEPTIONS
 from reformatters.eccc.hrdps.forecast.region_job import (
@@ -39,6 +41,27 @@ def test_source_file_coord_urls() -> None:
     assert coord.get_datamart_url() == (
         "https://dd.weather.gc.ca/20260709/WXO-DD/model_hrdps/continental/2.5km/"
         f"12/048/{file_name}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("variable_name", "expected_field_and_level"),
+    [
+        ("temperature_2m", "TMP_AGL-2m"),
+        ("wind_speed_80m", "WIND_AGL-80m"),
+        ("wind_direction_10m", "WDIR_AGL-10m"),
+        ("pressure_reduced_to_mean_sea_level", "PRMSL_MSL"),
+        ("categorical_precipitation_type_surface", "PTYPE_Sfc"),
+        ("snow_water_equivalent_surface", "SDWE_Sfc"),
+        ("downward_long_wave_radiation_flux_surface", "DLWRF_Sfc"),
+    ],
+)
+def test_every_field_and_level_reaches_the_file_name(
+    variable_name: str, expected_field_and_level: str
+) -> None:
+    coord = make_coord(variable_name, lead_time="1h")
+    assert coord.get_url().endswith(
+        f"20260709T12Z_MSC_HRDPS_{expected_field_and_level}_RLatLon0.0225_PT001H.grib2"
     )
 
 
@@ -119,3 +142,56 @@ def test_download_file_source_order(
 
     assert expected_first_source in requested_urls[0]
     assert expected_first_source not in requested_urls[1]
+
+
+def make_data_array(variable_name: str, values: list[float]) -> xr.DataArray:
+    data_var = DATA_VARS_BY_NAME[variable_name]
+    return xr.DataArray(
+        np.array(values, dtype=np.float32).reshape(len(values), 1, 1),
+        dims=("lead_time", "y", "x"),
+        coords={"lead_time": pd.timedelta_range("0h", periods=len(values), freq="1h")},
+        attrs={"units": data_var.attrs.units},
+    )
+
+
+def apply_transformations(variable_name: str, values: list[float]) -> list[float]:
+    region_job = EcccHrdpsForecastRegionJob.model_construct(
+        tmp_store=Path("/tmp/not-used"),  # noqa: S108
+        template_ds=TEMPLATE_CONFIG.get_template(pd.Timestamp("2026-07-09T06:00")),
+        data_vars=TEMPLATE_CONFIG.data_vars,
+        append_dim=TEMPLATE_CONFIG.append_dim,
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    data_array = make_data_array(variable_name, values)
+    region_job.apply_data_transformations(data_array, DATA_VARS_BY_NAME[variable_name])
+    return [float(v) for v in data_array.values.ravel()]
+
+
+def test_hourly_accumulation_becomes_a_mean_rate() -> None:
+    # Every lead time resets, so each hourly bucket becomes its own mean rate.
+    assert apply_transformations("precipitation_surface", [np.nan, 1800.0, 900.0]) == [
+        pytest.approx(np.nan, nan_ok=True),
+        0.5,
+        0.25,
+    ]
+
+
+def test_run_total_is_differenced_into_a_mean_rate() -> None:
+    # A run total accumulating 100 W m-2 then 200 W m-2 over consecutive hours.
+    assert apply_transformations(
+        "downward_short_wave_radiation_flux_surface", [0.0, 360_000.0, 1_080_000.0]
+    ) == [pytest.approx(np.nan, nan_ok=True), 100.0, 200.0]
+
+
+def test_snow_water_equivalent_converts_to_metres() -> None:
+    assert apply_transformations(
+        "snow_water_equivalent_surface", [1000.0, 500.0, 250.0]
+    ) == [1.0, 0.5, 0.25]
+
+
+def test_categorical_values_are_whole_codes() -> None:
+    # The source's packing leaves some cells fractionally off their integer code.
+    assert apply_transformations(
+        "categorical_precipitation_type_surface", [np.nan, 9.3886, 1.4]
+    ) == [pytest.approx(np.nan, nan_ok=True), 9.0, 1.0]

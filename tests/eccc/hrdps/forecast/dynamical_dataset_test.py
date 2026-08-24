@@ -112,6 +112,12 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         point_ds["snow_water_equivalent_surface"].values,
         np.array([0.0, 0.0, 0.0], dtype=np.float32),
     )
+    # A snow covered cell, where dropping the kg m-2 to metres conversion would show
+    snowy_ds = backfill_ds.sel(init_time=init_time_start).isel(y=386, x=146)
+    assert_array_equal(
+        snowy_ds["snow_water_equivalent_surface"].values,
+        np.array([0.213867188, 0.206054688, 0.200195312], dtype=np.float32),
+    )
 
     # Operational update
     dataset = _make_dataset()

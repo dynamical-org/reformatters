@@ -96,7 +96,6 @@ class EcccHrdpsForecastRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcccHrdpsDataVar],
     ) -> Sequence[EcccHrdpsForecastSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         data_var = item(data_var_group)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         if not data_var.has_hour_0_values():
@@ -113,7 +112,6 @@ class EcccHrdpsForecastRegionJob(
         ]
 
     def download_file(self, coord: EcccHrdpsForecastSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
         recent = pd.Timestamp.now() - coord.init_time < DATAMART_PREFERRED_AGE
         primary_url, fallback_url = (
             (coord.get_datamart_url(), coord.get_url())
@@ -133,7 +131,6 @@ class EcccHrdpsForecastRegionJob(
         coord: EcccHrdpsForecastSourceFileCoord,
         data_var: EcccHrdpsDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source file coordinate."""
         assert coord.downloaded_path is not None  # for type check, system guarantees it
         with rasterio.open(coord.downloaded_path) as reader:
             assert reader.count == 1, (
@@ -146,7 +143,6 @@ class EcccHrdpsForecastRegionJob(
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: EcccHrdpsDataVar
     ) -> None:
-        """Apply in-place data transformations to the output data array for a given data variable."""
         internal_attrs = data_var.internal_attrs
 
         if internal_attrs.deaccumulate_to_rate:
@@ -160,9 +156,12 @@ class EcccHrdpsForecastRegionJob(
                     dim="lead_time",
                     reset_frequency=internal_attrs.window_reset_frequency,
                     invalid_below_threshold_rate=internal_attrs.deaccumulation_invalid_below_threshold_rate,
+                    expected_clamp_fraction=internal_attrs.deaccumulation_expected_clamp_fraction,
                 )
             except ValueError:
-                # Log exception so we are notified if deaccumulation errors are larger than expected.
+                # The array is deaccumulated either way; the raise reports only that more
+                # steps than expected were clamped to 0 or invalidated, so log it rather
+                # than discard an otherwise good forecast.
                 log.exception(f"Error deaccumulating {data_var.name}")
 
         if (scale_factor := internal_attrs.scale_factor) is not None:
@@ -188,7 +187,6 @@ class EcccHrdpsForecastRegionJob(
         Sequence[RegionJob[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]],
         xr.DataTree,
     ]:
-        """Return RegionJob instances to update the dataset from its current state to the latest available data."""
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
         append_dim_end = pd.Timestamp.now()
