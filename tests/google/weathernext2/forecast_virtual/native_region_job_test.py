@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import pandas as pd
 import pytest
 import xarray as xr
@@ -95,8 +96,10 @@ def _mock_native_listing(
         assert params["prefix"].startswith("weathernext_2_0_0/zarr/")
         assert params["maxResults"] == "1000"
         if coord.source_layout == "operational":
-            expected_suffix = f"*.{coord.lead_index}.*"
-            assert params["matchGlob"].endswith(expected_suffix)
+            assert params["matchGlob"] == (
+                f"{params['prefix']}{region_job_module._OPERATIONAL_MEMBER_GLOB}."
+                f"{coord.lead_index}.*"
+            )
             assert params["delimiter"] == "/"
         else:
             assert "matchGlob" not in params
@@ -222,6 +225,32 @@ def test_operational_generation_enforces_strict_valid_time_cutoff() -> None:
     assert [coord.lead_time for coord in coords] == [pd.Timedelta("6h")]
 
 
+def test_source_file_coords_are_independent_per_variable() -> None:
+    init_time = pd.Timestamp("2025-03-01T00:00")
+    template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
+    data_vars = [
+        _var(OPERATIONAL, "temperature_2m"),
+        _var(OPERATIONAL, "pressure_level/temperature"),
+    ]
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        template,
+        data_vars,
+    )
+
+    region = template.to_dataset().sel(init_time=[init_time])
+
+    coords = job.generate_source_file_coords(region, data_vars)
+
+    assert len(coords) == 2 * 60
+    assert all(len(coord.data_vars) == 1 for coord in coords)
+    assert {coord.data_vars[0].path for coord in coords} == {
+        "temperature_2m",
+        "pressure_level/temperature",
+    }
+
+
 def test_operational_backfill_jobs_share_strict_valid_time_cutoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -274,3 +303,47 @@ def test_historical_validation_job_uses_final_fixed_window() -> None:
     assert max(coord.init_time for coord in source_coords) == pd.Timestamp(
         "2024-12-31T18:00"
     )
+
+
+def test_direct_operational_update_uses_utc_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = pd.Timestamp("2025-03-20T12:00")
+    monkeypatch.setattr(region_job_module, "_utc_now", lambda: now)
+
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="test",
+        )
+    )
+
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    assert job.publication_cutoff == now - pd.Timedelta("48h")
+    assert template.to_dataset().get_index("init_time")[-1] == now - pd.Timedelta("6h")
+
+
+def test_object_listing_retries_transient_response() -> None:
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    request = httpx.Request("GET", OBJECTS_LOCATION)
+    transient = httpx.Response(502, request=request)
+    success = httpx.Response(
+        200,
+        request=request,
+        json={"items": [{"name": f"{prefix}0.1.0.0", "size": "100"}]},
+    )
+    client = Mock()
+    client.get.side_effect = [transient, success]
+
+    objects = region_job_module._list_objects(
+        client,
+        region_job_module.ObjectListingQuery(prefix),
+    )
+
+    assert objects == {f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": 100}
+    assert client.get.call_count == 2

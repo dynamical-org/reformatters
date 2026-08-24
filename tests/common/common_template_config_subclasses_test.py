@@ -282,7 +282,6 @@ def test_virtual_serializers_flip_to_shared_orientation(
         assert serializer is not None, var.name
         if serializer["name"] != "gribberish":
             continue
-        assert serializer["name"] == "gribberish", var.name
         assert serializer["configuration"]["north_up"] is True, var.name
         assert serializer["configuration"]["adjust_longitude_range"] is True, var.name
 

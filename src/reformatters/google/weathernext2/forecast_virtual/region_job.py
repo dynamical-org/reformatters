@@ -12,7 +12,9 @@ from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, RegionJob, SourceFileCoord
+from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
     DatetimeLike,
@@ -34,9 +36,12 @@ PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
 OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
+_OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
 _PUBLICATION_LAG = pd.Timedelta("48h")
 ROOT_MANIFEST_INIT_SPLIT = 32
 PRESSURE_MANIFEST_INIT_SPLIT = 4
+
+log = get_logger(__name__)
 
 
 def weathernext2_virtual_chunk_containers() -> tuple[
@@ -176,6 +181,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
+        fire_time = job_fire_time or _utc_now()
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -183,11 +189,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=job_fire_time,
+            job_fire_time=fire_time,
         )
         (job,) = jobs
         assert isinstance(job, cls)
-        fire_time = job_fire_time or pd.Timestamp.now()
         return [
             job.model_copy(update={"publication_cutoff": fire_time - _PUBLICATION_LAG})
         ], template_ds
@@ -211,13 +216,14 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                     and init_time + lead_time >= self.publication_cutoff
                 ):
                     continue
-                coords.append(
+                coords.extend(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
                         source_layout=self.source_layout,
                         init_time=init_time,
                         lead_time=lead_time,
-                        data_vars=data_var_group,
+                        data_vars=(data_var,),
                     )
+                    for data_var in data_var_group
                 )
         return coords
 
@@ -274,7 +280,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 queries.append(
                     ObjectListingQuery(
                         prefix=prefix,
-                        match_glob=f"{prefix}*.{coord.lead_index}.*",
+                        match_glob=(
+                            f"{prefix}{_OPERATIONAL_MEMBER_GLOB}.{coord.lead_index}.*"
+                        ),
                     )
                 )
         return queries
@@ -313,6 +321,13 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                         {location: coord_objects[location] for location in locations}
                     )
                     available.append((coord, 0))
+                else:
+                    missing = locations - coord_objects.keys()
+                    log.debug(
+                        f"{len(missing)} source chunks unavailable for "
+                        f"{coord.get_url()} {coord.data_vars[0].path}; "
+                        f"first: {min(missing)}"
+                    )
         return available
 
     def process_virtual_refs(
@@ -374,6 +389,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
+    # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = PRESSURE_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18D")
 
@@ -382,8 +398,12 @@ def _store_key(url: str) -> str:
     return url.removeprefix(SOURCE_LOCATION_PREFIX)
 
 
+def _utc_now() -> Timestamp:
+    return pd.Timestamp.now(tz="UTC").tz_localize(None)
+
+
 def _current_publication_cutoff() -> Timestamp:
-    return pd.Timestamp.now(tz="UTC").tz_localize(None) - _PUBLICATION_LAG
+    return _utc_now() - _PUBLICATION_LAG
 
 
 def _list_objects(
@@ -397,7 +417,17 @@ def _list_objects(
             params.update({"matchGlob": query.match_glob, "delimiter": "/"})
         if page_token is not None:
             params["pageToken"] = page_token
-        response = client.get(OBJECTS_LOCATION, params=params)
+
+        def get_page(params: dict[str, str] = params) -> httpx.Response:
+            response = client.get(OBJECTS_LOCATION, params=params)
+            if response.status_code in {408, 429} or response.status_code >= 500:
+                response.raise_for_status()
+            return response
+
+        response = retry(
+            get_page,
+            retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
+        )
         if response.status_code in {403, 404}:
             return None
         response.raise_for_status()
