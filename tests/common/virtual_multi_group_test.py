@@ -17,7 +17,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import dask.array
 import icechunk
@@ -26,6 +26,9 @@ import pandas as pd
 import pytest
 import xarray as xr
 import zarr
+from zarr.core.metadata import ArrayV3Metadata
+from zarr.core.sync import sync
+from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils, validation
 from reformatters.common.config_models import (
@@ -563,6 +566,48 @@ def test_decode_health_covers_group_vars(tmp_path: Path) -> None:
         )
     )
     assert result.passed, result.message
+
+
+def test_decode_health_detects_missing_grouped_ref() -> None:
+    template_ds = _create_template_ds(2)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    var = next(var for var in job.data_vars if var.path == "pressure_level/temperature")
+    loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[0],
+    }
+    da = template_ds["pressure_level"].to_dataset()["temperature"].sel(loc)
+
+    store = MemoryStore()
+    group = zarr.open_group(store, mode="w")
+    array = group.require_group("pressure_level").create_array(
+        "temperature",
+        shape=(2, N_LEADS, N_LAT, N_LON, N_LEVELS),
+        chunks=(1, 1, N_LAT, N_LON, 1),
+        dtype="float64",
+    )
+    array[1, 0, :, :, :] = 1.0
+    icechunk_store = cast("icechunk.IcechunkStore", store)
+
+    assert validation.CheckVirtualDecodeHealth._sampled_refs_present(
+        da, loc, var, job, icechunk_store, group
+    )
+
+    missing_loc: Mapping[Dim, CoordinateValue] = {
+        "init_time": APPEND_DIM_START + APPEND_DIM_FREQ,
+        "lead_time": LEAD_TIMES[0],
+        "pressure_level": PRESSURE_LEVELS[-1],
+    }
+    missing_index = job.chunk_key(missing_loc, var)
+    assert missing_index is not None
+    metadata = array.metadata
+    assert isinstance(metadata, ArrayV3Metadata)
+    encoded = metadata.chunk_key_encoding.encode_chunk_key(missing_index)
+    sync(store.delete(f"{array.path}/{encoded}"))
+
+    assert not validation.CheckVirtualDecodeHealth._sampled_refs_present(
+        da, loc, var, job, icechunk_store, group
+    )
 
 
 def test_decode_health_samples_levels_and_positions(tmp_path: Path) -> None:

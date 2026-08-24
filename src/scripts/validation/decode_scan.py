@@ -11,7 +11,7 @@ Entry points: the `decode-scan` command (URL-driven, resolves the registered dat
 the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
@@ -20,6 +20,7 @@ import typer
 import zarr
 
 from reformatters.common import validation
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
@@ -44,6 +45,28 @@ MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
 SAMPLED_LEVELS = 3
 JOB_CONCURRENCY = 4
+
+
+def _decode_checker(
+    dataset: DynamicalDataset[Any, Any],
+    reference_exists: Callable[[str, Mapping[str, Any]], bool],
+) -> validation.CheckVirtualDecodeHealth:
+    configured = next(
+        (
+            validator
+            for validator in dataset.validators()
+            if isinstance(validator, validation.CheckVirtualDecodeHealth)
+        ),
+        validation.CheckVirtualDecodeHealth(),
+    )
+    return configured.model_copy(
+        update={
+            "positions": 1,
+            "sampled_leads": SAMPLED_LEADS,
+            "sampled_levels": SAMPLED_LEVELS,
+            "reference_exists": reference_exists,
+        }
+    )
 
 
 def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> None:
@@ -78,22 +101,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         f"(sampled_leads={SAMPLED_LEADS}, sampled_levels={SAMPLED_LEVELS})"
     )
 
-    configured_checker = next(
-        (
-            validator
-            for validator in dataset.validators()
-            if isinstance(validator, validation.CheckVirtualDecodeHealth)
-        ),
-        validation.CheckVirtualDecodeHealth(),
-    )
-    checker = configured_checker.model_copy(
-        update={
-            "positions": 1,
-            "sampled_leads": SAMPLED_LEADS,
-            "sampled_levels": SAMPLED_LEVELS,
-            "reference_exists": reference_exists,
-        }
-    )
+    checker = _decode_checker(dataset, reference_exists)
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
         return checker.check(
