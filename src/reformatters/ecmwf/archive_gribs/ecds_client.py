@@ -276,6 +276,13 @@ class EcdsRequest:
         response = self.session.get(
             result_url, headers=headers, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
         )
+        if response.status_code == requests.codes.requested_range_not_satisfiable:
+            # The partial file is longer than the result or otherwise unresumable,
+            # so ask for the whole body and overwrite it.
+            response.close()
+            response = self.session.get(
+                result_url, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
+            )
         response.raise_for_status()
         # A server that ignores the Range header replies 200 with the whole body,
         # which must overwrite rather than extend the partial file.
