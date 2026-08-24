@@ -64,7 +64,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-            dataset_version="0.1.0",
+            dataset_version="0.0.1",
             name="ECMWF IFS ENS forecast, 46 day, 1.5 degree",
             description="Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
             attribution="ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
