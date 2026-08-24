@@ -310,23 +310,22 @@ def write_unavailable_timestamps_file(output_dir: Path, ctx: RunContext) -> str 
     return filename
 
 
-def _uses_semantic_missing_values(
-    da: xr.DataArray, template_var: DataVar[Any] | None
-) -> bool:
-    """Semantic NaNs cannot distinguish an unwritten value from a valid missing state."""
-    fill_value = da.encoding.get("_FillValue")
-    return (
-        template_var is not None
-        and template_var.internal_attrs.source_fill_value is not None
-    ) or (fill_value is not None and not np.isnan(fill_value))
-
-
 def _template_data_vars(ctx: RunContext) -> dict[str, DataVar[Any]]:
     """The registered dataset's data vars by store path, {} for unregistered stores."""
     dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
     if dataset is None:
         return {}
     return {v.path: v for v in dataset.template_config.data_vars}
+
+
+def _uses_semantic_missing_values(
+    da: xr.DataArray, template_var: DataVar[Any] | None
+) -> bool:
+    fill_value = da.encoding.get("_FillValue")
+    return (
+        template_var is not None
+        and template_var.internal_attrs.source_fill_value is not None
+    ) or (fill_value is not None and not np.isnan(fill_value))
 
 
 def _co_ingested_availability(
