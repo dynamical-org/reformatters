@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.types import DatetimeLike
 from reformatters.noaa.hrrr import virtual_region_job as region_job_module
 from reformatters.noaa.hrrr.analysis_virtual.region_job import (
     NoaaHrrrAnalysisVirtualRegionJob,
@@ -25,22 +24,9 @@ def get_var(path: str) -> NoaaHrrrDataVar:
     return next(v for v in TEMPLATE_CONFIG.data_vars if v.path == path)
 
 
-def build_template(end_time: DatetimeLike) -> xr.DataTree:
-    coords = TEMPLATE_CONFIG.dimension_coordinates()
-    coords["time"] = TEMPLATE_CONFIG.append_dim_coordinates(end_time)
-    return xr.DataTree.from_dict(
-        {
-            TEMPLATE_CONFIG._group_node_path(
-                group
-            ): TEMPLATE_CONFIG._build_node_dataset(group, coords)
-            for group in TEMPLATE_CONFIG.groups
-        }
-    )
-
-
 @pytest.fixture(scope="module")
 def template_ds() -> xr.DataTree:
-    return build_template(pd.Timestamp("2014-10-01T03:00"))
+    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2014-10-01T03:00"))
 
 
 def make_job(
@@ -101,72 +87,31 @@ def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> N
     }
 
 
-def test_native_probe_prefers_cloud_mixing_ratio_when_selected(
-    template_ds: xr.DataTree,
+def test_truncated_source_files_are_never_available(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    temperature = get_var("model_level/temperature")
-    cloud_mixing_ratio = get_var("model_level/cloud_mixing_ratio")
-    coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2016-08-05T10:00"),
-        lead_time=pd.Timedelta(0),
-        domain="conus",
-        file_type="nat",
-        data_vars=[temperature, cloud_mixing_ratio],
-    )
-    job = make_job(template_ds, data_vars=list(coord.data_vars))
-
-    assert job.representative_var(coord) == cloud_mixing_ratio
-
-
-def test_native_probe_stays_within_filtered_variables(template_ds: xr.DataTree) -> None:
-    cloud_ice = get_var("model_level/cloud_ice_mixing_ratio")
-    coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2016-08-05T10:00"),
-        lead_time=pd.Timedelta(0),
-        domain="conus",
-        file_type="nat",
-        data_vars=[cloud_ice],
-    )
-    job = make_job(template_ds, data_vars=list(coord.data_vars))
-
-    assert job.representative_var(coord) == cloud_ice
-
-
-def test_partial_historical_native_file_covers_its_probe(
-    template_ds: xr.DataTree,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    fake_index(
-        monkeypatch,
-        tmp_path,
-        "1:0:d=2016080510:CLMR:1 hybrid level:anl:\n"
-        "2:16613:d=2016080510:CICE:1 hybrid level:anl:\n"
-        "3:222925:d=2016080510:SNMR:1 hybrid level:anl:\n",
-    )
-    data_vars = [
-        get_var("model_level/temperature"),
-        get_var("model_level/cloud_mixing_ratio"),
-        get_var("model_level/cloud_ice_mixing_ratio"),
-        get_var("model_level/snow_mixing_ratio"),
+    """The 2016-08-05 native uploads that end mid-file never reach the write loop."""
+    data_vars = [get_var("model_level/temperature")]
+    coords = [
+        NoaaHrrrAnalysisVirtualSourceFileCoord(
+            init_time=pd.Timestamp(f"2016-08-05T{hour:02d}:00"),
+            lead_time=pd.Timedelta(0),
+            domain="conus",
+            file_type="nat",
+            data_vars=data_vars,
+        )
+        for hour in (9, 10, 12)
     ]
-    coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2016-08-05T10:00"),
-        lead_time=pd.Timedelta(0),
-        domain="conus",
-        file_type="nat",
-        data_vars=data_vars,
+    monkeypatch.setattr(
+        region_job_module,
+        "discover_available_by_obstore_listing",
+        lambda pending, **kwargs: [(coord, 100) for coord in pending],
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    refs = job.file_refs(coord, file_size=300_000)
-
-    assert {ref.data_var.path for ref in refs} == {
-        "model_level/cloud_mixing_ratio",
-        "model_level/cloud_ice_mixing_ratio",
-        "model_level/snow_mixing_ratio",
-    }
-    job._assert_probe_chunk_covered(coord, refs)
+    assert [coord.get_url() for coord, _ in job.discover_available(coords)] == [
+        "s3://noaa-hrrr-bdp-pds/hrrr.20160805/conus/hrrr.t09z.wrfnatf00.grib2"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -269,7 +214,7 @@ def test_operational_update_jobs_single_polling_job(
     jobs, template_ds = NoaaHrrrAnalysisVirtualRegionJob.operational_update_jobs(
         primary_store=Mock(),
         tmp_store=Path("unused-tmp.zarr"),
-        get_template_fn=build_template,
+        get_template_fn=TEMPLATE_CONFIG.get_template,
         append_dim="time",
         all_data_vars=TEMPLATE_CONFIG.data_vars,
         reformat_job_name="test",
