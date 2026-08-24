@@ -98,16 +98,19 @@ def _create_template_ds(
     *,
     serializer: dict[str, Any] | None = None,
     chunks: tuple[int, ...] = (1, 1, N_LAT, N_LON),
+    fill_value: float = np.nan,
 ) -> xr.DataTree:
     """Forecast-shaped virtual template (no shards; one chunk per message)."""
     init_times = pd.date_range(APPEND_DIM_START, periods=n_inits, freq=APPEND_DIM_FREQ)
     encoding: dict[str, Any] = {
         "dtype": "float64",
         "chunks": chunks,
-        "fill_value": np.nan,
+        "fill_value": fill_value,
         "compressors": None,
         "filters": None,
     }
+    # Like assign_var_metadata: the CF fill value a reader masks on, alongside zarr's.
+    encoding["_FillValue"] = fill_value
     if serializer is not None:
         encoding["serializer"] = serializer
     ds = xr.Dataset(
@@ -1231,6 +1234,49 @@ def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
         )
 
 
+def test_driver_receives_the_stores_ingested_through(tmp_path: Path) -> None:
+    # A dataset's discover_available uses ingested_through to tell a coord that fills in
+    # an existing position from one that extends the array, so the loop must hand it the
+    # store's newest label rather than the template's.
+    seen: list[Timestamp | None] = []
+
+    class RecordingJob(VirtualTestRegionJob):
+        def process_virtual_refs(
+            self,
+            remaining: Sequence[VirtualTestSourceFileCoord],
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            seen.append(self.ingested_through)
+            yield from super().process_virtual_refs(remaining)
+
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    full_template = _create_template_ds(4)
+    RecordingJob.backfill_batch_files = 2 * N_LEADS
+
+    for region in (slice(0, 2), slice(2, 4)):
+        RecordingJob.process_worker_jobs(
+            [
+                RecordingJob(
+                    tmp_store=Path("unused-tmp.zarr"),
+                    template_ds=full_template,
+                    data_vars=[VirtualTestDataVar(name="temperature_2m")],
+                    append_dim="init_time",
+                    region=region,
+                    reformat_job_name="test",
+                    processing_mode="backfill",
+                )
+            ],
+            dataset.store_factory,
+            "main",
+            worker_index=0,
+        )
+
+    init_times = full_template.to_dataset().get_index("init_time")
+    assert seen == [None, init_times[1]]
+
+
 # --- driver fork integration (operational + backfill routing) ---
 
 
@@ -1597,17 +1643,22 @@ def test_check_virtual_decode_health_fails_when_no_present_refs(tmp_path: Path) 
     assert "No present references" in result.message
 
 
-def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
-    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
-    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
-    dataset = _make_dataset(tmp_path)
+def _overwrite_messages_with_nan(tmp_path: Path, *, init_idx: int) -> None:
+    """Replace every lead's message block for one init with all-NaN values."""
     messages = tmp_path / "messages.bin"
     data = bytearray(messages.read_bytes())
     nan_block = np.full(N_LAT * N_LON, np.nan, dtype="<f8").tobytes()
     for lead_idx in range(N_LEADS):
-        offset, length = _message_offset_length(0, lead_idx)
+        offset, length = _message_offset_length(init_idx, lead_idx)
         data[offset : offset + length] = nan_block
     messages.write_bytes(bytes(data))
+
+
+def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> None:
+    # A present ref whose bytes decode to all-NaN is unreadable data. Overwrite init 0's
+    # message blocks with NaN, emit only init 0, and assert decode-health flags the var.
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
 
     template_ds = _create_template_ds(1)
     store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
@@ -1618,6 +1669,65 @@ def test_check_virtual_decode_health_detects_unreadable_ref(tmp_path: Path) -> N
     )
     assert not result.passed
     assert "entirely NaN" in result.message
+
+
+def test_check_virtual_decode_health_requires_explicit_all_nan_allowlist(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
+
+    template_ds = _create_template_ds(1, fill_value=-50.0)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    ds = xr.open_zarr(store, decode_timedelta=True)
+    assert ds["temperature_2m"].encoding["_FillValue"] == -50.0
+
+    automatic = validation.CheckVirtualDecodeHealth().check(
+        _virtual_context(job, store, ds)
+    )
+    assert not automatic.passed
+    assert "entirely NaN" in automatic.message
+
+    explicit = validation.CheckVirtualDecodeHealth(
+        allow_all_nan_vars=("temperature_2m",)
+    ).check(_virtual_context(job, store, ds))
+    assert explicit.passed, explicit.message
+
+
+def test_check_virtual_decode_health_all_nan_allowlist_requires_present_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    _overwrite_messages_with_nan(tmp_path, init_idx=0)
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    monkeypatch.setattr(
+        validation.CheckVirtualDecodeHealth,
+        "_sampled_refs_present",
+        staticmethod(lambda *args: False),
+    )
+
+    result = validation.CheckVirtualDecodeHealth(
+        allow_all_nan_vars=("temperature_2m",)
+    ).check(_virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True)))
+    assert not result.passed
+    assert "sampled chunk reference is missing" in result.message
+
+
+def test_check_virtual_decode_health_rejects_unknown_all_nan_var(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+
+    with pytest.raises(ValueError, match="unknown allow_all_nan_vars"):
+        validation.CheckVirtualDecodeHealth(allow_all_nan_vars=("not_a_var",)).check(
+            _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+        )
 
 
 def test_check_virtual_decode_health_skips_vars_without_reference(

@@ -654,6 +654,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
         root_var(
             "pressure_reduced_to_mean_sea_level",
             element="MSLMA",
+            # PRMSL through the 2016-08-23 cycles, MSLMA from 2016-08-24 (HRRR v2) on.
+            element_alternatives=("PRMSL",),
             level="mean sea level",
             short_name="prmsl",
             long_name="Pressure reduced to MSL",

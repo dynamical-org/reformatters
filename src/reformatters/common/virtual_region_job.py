@@ -73,6 +73,11 @@ class VirtualRegionJob(
     # Stop polling after this time, leaving unpublished files to the next fire.
     poll_deadline: Timestamp = pd.Timestamp.max
 
+    # The newest append-dim label the store covers when the run starts, or None when it
+    # is empty. Set by process_worker_jobs; lets discover_available tell a coord that
+    # fills in an existing position from one that extends the array.
+    ingested_through: Timestamp | None = None
+
     # When polling, pace each discovery sweep to at most one per tick.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
@@ -147,6 +152,9 @@ class VirtualRegionJob(
         `virtual_source_listing.discover_available_by_obstore_listing`; for a source
         obstore can't list (an HTML directory index, a frontier to probe,
         assume-all) implement it directly.
+
+        Withholding a fetchable file defers it: it stays pending and is offered again
+        next tick, which is how a dataset orders writes that have to land together.
         """
         raise NotImplementedError(
             "Return the (coord, file_size) pairs ready to fetch now."
@@ -337,7 +345,12 @@ class VirtualRegionJob(
             # A worker's jobs share template_ds/processing_mode/tick_interval, so any
             # one drives the write loop over the union of their coords; its region is
             # poisoned because the loop spans every job's region (see _NoRegion).
-            driver = jobs[0].model_copy(update={"region": _NO_REGION})
+            driver = jobs[0].model_copy(
+                update={
+                    "region": _NO_REGION,
+                    "ingested_through": jobs[0].read_ingested_through(readonly_store),
+                }
+            )
             driver.process_virtual(
                 primary_repo, list(replica_repos), branch_name, remaining
             )
@@ -580,6 +593,16 @@ class VirtualRegionJob(
             "a ref's append-dim label is not present in the template"
         )
         return int(positions.max()) + 1
+
+    def read_ingested_through(self, store: IcechunkStore) -> Timestamp | None:
+        """The newest append-dim label `store` covers, or None when it is empty."""
+        size = self._committed_append_dim_size(store)
+        if size == 0:
+            return None
+        return cast(
+            "Timestamp",
+            self.template_ds.to_dataset().get_index(self.append_dim)[size - 1],
+        )
 
     def _committed_append_dim_size(self, store: IcechunkStore) -> int:
         """The store's append dim size, asserting every group agrees."""
