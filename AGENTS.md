@@ -135,7 +135,7 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 
 **Dataset id and name:** A materialized dataset uses `dataset_id="<provider>-<model>-<variant>"` and `name="Provider Model variant"`. A virtual dataset carries a `-virtual` id suffix and a `, virtual` name suffix: `dataset_id="<provider>-<model>-<variant>-virtual"` and `name="Provider Model variant, virtual"`.
 
-**Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets.
+**Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets. A projected dataset's y/x carry CF's `projection_y_coordinate`/`projection_x_coordinate` in metres, except on a rotated pole grid, whose axes are `grid_latitude`/`grid_longitude` in degrees.
 
 ## CLI commands
 
