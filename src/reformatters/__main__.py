@@ -265,7 +265,6 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
 ]
 
 register_run_monitor(monitoring.monitor_cron)
-monitoring.install_sigterm_logger()
 
 if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
@@ -302,6 +301,13 @@ if Config.is_sentry_enabled:
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
+
+
+@app.callback()
+def startup() -> None:
+    monitoring.install_sigterm_logger()
+
+
 app.command()(initialize_new_integration)
 
 
