@@ -198,9 +198,8 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 2
     assert update_cron_job.parallelism == 2
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    # Until the store is backfilled
-    assert update_cron_job.suspend is True
-    assert validation_cron_job.suspend is True
+    assert update_cron_job.suspend is False
+    assert validation_cron_job.suspend is False
 
     for cron_job in (archive_grib_files_job, update_cron_job, validation_cron_job):
         assert cron_job.schedule.endswith(" * * *")
