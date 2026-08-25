@@ -571,7 +571,7 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     long_name="Precipitation type",
                     units="1",
                     step_type="instant",
-                    comment="1=Rain; 2=Rain/snow; 3=Freezing rain; 4=Ice pellets; 5=Snow; 6=None; 7=Drizzle; 8=Freezing drizzle; 9=Freezing rain/ice pellets. These are ECCC's codes, not the GRIB 4.201 codes the source messages claim.",
+                    comment="1=Rain; 2=Rain/snow; 3=Freezing rain; 4=Ice pellets; 5=Snow; 6=None; 7=Drizzle; 8=Freezing drizzle; 9=Freezing rain/ice pellets.",
                     flag_values=(1, 2, 3, 4, 5, 6, 7, 8, 9),
                     flag_meanings="rain mixture_of_rain_and_snow freezing_rain ice_pellets snow no_precipitation drizzle freezing_drizzle mixture_of_freezing_rain_and_ice_pellets",
                 ),
