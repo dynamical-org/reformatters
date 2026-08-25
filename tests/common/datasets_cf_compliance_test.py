@@ -421,6 +421,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "soil_moisture_0_100cm",
     "snow_albedo_surface",
     "snow_density_surface",
+    # HRRR ice cover is a binary flag covering lake as well as sea ice, so
+    # sea_ice_area_fraction does not describe it and CF names no combined quantity.
+    "ice_cover_surface",
     # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",

@@ -37,6 +37,7 @@
     "short_name": "10u",
     "standard_name": "eastward_wind",
     "units": "m s-1",
+    "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

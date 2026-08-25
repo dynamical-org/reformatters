@@ -1,6 +1,7 @@
 from typing import Literal
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.types import Timestamp
 from reformatters.noaa.models import NoaaInternalAttrs
 
 type NoaaHrrrDomain = Literal["alaska", "conus"]
@@ -17,6 +18,9 @@ class NoaaHrrrInternalAttrs(NoaaInternalAttrs):
     hrrr_file_type: NoaaHrrrFileType
     # Multiply raw values by this factor after reading (e.g. 0.01 to convert percent to fraction)
     scale_factor: float | None = None
+    # Append dim value before which the source field holds nothing a reader can use, so
+    # no source file is read and readers get NaN. None means the whole archive is usable.
+    usable_from: Timestamp | None = None
 
 
 class NoaaHrrrDataVar(DataVar[NoaaHrrrInternalAttrs]):

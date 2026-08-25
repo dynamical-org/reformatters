@@ -37,6 +37,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
+    "comment": "The source reports a height everywhere, including where no free convection is possible, and marks those points in no other way. Mask by convective available potential energy, which is 0 at those points.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -35,9 +35,13 @@
   "attributes": {
     "long_name": "Ice cover (1=ice, 0=no ice)",
     "short_name": "icec",
-    "standard_name": "sea_ice_area_fraction",
     "units": "1",
     "step_type": "instant",
+    "flag_values": [
+      0,
+      1
+    ],
+    "flag_meanings": "no_ice ice",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
   },

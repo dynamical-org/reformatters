@@ -21,7 +21,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": 0.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -37,9 +37,10 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
+    "comment": "NaN where the freezing level is at or below ground.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAAAA="
   },
   "dimension_names": [
     "time",
