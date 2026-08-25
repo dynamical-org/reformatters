@@ -6,12 +6,12 @@
     "description": "Weather forecasts from the High Resolution Deterministic Prediction System (HRDPS) continental domain, operated by Environment and Climate Change Canada (ECCC).",
     "attribution": "ECCC HRDPS data processed by dynamical.org from Environment and Climate Change Canada, used under the ECCC Data Servers End-use Licence version 2.1 (https://eccc-msc.github.io/open-data/licence/readme_en/).",
     "license": "CC-BY-4.0",
-    "spatial_domain": "Canada and the northern continental United States",
+    "spatial_domain": "Canada",
     "spatial_resolution": "2.5 km",
     "time_domain": "Forecasts initialized 2026-07-09 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-48 hours ahead",
-    "forecast_resolution": "Forecast step 0-48 hours: hourly"
+    "forecast_resolution": "Hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {
@@ -683,7 +683,7 @@
           "standard_name": "latitude",
           "units": "degree_north",
           "statistics_approximate": {
-            "min": 27.284597,
+            "min": 27.2846,
             "max": 70.61148
           },
           "_FillValue": "AAAAAAAA+H8="
@@ -1788,6 +1788,7 @@
           "short_name": "gust",
           "standard_name": "wind_speed_of_gust",
           "units": "m s-1",
+          "comment": "Peak wind diagnosed at this time step, exceeding the sustained wind because it includes sub-grid turbulence. Not a maximum since the previous forecast step.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

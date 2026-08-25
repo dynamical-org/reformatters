@@ -84,12 +84,12 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
             "and Climate Change Canada, used under the ECCC Data Servers End-use "
             "Licence version 2.1 (https://eccc-msc.github.io/open-data/licence/readme_en/).",
             license="CC-BY-4.0",
-            spatial_domain="Canada and the northern continental United States",
+            spatial_domain="Canada",
             spatial_resolution="2.5 km",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-48 hours ahead",
-            forecast_resolution="Forecast step 0-48 hours: hourly",
+            forecast_resolution="Hourly",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -131,6 +131,7 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
         y_coords, x_coords = dim_coords["y"], dim_coords["x"]
+        latitudes, longitudes = self._latitude_longitude_coordinates(x_coords, y_coords)
 
         return [
             Coordinate(
@@ -227,8 +228,8 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     standard_name="latitude",
                     units="degree_north",
                     statistics_approximate=StatisticsApproximate(
-                        min=27.284597,
-                        max=70.61148,
+                        min=round(float(latitudes.min()), 5),
+                        max=round(float(latitudes.max()), 5),
                     ),
                 ),
             ),
@@ -246,8 +247,8 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     standard_name="longitude",
                     units="degree_east",
                     statistics_approximate=StatisticsApproximate(
-                        min=-152.73067,
-                        max=-40.70856,
+                        min=round(float(longitudes.min()), 5),
+                        max=round(float(longitudes.max()), 5),
                     ),
                 ),
             ),
@@ -502,6 +503,9 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     units="m s-1",
                     step_type="instant",
                     standard_name="wind_speed_of_gust",
+                    comment="Peak wind diagnosed at this time step, exceeding the "
+                    "sustained wind because it includes sub-grid turbulence. Not a "
+                    "maximum since the previous forecast step.",
                 ),
                 internal_attrs=EcccHrdpsInternalAttrs(
                     grib_field="GUST",

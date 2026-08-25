@@ -61,7 +61,7 @@ class EcccHrdpsForecastDynamicalDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
-            memory="14G",
+            memory="7G",
             shared_memory="1.5G",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),

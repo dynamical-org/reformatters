@@ -188,10 +188,3 @@ def test_snow_water_equivalent_converts_to_metres() -> None:
     assert apply_transformations(
         "snow_water_equivalent_surface", [1000.0, 500.0, 250.0]
     ) == [1.0, 0.5, 0.25]
-
-
-def test_categorical_values_are_whole_codes() -> None:
-    # The source's packing leaves some cells fractionally off their integer code.
-    assert apply_transformations(
-        "categorical_precipitation_type_surface", [np.nan, 9.3886, 1.4]
-    ) == [pytest.approx(np.nan, nan_ok=True), 9.0, 1.0]

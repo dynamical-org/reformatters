@@ -43,7 +43,7 @@
     "standard_name": "latitude",
     "units": "degree_north",
     "statistics_approximate": {
-      "min": 27.284597,
+      "min": 27.2846,
       "max": 70.61148
     },
     "_FillValue": "AAAAAAAA+H8="

@@ -80,7 +80,7 @@ class EcccHrdpsForecastRegionJob(
     MaterializedRegionJob[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]
 ):
     # The Datamart's throughput plateaus at 8 concurrent downloads and it asks callers
-    # to keep their request rate modest, see src/reformatters/eccc/README.md.
+    # to keep their request rate modest.
     download_parallelism: int = 8
 
     @classmethod
@@ -159,18 +159,10 @@ class EcccHrdpsForecastRegionJob(
                     expected_clamp_fraction=internal_attrs.deaccumulation_expected_clamp_fraction,
                 )
             except ValueError:
-                # The array is deaccumulated either way; the raise reports only that more
-                # steps than expected were clamped to 0 or invalidated, so log it rather
-                # than discard an otherwise good forecast.
                 log.exception(f"Error deaccumulating {data_var.name}")
 
         if (scale_factor := internal_attrs.scale_factor) is not None:
             data_array.values *= np.float32(scale_factor)
-
-        if data_var.attrs.flag_values is not None:
-            # The source's lossy packing leaves a small fraction of cells fractionally
-            # off their integer code.
-            np.round(data_array.values, out=data_array.values)
 
         super().apply_data_transformations(data_array, data_var)
 
