@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -188,3 +189,57 @@ def test_snow_water_equivalent_converts_to_metres() -> None:
     assert apply_transformations(
         "snow_water_equivalent_surface", [1000.0, 500.0, 250.0]
     ) == [1.0, 0.5, 0.25]
+
+
+# A run total rising 1000 W m-2 an hour, dipping 10 W m-2 once. The dip is a negative
+# step rate above the invalid threshold, so it clamps to 0: one of ten values, 10%.
+RUN_TOTAL_WITH_ONE_CLAMPED_STEP = [
+    0.0,
+    3_600_000.0,
+    7_200_000.0,
+    10_800_000.0,
+    14_400_000.0,
+    14_364_000.0,
+    21_600_000.0,
+    25_200_000.0,
+    28_800_000.0,
+    32_400_000.0,
+]
+
+
+def deaccumulation_errors(
+    variable_name: str, values: list[float], caplog: pytest.LogCaptureFixture
+) -> list[str]:
+    with caplog.at_level(logging.ERROR):
+        transformed = apply_transformations(variable_name, values)
+    assert transformed[5] == 0.0  # the dip clamped rather than going negative
+    return [record.message for record in caplog.records]
+
+
+def test_short_wave_allows_the_clamping_dark_hours_produce(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Short wave is flat overnight, where precision jitter clamps far more than the 5%
+    # default allows, so its allowance is raised and 10% must pass quietly.
+    assert (
+        deaccumulation_errors(
+            "downward_short_wave_radiation_flux_surface",
+            RUN_TOTAL_WITH_ONE_CLAMPED_STEP,
+            caplog,
+        )
+        == []
+    )
+
+
+def test_long_wave_keeps_the_default_clamp_allowance(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Long wave accumulates day and night, so the same 10% is unexpected and reported.
+    assert any(
+        "Error deaccumulating downward_long_wave_radiation_flux_surface" in message
+        for message in deaccumulation_errors(
+            "downward_long_wave_radiation_flux_surface",
+            RUN_TOTAL_WITH_ONE_CLAMPED_STEP,
+            caplog,
+        )
+    )
