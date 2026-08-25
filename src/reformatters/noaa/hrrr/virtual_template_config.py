@@ -63,9 +63,9 @@ _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
 
 # Initialization noise leaves a spurious floor over nearly the whole domain at forecast
 # hour 1 until HRRRv4: before this cycle 92-100% of the domain exceeds 1 m s-1, after it
-# 1-3%. Only gates datasets whose region job reads usable_from - an analysis, which has
-# no lead but hour 1. Longer leads are unaffected throughout.
-_MAX_VERTICAL_VELOCITY_USABLE_FROM = pd.Timestamp("2020-12-02T13:00")
+# 1-3%. Hour 1 is the only lead an analysis has; the longer leads a forecast also carries
+# are unaffected throughout, which is why this gates an analysis alone.
+_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM = pd.Timestamp("2020-12-02T13:00")
 
 type WindowKind = Literal["instant", "max", "min", "avg", "acc_run", "acc_1h"]
 
@@ -404,7 +404,7 @@ def _data_var(
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
-    usable_from: Timestamp | None = None,
+    analysis_usable_from: Timestamp | None = None,
 ) -> NoaaHrrrDataVar:
     step_type, window_reset_frequency = _WINDOW_ATTRS[window]
     # Default to the K->C filter for temperature/dew point; a var may override with an
@@ -442,7 +442,7 @@ def _data_var(
             hrrr_file_type=file_type,
             window_reset_frequency=window_reset_frequency,
             hour_0_values_override=hour_0,
-            usable_from=usable_from,
+            analysis_usable_from=analysis_usable_from,
             # Virtual chunks are never rewritten, so no rounding and no rasterio band
             # description / index position (unused fields the base model requires).
             keep_mantissa_bits="no-rounding",
@@ -470,7 +470,7 @@ def _root_var(
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
-    usable_from: Timestamp | None = None,
+    analysis_usable_from: Timestamp | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -491,7 +491,7 @@ def _root_var(
         filters=filters,
         flag_values=flag_values,
         flag_meanings=flag_meanings,
-        usable_from=usable_from,
+        analysis_usable_from=analysis_usable_from,
     )
 
 
@@ -538,7 +538,7 @@ def _model_var(
     units: str,
     standard_name: str | None = None,
     comment: str | None = None,
-    usable_from: Timestamp | None = None,
+    analysis_usable_from: Timestamp | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -555,7 +555,7 @@ def _model_var(
         standard_name=standard_name,
         comment=comment,
         hour_0=None,
-        usable_from=usable_from,
+        analysis_usable_from=analysis_usable_from,
     )
 
 
@@ -643,7 +643,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Maximum upward vertical velocity",
             units="m s-1",
             standard_name="upward_air_velocity",
-            usable_from=_MAX_VERTICAL_VELOCITY_USABLE_FROM,
+            analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
         ),
         root_var(
             "maximum_downward_vertical_velocity_100_1000mb",
@@ -653,7 +653,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="maxdvv",
             long_name="Maximum downward vertical velocity",
             units="m s-1",
-            usable_from=_MAX_VERTICAL_VELOCITY_USABLE_FROM,
+            analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
         ),
         root_var(
             "vertical_velocity_geometric_0p5_0p8_sigma",
@@ -2098,7 +2098,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             standard_name="specific_turbulent_kinetic_energy_of_air",
             # Identically zero until HRRRv2, then a boundary-layer scheme that blows up
             # aloft (domain maxima near 3000 J kg-1 at ~10 km) until HRRRv3.
-            usable_from=pd.Timestamp("2018-07-12T12:00"),
+            analysis_usable_from=pd.Timestamp("2018-07-12T12:00"),
         ),
         model_var(
             "cloud_mixing_ratio",

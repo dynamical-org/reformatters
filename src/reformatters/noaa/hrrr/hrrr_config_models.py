@@ -18,9 +18,10 @@ class NoaaHrrrInternalAttrs(NoaaInternalAttrs):
     hrrr_file_type: NoaaHrrrFileType
     # Multiply raw values by this factor after reading (e.g. 0.01 to convert percent to fraction)
     scale_factor: float | None = None
-    # Append dim value before which the source field holds nothing a reader can use, so
-    # no source file is read and readers get NaN. None means the whole archive is usable.
-    usable_from: Timestamp | None = None
+    # Time before which an analysis holds nothing a reader can use, so it reads no source
+    # file there and returns NaN. Analysis only: a field can be unusable at the hour an
+    # analysis takes while the longer leads a forecast also carries are fine.
+    analysis_usable_from: Timestamp | None = None
 
 
 class NoaaHrrrDataVar(DataVar[NoaaHrrrInternalAttrs]):

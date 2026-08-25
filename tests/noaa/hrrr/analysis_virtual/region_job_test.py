@@ -199,8 +199,10 @@ def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> N
         ("nat", pd.Timedelta("0h")),
     }
     sourced = [var for coord in coords for var in coord.data_vars]
-    # The region starts before every usable_from boundary, so those vars are not sourced.
-    gated = {v.path for v in data_vars if v.internal_attrs.usable_from is not None}
+    # The region starts before every analysis_usable_from boundary, so those vars are not sourced.
+    gated = {
+        v.path for v in data_vars if v.internal_attrs.analysis_usable_from is not None
+    }
     assert gated
     assert sorted(v.path for v in sourced) == sorted(
         v.path for v in data_vars if v.path not in gated
@@ -210,20 +212,20 @@ def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> N
         assert all(v.has_hour_0_values() == from_f00 for v in coord.data_vars)
 
 
-def test_a_variable_is_not_sourced_before_its_usable_from(
+def test_a_variable_is_not_sourced_before_its_analysis_usable_from(
     template_ds: xr.DataTree,
 ) -> None:
     """The file is still read for its other variables; only the gated one drops out."""
     tke = get_var("model_level/turbulent_kinetic_energy")
     mate = get_var("model_level/temperature")
-    usable_from = tke.internal_attrs.usable_from
-    assert usable_from is not None
+    analysis_usable_from = tke.internal_attrs.analysis_usable_from
+    assert analysis_usable_from is not None
     data_vars = [tke, mate]
     job = make_job(template_ds, data_vars=data_vars)
 
     for time, expected in (
-        (usable_from - pd.Timedelta("1h"), {mate.path}),
-        (usable_from, {mate.path, tke.path}),
+        (analysis_usable_from - pd.Timedelta("1h"), {mate.path}),
+        (analysis_usable_from, {mate.path, tke.path}),
     ):
         region_ds = xr.Dataset(coords={"time": pd.to_datetime([time])})
         coords = job.generate_source_file_coords(region_ds, data_vars)
