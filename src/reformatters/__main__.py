@@ -301,6 +301,13 @@ if Config.is_sentry_enabled:
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
+
+
+@app.callback()
+def startup() -> None:
+    monitoring.install_sigterm_logger()
+
+
 app.command()(initialize_new_integration)
 
 
@@ -317,15 +324,10 @@ for archiver in OPERATIONAL_ARCHIVERS:
 deploy_module.register_commands(app, DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS)
 
 
-def main() -> None:
-    monitoring.install_sigterm_logger()
-    app()
-
-
 if not __debug__:
     raise RuntimeError(
         "This project relies on assert statements. Do not run with python -O."
     )
 
 if __name__ == "__main__":
-    main()
+    app()
