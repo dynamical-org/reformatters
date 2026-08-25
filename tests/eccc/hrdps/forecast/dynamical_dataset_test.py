@@ -193,6 +193,10 @@ def test_operational_kubernetes_resources(
     assert archive_grib_files_job.suspend is False
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    # One worker for the newest init time and one for the previous, which the update
+    # reprocesses. Each is a whole shard, so neither splits further.
+    assert update_cron_job.workers_total == 2
+    assert update_cron_job.parallelism == 2
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     # Until the store is backfilled
     assert update_cron_job.suspend is True

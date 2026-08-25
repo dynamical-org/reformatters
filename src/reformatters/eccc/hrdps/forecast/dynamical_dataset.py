@@ -53,7 +53,9 @@ class EcccHrdpsForecastDynamicalDataset(
 
         # The Datamart has each complete run about 4 hours after its init time. We read it
         # directly rather than waiting for the archive job above to mirror the run.
-        workers = 2 * self.num_variable_groups()
+        # An update covers the newest init time and the previous one it reprocesses,
+        # which shard into one job each.
+        workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="10 4,10,16,22 * * *",
