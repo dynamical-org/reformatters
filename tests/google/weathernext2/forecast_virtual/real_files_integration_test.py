@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from itertools import pairwise
 from pathlib import Path
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,6 +23,9 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 )
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_virtual.region_job import (
+    PROXY_LOCATION_PREFIX,
 )
 
 pytestmark = [
@@ -128,6 +132,21 @@ def test_operational_native_chunk_values(
         rtol=1e-6,
     )
     _assert_all_variable_semantics(ds, dataset, init_time)
+
+
+def test_proxy_honors_etag_if_match() -> None:
+    location = (
+        f"{PROXY_LOCATION_PREFIX}weathernext_2_0_0/zarr/2022_to_2023/"
+        "predictions.zarr/2m_temperature/6.0.1.0.0"
+    )
+    etag = httpx.head(location).headers["etag"]
+
+    matched = httpx.get(location, headers={"Range": "bytes=0-0", "If-Match": etag})
+    stale = httpx.get(location, headers={"Range": "bytes=0-0", "If-Match": '"stale"'})
+
+    assert matched.status_code == 206
+    assert len(matched.content) == 1
+    assert stale.status_code == 412
 
 
 def _assert_all_variable_semantics(

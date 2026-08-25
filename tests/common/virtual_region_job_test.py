@@ -17,6 +17,7 @@ from datetime import timedelta
 from itertools import batched, count
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
+from unittest.mock import Mock
 
 import dask.array
 import icechunk
@@ -917,6 +918,26 @@ def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> No
     )
     with pytest.raises(AssertionError, match="registered container"):
         job._emit_refs([session.store], [ref])
+
+
+def test_emit_refs_propagates_etag_checksum() -> None:
+    template_ds = _create_template_ds(1)
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    store = Mock()
+    store.set_virtual_refs.return_value = None
+    ref = VirtualRef(
+        job.data_vars[0],
+        {"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]},
+        "file://x",
+        0,
+        BLOCK_NBYTES,
+        '"object-etag"',
+    )
+
+    job._emit_refs([store], [ref])
+
+    [spec] = store.set_virtual_refs.call_args.args[1]
+    assert spec.etag_checksum == '"object-etag"'
 
 
 def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:

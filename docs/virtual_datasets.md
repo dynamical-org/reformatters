@@ -40,7 +40,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 1. `generate_source_file_coords(processing_region_ds, data_var_group) -> [coord]` — list every source file this job covers.
 2. `discover_available(pending) -> [(coord, file_size)]` — given the source files not yet ingested, return those available to fetch right now, each with its data-file size. Obstore-listable backends one-line this via `discover_available_by_obstore_listing` (below); other sources implement it directly.
-3. `file_refs(coord, file_size) -> [VirtualRef]` — given one available file, return every pointer it contributes — a `VirtualRef` is `(source location, byte offset, length) -> one output chunk` — or `[]` to skip the file. Resolve byte ranges however the source allows: parse a sidecar index, scan the data file, or (one message per file) point at the whole file. Refs are in coordinate-label space; the chunk index is resolved centrally.
+3. `file_refs(coord, file_size) -> [VirtualRef]` — given one available file, return every pointer it contributes — a `VirtualRef` is `(source location, byte offset, length, optional ETag) -> one output chunk` — or `[]` to skip the file. Resolve byte ranges however the source allows: parse a sidecar index, scan the data file, or (one message per file) point at the whole file. Refs are in coordinate-label space; the chunk index is resolved centrally.
 
 (Between 1 and 2 the base runs `filter_already_present` to drop files already in the manifest; steps 2–3 then repeat each tick until everything is ingested. See "The write loop" above.)
 

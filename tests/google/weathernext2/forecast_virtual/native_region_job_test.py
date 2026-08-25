@@ -111,6 +111,7 @@ def _mock_native_listing(
                 {
                     "name": chunk.location.removeprefix(PROXY_LOCATION_PREFIX),
                     "size": str(len(chunk.location) + 1000),
+                    "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA==",
                 }
                 for chunk in page
             ]
@@ -154,6 +155,9 @@ def test_historical_refs_are_whole_four_member_native_chunks(
     )
     assert all(ref.offset == 0 for ref in refs)
     assert all(ref.length == len(ref.location) + 1000 for ref in refs)
+    assert all(
+        ref.etag_checksum == '"00000000000000000000000000000000"' for ref in refs
+    )
     assert client.get.call_count == 2
 
 
@@ -335,7 +339,15 @@ def test_object_listing_retries_transient_response() -> None:
     success = httpx.Response(
         200,
         request=request,
-        json={"items": [{"name": f"{prefix}0.1.0.0", "size": "100"}]},
+        json={
+            "items": [
+                {
+                    "name": f"{prefix}0.1.0.0",
+                    "size": "100",
+                    "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA==",
+                }
+            ]
+        },
     )
     client = Mock()
     client.get.side_effect = [transient, success]
@@ -345,5 +357,10 @@ def test_object_listing_retries_transient_response() -> None:
         region_job_module.ObjectListingQuery(prefix),
     )
 
-    assert objects == {f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": 100}
+    assert objects == {
+        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": region_job_module.NativeObjectMetadata(
+            size=100,
+            etag_checksum='"00000000000000000000000000000000"',
+        )
+    }
     assert client.get.call_count == 2

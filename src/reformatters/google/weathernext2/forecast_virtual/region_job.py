@@ -1,3 +1,4 @@
+from base64 import b64decode
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -44,6 +45,11 @@ PRESSURE_MANIFEST_INIT_SPLIT = 4
 log = get_logger(__name__)
 
 
+class NativeObjectMetadata(NamedTuple):
+    size: int
+    etag_checksum: str
+
+
 def weathernext2_virtual_chunk_containers() -> tuple[
     icechunk.VirtualChunkContainer, ...
 ]:
@@ -59,7 +65,9 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
     init_time: Timestamp
     lead_time: Timedelta
     data_vars: Sequence[GoogleWeathernext2DataVar]
-    chunk_lengths: dict[str, int] = Field(default_factory=dict, frozen=False)
+    chunk_metadata: dict[str, NativeObjectMetadata] = Field(
+        default_factory=dict, frozen=False
+    )
 
     def get_url(self) -> str:
         if self.source_layout == "operational":
@@ -307,7 +315,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 
         available = []
         for coord in pending:
-            coord_objects: dict[str, int] = {}
+            coord_objects: dict[str, NativeObjectMetadata] = {}
             for query in self._listing_queries(coord):
                 objects = listed[query]
                 if objects is None:
@@ -316,8 +324,8 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             else:
                 locations = {chunk.location for chunk in self._source_chunks(coord)}
                 if locations <= coord_objects.keys():
-                    coord.chunk_lengths.clear()
-                    coord.chunk_lengths.update(
+                    coord.chunk_metadata.clear()
+                    coord.chunk_metadata.update(
                         {location: coord_objects[location] for location in locations}
                     )
                     available.append((coord, 0))
@@ -364,14 +372,15 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         file_size: int,  # noqa: ARG002 - each coord covers several native objects
     ) -> list[VirtualRef]:
         chunks = self._source_chunks(coord)
-        assert set(coord.chunk_lengths) == {chunk.location for chunk in chunks}
+        assert set(coord.chunk_metadata) == {chunk.location for chunk in chunks}
         return [
             VirtualRef(
                 data_var=chunk.data_var,
                 out_loc=chunk.out_loc,
                 location=chunk.location,
                 offset=0,
-                length=coord.chunk_lengths[chunk.location],
+                length=coord.chunk_metadata[chunk.location].size,
+                etag_checksum=coord.chunk_metadata[chunk.location].etag_checksum,
             )
             for chunk in chunks
         ]
@@ -408,8 +417,8 @@ def _current_publication_cutoff() -> Timestamp:
 
 def _list_objects(
     client: httpx.Client, query: ObjectListingQuery
-) -> dict[str, int] | None:
-    objects: dict[str, int] = {}
+) -> dict[str, NativeObjectMetadata] | None:
+    objects: dict[str, NativeObjectMetadata] = {}
     page_token: str | None = None
     while True:
         params = {"prefix": query.prefix, "maxResults": "1000"}
@@ -441,7 +450,11 @@ def _list_objects(
             assert size > 0, f"invalid object size for {key}: {size}"
             location = f"{PROXY_LOCATION_PREFIX}{key}"
             assert location not in objects, f"duplicate listed object: {key}"
-            objects[location] = size
+            md5 = b64decode(str(item["md5Hash"]), validate=True)
+            assert len(md5) == 16, f"invalid object MD5 for {key}"
+            objects[location] = NativeObjectMetadata(
+                size=size, etag_checksum=f'"{md5.hex()}"'
+            )
         page_token = payload.get("nextPageToken")
         if page_token is None:
             return objects

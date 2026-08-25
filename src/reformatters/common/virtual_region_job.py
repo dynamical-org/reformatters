@@ -42,6 +42,7 @@ class VirtualRef(NamedTuple):
     location: str
     offset: int
     length: int
+    etag_checksum: str | None = None
 
 
 class VirtualRegionJob(
@@ -431,6 +432,7 @@ class VirtualRegionJob(
                     location=ref.location,
                     offset=ref.offset,
                     length=ref.length,
+                    etag_checksum=ref.etag_checksum,
                 )
             )
         for store in stores:
