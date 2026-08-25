@@ -78,11 +78,11 @@ def _copy_one_init_hour(
     cmd = (
         "/usr/bin/rclone",
         "copy",
-        f":http:{src_path}",
+        f":http:{src_path}/",
         dst_path,
         f"--http-url={MSC_DATAMART_HOST}",
+        "--http-no-head",
         "--ignore-existing",
-        "--min-age=1m",  # Ignore files that are so young they might still be mid-upload.
         "--filter=+ *.grib2",
         "--filter=- *",
         "--s3-no-check-bucket",  # Workaround for reformatters issue #428
