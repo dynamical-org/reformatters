@@ -71,13 +71,14 @@ def test_historical_encoding_preserves_native_annual_chunks() -> None:
 
     assert root.encoding.chunks == (1, 4, 1, 721, 1440)
     assert pressure.encoding.chunks == (1, 4, 1, 721, 1440, 13)
+    assert root.encoding.filters is not None
+    assert [codec["name"] for codec in root.encoding.filters] == ["scale_offset"]
     assert pressure.encoding.filters is not None
-    spatial, transpose = pressure.encoding.filters[-2:]
-    assert spatial == {
-        "name": "dynamicalorg.latitude_longitude",
-        "configuration": {"latitude_axis": 3, "longitude_axis": 4},
-    }
-    assert transpose == {
+    assert [codec["name"] for codec in pressure.encoding.filters] == [
+        "scale_offset",
+        "transpose",
+    ]
+    assert pressure.encoding.filters[-1] == {
         "name": "transpose",
         "configuration": {"order": (0, 1, 2, 5, 3, 4)},
     }
@@ -89,11 +90,10 @@ def test_operational_encoding_preserves_native_per_init_chunks() -> None:
 
     assert root.encoding.chunks == (1, 1, 1, 721, 1440)
     assert pressure.encoding.chunks == (1, 1, 1, 721, 1440, 1)
-    assert all(
-        codec["name"] != "transpose" for codec in pressure.encoding.filters or ()
-    )
+    assert root.encoding.filters is not None
+    assert [codec["name"] for codec in root.encoding.filters] == ["scale_offset"]
     assert pressure.encoding.filters is not None
-    assert pressure.encoding.filters[-1]["name"] == "dynamicalorg.latitude_longitude"
+    assert [codec["name"] for codec in pressure.encoding.filters] == ["scale_offset"]
 
 
 def test_every_data_var_decodes_native_blosc_lz4_shuffle() -> None:
@@ -117,7 +117,7 @@ def test_every_data_var_decodes_native_blosc_lz4_shuffle() -> None:
             assert var.internal_attrs.keep_mantissa_bits == "no-rounding"
 
 
-def test_read_time_unit_conversions_precede_spatial_orientation() -> None:
+def test_read_time_unit_conversions_use_standard_filters() -> None:
     for config in (HISTORICAL, OPERATIONAL):
         temperature = _var(config, "temperature_2m")
         precipitation = _var(config, "total_precipitation_surface")
@@ -128,22 +128,18 @@ def test_read_time_unit_conversions_precede_spatial_orientation() -> None:
         assert precipitation.encoding.filters[0]["configuration"]["scale"] == 0.001
         assert geopotential.encoding.filters is not None
         assert geopotential.encoding.filters[0]["configuration"]["scale"] == 9.80665
-        for var in (temperature, precipitation, geopotential):
-            spatial_index = next(
-                index
-                for index, codec in enumerate(var.encoding.filters or ())
-                if codec["name"] == "dynamicalorg.latitude_longitude"
-            )
-            assert spatial_index == 1
+        assert all(
+            codec["name"] in {"scale_offset", "transpose"}
+            for var in (temperature, precipitation, geopotential)
+            for codec in var.encoding.filters or ()
+        )
 
 
-def test_coordinate_values_match_canonical_spatial_grid_and_native_level_order() -> (
-    None
-):
+def test_coordinate_values_match_native_spatial_grid_and_level_order() -> None:
     for config in (HISTORICAL, OPERATIONAL):
         coords = config.dimension_coordinates()
-        np.testing.assert_array_equal(coords["latitude"], np.arange(90, -90.25, -0.25))
-        np.testing.assert_array_equal(coords["longitude"], np.arange(-180, 180, 0.25))
+        np.testing.assert_array_equal(coords["y"], np.arange(-90, 90.25, 0.25))
+        np.testing.assert_array_equal(coords["x"], np.arange(0, 360, 0.25))
         np.testing.assert_array_equal(
             coords["pressure_level"],
             np.array([50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]),

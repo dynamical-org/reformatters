@@ -179,62 +179,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "latitude": {
-        "shape": [
-          721
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              721
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Latitude",
-          "standard_name": "latitude",
-          "axis": "Y",
-          "units": "degree_north",
-          "statistics_approximate": {
-            "min": -90.0,
-            "max": 90.0
-          },
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "latitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "lead_time": {
         "shape": [
           60
@@ -286,62 +230,6 @@
         },
         "dimension_names": [
           "lead_time"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "longitude": {
-        "shape": [
-          1440
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1440
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Longitude",
-          "standard_name": "longitude",
-          "axis": "X",
-          "units": "degree_east",
-          "statistics_approximate": {
-            "min": -180.0,
-            "max": 179.75
-          },
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -514,13 +402,6 @@
             }
           },
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -550,8 +431,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
         ],
         "zarr_format": 3,
@@ -613,62 +494,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "pressure_level/latitude": {
-        "shape": [
-          721
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              721
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Latitude",
-          "standard_name": "latitude",
-          "axis": "Y",
-          "units": "degree_north",
-          "statistics_approximate": {
-            "min": -90.0,
-            "max": 90.0
-          },
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "latitude"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "pressure_level/lead_time": {
         "shape": [
           60
@@ -720,62 +545,6 @@
         },
         "dimension_names": [
           "lead_time"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "pressure_level/longitude": {
-        "shape": [
-          1440
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1440
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 8,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "shuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Longitude",
-          "standard_name": "longitude",
-          "axis": "X",
-          "units": "degree_east",
-          "statistics_approximate": {
-            "min": -180.0,
-            "max": 179.75
-          },
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "longitude"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -907,13 +676,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -943,8 +705,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
         ],
         "zarr_format": 3,
@@ -989,13 +751,6 @@
             }
           },
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1025,8 +780,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
         ],
         "zarr_format": 3,
@@ -1123,13 +878,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1159,8 +907,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
         ],
         "zarr_format": 3,
@@ -1199,13 +947,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1235,8 +976,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
         ],
         "zarr_format": 3,
@@ -1275,13 +1016,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1311,9 +1045,121 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude",
+          "y",
+          "x",
           "pressure_level"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "pressure_level/x": {
+        "shape": [
+          1440
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1440
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
+          "units": "degree_east",
+          "statistics_approximate": {
+            "min": 0.0,
+            "max": 359.75
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "pressure_level/y": {
+        "shape": [
+          721
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              721
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
+          "units": "degree_north",
+          "statistics_approximate": {
+            "min": -90.0,
+            "max": 90.0
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1349,13 +1195,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1385,8 +1224,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1428,13 +1267,6 @@
             }
           },
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1465,8 +1297,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1546,13 +1378,6 @@
             }
           },
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1582,8 +1407,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1625,13 +1450,6 @@
             }
           },
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1662,8 +1480,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1757,13 +1575,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1793,8 +1604,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1830,13 +1641,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1866,8 +1670,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1903,13 +1707,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -1939,8 +1736,8 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -1976,13 +1773,6 @@
         "fill_value": "NaN",
         "codecs": [
           {
-            "name": "dynamicalorg.latitude_longitude",
-            "configuration": {
-              "latitude_axis": 3,
-              "longitude_axis": 4
-            }
-          },
-          {
             "name": "bytes",
             "configuration": {
               "endian": "little"
@@ -2012,8 +1802,120 @@
           "init_time",
           "ensemble_member",
           "lead_time",
-          "latitude",
-          "longitude"
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "x": {
+        "shape": [
+          1440
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1440
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Longitude",
+          "standard_name": "longitude",
+          "axis": "X",
+          "units": "degree_east",
+          "statistics_approximate": {
+            "min": 0.0,
+            "max": 359.75
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "y": {
+        "shape": [
+          721
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              721
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 8,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Latitude",
+          "standard_name": "latitude",
+          "axis": "Y",
+          "units": "degree_north",
+          "statistics_approximate": {
+            "min": -90.0,
+            "max": 90.0
+          },
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "y"
         ],
         "zarr_format": 3,
         "node_type": "array",

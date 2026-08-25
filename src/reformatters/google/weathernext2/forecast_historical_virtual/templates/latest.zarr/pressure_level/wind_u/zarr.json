@@ -30,13 +30,6 @@
   "fill_value": "NaN",
   "codecs": [
     {
-      "name": "dynamicalorg.latitude_longitude",
-      "configuration": {
-        "latitude_axis": 3,
-        "longitude_axis": 4
-      }
-    },
-    {
       "name": "transpose",
       "configuration": {
         "order": [
@@ -79,8 +72,8 @@
     "init_time",
     "ensemble_member",
     "lead_time",
-    "latitude",
-    "longitude",
+    "y",
+    "x",
     "pressure_level"
   ],
   "zarr_format": 3,

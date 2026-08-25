@@ -70,8 +70,8 @@ def _dataset(
 
 def _selected_cell(ds: xr.Dataset, init_time: pd.Timestamp) -> xr.Dataset:
     return ds.sel(
-        latitude=0,
-        longitude=0,
+        y=0,
+        x=0,
         init_time=init_time,
         ensemble_member=0,
         lead_time=pd.Timedelta("12h"),
