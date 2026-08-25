@@ -91,7 +91,7 @@
           "long_name": "Precipitation type",
           "short_name": "ptype",
           "units": "1",
-          "comment": "1=Rain; 2=Rain/snow; 3=Freezing rain; 4=Ice pellets; 5=Snow; 6=None; 7=Drizzle; 8=Freezing drizzle; 9=Freezing rain/ice pellets.",
+          "comment": "1=Rain; 2=Rain/snow; 3=Freezing rain; 4=Ice pellets; 5=Snow; 6=None; 7=Drizzle; 8=Freezing drizzle; 9=Freezing rain/ice pellets. NaN at lead time 0.",
           "step_type": "instant",
           "flag_values": [
             1,
@@ -1464,6 +1464,7 @@
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",
+          "comment": "NaN at lead time 0.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
