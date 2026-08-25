@@ -69,7 +69,6 @@ class EcccHrdpsForecastDynamicalDataset(
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
             parallelism=workers,
-            suspend=True,  # until the store is backfilled
         )
 
         validation_cron_job = ValidationCronJob(
@@ -81,7 +80,6 @@ class EcccHrdpsForecastDynamicalDataset(
             cpu="0.7",
             memory="3.5G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,  # until the store is backfilled
         )
 
         return [
