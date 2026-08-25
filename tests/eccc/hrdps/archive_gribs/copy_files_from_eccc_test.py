@@ -28,10 +28,12 @@ def test_copy_one_init_hour_builds_expected_command(mock_run_cmd: MagicMock) -> 
     cmd = mock_run_cmd.call_args[0][0]
     assert cmd[0] == "/usr/bin/rclone"
     assert cmd[1] == "copy"
-    assert cmd[2] == ":http:/20260704/WXO-DD/model_hrdps/continental/2.5km/00"
+    assert cmd[2] == ":http:/20260704/WXO-DD/model_hrdps/continental/2.5km/00/"
     assert cmd[3] == ":s3:bucket/eccc-hrdps-grib/20260704/00"
     assert "--http-url=https://dd.weather.gc.ca" in cmd
+    assert "--http-no-head" in cmd
     assert "--ignore-existing" in cmd
+    assert not any(arg.startswith("--min-age") for arg in cmd)
     assert "--filter=+ *.grib2" in cmd
     assert "--transfers=8" in cmd
     assert "--checkers=4" in cmd
