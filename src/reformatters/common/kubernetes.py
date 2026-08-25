@@ -38,7 +38,10 @@ class Job(pydantic.BaseModel):
     pod_active_deadline: timedelta = timedelta(hours=6)
     ttl: timedelta = timedelta(days=1)
 
-    pod_annotations: dict[str, str] = pydantic.Field(default_factory=dict)
+    # A worker evicted mid-run restarts from the beginning of its jobs, so opt out of
+    # consolidation. Karpenter evicts an underutilized node's pods whatever they are
+    # doing, and a job's own tail makes its remaining nodes underutilized.
+    pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
 
@@ -273,8 +276,6 @@ class ReformatCronJob(CronJob):
     # Operational updates expect a single worker
     workers_total: int = 1
     parallelism: int = 1
-    # A mid-run eviction restarts the whole job, so opt out of consolidation.
-    pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
 
 class ValidationCronJob(CronJob):
