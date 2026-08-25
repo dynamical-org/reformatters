@@ -32,6 +32,7 @@ def test_copy_one_init_hour_builds_expected_command(mock_run_cmd: MagicMock) -> 
     assert cmd[3] == ":s3:bucket/eccc-hrdps-grib/20260704/00"
     assert "--http-url=https://dd.weather.gc.ca" in cmd
     assert "--http-no-head" in cmd
+    assert "--streaming-upload-cutoff=32Mi" in cmd
     assert "--ignore-existing" in cmd
     assert not any(arg.startswith("--min-age") for arg in cmd)
     assert "--filter=+ *.grib2" in cmd
@@ -75,32 +76,33 @@ def test_copy_one_init_hour_raises_on_other_errors(mock_run_cmd: MagicMock) -> N
 
 
 @patch("reformatters.eccc.hrdps.archive_gribs.copy_files_from_eccc._copy_one_init_hour")
-def test_copy_files_from_eccc_https_iterates_days_and_hours(
+def test_copy_files_from_eccc_https_skips_recent_init_hours(
     mock_copy_one: MagicMock,
 ) -> None:
     with patch("pandas.Timestamp.now", return_value=pd.Timestamp("2026-07-09T12:00Z")):
         copy_files_from_eccc_https(
             dst_root_path=":s3:bucket/eccc-hrdps-grib",
-            nwp_init_hours=[0, 12],
+            nwp_init_hours=[0, 6, 12],
             days_back=1,
             transfer_parallelism=8,
             checkers=4,
             stats_logging_freq="1m",
         )
 
-    # 2 days (today + 1 day back) x 2 init hours = 4 calls
-    assert mock_copy_one.call_count == 4
+    assert mock_copy_one.call_count == 5
     src_paths = {call.kwargs["src_path"] for call in mock_copy_one.call_args_list}
     dst_paths = {call.kwargs["dst_path"] for call in mock_copy_one.call_args_list}
     assert src_paths == {
         "/20260709/WXO-DD/model_hrdps/continental/2.5km/00",
-        "/20260709/WXO-DD/model_hrdps/continental/2.5km/12",
+        "/20260709/WXO-DD/model_hrdps/continental/2.5km/06",
         "/20260708/WXO-DD/model_hrdps/continental/2.5km/00",
+        "/20260708/WXO-DD/model_hrdps/continental/2.5km/06",
         "/20260708/WXO-DD/model_hrdps/continental/2.5km/12",
     }
     assert dst_paths == {
         ":s3:bucket/eccc-hrdps-grib/20260709/00",
-        ":s3:bucket/eccc-hrdps-grib/20260709/12",
+        ":s3:bucket/eccc-hrdps-grib/20260709/06",
         ":s3:bucket/eccc-hrdps-grib/20260708/00",
+        ":s3:bucket/eccc-hrdps-grib/20260708/06",
         ":s3:bucket/eccc-hrdps-grib/20260708/12",
     }
