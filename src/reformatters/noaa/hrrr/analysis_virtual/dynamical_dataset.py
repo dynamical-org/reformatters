@@ -61,8 +61,6 @@ class NoaaHrrrAnalysisVirtualDataset(
             cpu="4",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            # Suspended until the initial backfill completes.
-            suspend=True,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
@@ -75,8 +73,6 @@ class NoaaHrrrAnalysisVirtualDataset(
             cpu="1.5",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            # Suspended until the initial backfill completes.
-            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
