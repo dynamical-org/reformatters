@@ -503,9 +503,8 @@ class EcccHrdpsForecastTemplateConfig(TemplateConfig[EcccHrdpsDataVar]):
                     units="m s-1",
                     step_type="instant",
                     standard_name="wind_speed_of_gust",
-                    comment="Peak wind diagnosed at this time step, exceeding the "
-                    "sustained wind because it includes sub-grid turbulence. Not a "
-                    "maximum since the previous forecast step.",
+                    comment="Peak wind speed at this time step, including sub-grid "
+                    "turbulence. Not a maximum since the previous forecast step.",
                 ),
                 internal_attrs=EcccHrdpsInternalAttrs(
                     grib_field="GUST",

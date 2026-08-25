@@ -1788,7 +1788,7 @@
           "short_name": "gust",
           "standard_name": "wind_speed_of_gust",
           "units": "m s-1",
-          "comment": "Peak wind diagnosed at this time step, exceeding the sustained wind because it includes sub-grid turbulence. Not a maximum since the previous forecast step.",
+          "comment": "Peak wind speed at this time step, including sub-grid turbulence. Not a maximum since the previous forecast step.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
