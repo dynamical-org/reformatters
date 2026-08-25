@@ -39,6 +39,7 @@
     "short_name": "snowc",
     "standard_name": "surface_snow_area_fraction",
     "units": "1",
+    "comment": "Fraction (0-1) of the grid box covered by snow. Applies over land only; NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

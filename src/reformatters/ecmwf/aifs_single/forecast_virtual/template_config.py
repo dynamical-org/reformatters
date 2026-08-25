@@ -411,6 +411,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Snow cover",
             units="1",
             standard_name="surface_snow_area_fraction",
+            comment="Fraction (0-1) of the grid box covered by snow. Applies over land only; NaN over water.",
             date_available=AIFS_2026_UPGRADE_DATE,
         ),
         # tp/cp exist before AIFS_SINGLE_FORMAT_CHANGE_DATE too, but in metres;
@@ -453,6 +454,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Runoff water equivalent (surface plus subsurface)",
             units="kg m-2",
             standard_name="runoff_amount",
+            comment="Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
@@ -484,7 +486,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="ECMWF soil level 1, the uppermost soil layer.",
+            comment="ECMWF soil level 1, the uppermost soil layer. Over water this is the sea surface temperature, not a soil temperature.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
@@ -496,7 +498,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="ECMWF soil level 2, the second soil layer from the surface.",
+            comment="ECMWF soil level 2, the second soil layer from the surface. Over water this is the sea surface temperature, not a soil temperature.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
@@ -508,7 +510,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="ECMWF soil level 1, the uppermost soil layer.",
+            comment="ECMWF soil level 1, the uppermost soil layer. Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(
@@ -520,7 +522,7 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="ECMWF soil level 2, the second soil layer from the surface.",
+            comment="ECMWF soil level 2, the second soil layer from the surface. Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
             date_available=AIFS_SINGLE_FORMAT_CHANGE_DATE,
         ),
         _root_var(

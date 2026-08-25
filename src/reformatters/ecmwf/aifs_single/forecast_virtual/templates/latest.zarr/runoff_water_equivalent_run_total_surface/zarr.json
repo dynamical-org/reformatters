@@ -39,6 +39,7 @@
     "short_name": "rowe",
     "standard_name": "runoff_amount",
     "units": "kg m-2",
+    "comment": "Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -39,7 +39,7 @@
     "short_name": "vsw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
-    "comment": "ECMWF soil level 2, the second soil layer from the surface.",
+    "comment": "ECMWF soil level 2, the second soil layer from the surface. Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
