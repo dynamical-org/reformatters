@@ -265,7 +265,6 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
 ]
 
 register_run_monitor(monitoring.monitor_cron)
-monitoring.install_sigterm_logger()
 
 if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
@@ -318,10 +317,15 @@ for archiver in OPERATIONAL_ARCHIVERS:
 deploy_module.register_commands(app, DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS)
 
 
+def main() -> None:
+    monitoring.install_sigterm_logger()
+    app()
+
+
 if not __debug__:
     raise RuntimeError(
         "This project relies on assert statements. Do not run with python -O."
     )
 
 if __name__ == "__main__":
-    app()
+    main()

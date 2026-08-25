@@ -38,7 +38,7 @@ exclude-newer = "5 days"
 
 
 [project.scripts]
-main = "reformatters.__main__:app"
+main = "reformatters.__main__:main"
 
 [dependency-groups]
 dev = [
