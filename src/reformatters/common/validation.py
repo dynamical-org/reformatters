@@ -465,7 +465,7 @@ class CheckRecentNans(VariableSelection, Validator):
                 ),
             )
 
-        selected_ds = cast("xr.Dataset", ds[var_paths])
+        selected_ds = ds[var_paths]
         positions = min(self._resolve_window(selected_ds, append_dim), size)
         window_ds = selected_ds.isel({append_dim: slice(size - positions, None)})
         # A tier of 1.0 excuses a position entirely, so never read for it.
