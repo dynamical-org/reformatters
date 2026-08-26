@@ -227,8 +227,13 @@ class Job(pydantic.BaseModel):
         }
 
 
+# Kubernetes appends up to 11 characters when it names a cron job's jobs, so the
+# cron job's own name must stay within 63 - 11.
+CronJobName = Annotated[str, pydantic.Field(min_length=1, max_length=52)]
+
+
 class CronJob(Job):
-    name: Annotated[str, pydantic.Field(min_length=1, max_length=52)]
+    name: CronJobName
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
@@ -269,7 +274,7 @@ class CronJob(Job):
 
 
 class ReformatCronJob(CronJob):
-    name: Annotated[str, pydantic.Field(pattern=r".+-update$")]
+    name: Annotated[CronJobName, pydantic.Field(pattern=r".+-update$")]
     command: Sequence[str] = ["update"]
     # Operational updates expect a single worker
     workers_total: int = 1
@@ -277,7 +282,7 @@ class ReformatCronJob(CronJob):
 
 
 class ValidationCronJob(CronJob):
-    name: Annotated[str, pydantic.Field(pattern=r".+-validate$")]
+    name: Annotated[CronJobName, pydantic.Field(pattern=r".+-validate$")]
     command: Sequence[str] = ["validate"]
     workers_total: int = 1
     parallelism: int = 1
