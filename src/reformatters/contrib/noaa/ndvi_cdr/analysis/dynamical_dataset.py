@@ -20,7 +20,7 @@ class NoaaNdviCdrAnalysisDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="0 20 * * *",
             pod_active_deadline=timedelta(minutes=30),  # runs take <24 min
             image=image_tag,
@@ -32,7 +32,7 @@ class NoaaNdviCdrAnalysisDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule="30 20 * * *",  # 30m (pod_active_deadline) after reformat at :00
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

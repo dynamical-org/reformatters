@@ -57,7 +57,7 @@ class EcccHrdpsForecastDynamicalDataset(
         # which shard into one job each.
         workers = 2
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="10 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -72,7 +72,7 @@ class EcccHrdpsForecastDynamicalDataset(
         )
 
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule="40 4,10,16,22 * * *",  # 30m (pod_active_deadline) after the update
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

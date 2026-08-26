@@ -29,7 +29,7 @@ class NasaImergAnalysisMaterializedDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule=self.update_schedule,
             pod_active_deadline=timedelta(minutes=60),
             image=image_tag,
@@ -46,7 +46,7 @@ class NasaImergAnalysisMaterializedDataset(
             ],
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule=self.validate_schedule,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

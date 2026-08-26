@@ -57,7 +57,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
         # window is fully ingested; the deadline bounds waiting on a file that never
         # publishes and stays well under the 6h gap so fires never overlap.
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="50 0,6,12,18 * * *",
             pod_active_deadline=timedelta(hours=1, minutes=40),
             image=image_tag,
@@ -67,7 +67,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             # After each update (:50) + its 1h40m deadline.
             schedule="40 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),

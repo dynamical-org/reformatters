@@ -22,7 +22,7 @@ class GefsForecast35DayDataset(
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             # A 00z init's lead times through GEFS_PRE_EXTENSION_MAX are all on the
             # source by ~init+6h40m, occasionally as late as ~init+6h48m; starting at
             # init+6h45m catches the slowest members instead of racing them. The prior
@@ -41,7 +41,7 @@ class GefsForecast35DayDataset(
             parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule="5 7 * * *",  # 20m (pod_active_deadline) after reformat at 06:45
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

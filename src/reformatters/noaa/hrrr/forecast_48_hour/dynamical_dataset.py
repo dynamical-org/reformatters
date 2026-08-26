@@ -35,7 +35,7 @@ class NoaaHrrrForecast48HourDataset(
         # first to spare NOMADS, but NOMADS publishes first). +3 min buffer.
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="53 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=10),  # usually takes <2 min
             image=image_tag,
@@ -50,7 +50,7 @@ class NoaaHrrrForecast48HourDataset(
         )
 
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule="3 2,8,14,20 * * *",  # 10m (pod_active_deadline) after reformat at :53
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

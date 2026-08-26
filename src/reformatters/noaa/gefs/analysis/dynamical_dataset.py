@@ -22,7 +22,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
         # Using num_variable_groups() would create way more parallelism than is useful
         workers = 2
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             # GEFS f006 (last lead time used) NOMADS last-modified ~init+3h48m. +3 min buffer.
             schedule="51 3,9,15,21 * * *",
             pod_active_deadline=timedelta(minutes=30),  # runs take <22 min
@@ -37,7 +37,7 @@ class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCo
             parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             schedule="21 4,10,16,22 * * *",  # 30m (pod_active_deadline) after reformat at :51
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
