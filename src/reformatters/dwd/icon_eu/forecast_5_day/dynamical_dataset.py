@@ -65,7 +65,7 @@ class DwdIconEuForecast5DayDataset(
         # download_file falls back to reading directly from DWD.
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             schedule="52 3,9,15,21 * * *",
             pod_active_deadline=timedelta(minutes=10),  # runs take <5 min
             image=image_tag,
@@ -80,7 +80,7 @@ class DwdIconEuForecast5DayDataset(
         )
 
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule="2 4,10,16,22 * * *",  # 10m (pod_active_deadline) after reformat at :52
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

@@ -61,7 +61,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
         # bounds waiting on a cycle that never publishes, and keeps fires from
         # overlapping.
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             schedule="20 5,11,17,23 * * *",
             pod_active_deadline=timedelta(hours=1),
             image=image_tag,
@@ -71,7 +71,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             # After each update (init+5h20m) + its 1h deadline.
             schedule="20 0,6,12,18 * * *",
             pod_active_deadline=timedelta(minutes=30),

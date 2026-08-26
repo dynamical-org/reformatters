@@ -26,7 +26,7 @@ class EcmwfAifsSingleForecastDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             # AIFS-single f360 (last lead) ecmwf-forecasts S3 p99 ~init+6h10m (recent
             # files land 5h25m-6h03m), so fetch at init+6h13m.
             schedule="13 */6 * * *",
@@ -42,7 +42,7 @@ class EcmwfAifsSingleForecastDataset(
             parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule="23 */6 * * *",  # 10m (pod_active_deadline) after reformat at :13
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,

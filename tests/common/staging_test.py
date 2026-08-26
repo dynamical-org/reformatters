@@ -60,23 +60,17 @@ class TestStagingCronjobName:
 class TestRenameCronjobForStaging:
     def test_renames_update_cronjob(self) -> None:
         cronjob = _make_cronjob("noaa-gfs-forecast-update")
-        result = rename_cronjob_for_staging(
-            cronjob, "noaa-gfs-forecast", "0.3.0", name_prefix="noaa-gfs-forecast"
-        )
+        result = rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
         assert result.name == "stage-noaa-gfs-forecast-v0-3-0-update"
 
     def test_renames_validate_cronjob(self) -> None:
         cronjob = _make_cronjob("noaa-gfs-forecast-validate")
-        result = rename_cronjob_for_staging(
-            cronjob, "noaa-gfs-forecast", "0.3.0", name_prefix="noaa-gfs-forecast"
-        )
+        result = rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
         assert result.name == "stage-noaa-gfs-forecast-v0-3-0-validate"
 
     def test_preserves_other_fields(self) -> None:
         cronjob = _make_cronjob("test-dataset-update")
-        result = rename_cronjob_for_staging(
-            cronjob, "test-dataset", "1.0.0", name_prefix="test-dataset"
-        )
+        result = rename_cronjob_for_staging(cronjob, "test-dataset", "1.0.0")
         assert result.schedule == cronjob.schedule
         assert result.image == cronjob.image
         assert result.dataset_id == cronjob.dataset_id
@@ -85,28 +79,13 @@ class TestRenameCronjobForStaging:
     def test_asserts_on_unexpected_name_prefix(self) -> None:
         cronjob = _make_cronjob("wrong-prefix-update")
         with pytest.raises(AssertionError):
-            rename_cronjob_for_staging(
-                cronjob, "noaa-gfs-forecast", "0.3.0", name_prefix="noaa-gfs-forecast"
-            )
-
-    def test_uses_name_prefix_when_it_differs_from_dataset_id(self) -> None:
-        cronjob = _make_cronjob("weathernext2-forecast-historical-virtual-update")
-        result = rename_cronjob_for_staging(
-            cronjob,
-            "google-weathernext2-forecast-historical-virtual",
-            "0.3.0",
-            name_prefix="weathernext2-forecast-historical-virtual",
-        )
-        assert result.name.startswith("stage-")
-        assert result.name.endswith("-update")
+            rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
 
     def test_longest_real_dataset_id_fits(self) -> None:
         # ecmwf-ifs-ens-forecast-15-day-0-25-degree is currently the longest
         dataset_id = "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
         cronjob = _make_cronjob(f"{dataset_id}-update")
-        result = rename_cronjob_for_staging(
-            cronjob, dataset_id, "0.3.0", name_prefix=dataset_id
-        )
+        result = rename_cronjob_for_staging(cronjob, dataset_id, "0.3.0")
         assert len(result.name) <= _MAX_KUBERNETES_NAME_LENGTH
 
 

@@ -37,9 +37,9 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
     )
 
     update, validate = dataset.operational_kubernetes_resources("test")
-    assert update.name == f"{dataset.cron_job_name_prefix}-update"
+    assert update.name == "google-wn2-forecast-historical-virtual-update"
     assert update.suspend is True
-    assert validate.name == f"{dataset.cron_job_name_prefix}-validate"
+    assert validate.name == "google-wn2-forecast-historical-virtual-validate"
     assert validate.suspend is True
     assert not any(
         isinstance(item, validation.CheckCurrentData) for item in dataset.validators()
@@ -65,7 +65,7 @@ def test_operational_product_has_lag_aware_crons_and_splits(tmp_path: Path) -> N
     )
 
     update, validate = dataset.operational_kubernetes_resources("test")
-    assert update.name == f"{dataset.cron_job_name_prefix}-update"
+    assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)

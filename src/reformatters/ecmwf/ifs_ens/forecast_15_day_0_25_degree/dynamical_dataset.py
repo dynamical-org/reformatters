@@ -28,7 +28,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             # Gating lead group f360 typically lands ~08:00-08:09 UTC (recent days;
             # wxopticon external-ecmwf-ifs-ens-long-aws p99 08:26); pod spin-up adds
             # a head start before late-lead downloads, so fire at 08:05.
@@ -46,7 +46,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             parallelism=min(workers, 20),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule="40 8 * * *",  # 35m (pod_active_deadline) after reformat at 08:05
             suspend=False,
             pod_active_deadline=timedelta(minutes=10),
