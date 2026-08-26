@@ -26,10 +26,6 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
         - ecmwf-ifs-ens-forecast-46-day-1-5-degree-update
         - ecmwf-ifs-ens-forecast-46-day-1-5-degree-validate
-        - google-weathernext2-forecast-historical-virtual-update
-        - google-weathernext2-forecast-historical-virtual-validate
-        - google-weathernext2-forecast-operational-virtual-update
-        - google-weathernext2-forecast-operational-virtual-validate
         - nasa-imerg-analysis-early-update
         - nasa-imerg-analysis-early-validate
         - nasa-imerg-analysis-late-update
@@ -60,6 +56,10 @@ name: 'Manual: Create Job from CronJob'
         - noaa-ndvi-cdr-analysis-validate
         - u-arizona-swann-analysis-update
         - u-arizona-swann-analysis-validate
+        - weathernext2-forecast-historical-virtual-update
+        - weathernext2-forecast-historical-virtual-validate
+        - weathernext2-forecast-operational-virtual-update
+        - weathernext2-forecast-operational-virtual-validate
 concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false

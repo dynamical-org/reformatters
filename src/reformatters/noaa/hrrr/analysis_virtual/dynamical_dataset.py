@@ -53,7 +53,7 @@ class NoaaHrrrAnalysisVirtualDataset(
         # cycle's f01 is already out (~init+53m), so a :50 fire commits the hour's
         # files within minutes; a late cycle rolls to the next fire.
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="50 * * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -63,7 +63,7 @@ class NoaaHrrrAnalysisVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             # The update's fire plus its pod_active_deadline, so the run being
             # validated has always stopped writing.
             schedule="20 * * * *",

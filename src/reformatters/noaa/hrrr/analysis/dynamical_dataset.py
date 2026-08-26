@@ -27,7 +27,7 @@ class NoaaHrrrAnalysisDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates and validation."""
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             # Every 3 hours at 57 minutes past the hour.
             # HRRR f001 (last lead time used) NOMADS last-modified ~init+53m (max ~55m;
             # we try S3 first to spare NOMADS, but NOMADS publishes first, by ~10 min at
@@ -44,7 +44,7 @@ class NoaaHrrrAnalysisDataset(
         )
 
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             # 20m (pod_active_deadline) after reformat at :57 = :77 = :17 of the next hour.
             # "17 1-23/3 * * *" gives 01:17, 04:17, 07:17, ... matching reformat at 00:57, 03:57, 06:57, ...
             schedule="17 1-23/3 * * *",

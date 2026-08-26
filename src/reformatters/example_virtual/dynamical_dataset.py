@@ -60,7 +60,7 @@ class ExampleSpatialDynamicalDataset(
         """
         # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
         # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-update",
+        #     name=f"{self.cron_job_name_prefix}-update",
         #     schedule="0 6 * * *",
         #     # Sets how long a fire chases its own source files (the poll deadline is
         #     # the fire plus this, less a small grace); keep it under the gap
@@ -74,7 +74,7 @@ class ExampleSpatialDynamicalDataset(
         #     suspend=suspend,
         # )
         # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
+        #     name=f"{self.cron_job_name_prefix}-validate",
         #     # After the update's fire + its deadline.
         #     schedule="0 8 * * *",
         #     pod_active_deadline=timedelta(minutes=30),

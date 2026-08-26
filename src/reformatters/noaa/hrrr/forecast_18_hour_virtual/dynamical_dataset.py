@@ -49,7 +49,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # Race the current init: f00 arrives near :51 and f18 normally by init + 86m.
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{self.cron_job_name_prefix}-update",
             schedule="50 * * * *",
             pod_active_deadline=timedelta(minutes=59),
             image=image_tag,
@@ -59,7 +59,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{self.cron_job_name_prefix}-validate",
             # The update's fire plus its pod_active_deadline, so the run being
             # validated has always stopped writing.
             schedule="49 * * * *",

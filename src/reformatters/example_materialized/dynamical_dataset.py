@@ -24,7 +24,7 @@ class ExampleTemporalDynamicalDataset(
         # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
         # workers = self.num_variable_groups()  # set if max_vars_per_job is set on RegionJob
         # operational_update_cron_job = ReformatCronJob(
-        #     name=f"{self.dataset_id}-update",
+        #     name=f"{self.cron_job_name_prefix}-update",
         #     schedule="0 0 * * *",
         #     pod_active_deadline=timedelta(minutes=30),
         #     image=image_tag,
@@ -39,7 +39,7 @@ class ExampleTemporalDynamicalDataset(
         #     suspend=suspend,
         # )
         # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
+        #     name=f"{self.cron_job_name_prefix}-validate",
         #     schedule="30 0 * * *",
         #     pod_active_deadline=timedelta(minutes=10),
         #     image=image_tag,
