@@ -11,20 +11,23 @@ if [ -z "$BUCKET_NAME" ] || [ -z "$K8S_SECRET_NAME" ]; then
   cat <<USAGE
 Usage: $0 <bucket-name> <k8s-secret-name>
 
+Bucket creation uses your \`wrangler login\` OAuth session. Minting the bucket
+scoped token goes through the REST API instead, which wrangler's session cannot
+authenticate, so it needs an API token.
+
 Required env:
   CLOUDFLARE_ACCOUNT_ID
-  CLOUDFLARE_API_TOKEN    R2 admin permissions, plus "API Tokens Write" to mint
-                          the bucket scoped token
 
 Optional env:
   R2_ACCESS_KEY_ID        use these credentials instead of minting a new token
   R2_SECRET_ACCESS_KEY
+  CLOUDFLARE_API_TOKEN    needed only to mint a token: "API Tokens Write" plus
+                          R2 admin, since wrangler prefers it over OAuth
 USAGE
   exit 1
 fi
 
 : "${CLOUDFLARE_ACCOUNT_ID:?set CLOUDFLARE_ACCOUNT_ID}"
-: "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN}"
 
 for cmd in npx kubectl jq curl sha256sum uv; do
   command -v "$cmd" > /dev/null || { echo "Error: $cmd not found"; exit 1; }
@@ -43,6 +46,7 @@ fi
 
 if [ -z "${R2_ACCESS_KEY_ID:-}" ] || [ -z "${R2_SECRET_ACCESS_KEY:-}" ]; then
   echo "Minting an R2 API token scoped to $BUCKET_NAME..."
+  : "${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN, or set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY}"
   # Object Read & Write on this one bucket. Resource name format and permission
   # group id: https://developers.cloudflare.com/r2/api/tokens/
   token_request=$(jq -n \
