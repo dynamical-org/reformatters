@@ -24,34 +24,6 @@ from reformatters.noaa.hrrr.virtual_template_config import (
     NoaaHrrrVirtualTemplateConfig,
 )
 
-# HRRR writes these as constant-value messages holding no data, so this analysis omits
-# them: AOTK is all-zero in every cycle since the field appeared, and BGRUN is
-# unpopulated (0.002% of cells nonzero, none coincident with precipitation).
-_EMPTY_AT_ANALYSIS_LEAD = frozenset(
-    {
-        "aerosol_optical_thickness_atmosphere",
-        "baseflow_groundwater_runoff_surface",
-    }
-)
-
-# Flux and rate diagnostics HRRR writes as constant zero at forecast hour 0 because they
-# have no accumulation interval there. The hour-1 message carries the data.
-_HOUR_1_ONLY = frozenset(
-    {
-        "precipitation_rate_surface",
-        "lightning_atmosphere",
-        "lightning_threat_1m",
-    }
-)
-
-# The source encodes "freezing level is at or below ground" as a height of exactly 0 m.
-_GROUND_LEVEL_FILL = frozenset(
-    {
-        "geopotential_height_0c_isotherm",
-        "geopotential_height_highest_tropospheric_freezing_level",
-    }
-)
-
 
 class NoaaHrrrAnalysisVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
     """Virtual HRRR analysis with hourly valid times."""
@@ -135,34 +107,14 @@ class NoaaHrrrAnalysisVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
         ]
 
     def _catalog_data_vars(self) -> list[NoaaHrrrDataVar]:
-        catalog = [
-            var
-            for var in super()._catalog_data_vars()
-            if var.name not in _EMPTY_AT_ANALYSIS_LEAD
-        ]
+        catalog = super()._catalog_data_vars()
         names = {var.name for var in catalog}
-        return [self._for_analysis(var, names) for var in catalog]
-
-    def _for_analysis(self, var: NoaaHrrrDataVar, names: set[str]) -> NoaaHrrrDataVar:
-        if var.name in _HOUR_1_ONLY:
-            var = replace(
-                var,
-                internal_attrs=replace(
-                    var.internal_attrs, hour_0_values_override=False
-                ),
-            )
-        if var.name in _GROUND_LEVEL_FILL:
-            var = replace(
-                var,
-                encoding=replace(var.encoding, fill_value=0.0),
-                attrs=replace(
-                    var.attrs,
-                    comment="NaN where the freezing level is at or below ground.",
-                ),
-            )
-        if var.internal_attrs.window_reset_frequency == pd.Timedelta.max:
-            var = _with_run_total_comment(var, names)
-        return var
+        return [
+            _with_run_total_comment(var, names)
+            if var.internal_attrs.window_reset_frequency == pd.Timedelta.max
+            else var
+            for var in catalog
+        ]
 
 
 def _with_run_total_comment(var: NoaaHrrrDataVar, names: set[str]) -> NoaaHrrrDataVar:

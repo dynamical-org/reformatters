@@ -2097,7 +2097,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2113,9 +2113,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the freezing level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2541,7 +2542,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2557,9 +2558,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the freezing level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -6333,7 +6335,7 @@
         "attributes": {
           "long_name": "U component of wind",
           "short_name": "u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
@@ -6392,7 +6394,7 @@
         "attributes": {
           "long_name": "V component of wind",
           "short_name": "v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
@@ -8351,7 +8353,7 @@
         "attributes": {
           "long_name": "U component of wind",
           "short_name": "u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
@@ -8410,7 +8412,7 @@
         "attributes": {
           "long_name": "V component of wind",
           "short_name": "v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
@@ -11266,7 +11268,7 @@
         "attributes": {
           "long_name": "10 metre U wind component",
           "short_name": "10u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
@@ -11322,7 +11324,7 @@
         "attributes": {
           "long_name": "80 metre U wind component",
           "short_name": "80u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
@@ -11378,7 +11380,7 @@
         "attributes": {
           "long_name": "10 metre V wind component",
           "short_name": "10v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
@@ -11434,7 +11436,7 @@
         "attributes": {
           "long_name": "80 metre V wind component",
           "short_name": "80v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
           "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",

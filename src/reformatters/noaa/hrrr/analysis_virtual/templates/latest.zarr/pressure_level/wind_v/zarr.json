@@ -37,7 +37,7 @@
   "attributes": {
     "long_name": "V component of wind",
     "short_name": "v",
-    "standard_name": "northward_wind",
+    "standard_name": "y_wind",
     "units": "m s-1",
     "comment": "Velocity along the model grid's y dimension, not northward velocity.",
     "step_type": "instant",

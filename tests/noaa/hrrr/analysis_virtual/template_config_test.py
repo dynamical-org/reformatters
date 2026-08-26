@@ -29,17 +29,10 @@ def test_hourly_time_structure() -> None:
     assert dims["model_level"] == ("time", "y", "x", "model_level")
 
 
-def test_serves_the_forecast_catalog_less_the_fields_empty_at_analysis_lead() -> None:
-    forecast_paths = [
-        v.path for v in NoaaHrrrForecast48HourVirtualTemplateConfig().data_vars
-    ]
-    paths = [v.path for v in CONFIG.data_vars]
-    assert len(paths) == 174
-    assert set(forecast_paths) - set(paths) == {
-        "aerosol_optical_thickness_atmosphere",
-        "baseflow_groundwater_runoff_surface",
-    }
-    assert paths == [p for p in forecast_paths if p in set(paths)]
+def test_serves_the_whole_forecast_catalog() -> None:
+    forecast_vars = NoaaHrrrForecast48HourVirtualTemplateConfig().data_vars
+    assert len(CONFIG.data_vars) == 176
+    assert [v.path for v in CONFIG.data_vars] == [v.path for v in forecast_vars]
 
 
 def test_fields_constant_at_hour_0_are_sourced_from_hour_1() -> None:
@@ -47,6 +40,7 @@ def test_fields_constant_at_hour_0_are_sourced_from_hour_1() -> None:
         "precipitation_rate_surface",
         "lightning_atmosphere",
         "lightning_threat_1m",
+        "aerosol_optical_thickness_atmosphere",
     ):
         assert not get_var(path).has_hour_0_values()
     # The sibling in the same GRIB slot is diagnosed at hour 0 and keeps it.
@@ -90,19 +84,16 @@ def test_run_total_variables_carry_the_one_hour_equivalence_comment() -> None:
         "Accumulated over the one hour ending at this time."
     )
 
-    # Variables this analysis does not deliberately override keep the shared catalog's
-    # attrs untouched.
+    # Run totals are the analysis's only attr override; everything else matches the
+    # shared catalog.
     forecast_attrs = {
         v.path: v.attrs for v in NoaaHrrrForecast48HourVirtualTemplateConfig().data_vars
     }
-    overridden = {v.path for v in run_totals} | {
-        "geopotential_height_0c_isotherm",
-        "geopotential_height_highest_tropospheric_freezing_level",
-    }
+    run_total_paths = {v.path for v in run_totals}
     assert all(
         var.attrs == forecast_attrs[var.path]
         for var in CONFIG.data_vars
-        if var.path not in overridden
+        if var.path not in run_total_paths
     )
 
 

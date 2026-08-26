@@ -818,6 +818,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Maximum lightning threat 1 (graupel flux)",
             units="1",
             comment="GSD maximum lightning threat 1 derived from upward graupel flux, in flashes km-2 (5 min)-1. Encoded in HRRR GRIB as LTNGSD (lightning strike density) at the pseudo-level 1 m above ground. Before the 2022-06-28T12Z cycle this GRIB slot carried lightning potential index (J kg-1), a different quantity that is not included.",
+            hour_0=False,
         ),
         root_var(
             "lightning_threat_2m",
@@ -835,6 +836,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="ltng",
             long_name="Lightning",
             units="1",
+            hour_0=False,
         ),
         root_var(
             "wind_u_80m",
@@ -843,7 +845,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="80u",
             long_name="80 metre U wind component",
             units="m s-1",
-            standard_name="eastward_wind",
+            standard_name="x_wind",
             comment="Velocity along the model grid's x dimension, not eastward velocity.",
         ),
         root_var(
@@ -853,7 +855,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="80v",
             long_name="80 metre V wind component",
             units="m s-1",
-            standard_name="northward_wind",
+            standard_name="y_wind",
             comment="Velocity along the model grid's y dimension, not northward velocity.",
         ),
         root_var(
@@ -1000,7 +1002,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="10u",
             long_name="10 metre U wind component",
             units="m s-1",
-            standard_name="eastward_wind",
+            standard_name="x_wind",
             comment="Velocity along the model grid's x dimension, not eastward velocity.",
         ),
         root_var(
@@ -1010,7 +1012,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="10v",
             long_name="10 metre V wind component",
             units="m s-1",
-            standard_name="northward_wind",
+            standard_name="y_wind",
             comment="Velocity along the model grid's y dimension, not northward velocity.",
         ),
         root_var(
@@ -1062,6 +1064,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Precipitation rate",
             units="kg m-2 s-1",
             standard_name="precipitation_flux",
+            hour_0=False,
         ),
         root_var(
             "total_precipitation_run_total_surface",
@@ -1344,6 +1347,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Aerosol optical thickness",
             units="1",
             standard_name="atmosphere_optical_thickness_due_to_ambient_aerosol_particles",
+            hour_0=False,
         ),
         root_var(
             "column_integrated_mass_density_atmosphere",
@@ -1620,6 +1624,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the freezing level is at or below ground.",
         ),
         root_var(
             "relative_humidity_0c_isotherm",
@@ -1647,6 +1653,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the freezing level is at or below ground.",
         ),
         root_var(
             "relative_humidity_highest_tropospheric_freezing_level",
@@ -2005,7 +2013,7 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="u",
             long_name="U component of wind",
             units="m s-1",
-            standard_name="eastward_wind",
+            standard_name="x_wind",
             comment="Velocity along the model grid's x dimension, not eastward velocity.",
         ),
         pressure_var(
@@ -2014,7 +2022,7 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="v",
             long_name="V component of wind",
             units="m s-1",
-            standard_name="northward_wind",
+            standard_name="y_wind",
             comment="Velocity along the model grid's y dimension, not northward velocity.",
         ),
         pressure_var(
@@ -2053,7 +2061,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="u",
             long_name="U component of wind",
             units="m s-1",
-            standard_name="eastward_wind",
+            standard_name="x_wind",
             comment="Velocity along the model grid's x dimension, not eastward velocity.",
         ),
         model_var(
@@ -2062,7 +2070,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="v",
             long_name="V component of wind",
             units="m s-1",
-            standard_name="northward_wind",
+            standard_name="y_wind",
             comment="Velocity along the model grid's y dimension, not northward velocity.",
         ),
         model_var(
