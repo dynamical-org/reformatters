@@ -93,9 +93,7 @@ def register_commands(
         staging.validate_version_differs_from_main(dataset, version)
 
         def transform(cronjob: kubernetes.CronJob) -> kubernetes.CronJob:
-            return staging.rename_cronjob_for_staging(
-                cronjob, dataset_id, version, name_prefix=dataset.cron_job_name_prefix
-            )
+            return staging.rename_cronjob_for_staging(cronjob, dataset_id, version)
 
         deploy_operational_resources(
             datasets,

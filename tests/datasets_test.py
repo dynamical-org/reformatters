@@ -212,19 +212,11 @@ def test_cronjob_commands_match_cli_commands(
 def test_cronjob_names_are_consistent(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    """CronJob names should be traceable to the dataset ID."""
+    """CronJob names should contain the dataset ID for traceability."""
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image"))
-    assert dataset.dataset_id.endswith(dataset.cron_job_name_prefix), (
-        f"cron_job_name_prefix '{dataset.cron_job_name_prefix}' is not a tail of "
-        f"dataset_id '{dataset.dataset_id}'"
-    )
     for cron_job in cron_jobs:
-        assert cron_job.name.startswith(dataset.cron_job_name_prefix), (
-            f"CronJob name '{cron_job.name}' doesn't start with "
-            f"cron_job_name_prefix '{dataset.cron_job_name_prefix}'"
-        )
-        assert cron_job.dataset_id == dataset.dataset_id, (
-            f"CronJob '{cron_job.name}' carries dataset_id '{cron_job.dataset_id}'"
+        assert dataset.dataset_id in cron_job.name, (
+            f"CronJob name '{cron_job.name}' doesn't contain dataset_id '{dataset.dataset_id}'"
         )
 
 

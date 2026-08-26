@@ -30,15 +30,11 @@ def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
 
 
 def rename_cronjob_for_staging(
-    cronjob: CronJob, dataset_id: str, version: str, *, name_prefix: str
+    cronjob: CronJob, dataset_id: str, version: str
 ) -> CronJob:
-    """Create a copy of a CronJob with a staging-prefixed name.
-
-    `name_prefix` is the dataset's `cron_job_name_prefix`, which its cron job names
-    are built from and which is only the `dataset_id` when that fits `CronJobName`.
-    """
-    assert cronjob.name.startswith(f"{name_prefix}-")
-    suffix = cronjob.name.removeprefix(f"{name_prefix}-")
+    """Create a copy of a CronJob with a staging-prefixed name."""
+    assert cronjob.name.startswith(f"{dataset_id}-")
+    suffix = cronjob.name.removeprefix(f"{dataset_id}-")
     new_name = staging_cronjob_name(dataset_id, version, suffix)
     return replace(cronjob, name=new_name)
 
