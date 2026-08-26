@@ -458,9 +458,14 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         store_factory: storage.StoreFactory,
         branch_name: str,
         worker_index: int,
+        *,
+        overwrite_chunks: bool = False,
     ) -> dict[str, list[SourceFileResult]]:
         """Process one worker's region jobs against ``branch_name`` and
         return the per-variable source file results.
+
+        ``overwrite_chunks`` rewrites data the store already holds instead of
+        resuming: a variant that skips already-written work must not skip it.
 
         Materialized and virtual datasets each own their store/session lifecycle and
         commit cadence behind this one call (see "The worker-processing seam" in
