@@ -2,6 +2,7 @@ import json
 from typing import Any
 from unittest.mock import MagicMock
 
+import fsspec
 import icechunk
 import pytest
 import zarr
@@ -891,6 +892,33 @@ class TestIcechunkToS3fsStorageOptions:
         assert _icechunk_to_s3fs_storage_options({"endpoint_url": "https://x"}) == {
             "endpoint_url": "https://x"
         }
+
+    def test_force_path_style_becomes_addressing_style(self) -> None:
+        assert _icechunk_to_s3fs_storage_options({"force_path_style": True}) == {
+            "config_kwargs": {"s3": {"addressing_style": "path"}}
+        }
+
+    def test_force_path_style_false_is_dropped(self) -> None:
+        assert _icechunk_to_s3fs_storage_options({"force_path_style": False}) == {}
+
+    def test_force_path_style_merges_with_existing_config_kwargs(self) -> None:
+        assert _icechunk_to_s3fs_storage_options(
+            {"force_path_style": True, "config_kwargs": {"read_timeout": 5}}
+        ) == {"config_kwargs": {"read_timeout": 5, "s3": {"addressing_style": "path"}}}
+
+    def test_r2_options_construct_an_s3_filesystem(self) -> None:
+        """s3fs rejects `force_path_style`, so an R2 secret must reach it translated."""
+        options = _icechunk_to_s3fs_storage_options(
+            {
+                "access_key_id": "AKIA",
+                "secret_access_key": "shh",
+                "region": "auto",
+                "endpoint_url": "https://account.r2.cloudflarestorage.com",
+                "force_path_style": True,
+            }
+        )
+        fs = fsspec.filesystem("s3", **options)
+        assert fs.config_kwargs["s3"]["addressing_style"] == "path"
 
     def test_empty_options(self) -> None:
         assert _icechunk_to_s3fs_storage_options({}) == {}

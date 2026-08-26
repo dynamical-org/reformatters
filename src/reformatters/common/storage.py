@@ -325,17 +325,24 @@ def _icechunk_to_s3fs_storage_options(options: dict[str, Any]) -> dict[str, Any]
     """Translate `icechunk.s3_storage` option names to s3fs/fsspec ones."""
     translated: dict[str, Any] = {}
     client_kwargs: dict[str, Any] = dict(options.get("client_kwargs") or {})
+    config_kwargs: dict[str, Any] = dict(options.get("config_kwargs") or {})
     for k, v in options.items():
-        if k == "client_kwargs":
+        if k in {"client_kwargs", "config_kwargs"}:
             continue
         if k == "region":
             client_kwargs["region_name"] = v
+        elif k == "force_path_style":
+            # botocore, which s3fs builds on, spells this as an addressing style.
+            if v:
+                config_kwargs.setdefault("s3", {})["addressing_style"] = "path"
         elif k in _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS:
             translated[_ICECHUNK_TO_S3FS_CREDENTIAL_KEYS[k]] = v
         else:
             translated[k] = v
     if client_kwargs:
         translated["client_kwargs"] = client_kwargs
+    if config_kwargs:
+        translated["config_kwargs"] = config_kwargs
     return translated
 
 
