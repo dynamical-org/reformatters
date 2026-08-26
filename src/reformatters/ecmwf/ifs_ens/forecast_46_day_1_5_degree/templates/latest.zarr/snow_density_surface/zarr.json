@@ -74,7 +74,7 @@
     "long_name": "Snow density",
     "short_name": "rsn",
     "units": "kg m-3",
-    "comment": "Mean snow density over the previous 24 hours. Land points only; sea points are missing.",
+    "comment": "Mean snow density over the previous 24 hours. Missing where the surface carries no snowpack, including snow-free land.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
