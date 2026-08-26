@@ -7,6 +7,7 @@ import xarray as xr
 
 from reformatters.common.iterating import group_by, item
 from reformatters.common.region_job import CoordinateValue
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.virtual_region_job import (
@@ -67,6 +68,31 @@ class NoaaHrrrAnalysisVirtualRegionJob(
                     )
                 )
         return coords
+
+    def representative_var(
+        self, coord: NoaaHrrrAnalysisVirtualSourceFileCoord
+    ) -> NoaaHrrrDataVar:
+        """Probe a variable HRRR has consistently available across all time periods;
+        the base class's first-instant pick can land on a slot the source only began
+        publishing partway through the archive."""
+        match (coord.file_type, whole_hours(coord.lead_time)):
+            case ("sfc", 0):
+                paths = ("composite_reflectivity", "temperature_2m")
+            case ("sfc", 1):
+                paths = ("categorical_rain_surface", "total_precipitation_surface")
+            case ("prs", 0):
+                paths = ("pressure_level/temperature", "pressure_level/wind_u")
+            case ("nat", 0):
+                paths = ("model_level/temperature", "model_level/wind_u")
+            case unexpected:
+                raise AssertionError(f"No representative variable for {unexpected}")
+        by_path = {var.path: var for var in coord.data_vars}
+        # A variable-filtered job may carry none of them; the write loop's
+        # probe-coverage assert catches a pick the file doesn't hold.
+        return next(
+            (by_path[path] for path in paths if path in by_path),
+            coord.data_vars[0],
+        )
 
     def discover_available(
         self, pending: list[NoaaHrrrAnalysisVirtualSourceFileCoord]

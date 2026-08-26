@@ -212,6 +212,28 @@ def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> N
         assert all(v.has_hour_0_values() == from_f00 for v in coord.data_vars)
 
 
+def test_representative_var_is_available_in_every_era(
+    template_ds: xr.DataTree,
+) -> None:
+    """The probe variable is never one the source began publishing partway through."""
+    data_vars = TEMPLATE_CONFIG.data_vars
+    job = make_job(template_ds, data_vars=data_vars)
+    region_ds = template_ds.to_dataset().isel(time=slice(0, 1))
+
+    coords = job.generate_source_file_coords(region_ds, data_vars)
+
+    assert {
+        (c.file_type, c.lead_time): job.representative_var(c).path for c in coords
+    } == {
+        ("sfc", pd.Timedelta("0h")): "composite_reflectivity",
+        ("sfc", pd.Timedelta("1h")): "categorical_rain_surface",
+        ("prs", pd.Timedelta("0h")): "pressure_level/temperature",
+        ("nat", pd.Timedelta("0h")): "model_level/temperature",
+    }
+    for coord in coords:
+        assert job.representative_var(coord).internal_attrs.analysis_usable_from is None
+
+
 def test_a_variable_is_not_sourced_before_its_analysis_usable_from(
     template_ds: xr.DataTree,
 ) -> None:
