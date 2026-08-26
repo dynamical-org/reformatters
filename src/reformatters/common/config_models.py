@@ -127,6 +127,8 @@ class CoordinateAttrs(FrozenBaseModel):
     geographic_crs_name: str | None = None
     horizontal_datum_name: str | None = None
     grid_mapping_name: str | None = None
+    grid_north_pole_latitude: float | None = None
+    grid_north_pole_longitude: float | None = None
     spatial_ref: str | None = None
     GeoTransform: str | None = None
     false_easting: float | None = None
@@ -149,7 +151,7 @@ def codecs_to_dicts(
         if isinstance(codec, dict):
             # Already a dict (e.g. revalidation of an Encoding whose filters were
             # converted on first construction); pass through so this is idempotent.
-            result.append(codec)  # ty: ignore[invalid-argument-type]
+            result.append(codec)
         elif hasattr(codec, "to_dict"):
             result.append(codec.to_dict())  # ty: ignore[call-non-callable]
         else:

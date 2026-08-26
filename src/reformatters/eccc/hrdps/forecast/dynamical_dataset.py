@@ -6,29 +6,23 @@ import typer
 
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.eccc.hrdps.archive_gribs.copy_files_from_eccc import (
     copy_files_from_eccc_https,
 )
 
 from .region_job import (
-    EcccHrdpsForecastTemporalRegionJob,
-    EcccHrdpsForecastTemporalSourceFileCoord,
+    EcccHrdpsForecastRegionJob,
+    EcccHrdpsForecastSourceFileCoord,
 )
-from .template_config import EcccHrdpsDataVar, EcccHrdpsForecastTemporalTemplateConfig
+from .template_config import EcccHrdpsDataVar, EcccHrdpsForecastTemplateConfig
 
 
-class EcccHrdpsForecastTemporalDynamicalDataset(
-    DynamicalDataset[EcccHrdpsDataVar, EcccHrdpsForecastTemporalSourceFileCoord]
+class EcccHrdpsForecastDynamicalDataset(
+    DynamicalDataset[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]
 ):
-    """Not yet implemented."""
-
-    template_config: EcccHrdpsForecastTemporalTemplateConfig = (
-        EcccHrdpsForecastTemporalTemplateConfig()
-    )
-    region_job_class: type[EcccHrdpsForecastTemporalRegionJob] = (
-        EcccHrdpsForecastTemporalRegionJob
-    )
+    template_config: EcccHrdpsForecastTemplateConfig = EcccHrdpsForecastTemplateConfig()
+    region_job_class: type[EcccHrdpsForecastRegionJob] = EcccHrdpsForecastRegionJob
 
     # Must be in the format `rclone` expects: `:s3:<bucket>/<path>`. No double slash
     # after `:s3:` - the leading colon tells `rclone` to create an on-the-fly remote
@@ -57,12 +51,51 @@ class EcccHrdpsForecastTemporalDynamicalDataset(
             secret_names=["source-coop-storage-options-key"],
         )
 
-        return [archive_grib_files_job]
+        # The Datamart has each complete run about 4 hours after its init time. We read it
+        # directly rather than waiting for the archive job above to mirror the run.
+        # An update covers the newest init time and the previous one it reprocesses,
+        # which shard into one job each.
+        workers = 2
+        operational_update_cron_job = ReformatCronJob(
+            name=f"{self.dataset_id}-update",
+            schedule="10 4,10,16,22 * * *",
+            pod_active_deadline=timedelta(minutes=30),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="3",
+            memory="7G",
+            shared_memory="1.5G",
+            ephemeral_storage="30G",
+            secret_names=self.store_factory.k8s_secret_names(),
+            workers_total=workers,
+            parallelism=workers,
+        )
+
+        validation_cron_job = ValidationCronJob(
+            name=f"{self.dataset_id}-validate",
+            schedule="40 4,10,16,22 * * *",  # 30m (pod_active_deadline) after the update
+            pod_active_deadline=timedelta(minutes=10),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="0.7",
+            memory="3.5G",
+            secret_names=self.store_factory.k8s_secret_names(),
+        )
+
+        return [
+            archive_grib_files_job,
+            operational_update_cron_job,
+            validation_cron_job,
+        ]
 
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
-        raise NotImplementedError(
-            f"Implement `validators` on {self.__class__.__name__}"
+        return (
+            # The update ingests each init at init+4h10m; validation fires at init+4h40m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=40)),
+            # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
+            # forecast is caught even after newer cycles land.
+            validation.CheckRecentNans(append_dim_window=4),
         )
 
     def archive_grib_files(

@@ -278,7 +278,7 @@ class MaterializedRegionJob(
     def _get_region_datasets(self) -> tuple[xr.Dataset, xr.Dataset]:
         # Key by var path so the same var in different groups is distinct
         var_paths = [v.path for v in self.data_vars]
-        ds: xr.Dataset = flatten_groups(self.template_ds)[var_paths]  # ty: ignore[invalid-assignment]
+        ds: xr.Dataset = flatten_groups(self.template_ds)[var_paths]
         processing_region = self.get_processing_region()
         processing_region_ds = ds.isel({self.append_dim: processing_region})
         output_region_ds = ds.isel({self.append_dim: self.region})

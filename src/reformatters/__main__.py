@@ -31,7 +31,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
-from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastTemporalDynamicalDataset
+from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDynamicalDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
 )
@@ -59,9 +59,6 @@ from reformatters.google.weathernext2.forecast_operational_virtual import (
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
-from reformatters.noaa.gefs.forecast_10_day_spatial.dynamical_dataset import (
-    GefsForecast10DaySpatialDataset,
-)
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -69,6 +66,9 @@ from reformatters.noaa.gfs.analysis import NoaaGfsAnalysisDataset
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from reformatters.noaa.hrrr.analysis.dynamical_dataset import (
     NoaaHrrrAnalysisDataset,
+)
+from reformatters.noaa.hrrr.analysis_virtual.dynamical_dataset import (
+    NoaaHrrrAnalysisVirtualDataset,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
@@ -158,6 +158,14 @@ class NasaImergIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """ECCC HRDPS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-eccc-hrdps"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 class SourceCoopZarrDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a SourceCoop dataset."""
 
@@ -208,9 +216,6 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
-    GefsForecast10DaySpatialDataset(
-        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
-    ),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
@@ -218,6 +223,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrAnalysisDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
+    ),
+    NoaaHrrrAnalysisVirtualDataset(
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -252,8 +260,8 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # ECCC
-    EcccHrdpsForecastTemporalDynamicalDataset(
-        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
+    EcccHrdpsForecastDynamicalDataset(
+        primary_storage_config=EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # Google
     GoogleWeathernext2ForecastHistoricalVirtualDataset(
@@ -282,7 +290,6 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
 ]
 
 register_run_monitor(monitoring.monitor_cron)
-monitoring.install_sigterm_logger()
 
 if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
@@ -319,6 +326,13 @@ if Config.is_sentry_enabled:
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
+
+
+@app.callback()
+def startup() -> None:
+    monitoring.install_sigterm_logger()
+
+
 app.command()(initialize_new_integration)
 
 

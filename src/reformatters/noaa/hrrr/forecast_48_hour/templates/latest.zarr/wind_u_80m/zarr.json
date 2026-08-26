@@ -70,8 +70,9 @@
   "attributes": {
     "long_name": "80 metre U wind component",
     "short_name": "80u",
-    "standard_name": "eastward_wind",
+    "standard_name": "x_wind",
     "units": "m s-1",
+    "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

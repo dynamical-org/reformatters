@@ -26,7 +26,7 @@ dependencies = [
     "icechunk~=2.1",
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
-    "gribberish==1.6.0",
+    "gribberish==1.7.0",
 ]
 
 [build-system]
@@ -47,7 +47,7 @@ dev = [
     "markdown-it-py>=4.0.0",
     "matplotlib~=3.11",
     "pandas-stubs~=3.0",
-    "prek==0.4.13",
+    "prek==0.4.14",
     "pyqt6>=6.7.1",
     "pytest~=9.1",
     "pytest-sugar~=1.0",

@@ -39,6 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
+    "comment": "Where no equilibrium level exists the source reports terrain height plus about 20 m rather than a missing value. Mask by convective available potential energy, which is 0 at those points.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

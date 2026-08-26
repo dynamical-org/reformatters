@@ -59,7 +59,10 @@ def shrink_chunks_and_shards[T: (xr.Dataset, xr.DataTree)](
                 }
             ),
         )
+    return cast("T", _shrink_dataset(ds, dims))
 
+
+def _shrink_dataset(ds: xr.Dataset, dims: Iterable[str] | None) -> xr.Dataset:
     selected = set(dims) if dims is not None else None
     for var in ds.data_vars.values():
         chunks = list(var.encoding["chunks"])

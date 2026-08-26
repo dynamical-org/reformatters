@@ -18,6 +18,7 @@ from reformatters.common.retry import retry
 log = get_logger(__name__)
 
 MSC_DATAMART_HOST: Final[str] = "https://dd.weather.gc.ca"
+MINIMUM_INIT_AGE: Final[pd.Timedelta] = pd.Timedelta(hours=6)
 
 
 def copy_files_from_eccc_https(
@@ -50,6 +51,10 @@ def copy_files_from_eccc_https(
     for day_offset in range(days_back + 1):
         date_str = (now - pd.Timedelta(days=day_offset)).strftime("%Y%m%d")
         for nwp_init_hour in nwp_init_hours:
+            init_time = pd.Timestamp(f"{date_str}T{nwp_init_hour:02d}:00Z")
+            if now - init_time < MINIMUM_INIT_AGE:
+                continue
+
             src_path = (
                 f"/{date_str}/WXO-DD/model_hrdps/continental/2.5km/{nwp_init_hour:02d}"
             )
@@ -78,11 +83,12 @@ def _copy_one_init_hour(
     cmd = (
         "/usr/bin/rclone",
         "copy",
-        f":http:{src_path}",
+        f":http:{src_path}/",
         dst_path,
         f"--http-url={MSC_DATAMART_HOST}",
+        "--http-no-head",
+        "--streaming-upload-cutoff=32Mi",
         "--ignore-existing",
-        "--min-age=1m",  # Ignore files that are so young they might still be mid-upload.
         "--filter=+ *.grib2",
         "--filter=- *",
         "--s3-no-check-bucket",  # Workaround for reformatters issue #428

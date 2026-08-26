@@ -1,220 +1,170 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import rasterio
 import xarray as xr
 from zarr.abc.store import Store
 
+from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
+from reformatters.common.download import FALLBACK_EXCEPTIONS, http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
     SourceFileCoord,
-    SourceFileResult,
 )
+from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timedelta,
+    Timestamp,
 )
 
 from .template_config import EcccHrdpsDataVar
 
 log = get_logger(__name__)
 
+# ECCC's MSC Datamart keeps a rolling ~30 day window and publishes each run about 4 hours
+# after its init time, hours before our archiver copies the run to Source Co-Op.
+DATAMART_PREFERRED_AGE = pd.Timedelta("2D")
 
-class EcccHrdpsForecastTemporalSourceFileCoord(SourceFileCoord):
-    """Coordinates of a single source file to process."""
+
+class EcccHrdpsForecastSourceFileCoord(SourceFileCoord):
+    """Coordinates of a single source file to process.
+
+    HRDPS is published as one single-message GRIB2 file per init time, lead time,
+    field and level.
+    """
+
+    init_time: Timestamp
+    lead_time: Timedelta
+    data_var: EcccHrdpsDataVar
 
     def get_url(self) -> str:
-        raise NotImplementedError("Return the URL of the source file.")
+        """URL of this file in dynamical.org's HRDPS archive on Source Co-Op."""
+        return (
+            "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
+            f"dynamical/eccc-hrdps-grib/{self.init_time.strftime('%Y%m%d')}/{self._path_within_date()}"
+        )
 
-    def out_loc(
-        self,
-    ) -> Mapping[Dim, CoordinateValue]:
-        """
-        Returns a data array indexer which identifies the region in the output dataset
-        to write the data from the source file. The indexer is a dict from dimension
-        names to coordinate values.
-        """
-        # If the names of the coordinate attributes of your SourceFileCoord subclass are also all
-        # dimension names in the output dataset (e.g. init_time and lead_time),
-        # delete this implementation and use the default implementation of this method.
-        #
-        # Examples where you would override this method:
-        # - An analysis dataset created from forecast data:
-        #   return {"time": self.init_time + self.lead_time}
-        return super().out_loc()
+    def get_datamart_url(self) -> str:
+        """URL of this file on ECCC's MSC Datamart."""
+        return (
+            f"https://dd.weather.gc.ca/{self.init_time.strftime('%Y%m%d')}/WXO-DD"
+            f"/model_hrdps/continental/2.5km/{self._path_within_date()}"
+        )
+
+    def _path_within_date(self) -> str:
+        """`{init hour}/{lead hour}/{file name}`, the layout both sources share."""
+        internal_attrs = self.data_var.internal_attrs
+        lead_time_hours = whole_hours(self.lead_time)
+        return (
+            f"{self.init_time.strftime('%H')}/{lead_time_hours:03d}/"
+            f"{self.init_time.strftime('%Y%m%dT%HZ')}_MSC_HRDPS_"
+            f"{internal_attrs.grib_field}_{internal_attrs.grib_level}"
+            f"_RLatLon0.0225_PT{lead_time_hours:03d}H.grib2"
+        )
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
-class EcccHrdpsForecastTemporalRegionJob(
-    MaterializedRegionJob[EcccHrdpsDataVar, EcccHrdpsForecastTemporalSourceFileCoord]
+class EcccHrdpsForecastRegionJob(
+    MaterializedRegionJob[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]
 ):
-    # Optionally, limit the number of variables downloaded together.
-    # If set to a value less than len(data_vars), downloading, reading/recompressing,
-    # and uploading steps will be pipelined within a region job.
-    # 5 is a reasonable default if it is possible to download less than all
-    # variables in a single file (e.g. you have a grib index).
-    # Leave unset if you have to download a whole file to get one variable out
-    # to avoid re-downloading the same file multiple times.
-    #
-    # max_vars_per_download_group: ClassVar[int | None] = None
+    # The Datamart's throughput plateaus at 8 concurrent downloads and it asks callers
+    # to keep their request rate modest.
+    download_parallelism: int = 8
 
-    # Implement this method only if different variables must be retrieved from different urls
-    #
-    # # @classmethod
-    # def source_file_var_groups(
-    #     cls,
-    #     data_vars: Sequence[EcccHrdpsDataVar],
-    # ) -> Sequence[Sequence[EcccHrdpsDataVar]]:
-    #     """
-    #     Return groups of variables, where all variables in a group can be retrieived from the same source file.
-    #     """
-    #     grouped = defaultdict(list)
-    #     for data_var in data_vars:
-    #         grouped[data_var.internal_attrs.file_type].append(data_var)
-    #     return list(grouped.values())
-
-    # Implement this method only if specific post processing in this dataset
-    # requires data from outside the region defined by self.region,
-    # e.g. for deaccumulation or interpolation along append_dim in an analysis dataset.
-    #
-    # def get_processing_region(self) -> slice:
-    #     """
-    #     Return a slice of integer offsets into self.template_ds along self.append_dim that identifies
-    #     the region to process. In most cases this is exactly self.region, but if additional data outside
-    #     the region is required, for example for correct interpolation or deaccumulation, this method can
-    #     return a modified slice (e.g. `slice(self.region.start - 1, self.region.stop + 1)`).
-    #     """
-    #     return self.region
+    @classmethod
+    def source_file_var_groups(
+        cls,
+        data_vars: Sequence[EcccHrdpsDataVar],
+    ) -> Sequence[Sequence[EcccHrdpsDataVar]]:
+        # Each HRDPS grib file contains a single variable.
+        return [[data_var] for data_var in data_vars]
 
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[EcccHrdpsDataVar],
-    ) -> Sequence[EcccHrdpsForecastTemporalSourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
-        # return [
-        #     EcccHrdpsForecastTemporalSourceFileCoord(
-        #         init_time=init_time,
-        #         lead_time=lead_time,
-        #     )
-        #     for init_time, lead_time in itertools.product(
-        #         processing_region_ds["init_time"].values,
-        #         processing_region_ds["lead_time"].values,
-        #     )
-        # ]
-        raise NotImplementedError(
-            "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
-        )
+    ) -> Sequence[EcccHrdpsForecastSourceFileCoord]:
+        data_var = item(data_var_group)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        if not data_var.has_hour_0_values():
+            lead_times = lead_times[lead_times > pd.Timedelta(0)]
 
-    def download_file(self, coord: EcccHrdpsForecastTemporalSourceFileCoord) -> Path:
-        """Download the file for the given coordinate and return the local path."""
-        # return http_download_to_disk(coord.get_url(), self.dataset_id)
-        raise NotImplementedError(
-            "Download the file for the given coordinate and return the local path."
+        return [
+            EcccHrdpsForecastSourceFileCoord(
+                init_time=init_time,
+                lead_time=lead_time,
+                data_var=data_var,
+            )
+            for init_time in pd.to_datetime(processing_region_ds["init_time"].values)
+            for lead_time in lead_times
+        ]
+
+    def download_file(self, coord: EcccHrdpsForecastSourceFileCoord) -> Path:
+        recent = pd.Timestamp.now() - coord.init_time < DATAMART_PREFERRED_AGE
+        primary_url, fallback_url = (
+            (coord.get_datamart_url(), coord.get_url())
+            if recent
+            else (coord.get_url(), coord.get_datamart_url())
         )
+        try:
+            return http_download_to_disk(primary_url, self.dataset_id)
+        except FALLBACK_EXCEPTIONS as e:
+            # An update that falls back to the archive gets the previous run at best,
+            # because the archive lags the Datamart by hours.
+            log.info(f"Failed to download '{primary_url}', falling back: {e}")
+            return http_download_to_disk(fallback_url, self.dataset_id)
 
     def read_data(
         self,
-        coord: EcccHrdpsForecastTemporalSourceFileCoord,
+        coord: EcccHrdpsForecastSourceFileCoord,
         data_var: EcccHrdpsDataVar,
     ) -> ArrayFloat32:
-        """Read and return an array of data for the given variable and source file coordinate."""
-        # with rasterio.open(coord.downloaded_file_path) as reader:
-        #     matching_indexes = [
-        #         i
-        #         for i in range(reader.count)
-        #         if (tags := reader.tags(i + 1))["GRIB_ELEMENT"]
-        #         == data_var.internal_attrs.grib_element
-        #         and tags["GRIB_COMMENT"] == data_var.internal_attrs.grib_comment
-        #     ]
-        #     assert len(matching_indexes) == 1, f"Expected exactly 1 matching band, found {matching_indexes}. {data_var.internal_attrs.grib_element=}, {data_var.internal_attrs.grib_description=}, {coord.downloaded_file_path=}"
-        #     rasterio_band_index = 1 + matching_indexes[0]  # rasterio is 1-indexed
-        #     return reader.read(rasterio_band_index, out_dtype=np.float32)
-        raise NotImplementedError(
-            "Read and return data for the given variable and source file coordinate."
-        )
+        assert coord.downloaded_path is not None  # for type check, system guarantees it
+        with rasterio.open(coord.downloaded_path) as reader:
+            assert reader.count == 1, (
+                f"Expected exactly 1 message in each HRDPS grib file, found {reader.count}. "
+                f"{data_var.name=}, {coord.downloaded_path=}"
+            )
+            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
+            return result
 
-    # Implement this to apply transformations to the array (e.g. deaccumulation)
-    #
-    # def apply_data_transformations(
-    #     self, data_array: xr.DataArray, data_var: EcccHrdpsDataVar
-    # ) -> None:
-    #     """
-    #     Apply in-place data transformations to the output data array for a given data variable.
+    def apply_data_transformations(
+        self, data_array: xr.DataArray, data_var: EcccHrdpsDataVar
+    ) -> None:
+        internal_attrs = data_var.internal_attrs
 
-    #     This method is called after reading all data for a variable into the shared-memory array,
-    #     and before writing shards to the output store. The default implementation applies binary
-    #     rounding to float32 arrays if `data_var.internal_attrs.keep_mantissa_bits` is set.
+        if internal_attrs.deaccumulate_to_rate:
+            assert internal_attrs.window_reset_frequency is not None
+            log.info(
+                f"Converting {data_var.name} from accumulations to rates along lead_time"
+            )
+            try:
+                deaccumulate_to_rates_inplace(
+                    data_array,
+                    dim="lead_time",
+                    reset_frequency=internal_attrs.window_reset_frequency,
+                    invalid_below_threshold_rate=internal_attrs.deaccumulation_invalid_below_threshold_rate,
+                    expected_clamp_fraction=internal_attrs.deaccumulation_expected_clamp_fraction,
+                )
+            except ValueError:
+                log.exception(f"Error deaccumulating {data_var.name}")
 
-    #     Subclasses may override this method to implement additional transformations such as
-    #     deaccumulation, interpolation or other custom logic. All transformations should be
-    #     performed in-place (don't copy `data_array`, it's large).
+        if (scale_factor := internal_attrs.scale_factor) is not None:
+            data_array.values *= np.float32(scale_factor)
 
-    #     Parameters
-    #     ----------
-    #     data_array : xr.DataArray
-    #         The output data array to be transformed in-place.
-    #     data_var : EcccHrdpsDataVar
-    #         The data variable metadata object, which may contain transformation parameters.
-    #     """
-    #     super().apply_data_transformations(data_array, data_var)
-
-    def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SourceFileResult]]
-    ) -> xr.DataTree:
-        """
-        Update template dataset based on processing results. This method is called
-        during operational updates.
-
-        Subclasses should implement this method to apply dataset-specific adjustments
-        based on the processing results. Examples include:
-        - Trimming dataset along append_dim to only include successfully processed data
-        - Loading existing coordinate values from the primary store and updating them based on results
-        - Updating metadata based on what was actually processed vs what was planned
-
-        The default implementation trims along append_dim to end at the most recent
-        successfully processed coordinate (timestamp).
-
-        Parameters
-        ----------
-        process_results : Mapping[str, Sequence[SourceFileResult]]
-            Mapping from variable names to their SourceFileResult with final processing status.
-
-        Returns
-        -------
-        xr.Dataset
-            Updated template dataset reflecting the actual processing results.
-        """
-        # The super() implementation looks like this:
-        #
-        # max_append_dim_processed = max(
-        #     (
-        #         c.out_loc[self.append_dim]
-        #         for c in chain.from_iterable(process_results.values())
-        #         if c.status == SourceFileStatus.Succeeded
-        #     ),
-        #     default=None,
-        # )
-        # if max_append_dim_processed is None:
-        #     # No data was processed, trim the template to stop before this job's region
-        #     # This is using isel's exclusive slice end behavior
-        #     return self.template_ds.isel(
-        #         {self.append_dim: slice(None, self.region.start)}
-        #     )
-        # else:
-        #     return self.template_ds.sel(
-        #         {self.append_dim: slice(None, max_append_dim_processed)}
-        #     )
-        #
-        # If you like the above behavior, skip implementing this method.
-        # If you need to customize the behavior, implement this method.
-
-        raise NotImplementedError(
-            "Subclasses implement update_template_with_results() with dataset-specific logic"
-        )
+        super().apply_data_transformations(data_array, data_var)
 
     @classmethod
     def operational_update_jobs(
@@ -226,63 +176,20 @@ class EcccHrdpsForecastTemporalRegionJob(
         all_data_vars: Sequence[EcccHrdpsDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[EcccHrdpsDataVar, EcccHrdpsForecastTemporalSourceFileCoord]],
+        Sequence[RegionJob[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]],
         xr.DataTree,
     ]:
-        """
-        Return the sequence of RegionJob instances necessary to update the dataset
-        from its current state to include the latest available data.
+        existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
+        append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
+        append_dim_end = pd.Timestamp.now()
+        template_ds = get_template_fn(append_dim_end)
 
-        Also return the template_ds, expanded along append_dim through the end of
-        the data to process. The dataset returned here may extend beyond the
-        available data at the source, in which case `update_template_with_results`
-        will trim the dataset to the actual data processed.
-
-        The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from the primary store to determine what's already processed
-            b. Optionally identify recent incomplete/non-final data for reprocessing
-        2. Call get_template_fn(append_dim_end) to get the template_ds
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
-
-        Parameters
-        ----------
-        primary_store : Store
-            The primary store to read existing data from and write updates to.
-        tmp_store : Path
-            The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.DataTree]
-            Function to get the template_ds for the operational update.
-        append_dim : AppendDim
-            The dimension along which data is appended (e.g., "time").
-        all_data_vars : Sequence[EcccHrdpsDataVar]
-            Sequence of all data variable configs for this dataset.
-        reformat_job_name : str
-            The name of the reformatting job, used for progress tracking.
-            This is often the name of the Kubernetes job, or "local".
-
-        Returns
-        -------
-        Sequence[RegionJob[EcccHrdpsDataVar, EcccHrdpsForecastTemporalSourceFileCoord]]
-            RegionJob instances that need processing for operational updates.
-        xr.Dataset
-            The template_ds for the operational update.
-        """
-        # existing_ds = xr.open_zarr(primary_store)
-        # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
-        # template_ds = get_template_fn(append_dim_end)
-
-        # jobs = cls.get_jobs(
-        #     tmp_store=tmp_store,
-        #     template_ds=template_ds,
-        #     append_dim=append_dim,
-        #     all_data_vars=all_data_vars,
-        #     reformat_job_name=reformat_job_name,
-        #     filter_start=append_dim_start,
-        # )
-        # return jobs, template_ds
-
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
+        jobs = cls.get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
         )
+        return jobs, template_ds

@@ -300,6 +300,33 @@ def test_download_restarts_a_partial_file_after_http_200(tmp_path: Path) -> None
     assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=11-"}
 
 
+def test_download_refetches_the_whole_blob_after_http_416(tmp_path: Path) -> None:
+    """A partial file longer than the result makes the ranged request unsatisfiable."""
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("id", {}, "now", "status", result_url="result"))
+    target = tmp_path / "blob.grib2"
+    message = grib_message()
+    target.with_suffix(".grib2.partial").write_bytes(b"stale bytes")
+    range_response = response(
+        {}, status_code=requests.codes.requested_range_not_satisfiable
+    )
+    range_response.raise_for_status.side_effect = requests.HTTPError(
+        "416 Client Error: Requested Range Not Satisfiable"
+    )
+    full_response = response({})
+    full_response.iter_content.return_value = [message]
+    session = session_mock()
+    session.get.side_effect = [range_response, full_response]
+
+    EcdsRequest(state_store, session=session).download(target)
+
+    assert target.read_bytes() == message
+    range_call, full_call = session.get.call_args_list
+    assert range_call.kwargs["headers"] == {"Range": "bytes=11-"}
+    assert "headers" not in full_call.kwargs
+    range_response.close.assert_called_once_with()
+
+
 def test_download_rejects_a_truncated_blob(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("id", {}, "now", "status", result_url="result"))

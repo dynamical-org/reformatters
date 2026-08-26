@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from types import SimpleNamespace
 from typing import Any
 
@@ -20,6 +22,26 @@ from scripts.validation.manifest_scan import (
     result_availability_series,
 )
 from scripts.validation.scan_common import evenly_spaced_subset
+
+
+def test_find_registered_dataset_from_worker_thread() -> None:
+    code = """
+from concurrent.futures import ThreadPoolExecutor
+from scripts.validation.scan_common import find_registered_dataset
+
+with ThreadPoolExecutor(max_workers=1) as pool:
+    dataset = pool.submit(
+        find_registered_dataset, "noaa-hrrr-analysis-virtual"
+    ).result()
+assert dataset is not None
+"""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 class _Coord:

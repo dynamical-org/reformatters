@@ -8,7 +8,12 @@ import pytest
 import xarray as xr
 
 from reformatters.common.iterating import item
-from reformatters.ecmwf.archive_gribs.request_shards import DAILY_LEAD_TIMES
+from reformatters.common.types import Group
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.request_shards import (
+    DAILY_LEAD_TIMES,
+    initialization_selections,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
     EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
 )
@@ -25,6 +30,16 @@ from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
 
 INIT_TIME = pd.Timestamp("2026-08-10T00:00")
 DAILY_CONFIG = EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
+
+
+# read_data fills one (init_time, lead_time, ensemble_member) slot of the output, so
+# its axes are the group's remaining dims, in the order the template declares them.
+SLOT_DIMS = ("init_time", "lead_time", "ensemble_member")
+
+
+def expected_read_shape(group: Group, level_count: int) -> tuple[int, ...]:
+    sizes = {"pressure_level": level_count, "latitude": 121, "longitude": 240}
+    return tuple(sizes[dim] for dim in DAILY_CONFIG.dims[group] if dim not in SLOT_DIMS)
 
 
 def daily_var(name: str) -> EcmwfIfsEns46DayDataVar:
@@ -57,9 +72,7 @@ def source_file_coord(
         ensemble_member=0,
         ecds_variable=ecds_variable,
         levels=levels,
-        selection=selections_by_variable([data_var])[
-            (ecds_variable, "control_forecast")
-        ],
+        selection=selections_by_variable()[(ecds_variable, "control_forecast")],
         downloaded_path=downloaded_path,
     )
 
@@ -105,10 +118,10 @@ def test_reads_a_pressure_level_message_into_its_output_level(tmp_path: Path) ->
 
     values = region_job(data_var, tmp_path).read_data(coord, data_var)
 
-    assert values.shape == (121, 240, len(levels))
+    assert values.shape == expected_read_shape("pressure_level", len(levels))
     level_index = levels.index("500_hpa")
-    assert values[60, 120, level_index] == pytest.approx(270.1207, abs=1e-3)
-    assert np.isnan(values[:, :, levels.index(None)]).all()
+    assert values[level_index, 60, 120] == pytest.approx(270.1207, abs=1e-3)
+    assert np.isnan(values[levels.index(None)]).all()
 
 
 def test_masks_the_land_only_sentinel(tmp_path: Path) -> None:
@@ -252,3 +265,30 @@ def test_a_24_hour_mean_variable_has_no_lead_time_zero_coord() -> None:
     assert not mean_var.has_hour_0_values()
     assert point_var.has_hour_0_values()
     assert DAILY_LEAD_TIMES[0] == "0"
+
+
+def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
+    """Every source file URL must name a blob the archiver wrote.
+
+    A blob's file name identifies the request group it was retrieved in, so deriving it
+    from anything narrower than the archive's whole manifest names a file that does not
+    exist, and the variable silently reads as all NaN.
+    """
+    archived_file_names = {
+        selection.file_name for selection in initialization_selections(ECDS_VARIABLES)
+    }
+
+    for data_var in DAILY_CONFIG.data_vars:
+        job = region_job(data_var, tmp_path)
+        processing_region_ds, _ = job._get_region_datasets()
+        coords = job.generate_source_file_coords(
+            processing_region_ds.isel(lead_time=slice(1, 3), ensemble_member=[0, 1]),
+            [data_var],
+        )
+
+        file_names = {coord.get_url().rsplit("/", 1)[-1] for coord in coords}
+        assert file_names <= archived_file_names, (
+            f"{data_var.path} reads {sorted(file_names - archived_file_names)}"
+        )
+        # The control member and the perturbed members are archived separately.
+        assert len(file_names) == 2
