@@ -212,11 +212,16 @@ def test_cronjob_commands_match_cli_commands(
 def test_cronjob_names_are_consistent(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    """CronJob names should contain the dataset ID for traceability."""
+    """CronJobs should be traceable to their dataset and fit kubernetes name limits."""
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image"))
     for cron_job in cron_jobs:
-        assert dataset.dataset_id in cron_job.name, (
-            f"CronJob name '{cron_job.name}' doesn't contain dataset_id '{dataset.dataset_id}'"
+        assert cron_job.dataset_id == dataset.dataset_id, (
+            f"CronJob '{cron_job.name}' carries dataset_id '{cron_job.dataset_id}', "
+            f"expected '{dataset.dataset_id}'"
+        )
+        # Kubernetes appends up to 11 characters when naming a cron job's jobs.
+        assert len(cron_job.name) <= 63 - 11, (
+            f"CronJob name '{cron_job.name}' is too long for kubernetes"
         )
 
 

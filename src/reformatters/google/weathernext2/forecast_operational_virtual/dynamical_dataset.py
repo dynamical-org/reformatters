@@ -49,9 +49,10 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
         suspend = True
         update = ReformatCronJob(
-            name=f"{self.dataset_id}-update",
+            name=f"{cron_job_name_prefix}-update",
             schedule="55 0,6,12,18 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -62,7 +63,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             suspend=suspend,
         )
         validate = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
+            name=f"{cron_job_name_prefix}-validate",
             schedule="55 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
