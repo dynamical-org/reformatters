@@ -151,7 +151,7 @@ def codecs_to_dicts(
         if isinstance(codec, dict):
             # Already a dict (e.g. revalidation of an Encoding whose filters were
             # converted on first construction); pass through so this is idempotent.
-            result.append(codec)  # ty: ignore[invalid-argument-type]
+            result.append(codec)
         elif hasattr(codec, "to_dict"):
             result.append(codec.to_dict())  # ty: ignore[call-non-callable]
         else:
