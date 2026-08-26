@@ -33,6 +33,19 @@ def test_validators_check_masked_variables_are_not_all_nan(
     assert validators[2].spatial_sampling == "quarter"
 
 
+def test_operational_cron_jobs_are_not_suspended(
+    dataset: EcmwfIfsEnsForecast46Day15DegreeDataset,
+) -> None:
+    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
+        "test-image-tag"
+    )
+
+    assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    assert update_cron_job.suspend is False
+    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
+    assert validation_cron_job.suspend is False
+
+
 def test_archive_contains_every_dataset_source_variable(
     dataset: EcmwfIfsEnsForecast46Day15DegreeDataset,
 ) -> None:
