@@ -72,7 +72,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         Implementations should look similar to this:
         ```
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             schedule=_OPERATIONAL_CRON_SCHEDULE,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -84,7 +84,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule=_VALIDATION_CRON_SCHEDULE,
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
@@ -123,14 +123,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     @property
     def dataset_id(self) -> str:
         return self.template_config.dataset_id
-
-    @property
-    def cron_job_name_prefix(self) -> str:
-        """Base for this dataset's cron job names.
-
-        Override when `{dataset_id}-validate` would exceed the `CronJobName` limit.
-        """
-        return self.dataset_id
 
     def update_template(self) -> None:
         """Generate and persist the dataset template using the template_config."""

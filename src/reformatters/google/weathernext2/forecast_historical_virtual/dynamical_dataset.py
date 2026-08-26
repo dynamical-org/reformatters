@@ -44,14 +44,9 @@ class GoogleWeathernext2ForecastHistoricalVirtualDataset(
         )
     )
 
-    @property
-    def cron_job_name_prefix(self) -> str:
-        # With the "google-" prefix these names exceed the CronJobName limit.
-        return self.dataset_id.removeprefix("google-")
-
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         update = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             schedule="0 0 * * *",
             pod_active_deadline=timedelta(hours=6),
             image=image_tag,
@@ -62,7 +57,7 @@ class GoogleWeathernext2ForecastHistoricalVirtualDataset(
             suspend=True,
         )
         validate = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule="0 0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,

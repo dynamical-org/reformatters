@@ -26,7 +26,7 @@ class EcmwfAifsEnsForecastDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             # AIFS-ENS full completion (wxopticon external-ecmwf-aifs-ens-aws, 365d):
             # last file p50 H+5h56m, p95 H+7h11m. Fire at H+7h00m (01/07/13/19 UTC);
             # late leads download last, so they land before the run reaches them.
@@ -44,7 +44,7 @@ class EcmwfAifsEnsForecastDataset(
             parallelism=min(workers, 20),
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             # Validation runs 30 minutes after each update run: 01:30, 07:30, 13:30, and 19:30.
             schedule="30 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=10),

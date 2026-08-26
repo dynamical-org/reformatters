@@ -19,7 +19,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
-            name=f"{self.cron_job_name_prefix}-update",
+            name=f"{self.dataset_id}-update",
             # GFS f384 (full forecast) NOMADS p99 ~init+5h35m (recent files land
             # 5h13m-5h24m, drifting later), so fetch at init+5h38m.
             schedule="38 5,11,17,23 * * *",
@@ -35,7 +35,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             parallelism=workers,
         )
         validation_cron_job = ValidationCronJob(
-            name=f"{self.cron_job_name_prefix}-validate",
+            name=f"{self.dataset_id}-validate",
             schedule="48 5,11,17,23 * * *",  # 10m (pod_active_deadline) after reformat at :38
             pod_active_deadline=timedelta(minutes=10),
             image=image_tag,
