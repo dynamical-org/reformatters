@@ -31,6 +31,7 @@ from scripts.validation.utils import (
     select_variables_for_plotting,
     start_date_option,
     time_option,
+    to_reference_longitude,
     var_slug,
     variables_option,
 )
@@ -178,10 +179,18 @@ def _load_timeseries_for_var(
         if level_sel:
             ref = ref.sel(level_sel, method="nearest")
         ref_p1 = load_retried(
-            ref.sel(latitude=ctx.point1_lat, longitude=ctx.point1_lon, method="nearest")
+            ref.sel(
+                latitude=ctx.point1_lat,
+                longitude=to_reference_longitude(ctx.point1_lon),
+                method="nearest",
+            )
         )
         ref_p2 = load_retried(
-            ref.sel(latitude=ctx.point2_lat, longitude=ctx.point2_lon, method="nearest")
+            ref.sel(
+                latitude=ctx.point2_lat,
+                longitude=to_reference_longitude(ctx.point2_lon),
+                method="nearest",
+            )
         )
     return val_p1, ref_p1, val_p2, ref_p2
 

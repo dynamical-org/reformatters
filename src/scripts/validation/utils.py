@@ -404,30 +404,26 @@ def _add_geographic_xy_coordinates(ds: xr.Dataset) -> xr.Dataset:
     """Give a geographic y/x dataset the 2D latitude/longitude auxiliary coordinates
     every other y/x dataset carries, so the rest of this tooling treats it uniformly.
 
-    The x axis holds 0 to 360 longitudes, which are labelled -180 to 180 here to match
-    every reference dataset. Labels beyond 180 degrees would otherwise select the
-    reference's easternmost column instead of the intended point.
+    The labels stay the archive's own: ascending latitude and 0 to 360 longitude. Plots
+    then show the grid as a consumer of the archive finds it. Use
+    `to_reference_longitude` where these longitudes index a reference dataset.
     """
     if ds.attrs.get("dataset_id") not in _GEOGRAPHIC_XY_DATASET_IDS:
         return ds
-    latitude, longitude = np.meshgrid(
-        ds["y"].values, ((ds["x"].values + 180) % 360) - 180, indexing="ij"
-    )
+    latitude, longitude = np.meshgrid(ds["y"].values, ds["x"].values, indexing="ij")
     return ds.assign_coords(
         latitude=(("y", "x"), latitude), longitude=(("y", "x"), longitude)
     )
 
 
-def roll_to_monotonic_longitude(ds: xr.Dataset) -> xr.Dataset:
-    """Order a geographic y/x dataset's x axis so its longitude labels ascend.
+def has_geographic_xy(ds: xr.Dataset) -> bool:
+    return ds.attrs.get("dataset_id") in _GEOGRAPHIC_XY_DATASET_IDS
 
-    Call this on an already selected plotting slice: rolling is not lazy, so rolling a
-    whole archive-scale dataset would read all of it.
-    """
-    if ds.attrs.get("dataset_id") not in _GEOGRAPHIC_XY_DATASET_IDS:
-        return ds
-    western_hemisphere_columns = int((ds["longitude"].values[0] < 0).sum())
-    return ds.roll(x=western_hemisphere_columns, roll_coords=True)
+
+def to_reference_longitude(longitude: float) -> float:
+    """A longitude in the -180 to 180 convention every dynamical archive uses, so a
+    0 to 360 point does not select a reference dataset's easternmost column."""
+    return ((longitude + 180) % 360) - 180
 
 
 def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
