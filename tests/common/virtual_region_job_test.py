@@ -11,6 +11,7 @@ expansion without the decode-only codec ever being invoked.
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
@@ -862,9 +863,12 @@ def test_process_virtual_rejects_empty_batch(tmp_path: Path) -> None:
         _process_virtual(job, repo)
 
 
-def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> None:
-    # A file's refs must cover the chunk filter_already_present probes, or the
-    # filter never sees the file land and re-ingests it forever.
+def test_process_virtual_warns_when_refs_miss_the_probe_chunk(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The file still contributed refs, so they are written; the filter will just offer
+    # the file again next run. Warn rather than kill the job: a variable the source did
+    # not carry this early is a normal thing for a long archive to contain.
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(4)
     template_utils.write_metadata(template_ds, dataset.store_factory)
@@ -896,8 +900,11 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
         region=slice(0, 4),
         reformat_job_name="test",
     )
-    with pytest.raises(AssertionError, match="do not cover representative chunk"):
+    with caplog.at_level(logging.WARNING):
         _process_virtual(job, repo)
+    assert "will be offered again on every run" in caplog.text
+    # The refs it did build are committed rather than discarded.
+    assert _snapshot_count(repo) > 1
 
 
 def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> None:
