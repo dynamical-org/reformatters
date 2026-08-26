@@ -64,8 +64,8 @@
     "init_time",
     "ensemble_member",
     "lead_time",
-    "latitude",
-    "longitude"
+    "y",
+    "x"
   ],
   "zarr_format": 3,
   "node_type": "array",

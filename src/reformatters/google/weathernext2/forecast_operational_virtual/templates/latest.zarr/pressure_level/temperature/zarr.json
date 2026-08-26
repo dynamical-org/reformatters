@@ -65,8 +65,8 @@
     "init_time",
     "ensemble_member",
     "lead_time",
-    "latitude",
-    "longitude",
+    "y",
+    "x",
     "pressure_level"
   ],
   "zarr_format": 3,

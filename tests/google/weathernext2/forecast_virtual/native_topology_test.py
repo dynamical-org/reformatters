@@ -138,9 +138,30 @@ def test_read_time_unit_conversions_use_standard_filters() -> None:
 def test_coordinate_values_match_native_spatial_grid_and_level_order() -> None:
     for config in (HISTORICAL, OPERATIONAL):
         coords = config.dimension_coordinates()
-        np.testing.assert_array_equal(coords["latitude"], np.arange(-90, 90.25, 0.25))
-        np.testing.assert_array_equal(coords["longitude"], np.arange(0, 360, 0.25))
+        np.testing.assert_array_equal(coords["y"], np.arange(-90, 90.25, 0.25))
+        np.testing.assert_array_equal(coords["x"], np.arange(0, 360, 0.25))
         np.testing.assert_array_equal(
             coords["pressure_level"],
             np.array([50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]),
         )
+
+
+def test_spatial_dimension_coordinates_carry_geographic_metadata() -> None:
+    """The x/y dimensions are geographic, so CF readers must find latitude and
+    longitude there. `GEOGRAPHIC_XY_DATASET_IDS` opts these products out of the
+    shared projected x/y metadata check in favor of this one."""
+    for config in (HISTORICAL, OPERATIONAL):
+        coords = {coord.name: coord for coord in config.coords}
+        y_attrs = coords["y"].attrs
+        x_attrs = coords["x"].attrs
+        assert (y_attrs.standard_name, y_attrs.units, y_attrs.axis) == (
+            "latitude",
+            "degree_north",
+            "Y",
+        )
+        assert (x_attrs.standard_name, x_attrs.units, x_attrs.axis) == (
+            "longitude",
+            "degree_east",
+            "X",
+        )
+        assert coords["spatial_ref"].attrs.grid_mapping_name == "latitude_longitude"

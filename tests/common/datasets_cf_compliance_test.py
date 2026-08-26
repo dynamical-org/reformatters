@@ -100,6 +100,16 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
     return result
 
 
+# These datasets reference their source's native chunks, whose spatial axes are
+# geographic, so their x/y dimension coordinates carry latitude/longitude metadata
+# rather than the projection coordinate metadata x/y otherwise implies. Their own
+# template config tests cover that metadata.
+GEOGRAPHIC_XY_DATASET_IDS = {
+    "google-weathernext2-forecast-historical-virtual",
+    "google-weathernext2-forecast-operational-virtual",
+}
+
+
 @pytest.mark.parametrize(
     "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
 )
@@ -174,7 +184,7 @@ def test_cf_latitude_longitude_recognized(
             )
 
     # For projected datasets, check x and y have correct CF attributes
-    if is_projected:
+    if is_projected and dataset.dataset_id not in GEOGRAPHIC_XY_DATASET_IDS:
         if "x" in ds.coords:
             x_attrs = ds["x"].attrs
             assert x_attrs.get("standard_name") == "projection_x_coordinate", (
@@ -969,6 +979,11 @@ def test_metadata_consistency_across_datasets() -> None:
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for coord_config in template_config.coords:
+            if (
+                coord_config.name in {"x", "y"}
+                and dataset.dataset_id in GEOGRAPHIC_XY_DATASET_IDS
+            ):
+                continue
             by_coord_name.setdefault(coord_config.name, {})[dataset.dataset_id] = {
                 "long_name": coord_config.attrs.long_name,
                 "standard_name": coord_config.attrs.standard_name,

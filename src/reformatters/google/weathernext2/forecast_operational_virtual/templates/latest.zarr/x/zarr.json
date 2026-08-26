@@ -1,13 +1,13 @@
 {
   "shape": [
-    721
+    1440
   ],
   "data_type": "float64",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        721
+        1440
       ]
     }
   },
@@ -37,18 +37,18 @@
     }
   ],
   "attributes": {
-    "long_name": "Latitude",
-    "standard_name": "latitude",
-    "axis": "Y",
-    "units": "degree_north",
+    "long_name": "Longitude",
+    "standard_name": "longitude",
+    "axis": "X",
+    "units": "degree_east",
     "statistics_approximate": {
-      "min": -90.0,
-      "max": 90.0
+      "min": 0.0,
+      "max": 359.75
     },
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
-    "latitude"
+    "x"
   ],
   "zarr_format": 3,
   "node_type": "array",

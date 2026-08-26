@@ -87,15 +87,15 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             "init_time",
             "ensemble_member",
             "lead_time",
-            "latitude",
-            "longitude",
+            "y",
+            "x",
         ),
         "pressure_level": (
             "init_time",
             "ensemble_member",
             "lead_time",
-            "latitude",
-            "longitude",
+            "y",
+            "x",
             "pressure_level",
         ),
     }
@@ -146,8 +146,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             # The source publishes no lead time 0.
             "lead_time": pd.timedelta_range("6h", "360h", freq="6h"),
             "ensemble_member": np.arange(64),
-            "latitude": np.arange(-90, 90.25, 0.25),
-            "longitude": np.arange(0, 360, 0.25),
+            "y": np.arange(-90, 90.25, 0.25),
+            "x": np.arange(0, 360, 0.25),
             "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.int64),
         }
 
@@ -234,12 +234,12 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                 ),
             ),
             Coordinate(
-                name="latitude",
+                name="y",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["latitude"]),
+                    chunks=len(dim_coords["y"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
@@ -248,18 +248,18 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="degree_north",
                     axis="Y",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["latitude"].min()),
-                        max=float(dim_coords["latitude"].max()),
+                        min=float(dim_coords["y"].min()),
+                        max=float(dim_coords["y"].max()),
                     ),
                 ),
             ),
             Coordinate(
-                name="longitude",
+                name="x",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["longitude"]),
+                    chunks=len(dim_coords["x"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
@@ -268,8 +268,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="degree_east",
                     axis="X",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["longitude"].min()),
-                        max=float(dim_coords["longitude"].max()),
+                        min=float(dim_coords["x"].min()),
+                        max=float(dim_coords["x"].max()),
                     ),
                 ),
             ),
