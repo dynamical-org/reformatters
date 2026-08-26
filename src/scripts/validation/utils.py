@@ -382,10 +382,33 @@ def load_zarr_dataset(url: str) -> xr.Dataset:
     # open_flattened_dataset exposes every vertical group's vars (e.g.
     # pressure_level/temperature) keyed by store path, not just the root group.
     ds = open_flattened_dataset(store, consolidated=consolidated)
+    ds = _add_geographic_xy_coordinates(ds)
     if "longitude" in ds.coords and "latitude" in ds.coords:
         ds.longitude.load()
         ds.latitude.load()
     return ds
+
+
+# These datasets reference their source's native chunks, whose spatial axes are
+# geographic, so their y/x dimension coordinates hold latitude and longitude values
+# instead of projected ones.
+_GEOGRAPHIC_XY_DATASET_IDS = frozenset(
+    {
+        "google-weathernext2-forecast-historical-virtual",
+        "google-weathernext2-forecast-operational-virtual",
+    }
+)
+
+
+def _add_geographic_xy_coordinates(ds: xr.Dataset) -> xr.Dataset:
+    """Give a geographic y/x dataset the 2D latitude/longitude auxiliary coordinates
+    every other y/x dataset carries, so the rest of this tooling treats it uniformly."""
+    if ds.attrs.get("dataset_id") not in _GEOGRAPHIC_XY_DATASET_IDS:
+        return ds
+    latitude, longitude = np.meshgrid(ds["y"].values, ds["x"].values, indexing="ij")
+    return ds.assign_coords(
+        latitude=(("y", "x"), latitude), longitude=(("y", "x"), longitude)
+    )
 
 
 def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:

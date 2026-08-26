@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -6,6 +8,7 @@ from scripts.validation.utils import (
     choose_level,
     get_random_spatial_indices,
     get_two_random_points,
+    load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
     var_slug,
@@ -134,3 +137,23 @@ def test_get_two_random_points_pins_provided_points() -> None:
     assert p2_sel == {"y": 18, "x": 28}
     assert (lat1, lon1) == (35.0, -100.0)
     assert (lat2, lon2) == (39.0, -96.0)
+
+
+def test_load_zarr_dataset_adds_geographic_xy_coordinates(tmp_path: Path) -> None:
+    y = np.arange(-2, 2.5, 0.5)
+    x = np.arange(0, 3, 0.5)
+    store_path = tmp_path / "wn2.zarr"
+    xr.Dataset(
+        {"temperature_2m": (("y", "x"), np.zeros((len(y), len(x))))},
+        coords={"y": y, "x": x},
+        attrs={"dataset_id": "google-weathernext2-forecast-operational-virtual"},
+    ).to_zarr(store_path, zarr_format=3, consolidated=True)
+
+    ds = load_zarr_dataset(str(store_path))
+
+    assert ds["latitude"].dims == ("y", "x")
+    assert ds["longitude"].dims == ("y", "x")
+    # y holds latitudes and x holds longitudes, so (1.0, 1.5) is y=6, x=3.
+    assert nearest_point_index(ds, 1.0, 1.5) == {"y": 6, "x": 3}
+    _, _, (lat1, lon1), _ = get_two_random_points(ds, [(1.0, 1.5)])
+    assert (lat1, lon1) == (1.0, 1.5)
