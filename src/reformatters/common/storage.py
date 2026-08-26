@@ -594,12 +594,12 @@ def _repository_config_and_credentials(
     # manifest versions (multi-GB OOM). A virtual ref is ~180 B, so 1M refs ≈ 200 MB.
     config.caching = icechunk.CachingConfig(num_chunk_refs=1_000_000)
 
-    # Every production source is S3 or S3-compatible (NOAA NODD, ECMWF, Source
-    # Coop) and anonymous-read, and icechunk only ships an S3 anonymous credential
-    # constructor; local-filesystem containers (dev/test) need no credentials. Map
-    # each container to the right credential explicitly rather than silently handing
-    # an S3 credential to a GCS/Azure container. To support a non-S3 or private /
-    # requester-pays source, add an optional per-container credentials field to
+    # Our S3 and S3-compatible sources (NOAA NODD, ECMWF, Source Coop) are all
+    # anonymous-read; authenticated transform proxies use HTTP; local-filesystem
+    # containers (dev/test) need no credentials. Map each container to the right
+    # credential explicitly rather than silently handing an S3 credential to a
+    # GCS/Azure container. To support a requester-pays or otherwise private object
+    # store, add an optional per-container credentials field to
     # IcechunkVirtualConfig and prefer it over these defaults.
     s3_compatible_stores = (
         icechunk.ObjectStoreConfig.S3,
@@ -616,12 +616,16 @@ def _repository_config_and_credentials(
             credentials_by_prefix[container.url_prefix] = (
                 icechunk.credentials.LocalFileSystemAccess  # local files: no creds
             )
+        elif isinstance(container.store, icechunk.ObjectStoreConfig.Http):
+            credentials_by_prefix[container.url_prefix] = (
+                icechunk.Credentials.HttpAccess()
+            )
         else:
             raise AssertionError(
                 f"Virtual chunk container {container.url_prefix} uses an unsupported "
                 f"store ({type(container.store).__name__}); only S3-compatible "
-                "(anonymous) and local-filesystem sources are supported. Add explicit "
-                "credentials to IcechunkVirtualConfig."
+                "(anonymous), HTTP and local-filesystem sources are supported. Add "
+                "explicit credentials to IcechunkVirtualConfig."
             )
 
     credentials = icechunk.containers_credentials(credentials_by_prefix)

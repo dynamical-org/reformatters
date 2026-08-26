@@ -1,0 +1,18 @@
+{
+  "attributes": {
+    "dataset_id": "google-weathernext2-forecast-operational-virtual",
+    "dataset_version": "0.1.0",
+    "name": "Google WeatherNext 2 operational forecast, virtual",
+    "description": "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
+    "attribution": "Google requires this attribution: \u00a9 2025 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use.",
+    "license": "CC-BY-4.0",
+    "spatial_domain": "Global",
+    "spatial_resolution": "0.25 degrees (~20km)",
+    "time_domain": "Forecasts initialized 2025-01-01 00:00:00 UTC to Present",
+    "time_resolution": "Forecasts initialized every 6 hours",
+    "forecast_domain": "Forecast lead time 6-360 hours (0.25-15 days) ahead",
+    "forecast_resolution": "6 hourly"
+  },
+  "zarr_format": 3,
+  "node_type": "group"
+}

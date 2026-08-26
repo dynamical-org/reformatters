@@ -274,13 +274,14 @@ def test_coordinates_have_single_chunk(
 def test_virtual_serializers_flip_to_shared_orientation(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    """Every virtual data var's GribberishCodec flips decoded messages into our shared
-    orientation: north_up (first row = largest latitude, matching materialized datasets'
-    GDAL flip) and adjust_longitude_range (monotonic -180..180 longitude)."""
+    """Every GRIB-decoding virtual data var's GribberishCodec flips decoded messages into
+    our shared orientation: north_up (first row = largest latitude, matching materialized
+    datasets' GDAL flip) and adjust_longitude_range (monotonic -180..180 longitude)."""
     for var in dataset.template_config.data_vars:
         serializer = var.encoding.serializer
         assert serializer is not None, var.name
-        assert serializer["name"] == "gribberish", var.name
+        if serializer["name"] != "gribberish":
+            continue
         assert serializer["configuration"]["north_up"] is True, var.name
         assert serializer["configuration"]["adjust_longitude_range"] is True, var.name
 

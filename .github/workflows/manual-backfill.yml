@@ -16,6 +16,8 @@ name: 'Manual: Backfill'
         - ecmwf-aifs-single-forecast-virtual
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree
         - ecmwf-ifs-ens-forecast-46-day-1-5-degree
+        - google-weathernext2-forecast-historical-virtual
+        - google-weathernext2-forecast-operational-virtual
         - nasa-imerg-analysis-early
         - nasa-imerg-analysis-late
         - nasa-smap-level3-36km-v9

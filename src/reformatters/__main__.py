@@ -50,6 +50,12 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset im
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
+from reformatters.google.weathernext2.forecast_historical_virtual import (
+    GoogleWeathernext2ForecastHistoricalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_operational_virtual import (
+    GoogleWeathernext2ForecastOperationalVirtualDataset,
+)
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
@@ -179,6 +185,18 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
+class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
+    """Icechunk storage in the private WeatherNext 2 bucket.
+
+    This is an R2 bucket. Its endpoint URL and `force_path_style` come from the
+    k8s secret, which holds `icechunk.s3_storage` kwargs.
+    """
+
+    base_path: str = "s3://dynamical-wn2"
+    k8s_secret_name: str = "weathernext2-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 # Registry of all DynamicalDatasets.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
@@ -244,6 +262,13 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # ECCC
     EcccHrdpsForecastDynamicalDataset(
         primary_storage_config=EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    # Google
+    GoogleWeathernext2ForecastHistoricalVirtualDataset(
+        primary_storage_config=Weathernext2IcechunkDatasetStorageConfig(),
+    ),
+    GoogleWeathernext2ForecastOperationalVirtualDataset(
+        primary_storage_config=Weathernext2IcechunkDatasetStorageConfig(),
     ),
     # NASA
     NasaImergAnalysisEarlyDataset(

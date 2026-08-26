@@ -6,8 +6,10 @@ from scripts.validation.utils import (
     choose_level,
     get_random_spatial_indices,
     get_two_random_points,
+    load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
+    to_reference_longitude,
     var_slug,
     vertical_dims,
 )
@@ -134,3 +136,27 @@ def test_get_two_random_points_pins_provided_points() -> None:
     assert p2_sel == {"y": 18, "x": 28}
     assert (lat1, lon1) == (35.0, -100.0)
     assert (lat2, lon2) == (39.0, -96.0)
+
+
+def test_load_zarr_dataset_keeps_geographic_xy_labels_native(
+    geographic_xy_store: str,
+) -> None:
+    ds = load_zarr_dataset(geographic_xy_store)
+
+    assert ds["latitude"].dims == ("y", "x")
+    assert ds["longitude"].dims == ("y", "x")
+    np.testing.assert_array_equal(
+        ds["longitude"].values[0], [0, 45, 90, 135, 180, 225, 270, 315]
+    )
+    assert nearest_point_index(ds, 45.0, 225.0) == {"y": 3, "x": 5}
+    _, _, (lat1, lon1), _ = get_two_random_points(ds, [(45.0, 225.0)])
+    assert (lat1, lon1) == (45.0, 225.0)
+
+
+def test_to_reference_longitude() -> None:
+    assert to_reference_longitude(225.0) == -135.0
+    assert to_reference_longitude(0.0) == 0.0
+    assert to_reference_longitude(179.75) == 179.75
+    assert to_reference_longitude(180.0) == -180.0
+    # Already in the reference convention, so unchanged.
+    assert to_reference_longitude(-110.0) == -110.0

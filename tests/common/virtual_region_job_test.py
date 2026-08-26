@@ -17,6 +17,7 @@ from datetime import timedelta
 from itertools import batched, count
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast
+from unittest.mock import Mock
 
 import dask.array
 import icechunk
@@ -922,6 +923,26 @@ def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> No
         job._emit_refs([session.store], [ref])
 
 
+def test_emit_refs_propagates_etag_checksum() -> None:
+    template_ds = _create_template_ds(1)
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    store = Mock()
+    store.set_virtual_refs.return_value = None
+    ref = VirtualRef(
+        job.data_vars[0],
+        {"init_time": APPEND_DIM_START, "lead_time": LEAD_TIMES[0]},
+        "file://x",
+        0,
+        BLOCK_NBYTES,
+        '"object-etag"',
+    )
+
+    job._emit_refs([store], [ref])
+
+    [spec] = store.set_virtual_refs.call_args.args[1]
+    assert spec.etag_checksum == '"object-etag"'
+
+
 def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
     # Without "update" the job sweeps once instead of polling; the driver
     # asserts operational jobs are constructed to poll.
@@ -962,7 +983,7 @@ def _encoding(**overrides: Any) -> Encoding:  # noqa: ANN401 - encoding field pa
     return Encoding(**{**defaults, **overrides})
 
 
-def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
+def test_virtual_dataset_rejects_shards_and_implicit_compressor(
     tmp_path: Path,
 ) -> None:
     class ShardedTemplateConfig(VirtualTestTemplateConfig):
@@ -995,8 +1016,39 @@ def test_virtual_dataset_rejects_sharded_or_compressed_encodings(
     class CompressedDataset(VirtualTestDataset):
         template_config: CompressedTemplateConfig = CompressedTemplateConfig()
 
-    with pytest.raises(ValidationError, match="must declare compressors="):
+    with pytest.raises(ValidationError, match="must explicitly declare compressors"):
         _construct_dataset(tmp_path, CompressedDataset)
+
+    class SourceCompressedTemplateConfig(VirtualTestTemplateConfig):
+        @computed_field  # type: ignore[prop-decorator]
+        @property
+        def data_vars(self) -> Sequence[VirtualTestDataVar]:
+            return [
+                VirtualTestDataVar(
+                    name="temperature_2m",
+                    encoding=_encoding(
+                        compressors=[
+                            {
+                                "name": "blosc",
+                                "configuration": {
+                                    "typesize": 8,
+                                    "cname": "lz4",
+                                    "clevel": 5,
+                                    "shuffle": "shuffle",
+                                    "blocksize": 0,
+                                },
+                            }
+                        ]
+                    ),
+                )
+            ]
+
+    class SourceCompressedDataset(VirtualTestDataset):
+        template_config: SourceCompressedTemplateConfig = (
+            SourceCompressedTemplateConfig()
+        )
+
+    _construct_dataset(tmp_path, SourceCompressedDataset)
 
 
 # --- process_virtual integration (real value read-back) ---

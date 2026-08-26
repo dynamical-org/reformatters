@@ -13,6 +13,7 @@ from scripts.validation.utils import (
     VariableStats,
     end_date_option,
     get_two_random_points,
+    has_geographic_xy,
     init_time_option,
     is_forecast_dataset,
     is_virtual_store,
@@ -39,6 +40,10 @@ log = get_logger(__name__)
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
+    if has_geographic_xy(ds):
+        # This dataset is global and labels longitude 0 to 360, so its bounds would
+        # crop the reference to one hemisphere. Its latitude bounds still apply.
+        return reference_ds.sel(latitude=slice(ds.latitude.max(), ds.latitude.min()))
     return reference_ds.sel(
         latitude=slice(ds.latitude.max(), ds.latitude.min()),
         longitude=slice(ds.longitude.min(), ds.longitude.max()),
@@ -188,9 +193,20 @@ def _draw_spatial_triplet(
     units: str | None,
     ds_title: str,
     ref_title: str,
+    share_axis_limits: bool,
 ) -> None:
-    """Draw reference map, validation map, and histogram onto provided axes."""
+    """Draw reference map, validation map, and histogram onto provided axes.
+
+    `share_axis_limits` widens the validation map to the reference's extent as well, so
+    the two maps cover one window. Pass False when the two label the same globe
+    differently, which would otherwise squeeze each map into part of its axis.
+    """
     vmin, vmax = _spatial_color_range(var, data, ref_data, data_clean, ref_clean)
+
+    lon_min = float(data.longitude.min())
+    lon_max = float(data.longitude.max())
+    lat_min = float(data.latitude.min())
+    lat_max = float(data.latitude.max())
 
     # Reference map
     if ref_data is not None:
@@ -198,10 +214,11 @@ def _draw_spatial_triplet(
             ref_data.longitude, ref_data.latitude, ref_data.values, vmin=vmin, vmax=vmax
         )
         plt.colorbar(im1, ax=ax_ref, label=units or "")
-        lon_min = min(float(ref_data.longitude.min()), float(data.longitude.min()))
-        lon_max = max(float(ref_data.longitude.max()), float(data.longitude.max()))
-        lat_min = min(float(ref_data.latitude.min()), float(data.latitude.min()))
-        lat_max = max(float(ref_data.latitude.max()), float(data.latitude.max()))
+        if share_axis_limits:
+            lon_min = min(lon_min, float(ref_data.longitude.min()))
+            lon_max = max(lon_max, float(ref_data.longitude.max()))
+            lat_min = min(lat_min, float(ref_data.latitude.min()))
+            lat_max = max(lat_max, float(ref_data.latitude.max()))
     else:
         ax_ref.text(
             0.5,
@@ -213,10 +230,6 @@ def _draw_spatial_triplet(
             fontsize=12,
             color="gray",
         )
-        lon_min = float(data.longitude.min())
-        lon_max = float(data.longitude.max())
-        lat_min = float(data.latitude.min())
-        lat_max = float(data.latitude.max())
     ax_ref.set_title(ref_title, fontsize=10)
     ax_ref.set_aspect("auto")
     ax_ref.set_xlabel("Longitude")
@@ -380,6 +393,7 @@ def run_compare_spatial(ctx: RunContext) -> None:
             stats.units,
             ds_title,
             ref_title,
+            share_axis_limits=not has_geographic_xy(validation_ds),
         )
         fig_v.tight_layout()
         fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=80, bbox_inches="tight")

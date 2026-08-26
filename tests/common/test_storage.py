@@ -468,6 +468,26 @@ class TestIcechunkVirtualConfig:
         assert caching is not None
         assert caching.num_chunk_refs == 1_000_000
 
+    def test_http_container_accepted(self) -> None:
+        http_container = icechunk.VirtualChunkContainer(
+            "https://example.com/", icechunk.http_store()
+        )
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=IcechunkVirtualConfig(
+                containers=(http_container,),
+                manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+            ),
+        )
+        repo = factory.icechunk_repos(sort="primary-first")[0][1]
+        containers = repo.config.virtual_chunk_containers
+        assert containers is not None
+        assert set(containers) == {"https://example.com/"}
+
     def test_unsupported_container_rejected(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
             "gs://bucket/", icechunk.gcs_store()
