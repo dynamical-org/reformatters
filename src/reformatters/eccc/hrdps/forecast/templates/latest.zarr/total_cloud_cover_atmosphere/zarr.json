@@ -72,6 +72,7 @@
     "short_name": "tcc",
     "standard_name": "cloud_area_fraction",
     "units": "percent",
+    "comment": "NaN at lead time 0.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
