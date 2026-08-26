@@ -38,9 +38,7 @@ class Job(pydantic.BaseModel):
     pod_active_deadline: timedelta = timedelta(hours=6)
     ttl: timedelta = timedelta(days=1)
 
-    # A worker evicted mid-run restarts from the beginning of its jobs, so opt out of
-    # consolidation. Karpenter evicts an underutilized node's pods whatever they are
-    # doing, and a job's own tail makes its remaining nodes underutilized.
+    # Opt out of consolidation. Quick jobs have minimal impact and we'd rather not interrupt and restart longer jobs.
     pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
