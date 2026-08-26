@@ -8,6 +8,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.iterating import item
+from reformatters.common.types import Group
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
 from reformatters.ecmwf.archive_gribs.request_shards import (
     DAILY_LEAD_TIMES,
@@ -29,6 +30,16 @@ from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
 
 INIT_TIME = pd.Timestamp("2026-08-10T00:00")
 DAILY_CONFIG = EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
+
+
+# read_data fills one (init_time, lead_time, ensemble_member) slot of the output, so
+# its axes are the group's remaining dims, in the order the template declares them.
+SLOT_DIMS = ("init_time", "lead_time", "ensemble_member")
+
+
+def expected_read_shape(group: Group, level_count: int) -> tuple[int, ...]:
+    sizes = {"pressure_level": level_count, "latitude": 121, "longitude": 240}
+    return tuple(sizes[dim] for dim in DAILY_CONFIG.dims[group] if dim not in SLOT_DIMS)
 
 
 def daily_var(name: str) -> EcmwfIfsEns46DayDataVar:
@@ -107,10 +118,10 @@ def test_reads_a_pressure_level_message_into_its_output_level(tmp_path: Path) ->
 
     values = region_job(data_var, tmp_path).read_data(coord, data_var)
 
-    assert values.shape == (121, 240, len(levels))
+    assert values.shape == expected_read_shape("pressure_level", len(levels))
     level_index = levels.index("500_hpa")
-    assert values[60, 120, level_index] == pytest.approx(270.1207, abs=1e-3)
-    assert np.isnan(values[:, :, levels.index(None)]).all()
+    assert values[level_index, 60, 120] == pytest.approx(270.1207, abs=1e-3)
+    assert np.isnan(values[levels.index(None)]).all()
 
 
 def test_masks_the_land_only_sentinel(tmp_path: Path) -> None:
