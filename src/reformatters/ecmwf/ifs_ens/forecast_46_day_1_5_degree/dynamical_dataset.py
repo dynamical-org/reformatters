@@ -26,12 +26,11 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        reformat_suspend = True
         workers = self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 9 * * *",
-            suspend=reformat_suspend,
+            suspend=False,
             pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -46,7 +45,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
             schedule="0 12 * * *",
-            suspend=reformat_suspend,
+            suspend=False,
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
