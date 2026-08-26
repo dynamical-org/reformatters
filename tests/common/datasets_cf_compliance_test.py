@@ -173,20 +173,32 @@ def test_cf_latitude_longitude_recognized(
                 f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
             )
 
-    # For projected datasets, check x and y have correct CF attributes
+    # For projected datasets, check x and y have correct CF attributes.
+    # CF names the axes of a rotated pole grid grid_longitude/grid_latitude,
+    # in degrees, rather than the projection_[xy]_coordinate of a metre based grid.
     if is_projected:
+        rotated_pole = (
+            ds["spatial_ref"].attrs.get("grid_mapping_name")
+            == "rotated_latitude_longitude"
+        )
+        expected_x_standard_name = (
+            "grid_longitude" if rotated_pole else "projection_x_coordinate"
+        )
+        expected_y_standard_name = (
+            "grid_latitude" if rotated_pole else "projection_y_coordinate"
+        )
         if "x" in ds.coords:
             x_attrs = ds["x"].attrs
-            assert x_attrs.get("standard_name") == "projection_x_coordinate", (
-                f"x missing standard_name='projection_x_coordinate', got: {x_attrs.get('standard_name')}"
+            assert x_attrs.get("standard_name") == expected_x_standard_name, (
+                f"x missing standard_name='{expected_x_standard_name}', got: {x_attrs.get('standard_name')}"
             )
             assert x_attrs.get("axis") == "X", (
                 f"x missing axis='X', got: {x_attrs.get('axis')}"
             )
         if "y" in ds.coords:
             y_attrs = ds["y"].attrs
-            assert y_attrs.get("standard_name") == "projection_y_coordinate", (
-                f"y missing standard_name='projection_y_coordinate', got: {y_attrs.get('standard_name')}"
+            assert y_attrs.get("standard_name") == expected_y_standard_name, (
+                f"y missing standard_name='{expected_y_standard_name}', got: {y_attrs.get('standard_name')}"
             )
             assert y_attrs.get("axis") == "Y", (
                 f"y missing axis='Y', got: {y_attrs.get('axis')}"
@@ -389,6 +401,16 @@ def test_cf_data_variables_have_long_name(
 # --- CF standard_name and units validation ---
 
 # Variable names for which CF Conventions does NOT define a standard name.
+# Standard names accepted for CF but not yet in a published table, with the canonical
+# units the accepted entry defines. Move each to the table check by refreshing
+# cf-standard-name-table.xml once the release carrying it is out.
+CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
+    # Accepted 2026-06-24, after table v94 was cut; covers frozen lake water as well as
+    # frozen sea water, which is what HRRR's ice cover reports.
+    # https://github.com/cf-convention/vocabularies/issues/271
+    "floating_ice_area_fraction": "1",
+}
+
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "percent_frozen_precipitation_surface",
     "categorical_snow_surface",
@@ -531,6 +553,15 @@ def test_cf_standard_name_and_units(
             continue
 
         # standard_name is set — validate it
+        if standard_name in CF_STANDARD_NAMES_PENDING_PUBLICATION:
+            expected_units = CF_STANDARD_NAMES_PENDING_PUBLICATION[standard_name]
+            if units != expected_units:
+                errors.append(
+                    f"Variable '{var_config.name}' has standard_name='{standard_name}' "
+                    f"with units='{units}', but the accepted CF entry defines "
+                    f"'{expected_units}'."
+                )
+            continue
         if standard_name not in cf_standard_name_to_canonical_units:
             errors.append(
                 f"Variable '{var_config.name}' has standard_name='{standard_name}', "
@@ -601,11 +632,13 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     # DWD ICON-specific variables
     "aswdifd_s",
     "aswdir_s",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR, ECCC HRDPS)
     "80u",
     "80v",
     "80t",
     "80sp",
+    "80si",
+    "80wdir",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH_QPE_FFGMAX",
     # NASA IMERG quality index (no ECMWF equivalent)
@@ -651,11 +684,13 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Soil Moisture (PM)",
     # NASA IMERG quality index (no ECMWF equivalent)
     "Quality index for precipitation",
-    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR)
+    # 80m level fields with no ECMWF equivalent (NOAA GFS, NOAA GEFS, NOAA HRRR, ECCC HRDPS)
     "80 metre U wind component",
     "80 metre V wind component",
     "80 metre temperature",
     "80 metre pressure",
+    "80 metre wind speed",
+    "80 metre wind direction",
     # NOAA MRMS FLASH system (no ECMWF equivalent)
     "FLASH QPE-to-FFG percentage maximum",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
@@ -819,6 +854,131 @@ def test_ecmwf_parameter_compliance(
 # Format: (variable_or_coord_name, attribute_name, dataset_id)
 # These are intentional exceptions where source data conventions differ.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # HRRR is on a Lambert-conformal grid whose GRIB messages set the grid-relative
+    # wind flag, so its components follow the grid axes (x_wind/y_wind) rather than
+    # east and north. The lat-lon datasets carry genuinely earth-relative winds.
+    ("wind_u_10m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v", "standard_name", "noaa-hrrr-analysis"),
+    ("10u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10u", "standard_name", "noaa-hrrr-analysis"),
+    ("10v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10v", "standard_name", "noaa-hrrr-analysis"),
+    ("80u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80u", "standard_name", "noaa-hrrr-analysis"),
+    ("80v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80v", "standard_name", "noaa-hrrr-analysis"),
+    ("u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("u", "standard_name", "noaa-hrrr-analysis"),
+    ("v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("v", "standard_name", "noaa-hrrr-analysis"),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "10 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "10 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "10 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "10 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "80 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "80 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "80 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "80 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("U component of wind", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("U component of wind", "standard_name", "noaa-hrrr-analysis"),
+    ("V component of wind", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("V component of wind", "standard_name", "noaa-hrrr-analysis"),
     # U Arizona SWANN uses mm for snow variables to match source data conventions,
     # while other datasets use CF-compliant meters.
     # Excepted by var_name, short_name, and long_name since all three groupings detect the conflict.
@@ -834,6 +994,19 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
+    # maximum since the previous post-processing; each names the quantity it carries.
+    ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
+    ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
+    # HRDPS is on a rotated pole grid, whose CF axes are grid_longitude/grid_latitude in
+    # degrees, rather than the metre based projection_[xy]_coordinate of the other
+    # projected datasets.
+    ("x", "long_name", "eccc-hrdps-forecast"),
+    ("x", "standard_name", "eccc-hrdps-forecast"),
+    ("x", "units", "eccc-hrdps-forecast"),
+    ("y", "long_name", "eccc-hrdps-forecast"),
+    ("y", "standard_name", "eccc-hrdps-forecast"),
+    ("y", "units", "eccc-hrdps-forecast"),
 }
 
 
@@ -893,23 +1066,6 @@ def _check_consistency(
     return conflicts
 
 
-# Virtual datasets serve raw GRIB values, which diverge from the transformed
-# values materialized datasets serve under the same variable name (Kelvin vs
-# GDAL's Celsius temperatures), so these (dataset_id, var_name) pairs are
-# exempt from cross-dataset metadata consistency. Raw quantities that differ in
-# kind, not just units (e.g. accumulated precipitation), instead get a distinct
-# variable name like total_precipitation_surface and need no exemption.
-# TEMPORARY: once a gribberish release includes
-# https://github.com/mpiannucci/gribberish/pull/153 and we upgrade zarr for
-# zarr.codecs ScaleOffset, the temperature vars chain a K->C filter, declare
-# degree_Celsius, and these exemptions are removed.
-RAW_GRIB_VALUE_VARS = {
-    ("noaa-gefs-forecast-10-day-spatial-dev", "temperature_2m"),
-    ("noaa-gefs-forecast-10-day-spatial-dev", "maximum_temperature_2m"),
-    ("noaa-gefs-forecast-10-day-spatial-dev", "minimum_temperature_2m"),
-}
-
-
 def test_metadata_consistency_across_datasets() -> None:
     """
     Ensure metadata is consistent across all datasets. Checks:
@@ -927,8 +1083,6 @@ def test_metadata_consistency_across_datasets() -> None:
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for var_config in template_config.data_vars:
-            if (dataset.dataset_id, var_config.name) in RAW_GRIB_VALUE_VARS:
-                continue
             attrs = {
                 "short_name": var_config.attrs.short_name,
                 "units": var_config.attrs.units,

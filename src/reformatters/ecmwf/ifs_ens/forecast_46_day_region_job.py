@@ -212,10 +212,10 @@ class EcmwfIfsEns46DayRegionJob(
             bands = iter(present)
             values = np.stack(
                 [missing if level is None else next(bands) for level in coord.levels],
-                axis=-1,
+                axis=0,
             )
-        assert values.shape[:2] == GRID_SHAPE, (
-            f"Expected a {GRID_SHAPE} grid, found {values.shape[:2]}"
+        assert values.shape[-2:] == GRID_SHAPE, (
+            f"Expected a {GRID_SHAPE} grid, found {values.shape[-2:]}"
         )
         mask_source_fill_value_inplace(values, data_var.internal_attrs)
         return values

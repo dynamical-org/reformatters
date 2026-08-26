@@ -13,6 +13,8 @@ name: 'Manual: Create Job from CronJob'
         - dwd-icon-eu-forecast-5-day-update
         - dwd-icon-eu-forecast-5-day-validate
         - eccc-hrdps-forecast-archive-grib-files
+        - eccc-hrdps-forecast-update
+        - eccc-hrdps-forecast-validate
         - ecmwf-aifs-ens-forecast-update
         - ecmwf-aifs-ens-forecast-validate
         - ecmwf-aifs-single-forecast-update
@@ -32,8 +34,6 @@ name: 'Manual: Create Job from CronJob'
         - nasa-smap-level3-36km-v9-validate
         - noaa-gefs-analysis-update
         - noaa-gefs-analysis-validate
-        - noaa-gefs-forecast-10-day-spatial-dev-update
-        - noaa-gefs-forecast-10-day-spatial-dev-validate
         - noaa-gefs-forecast-35-day-update
         - noaa-gefs-forecast-35-day-validate
         - noaa-gfs-analysis-update
@@ -68,16 +68,16 @@ jobs:
     runs-on: ubuntu-24.04
     environment: prod
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         sparse-checkout: .
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+      uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
         aws-region: ${{ secrets.AWS_REGION }}
     - name: Install kubectl
-      uses: azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b
+      uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d
       with:
         version: latest
     - name: Update kubeconfig

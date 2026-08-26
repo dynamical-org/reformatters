@@ -1781,6 +1781,7 @@
           "short_name": "rowe",
           "standard_name": "runoff_amount",
           "units": "kg m-2",
+          "comment": "Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1952,6 +1953,7 @@
           "short_name": "snowc",
           "standard_name": "surface_snow_area_fraction",
           "units": "1",
+          "comment": "Fraction (0-1) of the grid box covered by snow. Applies over land only; NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2068,7 +2070,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "ECMWF soil level 1, the uppermost soil layer.",
+          "comment": "ECMWF soil level 1, the uppermost soil layer. Over water this is the sea surface temperature, not a soil temperature.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2130,7 +2132,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "ECMWF soil level 2, the second soil layer from the surface.",
+          "comment": "ECMWF soil level 2, the second soil layer from the surface. Over water this is the sea surface temperature, not a soil temperature.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2574,7 +2576,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 1, the uppermost soil layer.",
+          "comment": "ECMWF soil level 1, the uppermost soil layer. Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2630,7 +2632,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 2, the second soil layer from the surface.",
+          "comment": "ECMWF soil level 2, the second soil layer from the surface. Applies over land only. Water points are NaN from init time 2026-05-12T06:00 and unmasked before it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

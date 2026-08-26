@@ -33,7 +33,11 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisVirtualSourceFileCoord]:
-        """Use the shortest present lead for each variable: f00 if available, f01 otherwise."""
+        """Use the shortest present lead for each variable: f00 if available, f01 otherwise.
+
+        A variable contributes no coord before its `analysis_usable_from`, so the store holds no
+        ref there and readers get NaN.
+        """
         times = pd.to_datetime(processing_region_ds["time"].values)
         var_groups = group_by(
             data_var_group,
@@ -44,16 +48,24 @@ class NoaaHrrrAnalysisVirtualRegionJob(
             file_type = item({v.internal_attrs.hrrr_file_type for v in vars_in_file})
             has_hour_0_values = item({v.has_hour_0_values() for v in vars_in_file})
             lead_time = pd.Timedelta("0h") if has_hour_0_values else pd.Timedelta("1h")
-            coords.extend(
-                NoaaHrrrAnalysisVirtualSourceFileCoord(
-                    init_time=time - lead_time,
-                    lead_time=lead_time,
-                    domain="conus",
-                    file_type=file_type,
-                    data_vars=vars_in_file,
+            for time in times:
+                usable_vars = [
+                    var
+                    for var in vars_in_file
+                    if var.internal_attrs.analysis_usable_from is None
+                    or time >= var.internal_attrs.analysis_usable_from
+                ]
+                if not usable_vars:
+                    continue
+                coords.append(
+                    NoaaHrrrAnalysisVirtualSourceFileCoord(
+                        init_time=time - lead_time,
+                        lead_time=lead_time,
+                        domain="conus",
+                        file_type=file_type,
+                        data_vars=usable_vars,
+                    )
                 )
-                for time in times
-            )
         return coords
 
     def discover_available(

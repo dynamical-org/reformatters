@@ -2097,7 +2097,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2113,9 +2113,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the freezing level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2445,7 +2446,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height_at_cloud_top",
           "units": "m",
-          "comment": "NaN where no cloud was detected.",
+          "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2501,6 +2502,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "Where no equilibrium level exists the source reports terrain height plus about 20 m rather than a missing value. Mask by convective available potential energy, which is 0 at those points.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2540,7 +2542,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2556,9 +2558,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the freezing level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2611,6 +2614,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "The source reports a height everywhere, including where no free convection is possible, and marks those points in no other way. Mask by convective available potential energy, which is 0 at those points.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2884,9 +2888,14 @@
         "attributes": {
           "long_name": "Ice cover (1=ice, 0=no ice)",
           "short_name": "icec",
-          "standard_name": "sea_ice_area_fraction",
+          "standard_name": "floating_ice_area_fraction",
           "units": "1",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no_ice ice",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -3605,7 +3614,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
+          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4423,6 +4432,7 @@
           "long_name": "Maximum 10 metre wind speed u component",
           "short_name": "maxuw",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4477,6 +4487,7 @@
           "long_name": "Maximum 10 metre wind speed v component",
           "short_name": "maxvw",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5399,7 +5410,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Smoke concentration. Source values at init_times before 2021-12-21T18Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
+          "comment": "Smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6325,8 +6336,9 @@
         "attributes": {
           "long_name": "U component of wind",
           "short_name": "u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6383,8 +6395,9 @@
         "attributes": {
           "long_name": "V component of wind",
           "short_name": "v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7048,7 +7061,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
-          "comment": "NaN where no cloud was detected.",
+          "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8341,8 +8354,9 @@
         "attributes": {
           "long_name": "U component of wind",
           "short_name": "u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8399,8 +8413,9 @@
         "attributes": {
           "long_name": "V component of wind",
           "short_name": "v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10187,6 +10202,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10461,6 +10477,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10706,6 +10723,7 @@
           "long_name": "Vertical u-component shear",
           "short_name": "vucsh",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10760,6 +10778,7 @@
           "long_name": "Vertical u-component shear",
           "short_name": "vucsh",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10814,6 +10833,7 @@
           "long_name": "Vertical v-component shear",
           "short_name": "vvcsh",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10868,6 +10888,7 @@
           "long_name": "Vertical v-component shear",
           "short_name": "vvcsh",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11248,8 +11269,9 @@
         "attributes": {
           "long_name": "10 metre U wind component",
           "short_name": "10u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11303,8 +11325,9 @@
         "attributes": {
           "long_name": "80 metre U wind component",
           "short_name": "80u",
-          "standard_name": "eastward_wind",
+          "standard_name": "x_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11358,8 +11381,9 @@
         "attributes": {
           "long_name": "10 metre V wind component",
           "short_name": "10v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11413,8 +11437,9 @@
         "attributes": {
           "long_name": "80 metre V wind component",
           "short_name": "80v",
-          "standard_name": "northward_wind",
+          "standard_name": "y_wind",
           "units": "m s-1",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
