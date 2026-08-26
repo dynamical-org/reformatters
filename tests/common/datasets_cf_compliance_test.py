@@ -401,6 +401,16 @@ def test_cf_data_variables_have_long_name(
 # --- CF standard_name and units validation ---
 
 # Variable names for which CF Conventions does NOT define a standard name.
+# Standard names accepted for CF but not yet in a published table, with the canonical
+# units the accepted entry defines. Move each to the table check by refreshing
+# cf-standard-name-table.xml once the release carrying it is out.
+CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
+    # Accepted 2026-06-24, after table v94 was cut; covers frozen lake water as well as
+    # frozen sea water, which is what HRRR's ice cover reports.
+    # https://github.com/cf-convention/vocabularies/issues/271
+    "floating_ice_area_fraction": "1",
+}
+
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "percent_frozen_precipitation_surface",
     "categorical_snow_surface",
@@ -421,9 +431,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "soil_moisture_0_100cm",
     "snow_albedo_surface",
     "snow_density_surface",
-    # HRRR ice cover is a binary flag covering lake as well as sea ice, so
-    # sea_ice_area_fraction does not describe it and CF names no combined quantity.
-    "ice_cover_surface",
     # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",
@@ -546,6 +553,15 @@ def test_cf_standard_name_and_units(
             continue
 
         # standard_name is set — validate it
+        if standard_name in CF_STANDARD_NAMES_PENDING_PUBLICATION:
+            expected_units = CF_STANDARD_NAMES_PENDING_PUBLICATION[standard_name]
+            if units != expected_units:
+                errors.append(
+                    f"Variable '{var_config.name}' has standard_name='{standard_name}' "
+                    f"with units='{units}', but the accepted CF entry defines "
+                    f"'{expected_units}'."
+                )
+            continue
         if standard_name not in cf_standard_name_to_canonical_units:
             errors.append(
                 f"Variable '{var_config.name}' has standard_name='{standard_name}', "

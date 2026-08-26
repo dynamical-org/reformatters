@@ -35,6 +35,7 @@
   "attributes": {
     "long_name": "Ice cover (1=ice, 0=no ice)",
     "short_name": "icec",
+    "standard_name": "floating_ice_area_fraction",
     "units": "1",
     "step_type": "instant",
     "flag_values": [

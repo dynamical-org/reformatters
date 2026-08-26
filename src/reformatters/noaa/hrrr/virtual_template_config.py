@@ -1870,6 +1870,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="icec",
             long_name="Ice cover (1=ice, 0=no ice)",
             units="1",
+            # Covers lake ice as well as sea ice, which sea_ice_area_fraction excludes.
+            # Accepted for CF after the current table was cut; see the note in
+            # datasets_cf_compliance_test.CF_STANDARD_NAMES_PENDING_PUBLICATION.
+            standard_name="floating_ice_area_fraction",
             flag_values=(0, 1),
             flag_meanings="no_ice ice",
         ),
