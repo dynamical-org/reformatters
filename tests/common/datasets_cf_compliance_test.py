@@ -109,72 +109,88 @@ def test_cf_latitude_longitude_recognized(
     """
     Ensure latitude and longitude coordinates are recognized as CF coordinates.
     CF requires these to have standard_name and units attributes.
-    Coordinate semantics, rather than dimension names, distinguish geographic grids.
+    For non-projected datasets, they should also have axis attributes.
     """
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
     ds = xr.open_zarr(template_path)
 
+    # Check if this is a projected coordinate system (has x, y as dimension coords)
     if "x" in ds.dims and "y" in ds.dims:
-        latitude_coord_name = "y"
-        longitude_coord_name = "x"
+        assert "x" in ds.coords
+        assert "y" in ds.coords
+        is_projected = True
     elif "latitude" in ds.dims and "longitude" in ds.dims:
-        latitude_coord_name = "latitude"
-        longitude_coord_name = "longitude"
+        assert "latitude" in ds.coords
+        assert "longitude" in ds.coords
+        is_projected = False
     else:
         raise ValueError(
             f"Unknown spatial coordinate dimensions for dataset {dataset.dataset_id}. "
             f"Expected latitude/longitude or x/y as dimension coordinates."
         )
 
-    assert latitude_coord_name in ds.coords
-    assert longitude_coord_name in ds.coords
+    # Check latitude is recognized
+    if "latitude" in ds.coords:
+        assert "latitude" in ds.cf.coordinates, (
+            f"latitude coordinate not recognized by cf_xarray. "
+            f"Ensure it has standard_name='latitude', units='degree_north'. "
+            f"Current attrs: {dict(ds['latitude'].attrs)}"
+        )
+        # Verify latitude attrs are CF compliant
+        lat_attrs = ds["latitude"].attrs
+        assert lat_attrs.get("standard_name") == "latitude", (
+            f"latitude missing standard_name='latitude', got: {lat_attrs.get('standard_name')}"
+        )
+        assert lat_attrs.get("units") == "degree_north", (
+            f"latitude missing units='degree_north', got: {lat_attrs.get('units')}"
+        )
+        # Only check for axis if latitude is a dimension coordinate (not projected)
+        if not is_projected:
+            assert lat_attrs.get("axis") == "Y", (
+                f"latitude missing axis='Y', got: {lat_attrs.get('axis')}"
+            )
 
-    latitude_attrs = ds[latitude_coord_name].attrs
-    longitude_attrs = ds[longitude_coord_name].attrs
-    is_projected = (
-        latitude_attrs.get("standard_name") == "projection_y_coordinate"
-        and longitude_attrs.get("standard_name") == "projection_x_coordinate"
-    )
+    # Check longitude is recognized
+    if "longitude" in ds.coords:
+        assert "longitude" in ds.cf.coordinates, (
+            f"longitude coordinate not recognized by cf_xarray. "
+            f"Ensure it has standard_name='longitude', units='degree_east'. "
+            f"Current attrs: {dict(ds['longitude'].attrs)}"
+        )
+        # Verify longitude attrs are CF compliant
+        lon_attrs = ds["longitude"].attrs
+        assert lon_attrs.get("standard_name") == "longitude", (
+            f"longitude missing standard_name='longitude', got: {lon_attrs.get('standard_name')}"
+        )
+        assert lon_attrs.get("units") == "degree_east", (
+            f"longitude missing units='degree_east', got: {lon_attrs.get('units')}"
+        )
+        # Only check for axis if longitude is a dimension coordinate (not projected)
+        if not is_projected:
+            assert lon_attrs.get("axis") == "X", (
+                f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
+            )
 
+    # For projected datasets, check x and y have correct CF attributes
     if is_projected:
-        assert latitude_attrs.get("standard_name") == "projection_y_coordinate", (
-            f"{latitude_coord_name} has invalid projected coordinate metadata: "
-            f"{dict(latitude_attrs)}"
-        )
-        assert longitude_attrs.get("standard_name") == "projection_x_coordinate", (
-            f"{longitude_coord_name} has invalid projected coordinate metadata: "
-            f"{dict(longitude_attrs)}"
-        )
-    else:
-        assert latitude_attrs.get("standard_name") == "latitude", (
-            f"{latitude_coord_name} missing standard_name='latitude': "
-            f"{dict(latitude_attrs)}"
-        )
-        assert longitude_attrs.get("standard_name") == "longitude", (
-            f"{longitude_coord_name} missing standard_name='longitude': "
-            f"{dict(longitude_attrs)}"
-        )
-        assert latitude_attrs.get("units") == "degree_north", (
-            f"{latitude_coord_name} missing units='degree_north': {dict(latitude_attrs)}"
-        )
-        assert longitude_attrs.get("units") == "degree_east", (
-            f"{longitude_coord_name} missing units='degree_east': {dict(longitude_attrs)}"
-        )
-        assert latitude_coord_name in ds.cf.coordinates.get("latitude", []), (
-            f"cf_xarray did not recognize {latitude_coord_name} as latitude"
-        )
-        assert longitude_coord_name in ds.cf.coordinates.get("longitude", []), (
-            f"cf_xarray did not recognize {longitude_coord_name} as longitude"
-        )
-
-    assert latitude_attrs.get("axis") == "Y", (
-        f"{latitude_coord_name} missing axis='Y': {dict(latitude_attrs)}"
-    )
-    assert longitude_attrs.get("axis") == "X", (
-        f"{longitude_coord_name} missing axis='X': {dict(longitude_attrs)}"
-    )
+        if "x" in ds.coords:
+            x_attrs = ds["x"].attrs
+            assert x_attrs.get("standard_name") == "projection_x_coordinate", (
+                f"x missing standard_name='projection_x_coordinate', got: {x_attrs.get('standard_name')}"
+            )
+            assert x_attrs.get("axis") == "X", (
+                f"x missing axis='X', got: {x_attrs.get('axis')}"
+            )
+        if "y" in ds.coords:
+            y_attrs = ds["y"].attrs
+            assert y_attrs.get("standard_name") == "projection_y_coordinate", (
+                f"y missing standard_name='projection_y_coordinate', got: {y_attrs.get('standard_name')}"
+            )
+            assert y_attrs.get("axis") == "Y", (
+                f"y missing axis='Y', got: {y_attrs.get('axis')}"
+            )
 
 
 @pytest.mark.parametrize(
@@ -454,7 +470,6 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("dew_point_temperature", "degree_Celsius"),
     ("surface_temperature", "degree_Celsius"),
     ("soil_temperature", "degree_Celsius"),
-    ("sea_surface_temperature", "degree_Celsius"),
     ("cloud_area_fraction", "percent"),
     ("cloud_area_fraction_in_atmosphere_layer", "percent"),
     ("vegetation_area_fraction", "percent"),
@@ -902,7 +917,7 @@ def test_metadata_consistency_across_datasets() -> None:
     1. Same var_name → same (short_name, long_name, standard_name, units)
     2. Same short_name → same (long_name, standard_name, units)
     3. Same long_name → same (short_name, standard_name, units)
-    4. Same coordinate name → consistent metadata, distinguishing x/y semantics
+    4. Same coord_name → same (long_name, standard_name, units)
     """
     # Collect data variable metadata grouped by var_name, short_name, and long_name
     by_var_name: dict[str, dict[str, dict[str, str | None]]] = {}
@@ -948,28 +963,22 @@ def test_metadata_consistency_across_datasets() -> None:
         _check_consistency(by_long_name, ["short_name", "standard_name", "units"])
     )
 
-    by_coord_identity: dict[str, dict[str, dict[str, str | None]]] = {}
+    # Collect coordinate metadata and check consistency
+    by_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
         for coord_config in template_config.coords:
-            standard_name = coord_config.attrs.standard_name
-            identity = coord_config.name
-            if identity in {"x", "y"}:
-                identity = (
-                    f"{coord_config.name} ({standard_name or 'no standard_name'})"
-                )
-            by_coord_identity.setdefault(identity, {})[dataset.dataset_id] = {
+            by_coord_name.setdefault(coord_config.name, {})[dataset.dataset_id] = {
                 "long_name": coord_config.attrs.long_name,
-                "standard_name": standard_name,
+                "standard_name": coord_config.attrs.standard_name,
                 "units": coord_config.attrs.units,
                 "positive": coord_config.attrs.positive,
             }
 
     conflicts.extend(
         _check_consistency(
-            by_coord_identity,
-            ["long_name", "standard_name", "units", "positive"],
+            by_coord_name, ["long_name", "standard_name", "units", "positive"]
         )
     )
 

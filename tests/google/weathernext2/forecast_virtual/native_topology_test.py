@@ -138,8 +138,8 @@ def test_read_time_unit_conversions_use_standard_filters() -> None:
 def test_coordinate_values_match_native_spatial_grid_and_level_order() -> None:
     for config in (HISTORICAL, OPERATIONAL):
         coords = config.dimension_coordinates()
-        np.testing.assert_array_equal(coords["y"], np.arange(-90, 90.25, 0.25))
-        np.testing.assert_array_equal(coords["x"], np.arange(0, 360, 0.25))
+        np.testing.assert_array_equal(coords["latitude"], np.arange(-90, 90.25, 0.25))
+        np.testing.assert_array_equal(coords["longitude"], np.arange(0, 360, 0.25))
         np.testing.assert_array_equal(
             coords["pressure_level"],
             np.array([50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]),

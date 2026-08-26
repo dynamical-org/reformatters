@@ -35,6 +35,7 @@ _GRID_NLON = 1440
 PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
 
 PER_INIT_STORE_DATE = pd.Timestamp("2025-01-01T00:00")
+_SPATIAL_REF_WKT = 'GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]'
 
 
 # ScaleOffset decodes on read as value / scale + offset. Temperatures are served in
@@ -86,15 +87,15 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             "init_time",
             "ensemble_member",
             "lead_time",
-            "y",
-            "x",
+            "latitude",
+            "longitude",
         ),
         "pressure_level": (
             "init_time",
             "ensemble_member",
             "lead_time",
-            "y",
-            "x",
+            "latitude",
+            "longitude",
             "pressure_level",
         ),
     }
@@ -145,8 +146,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             # The source publishes no lead time 0.
             "lead_time": pd.timedelta_range("6h", "360h", freq="6h"),
             "ensemble_member": np.arange(64),
-            "y": np.arange(-90, 90.25, 0.25),
-            "x": np.arange(0, 360, 0.25),
+            "latitude": np.arange(-90, 90.25, 0.25),
+            "longitude": np.arange(0, 360, 0.25),
             "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.int64),
         }
 
@@ -233,12 +234,12 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                 ),
             ),
             Coordinate(
-                name="y",
+                name="latitude",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["y"]),
+                    chunks=len(dim_coords["latitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
@@ -247,18 +248,18 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="degree_north",
                     axis="Y",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["y"].min()),
-                        max=float(dim_coords["y"].max()),
+                        min=float(dim_coords["latitude"].min()),
+                        max=float(dim_coords["latitude"].max()),
                     ),
                 ),
             ),
             Coordinate(
-                name="x",
+                name="longitude",
                 encoding=Encoding(
                     dtype="float64",
                     fill_value=np.nan,
                     compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=len(dim_coords["x"]),
+                    chunks=len(dim_coords["longitude"]),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
@@ -267,8 +268,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     units="degree_east",
                     axis="X",
                     statistics_approximate=StatisticsApproximate(
-                        min=float(dim_coords["x"].min()),
-                        max=float(dim_coords["x"].max()),
+                        min=float(dim_coords["longitude"].min()),
+                        max=float(dim_coords["longitude"].max()),
                     ),
                 ),
             ),
@@ -347,7 +348,18 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                 attrs=CoordinateAttrs(
                     units=None,
                     statistics_approximate=None,
+                    crs_wkt=_SPATIAL_REF_WKT,
+                    semi_major_axis=6371229.0,
+                    semi_minor_axis=6371229.0,
+                    inverse_flattening=0.0,
+                    reference_ellipsoid_name="unknown",
+                    longitude_of_prime_meridian=0.0,
+                    prime_meridian_name="Greenwich",
+                    geographic_crs_name="unknown",
+                    horizontal_datum_name="unknown",
                     grid_mapping_name="latitude_longitude",
+                    spatial_ref=_SPATIAL_REF_WKT,
+                    comment="The source declares no coordinate reference system. WeatherNext 2 runs on the ERA5 0.25 degree latitude-longitude grid, which follows WMO conventions of assuming the earth is a perfect sphere with a radius of 6,371,229m. It is similar to EPSG:4326, but EPSG:4326 uses a more accurate representation of the earth's shape.",
                 ),
             ),
         ]
