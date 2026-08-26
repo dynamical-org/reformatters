@@ -44,7 +44,7 @@ _GRID_NX = 1799
 # 39 isobaric levels (hPa), descending like the GRIB order. The wrfprs 1013.2 mb
 # pseudo-level is excluded - it is not part of the dense 25 hPa column.
 PRESSURE_LEVELS = list(range(1000, 25, -25))  # 1000, 975, ..., 50
-# 50 native hybrid (sigma) model levels, 1 (top) .. 50 (near surface).
+# 50 native hybrid (sigma) model levels, 1 (near surface) .. 50 (top).
 MODEL_LEVELS = list(range(1, 51))
 
 # Air temperature and dew point are served in Celsius to match the materialized
