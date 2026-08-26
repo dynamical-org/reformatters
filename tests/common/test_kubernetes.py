@@ -63,7 +63,7 @@ def test_as_kubernetes_object_comprehensive() -> None:
             ]
         },
         "template": {
-            "metadata": {"annotations": {}},
+            "metadata": {"annotations": {"karpenter.sh/do-not-disrupt": "true"}},
             "spec": {
                 "containers": [
                     {
@@ -195,7 +195,7 @@ def test_cron_job_name_respects_kubernetes_length_limit() -> None:
         _cron_job_with_name("a" * 53)
 
 
-def test_do_not_disrupt_annotation_only_on_reformat_jobs() -> None:
+def test_do_not_disrupt_annotation_on_every_job() -> None:
     reformat = ReformatCronJob(
         name="weather-data-update",
         schedule="0 * * * *",
@@ -229,11 +229,11 @@ def test_do_not_disrupt_annotation_only_on_reformat_jobs() -> None:
     def annotations(obj: dict[str, Any], *, cron: bool) -> dict[str, str]:
         return pod_template(obj, cron=cron)["metadata"]["annotations"]
 
-    assert annotations(reformat.as_kubernetes_object(), cron=True) == {
-        "karpenter.sh/do-not-disrupt": "true"
-    }
-    assert annotations(validate.as_kubernetes_object(), cron=True) == {}
-    assert annotations(backfill.as_kubernetes_object(), cron=False) == {}
+    do_not_disrupt = {"karpenter.sh/do-not-disrupt": "true"}
+    assert annotations(reformat.as_kubernetes_object(), cron=True) == do_not_disrupt
+    assert annotations(validate.as_kubernetes_object(), cron=True) == do_not_disrupt
+    # A backfill worker carries many region jobs, so it loses the most to an eviction.
+    assert annotations(backfill.as_kubernetes_object(), cron=False) == do_not_disrupt
 
 
 def test_kubernetes_job_name() -> None:
