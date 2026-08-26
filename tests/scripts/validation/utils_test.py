@@ -11,6 +11,7 @@ from scripts.validation.utils import (
     load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
+    roll_to_monotonic_longitude,
     var_slug,
     vertical_dims,
 )
@@ -139,21 +140,55 @@ def test_get_two_random_points_pins_provided_points() -> None:
     assert (lat2, lon2) == (39.0, -96.0)
 
 
-def test_load_zarr_dataset_adds_geographic_xy_coordinates(tmp_path: Path) -> None:
-    y = np.arange(-2, 2.5, 0.5)
-    x = np.arange(0, 3, 0.5)
+def _geographic_xy_store(tmp_path: Path) -> str:
+    """A store shaped like the WeatherNext 2 products: geographic y/x dimension
+    coordinates, latitude ascending and longitude spanning 0 to 360."""
+    y = np.arange(-90, 91, 45)  # -90, -45, 0, 45, 90
+    x = np.arange(0, 360, 45)  # 0, 45, ..., 315
     store_path = tmp_path / "wn2.zarr"
     xr.Dataset(
-        {"temperature_2m": (("y", "x"), np.zeros((len(y), len(x))))},
+        {
+            "temperature_2m": (
+                ("y", "x"),
+                np.arange(len(y) * len(x), dtype="float32").reshape(len(y), len(x)),
+            )
+        },
         coords={"y": y, "x": x},
         attrs={"dataset_id": "google-weathernext2-forecast-operational-virtual"},
     ).to_zarr(store_path, zarr_format=3, consolidated=True)
+    return str(store_path)
 
-    ds = load_zarr_dataset(str(store_path))
+
+def test_load_zarr_dataset_labels_geographic_xy_in_reference_convention(
+    tmp_path: Path,
+) -> None:
+    ds = load_zarr_dataset(_geographic_xy_store(tmp_path))
 
     assert ds["latitude"].dims == ("y", "x")
     assert ds["longitude"].dims == ("y", "x")
-    # y holds latitudes and x holds longitudes, so (1.0, 1.5) is y=6, x=3.
-    assert nearest_point_index(ds, 1.0, 1.5) == {"y": 6, "x": 3}
-    _, _, (lat1, lon1), _ = get_two_random_points(ds, [(1.0, 1.5)])
-    assert (lat1, lon1) == (1.0, 1.5)
+    np.testing.assert_array_equal(
+        ds["longitude"].values[0], [0, 45, 90, 135, -180, -135, -90, -45]
+    )
+    # 225 degrees east is labelled -135, at x=5, and 45 north is y=3.
+    assert nearest_point_index(ds, 45.0, -135.0) == {"y": 3, "x": 5}
+    _, _, (lat1, lon1), _ = get_two_random_points(ds, [(45.0, -135.0)])
+    assert (lat1, lon1) == (45.0, -135.0)
+
+
+def test_roll_to_monotonic_longitude_orders_x_without_moving_values(
+    tmp_path: Path,
+) -> None:
+    ds = load_zarr_dataset(_geographic_xy_store(tmp_path))
+    cell = ds["temperature_2m"].isel(y=3, x=5).item()
+
+    rolled = roll_to_monotonic_longitude(ds)
+
+    longitudes = rolled["longitude"].values[0]
+    assert (np.diff(longitudes) > 0).all()
+    assert rolled["temperature_2m"].sel(y=45).isel(x=1).item() == cell
+    assert longitudes[1] == -135.0
+
+
+def test_roll_to_monotonic_longitude_leaves_other_datasets_alone() -> None:
+    ds = _projected_ds()
+    assert roll_to_monotonic_longitude(ds) is ds

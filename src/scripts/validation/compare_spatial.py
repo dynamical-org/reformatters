@@ -25,6 +25,7 @@ from scripts.validation.utils import (
     reference_url_option,
     resolve_output_dir,
     resolve_reference_url,
+    roll_to_monotonic_longitude,
     scope_time_period,
     select_random_ensemble_member,
     select_var_level,
@@ -326,7 +327,7 @@ def run_compare_spatial(ctx: RunContext) -> None:
         ds, ref_ds = align_to_valid_time_analysis(
             validation_ds, spatially_aligned_ref, ctx.time
         )
-    ds = _downsample_for_plot(ds)
+    ds = roll_to_monotonic_longitude(_downsample_for_plot(ds))
 
     val_time_label = _format_spatial_time_label(ds, is_forecast)
     ref_time_label = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")

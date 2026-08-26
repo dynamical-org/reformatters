@@ -402,13 +402,32 @@ _GEOGRAPHIC_XY_DATASET_IDS = frozenset(
 
 def _add_geographic_xy_coordinates(ds: xr.Dataset) -> xr.Dataset:
     """Give a geographic y/x dataset the 2D latitude/longitude auxiliary coordinates
-    every other y/x dataset carries, so the rest of this tooling treats it uniformly."""
+    every other y/x dataset carries, so the rest of this tooling treats it uniformly.
+
+    The x axis holds 0 to 360 longitudes, which are labelled -180 to 180 here to match
+    every reference dataset. Labels beyond 180 degrees would otherwise select the
+    reference's easternmost column instead of the intended point.
+    """
     if ds.attrs.get("dataset_id") not in _GEOGRAPHIC_XY_DATASET_IDS:
         return ds
-    latitude, longitude = np.meshgrid(ds["y"].values, ds["x"].values, indexing="ij")
+    latitude, longitude = np.meshgrid(
+        ds["y"].values, ((ds["x"].values + 180) % 360) - 180, indexing="ij"
+    )
     return ds.assign_coords(
         latitude=(("y", "x"), latitude), longitude=(("y", "x"), longitude)
     )
+
+
+def roll_to_monotonic_longitude(ds: xr.Dataset) -> xr.Dataset:
+    """Order a geographic y/x dataset's x axis so its longitude labels ascend.
+
+    Call this on an already selected plotting slice: rolling is not lazy, so rolling a
+    whole archive-scale dataset would read all of it.
+    """
+    if ds.attrs.get("dataset_id") not in _GEOGRAPHIC_XY_DATASET_IDS:
+        return ds
+    western_hemisphere_columns = int((ds["longitude"].values[0] < 0).sum())
+    return ds.roll(x=western_hemisphere_columns, roll_coords=True)
 
 
 def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
