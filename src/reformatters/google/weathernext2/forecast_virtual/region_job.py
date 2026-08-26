@@ -39,8 +39,13 @@ _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
 _PUBLICATION_LAG = pd.Timedelta("48h")
-ROOT_MANIFEST_INIT_SPLIT = 32
-PRESSURE_MANIFEST_INIT_SPLIT = 4
+# The two layouts pack chunks differently, so one init spans 13,440 refs in the
+# historical product and 330,240 in the operational one. Splits are sized per product
+# and per array group to keep each manifest inside the reader budgets in
+# docs/virtual_datasets.md while limiting the archive's total manifest count.
+HISTORICAL_MANIFEST_INIT_SPLIT = 128
+OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
+OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
 
 log = get_logger(__name__)
 
@@ -390,7 +395,7 @@ class GoogleWeathernext2ForecastHistoricalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "historical"
-    manifest_init_split: ClassVar[int] = ROOT_MANIFEST_INIT_SPLIT
+    manifest_init_split: ClassVar[int] = HISTORICAL_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("1D")
 
 
@@ -399,7 +404,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
-    manifest_init_split: ClassVar[int] = PRESSURE_MANIFEST_INIT_SPLIT
+    manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18D")
 
 

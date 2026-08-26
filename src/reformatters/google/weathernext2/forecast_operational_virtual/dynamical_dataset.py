@@ -8,8 +8,8 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
-    PRESSURE_MANIFEST_INIT_SPLIT,
-    ROOT_MANIFEST_INIT_SPLIT,
+    OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
+    OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
     weathernext2_virtual_chunk_containers,
@@ -40,8 +40,8 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             containers=weathernext2_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": PRESSURE_MANIFEST_INIT_SPLIT,
-                    None: ROOT_MANIFEST_INIT_SPLIT,
+                    r"^/pressure_level/": OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
+                    None: OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
                 },
                 dim="init_time",
             ),

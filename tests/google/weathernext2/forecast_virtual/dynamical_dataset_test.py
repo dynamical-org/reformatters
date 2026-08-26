@@ -52,13 +52,11 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
         isinstance(item, validation.CheckVirtualDecodeHealth)
         for item in dataset.validators()
     )
-    assert (
-        _resolved_split_size(
-            dataset.icechunk_virtual_config.manifest_split,
-            "/pressure_level/temperature",
-        )
-        == 32
-    )
+    # The historical layout packs 4 members and all 13 levels per chunk, so both array
+    # groups hold the same refs per init and take one coarse split.
+    split = dataset.icechunk_virtual_config.manifest_split
+    assert _resolved_split_size(split, "/pressure_level/temperature") == 128
+    assert _resolved_split_size(split, "/temperature_2m") == 128
 
 
 def test_operational_product_has_lag_aware_crons_and_splits(tmp_path: Path) -> None:
