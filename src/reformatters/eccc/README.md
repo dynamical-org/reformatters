@@ -25,16 +25,25 @@ addition to the day's roughly 80,000 file downloads. Reformatter updates add abo
 6,600 requests, for a total near 730,000 requests per day.
 
 The archive enables `--http-no-head`, reducing traversal to roughly one GET per
-directory, or about 1,600 enumeration requests per day. Downloads and reformatter
-updates bring the resulting total to about 88,000 requests per day, so contacting MSC
-is still required.
+directory. It also skips initializations less than six hours old; at the four scheduled
+run times, this leaves 22 date and initialization-hour pairs to examine per day. The
+result is about 1,100 enumeration requests per day. Downloads and reformatter updates
+bring the total to about 88,000 requests per day, so contacting MSC is still required.
 
 Without HEAD requests, rclone does not know source file sizes or modification times
-while listing. `--ignore-existing` still unconditionally skips paths already present at
-the destination, but rclone cannot use an age filter to avoid a source file that has
-become visible while it is still being published. If such a file were copied, later
-archive runs would not repair it automatically. The archive schedule normally starts
-after a complete run is available, but this residual risk remains.
+while listing. New objects therefore have an epoch rclone modification time, while
+objects archived before this change retain the Datamart time. Do not use rclone-visible
+modification times across this transition for age or inventory decisions. A 32 MiB
+streaming upload cutoff buffers each current GRIB before upload so its unknown source
+size does not force an S3 multipart upload.
+
+`--ignore-existing` still unconditionally skips paths already present at the
+destination. Because an unknown source size also prevents rclone's post-transfer size
+comparison, the archiver waits until an initialization is at least six hours old. The
+scheduled cron therefore archives a run at about init+10h, more than six hours after
+the observed init+3h49m p99 publication time. If an exceptionally late file were still
+being published then, later archive runs would not repair it automatically; this
+residual risk remains.
 
 ### Testing locally
 
