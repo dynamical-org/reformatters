@@ -401,6 +401,16 @@ def test_cf_data_variables_have_long_name(
 # --- CF standard_name and units validation ---
 
 # Variable names for which CF Conventions does NOT define a standard name.
+# Standard names accepted for CF but not yet in a published table, with the canonical
+# units the accepted entry defines. Move each to the table check by refreshing
+# cf-standard-name-table.xml once the release carrying it is out.
+CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
+    # Accepted 2026-06-24, after table v94 was cut; covers frozen lake water as well as
+    # frozen sea water, which is what HRRR's ice cover reports.
+    # https://github.com/cf-convention/vocabularies/issues/271
+    "floating_ice_area_fraction": "1",
+}
+
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "percent_frozen_precipitation_surface",
     "categorical_snow_surface",
@@ -543,6 +553,15 @@ def test_cf_standard_name_and_units(
             continue
 
         # standard_name is set — validate it
+        if standard_name in CF_STANDARD_NAMES_PENDING_PUBLICATION:
+            expected_units = CF_STANDARD_NAMES_PENDING_PUBLICATION[standard_name]
+            if units != expected_units:
+                errors.append(
+                    f"Variable '{var_config.name}' has standard_name='{standard_name}' "
+                    f"with units='{units}', but the accepted CF entry defines "
+                    f"'{expected_units}'."
+                )
+            continue
         if standard_name not in cf_standard_name_to_canonical_units:
             errors.append(
                 f"Variable '{var_config.name}' has standard_name='{standard_name}', "
@@ -835,6 +854,131 @@ def test_ecmwf_parameter_compliance(
 # Format: (variable_or_coord_name, attribute_name, dataset_id)
 # These are intentional exceptions where source data conventions differ.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # HRRR is on a Lambert-conformal grid whose GRIB messages set the grid-relative
+    # wind flag, so its components follow the grid axes (x_wind/y_wind) rather than
+    # east and north. The lat-lon datasets carry genuinely earth-relative winds.
+    ("wind_u_10m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u_10m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v_10m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u_80m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v_80m", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_u", "standard_name", "noaa-hrrr-analysis"),
+    ("wind_v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("wind_v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("wind_v", "standard_name", "noaa-hrrr-analysis"),
+    ("10u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("10u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10u", "standard_name", "noaa-hrrr-analysis"),
+    ("10v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("10v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10v", "standard_name", "noaa-hrrr-analysis"),
+    ("80u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("80u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80u", "standard_name", "noaa-hrrr-analysis"),
+    ("80v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("80v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80v", "standard_name", "noaa-hrrr-analysis"),
+    ("u", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("u", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("u", "standard_name", "noaa-hrrr-analysis"),
+    ("v", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("v", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("v", "standard_name", "noaa-hrrr-analysis"),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "10 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "10 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10 metre U wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "10 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "10 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("10 metre V wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "80 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "80 metre U wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80 metre U wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-analysis-virtual"),
+    (
+        "80 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "80 metre V wind component",
+        "standard_name",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("80 metre V wind component", "standard_name", "noaa-hrrr-analysis"),
+    ("U component of wind", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("U component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("U component of wind", "standard_name", "noaa-hrrr-analysis"),
+    ("V component of wind", "standard_name", "noaa-hrrr-analysis-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
+    ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
+    ("V component of wind", "standard_name", "noaa-hrrr-analysis"),
     # U Arizona SWANN uses mm for snow variables to match source data conventions,
     # while other datasets use CF-compliant meters.
     # Excepted by var_name, short_name, and long_name since all three groupings detect the conflict.

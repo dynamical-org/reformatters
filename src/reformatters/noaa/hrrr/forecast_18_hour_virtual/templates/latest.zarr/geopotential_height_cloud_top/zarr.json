@@ -39,7 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height_at_cloud_top",
     "units": "m",
-    "comment": "NaN where no cloud was detected.",
+    "comment": "NaN where no cloud top was detected.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

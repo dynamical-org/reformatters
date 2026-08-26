@@ -204,7 +204,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="10 metre U wind component",
                     units="m s-1",
                     step_type="instant",
-                    standard_name="eastward_wind",
+                    standard_name="x_wind",
+                    comment="Velocity along the model grid's x dimension, not eastward velocity.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="UGRD",
@@ -223,7 +224,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="10 metre V wind component",
                     units="m s-1",
                     step_type="instant",
-                    standard_name="northward_wind",
+                    standard_name="y_wind",
+                    comment="Velocity along the model grid's y dimension, not northward velocity.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VGRD",
@@ -550,7 +552,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="80 metre U wind component",
                     units="m s-1",
                     step_type="instant",
-                    standard_name="eastward_wind",
+                    standard_name="x_wind",
+                    comment="Velocity along the model grid's x dimension, not eastward velocity.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="UGRD",
@@ -569,7 +572,8 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     long_name="80 metre V wind component",
                     units="m s-1",
                     step_type="instant",
-                    standard_name="northward_wind",
+                    standard_name="y_wind",
+                    comment="Velocity along the model grid's y dimension, not northward velocity.",
                 ),
                 internal_attrs=NoaaHrrrInternalAttrs(
                     grib_element="VGRD",
