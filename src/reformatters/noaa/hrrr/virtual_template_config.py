@@ -904,10 +904,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             "temperature_surface",
             element="TMP",
             level="surface",
-            short_name="t",
-            long_name="Temperature",
+            short_name="skt",
+            long_name="Skin temperature",
             units="degree_Celsius",
-            standard_name="air_temperature",
+            standard_name="surface_temperature",
         ),
         root_var(
             "total_snowfall_run_total_surface",
@@ -1418,7 +1418,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             element="TCDC",
             level="boundary layer cloud layer",
             short_name="tcc",
-            long_name="Total cloud cover",
+            long_name="Boundary layer cloud cover",
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
@@ -1566,6 +1566,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="vbdsf",
             long_name="Visible Beam Downward Solar Flux",
             units="W m-2",
+            comment=(
+                "Broadband and direct-normal despite this variable's name: not visible-band, "
+                "and measured perpendicular to the sun's rays rather than on a horizontal "
+                "surface."
+            ),
         ),
         root_var(
             "visible_diffuse_downward_solar_flux_surface",
@@ -1574,6 +1579,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="vddsf",
             long_name="Visible Diffuse Downward Solar Flux",
             units="W m-2",
+            comment=("Broadband despite this variable's name, not visible-band."),
         ),
         root_var(
             "upward_short_wave_radiation_flux_top_of_atmosphere",
@@ -1682,6 +1688,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=(
+                "Where the freezing level is at or below ground this reports the surface "
+                "pressure; geopotential_height_0c_isotherm is NaN in the same locations."
+            ),
         ),
         root_var(
             "geopotential_height_highest_tropospheric_freezing_level",
@@ -1711,6 +1721,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=(
+                "Where the freezing level is at or below ground this reports the surface "
+                "pressure; geopotential_height_highest_tropospheric_freezing_level is NaN "
+                "in the same locations."
+            ),
         ),
         root_var(
             "geopotential_height_263k",
@@ -1904,6 +1919,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Land-sea mask",
             units="1",
             standard_name="land_binary_mask",
+            flag_values=(0, 1),
+            flag_meanings="sea land",
         ),
         root_var(
             "ice_cover_surface",

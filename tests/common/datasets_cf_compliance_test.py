@@ -705,6 +705,7 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "FLASH QPE-to-FFG percentage maximum",
     # HRRR forecast-48-hour-virtual fields with no ECMWF parameter-database entry.
     "Aerosol optical thickness",
+    "Boundary layer cloud cover",
     "Column-integrated mass density",
     "Critical angle",
     "Echo top",

@@ -35,7 +35,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Total cloud cover",
+    "long_name": "Boundary layer cloud cover",
     "short_name": "tcc",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",

@@ -3015,6 +3015,11 @@
           "standard_name": "land_binary_mask",
           "units": "1",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "sea land",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -6960,6 +6965,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_0c_isotherm is NaN in the same locations.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7127,6 +7133,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_highest_tropospheric_freezing_level is NaN in the same locations.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9769,9 +9776,9 @@
           }
         ],
         "attributes": {
-          "long_name": "Temperature",
-          "short_name": "t",
-          "standard_name": "air_temperature",
+          "long_name": "Skin temperature",
+          "short_name": "skt",
+          "standard_name": "surface_temperature",
           "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -9879,7 +9886,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Total cloud cover",
+          "long_name": "Boundary layer cloud cover",
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
@@ -11117,6 +11124,7 @@
           "long_name": "Visible Beam Downward Solar Flux",
           "short_name": "vbdsf",
           "units": "W m-2",
+          "comment": "Broadband and direct-normal despite this variable's name: not visible-band, and measured perpendicular to the sun's rays rather than on a horizontal surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11171,6 +11179,7 @@
           "long_name": "Visible Diffuse Downward Solar Flux",
           "short_name": "vddsf",
           "units": "W m-2",
+          "comment": "Broadband despite this variable's name, not visible-band.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
