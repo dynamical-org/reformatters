@@ -570,6 +570,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Maximum/Composite radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "echo_top",
@@ -606,6 +610,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "derived_radar_reflectivity_4000m",
@@ -615,6 +623,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "derived_radar_reflectivity_263k",
@@ -624,6 +636,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "wind_gust_surface",
@@ -685,6 +701,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Hourly maximum of simulated reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "0 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "maximum_derived_radar_reflectivity_263k",
@@ -695,6 +715,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "0 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "maximum_updraft_helicity_5000_2000m",
