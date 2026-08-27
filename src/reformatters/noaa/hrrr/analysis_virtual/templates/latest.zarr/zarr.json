@@ -2157,7 +2157,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where no cloud was detected.",
+          "comment": "NaN where no cloud was detected. Due to bit-packing in the source, heights above 8191.875 m wrap to that much below their true value, affecting about 8% of cells with cloud; use pressure_cloud_base instead.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

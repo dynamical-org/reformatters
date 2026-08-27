@@ -1442,7 +1442,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            comment="NaN where no cloud was detected.",
+            comment=(
+                "NaN where no cloud was detected. Due to bit-packing in the source, "
+                "heights above 8191.875 m wrap to that much below their true value, "
+                "affecting about 8% of cells with cloud; use pressure_cloud_base instead."
+            ),
         ),
         root_var(
             "pressure_cloud_base",
