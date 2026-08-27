@@ -1092,7 +1092,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_run",
             short_name="frozr",
-            long_name="Frozen rain",
+            long_name="Ice pellets",
             units="kg m-2",
             comment=(
                 "Ice pellet (sleet) accumulation from the source's FROZR element, "
@@ -1155,7 +1155,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_1h",
             short_name="frozr",
-            long_name="Frozen rain",
+            long_name="Ice pellets",
             units="kg m-2",
             comment=(
                 "Ice pellet (sleet) accumulation from the source's FROZR element, "

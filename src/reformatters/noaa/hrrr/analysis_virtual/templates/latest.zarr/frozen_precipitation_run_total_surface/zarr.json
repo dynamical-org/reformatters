@@ -33,7 +33,7 @@
     }
   ],
   "attributes": {
-    "long_name": "Frozen rain",
+    "long_name": "Ice pellets",
     "short_name": "frozr",
     "units": "kg m-2",
     "comment": "Identical to the one hour accumulated frozen_precipitation_surface in this analysis dataset. Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100.",
