@@ -72,9 +72,7 @@ class NoaaHrrrAnalysisVirtualRegionJob(
     def representative_var(
         self, coord: NoaaHrrrAnalysisVirtualSourceFileCoord
     ) -> NoaaHrrrDataVar:
-        """Probe a variable HRRR has consistently available across all time periods;
-        the base class's first-instant pick can land on a slot the source only began
-        publishing partway through the archive."""
+        """Specific representative vars known to be present continuously throughout the archive."""
         match (coord.file_type, whole_hours(coord.lead_time)):
             case ("sfc", 0):
                 paths = ("composite_reflectivity", "temperature_2m")
