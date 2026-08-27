@@ -1050,7 +1050,7 @@ class TestReplicaOrdering:
     Setup ordering: _parallel_setup passes ic_stores[0] (primary, per
     icechunk_repos(sort="primary-first")) as primary_store to
     commit_if_icechunk. commit_if_icechunk is separately verified to commit
-    replicas first in tests/common/test_storage.py.
+    replicas first in tests/common/storage_test.py.
 
     Finalize ordering: _finalize publishes zarr v3 stores (only ever replicas)
     before icechunk ones, and iterates icechunk_repos(sort="primary-last") for

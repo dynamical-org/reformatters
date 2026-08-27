@@ -3,7 +3,7 @@
 Exercises the coordination logic in isolation by stubbing out zarr/icechunk
 I/O with fakes and monkeypatching. End-to-end coverage — including real
 zarr writes, real icechunk sessions, and worker restart semantics —
-lives in tests/common/test_parallel_writes.py.
+lives in tests/common/parallel_writes_test.py.
 """
 
 import json
