@@ -39,7 +39,7 @@ src/reformatters/
 ├── example_materialized/    # Teaching template for a materialized (time-optimized) dataset
 └── example_virtual/         # Teaching template for a virtual (spatial-optimized) dataset
 
-tests/                       # Mirrors src/ structure; `<module>.py` is tested by `<module>_test.py` alongside it
+tests/                       # Mirrors src/ structure; `<module>.py` is tested by `<module>_test.py`
 docs/
 ├── dataset_development_guide.md      # explore→implement→backfill→validate→publish
 ├── implementation_guide.md           # Step-by-step new dataset implementation walkthrough
