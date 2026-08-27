@@ -39,9 +39,9 @@
     }
   ],
   "attributes": {
-    "long_name": "Temperature",
-    "short_name": "t",
-    "standard_name": "air_temperature",
+    "long_name": "Skin temperature",
+    "short_name": "skt",
+    "standard_name": "surface_temperature",
     "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",

@@ -38,6 +38,7 @@
     "long_name": "Visible Diffuse Downward Solar Flux",
     "short_name": "vddsf",
     "units": "W m-2",
+    "comment": "Broadband despite this variable's name, not visible-band.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

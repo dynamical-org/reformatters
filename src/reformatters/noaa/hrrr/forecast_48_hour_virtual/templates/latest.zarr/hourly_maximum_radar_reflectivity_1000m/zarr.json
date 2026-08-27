@@ -39,6 +39,7 @@
     "short_name": "maxref",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
+    "comment": "0 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

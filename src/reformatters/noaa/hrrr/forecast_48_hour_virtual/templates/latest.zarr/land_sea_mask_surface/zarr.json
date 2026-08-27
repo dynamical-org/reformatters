@@ -40,6 +40,11 @@
     "standard_name": "land_binary_mask",
     "units": "1",
     "step_type": "instant",
+    "flag_values": [
+      0,
+      1
+    ],
+    "flag_meanings": "sea land",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

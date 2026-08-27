@@ -738,6 +738,7 @@
           "short_name": "refc",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1342,6 +1343,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1397,6 +1399,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1452,6 +1455,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2001,9 +2005,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Frozen precipitation",
+          "long_name": "Ice pellets",
           "short_name": "frozr",
           "units": "kg m-2",
+          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2055,9 +2060,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Frozen precipitation",
+          "long_name": "Ice pellets",
           "short_name": "frozr",
           "units": "kg m-2",
+          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_surface by percent_frozen_precipitation_surface / 100.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2153,7 +2159,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2169,9 +2175,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the 253 K level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2208,7 +2215,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2224,9 +2231,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the 263 K level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2334,7 +2342,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where no cloud was detected.",
+          "comment": "NaN where no cloud was detected. Due to bit-packing in the source, heights above 8191.875 m wrap to that much below their true value, affecting about 8% of cells with cloud; use pressure_cloud_base instead.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2835,6 +2843,7 @@
           "short_name": "maxref",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "0 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3006,6 +3015,11 @@
           "standard_name": "land_binary_mask",
           "units": "1",
           "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "sea land",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -3725,6 +3739,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
+          "comment": "0 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6950,6 +6965,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_0c_isotherm is NaN in the same locations.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7117,6 +7133,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_highest_tropospheric_freezing_level is NaN in the same locations.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9759,9 +9776,9 @@
           }
         ],
         "attributes": {
-          "long_name": "Temperature",
-          "short_name": "t",
-          "standard_name": "air_temperature",
+          "long_name": "Skin temperature",
+          "short_name": "skt",
+          "standard_name": "surface_temperature",
           "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -9869,7 +9886,7 @@
           }
         ],
         "attributes": {
-          "long_name": "Total cloud cover",
+          "long_name": "Boundary layer cloud cover",
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
@@ -11107,6 +11124,7 @@
           "long_name": "Visible Beam Downward Solar Flux",
           "short_name": "vbdsf",
           "units": "W m-2",
+          "comment": "Broadband and direct-normal despite this variable's name: not visible-band, and measured perpendicular to the sun's rays rather than on a horizontal surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11161,6 +11179,7 @@
           "long_name": "Visible Diffuse Downward Solar Flux",
           "short_name": "vddsf",
           "units": "W m-2",
+          "comment": "Broadband despite this variable's name, not visible-band.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
