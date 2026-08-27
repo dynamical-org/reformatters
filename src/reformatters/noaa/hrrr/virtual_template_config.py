@@ -1686,6 +1686,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the 263 K level is at or below ground.",
         ),
         root_var(
             "geopotential_height_253k",
@@ -1695,6 +1697,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the 253 K level is at or below ground.",
         ),
         root_var(
             "best_4_layer_lifted_index_180_0mb",

@@ -2153,7 +2153,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2169,9 +2169,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the 253 K level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -2208,7 +2209,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2224,9 +2225,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where the 263 K level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
