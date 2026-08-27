@@ -349,8 +349,18 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     """
     storage = _icechunk_storage(url)
     assert storage is not None, url
+    config = (
+        icechunk.Repository.fetch_config(storage) or icechunk.RepositoryConfig.default()
+    )
+    # A whole-archive scan probes refs from many threads at once. A cache that cannot
+    # hold one manifest split makes every thread materialize its own copy of it, so peak
+    # memory scales with thread count instead of split size — 14 GB on a store whose
+    # splits hold ~1.7M refs. A ref is ~180 B, so 8M refs caches the largest split we
+    # write (see manifest_split in each virtual dataset) in well under 2 GB.
+    config.caching = icechunk.CachingConfig(num_chunk_refs=8_000_000)
     repo = icechunk.Repository.open(
         storage,
+        config=config,
         authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
     )
     return repo.readonly_session("main").store
