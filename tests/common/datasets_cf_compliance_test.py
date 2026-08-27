@@ -710,7 +710,7 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Echo top",
     "Effective layer helicity",
     "Enhanced stretching potential",
-    "Frozen precipitation",
+    "Frozen rain",
     "Hourly maximum of simulated reflectivity",
     "Maximum lightning threat 1 (graupel flux)",
     "Maximum lightning threat 2 (vertically integrated ice)",

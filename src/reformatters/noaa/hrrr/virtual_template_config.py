@@ -1092,8 +1092,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_run",
             short_name="frozr",
-            long_name="Frozen precipitation",
+            long_name="Frozen rain",
             units="kg m-2",
+            comment=(
+                "Ice pellet (sleet) accumulation from the source's FROZR element, "
+                "despite this variable's name. For all frozen precipitation, multiply "
+                "total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100."
+            ),
         ),
         root_var(
             "freezing_rain_run_total_surface",
@@ -1150,8 +1155,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_1h",
             short_name="frozr",
-            long_name="Frozen precipitation",
+            long_name="Frozen rain",
             units="kg m-2",
+            comment=(
+                "Ice pellet (sleet) accumulation from the source's FROZR element, "
+                "despite this variable's name. For all frozen precipitation, multiply "
+                "total_precipitation_surface by percent_frozen_precipitation_surface / 100."
+            ),
         ),
         root_var(
             "categorical_snow_surface",

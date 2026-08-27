@@ -118,11 +118,13 @@ class NoaaHrrrAnalysisVirtualTemplateConfig(NoaaHrrrVirtualTemplateConfig):
 
 
 def _with_run_total_comment(var: NoaaHrrrDataVar, names: set[str]) -> NoaaHrrrDataVar:
-    assert var.attrs.comment is None, f"{var.path} already has a comment"
     hourly_name = var.name.replace("_run_total", "")
-    comment = (
+    window_comment = (
         f"Identical to the one hour accumulated {hourly_name} in this analysis dataset."
         if hourly_name in names
         else "Accumulated over the one hour ending at this time."
+    )
+    comment = (
+        f"{window_comment} {var.attrs.comment}" if var.attrs.comment else window_comment
     )
     return replace(var, attrs=replace(var.attrs, comment=comment))
