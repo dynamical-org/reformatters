@@ -15,11 +15,6 @@ uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 - `s3://dynamical-noaa-hrrr/noaa-hrrr-analysis/v0.1.0.icechunk`
 - `s3://dynamical-dwd-icon-eu/dwd-icon-eu-forecast-5-day/v0.2.0.icechunk`
 
-An icechunk store whose bucket serves no anonymous S3 read (e.g. WeatherNext 2 in the
-private `dynamical-wn2` R2 bucket) is instead reached by its public https URL, which
-these commands accept in the same position:
-`https://pub-<id>.r2.dev/<dataset-id>/<version>.icechunk`.
-
 To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. It prints the primary and replica URLs; pass `--format json` for a machine-readable form.
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type. Virtual stores are slower and their runtime scales differently — see [Virtual and multi-level datasets](#virtual-and-multi-level-datasets) below.
