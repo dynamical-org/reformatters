@@ -50,6 +50,9 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset im
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
+from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
+)
 from reformatters.google.weathernext2.forecast_historical_virtual import (
     GoogleWeathernext2ForecastHistoricalVirtualDataset,
 )
@@ -243,6 +246,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     EcmwfIfsEnsForecast46Day15DegreeDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     EcmwfAifsSingleForecastDataset(
