@@ -21,6 +21,8 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-aifs-single-forecast-validate
         - ecmwf-aifs-single-forecast-virtual-update
         - ecmwf-aifs-single-forecast-virtual-validate
+        - ecmwf-ifs-ens-46-day-6-hourly-update
+        - ecmwf-ifs-ens-46-day-6-hourly-validate
         - ecmwf-ifs-ens-46-day-gribs-archive-grib-files
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-validate
