@@ -16,6 +16,7 @@ import zarr
 from zarr.storage import ObjectStore, StoreLike
 
 from reformatters.common.retry import retry
+from reformatters.common.storage import anonymous_virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
 
 # Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
@@ -310,36 +311,56 @@ def _anonymous_virtual_credentials(
 
     A virtual icechunk store decodes chunks from source files, which requires authorizing
     access to the source buckets. The container set is persisted in the repo config (see
-    docs/virtual_datasets.md); every dynamical source is public S3, so anonymous S3
-    credentials per container prefix suffice. Returns None for a materialized store.
+    docs/virtual_datasets.md). Returns None for a materialized store.
     """
     config = icechunk.Repository.fetch_config(storage)
     containers = config.virtual_chunk_containers if config is not None else None
     if not containers:
         return None
     items = containers.values() if isinstance(containers, dict) else containers
-    prefixes = [c.url_prefix if hasattr(c, "url_prefix") else c for c in items]
-    return icechunk.containers_credentials(
-        {prefix: icechunk.s3_anonymous_credentials() for prefix in prefixes}
+    return anonymous_virtual_chunk_credentials(list(items))
+
+
+def _icechunk_storage(url: str) -> icechunk.Storage | None:
+    """Anonymous read storage for an icechunk store URL, or None if `url` isn't one.
+
+    An `https://` URL reads the store over plain HTTP, which is how a store whose bucket
+    serves no anonymous S3 access is published.
+    """
+    url = url.removesuffix("/")
+    if not url.endswith(".icechunk"):
+        return None
+    if url.startswith(("https://", "http://")):
+        return icechunk.http_storage(url)
+    if not url.startswith("s3://"):
+        return None
+    bucket, _, prefix = url.removeprefix("s3://").partition("/")
+    assert prefix, url
+    return icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
     )
 
 
 def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
-    """Open an s3 icechunk store read-only and anonymously (virtual chunk access included).
+    """Open an icechunk store read-only and anonymously (virtual chunk access included).
 
     Unlike StoreFactory.primary_store this needs no credentials or Kubernetes secret
-    access, so offline validation runs anywhere the bucket is publicly readable.
+    access, so offline validation runs anywhere the store is publicly readable.
     """
-    assert url.startswith("s3://"), url
-    assert url.endswith(".icechunk"), url
-    path = url.removeprefix("s3://")
-    assert "/" in path
-    bucket, prefix = path.split("/", 1)
-    storage = icechunk.s3_storage(
-        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    storage = _icechunk_storage(url)
+    assert storage is not None, url
+    config = (
+        icechunk.Repository.fetch_config(storage) or icechunk.RepositoryConfig.default()
     )
+    # A whole-archive scan probes refs from many threads at once. A cache that cannot
+    # hold one manifest split makes every thread materialize its own copy of it, so peak
+    # memory scales with thread count instead of split size — 14 GB on a store whose
+    # splits hold ~1.7M refs. A ref is ~180 B, so 8M refs caches the largest split we
+    # write (see manifest_split in each virtual dataset) in well under 2 GB.
+    config.caching = icechunk.CachingConfig(num_chunk_refs=8_000_000)
     repo = icechunk.Repository.open(
         storage,
+        config=config,
         authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
     )
     return repo.readonly_session("main").store
@@ -353,7 +374,7 @@ def load_retried(da: xr.DataArray) -> xr.DataArray:
 
 def load_zarr_dataset(url: str) -> xr.Dataset:
     url = url.removesuffix("/")
-    if url.startswith("s3://") and url.endswith(".icechunk"):
+    if url.endswith(".icechunk"):
         store: StoreLike = open_icechunk_readonly(url)
         consolidated = False
     elif url.startswith("s3://"):
@@ -612,16 +633,8 @@ def level_label(stats: VariableStats) -> str:
 
 def is_virtual_store(url: str) -> bool:
     """True if `url` is an icechunk store with persisted virtual chunk containers."""
-    url = url.removesuffix("/")
-    if not (url.startswith("s3://") and url.endswith(".icechunk")):
-        return False
-    path = url.removeprefix("s3://")
-    assert "/" in path
-    bucket, prefix = path.split("/", 1)
-    storage = icechunk.s3_storage(
-        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
-    )
-    return _anonymous_virtual_credentials(storage) is not None
+    storage = _icechunk_storage(url)
+    return storage is not None and _anonymous_virtual_credentials(storage) is not None
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

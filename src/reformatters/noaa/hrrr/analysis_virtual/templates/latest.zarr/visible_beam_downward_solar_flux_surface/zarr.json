@@ -36,6 +36,7 @@
     "long_name": "Visible Beam Downward Solar Flux",
     "short_name": "vbdsf",
     "units": "W m-2",
+    "comment": "Broadband and direct-normal despite this variable's name: not visible-band, and measured perpendicular to the sun's rays rather than on a horizontal surface.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

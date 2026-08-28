@@ -44,7 +44,7 @@ _GRID_NX = 1799
 # 39 isobaric levels (hPa), descending like the GRIB order. The wrfprs 1013.2 mb
 # pseudo-level is excluded - it is not part of the dense 25 hPa column.
 PRESSURE_LEVELS = list(range(1000, 25, -25))  # 1000, 975, ..., 50
-# 50 native hybrid (sigma) model levels, 1 (top) .. 50 (near surface).
+# 50 native hybrid (sigma) model levels, 1 (near surface) .. 50 (top).
 MODEL_LEVELS = list(range(1, 51))
 
 # Air temperature and dew point are served in Celsius to match the materialized
@@ -570,6 +570,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Maximum/Composite radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "echo_top",
@@ -606,6 +610,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "derived_radar_reflectivity_4000m",
@@ -615,6 +623,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "derived_radar_reflectivity_263k",
@@ -624,6 +636,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-10 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "wind_gust_surface",
@@ -685,6 +701,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Hourly maximum of simulated reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "0 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "maximum_derived_radar_reflectivity_263k",
@@ -695,6 +715,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "0 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "maximum_updraft_helicity_5000_2000m",
@@ -880,10 +904,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             "temperature_surface",
             element="TMP",
             level="surface",
-            short_name="t",
-            long_name="Temperature",
+            short_name="skt",
+            long_name="Skin temperature",
             units="degree_Celsius",
-            standard_name="air_temperature",
+            standard_name="surface_temperature",
         ),
         root_var(
             "total_snowfall_run_total_surface",
@@ -1092,8 +1116,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_run",
             short_name="frozr",
-            long_name="Frozen precipitation",
+            long_name="Ice pellets",
             units="kg m-2",
+            comment=(
+                "Ice pellet (sleet) accumulation from the source's FROZR element, "
+                "despite this variable's name. For all frozen precipitation, multiply "
+                "total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100."
+            ),
         ),
         root_var(
             "freezing_rain_run_total_surface",
@@ -1150,8 +1179,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             level="surface",
             window="acc_1h",
             short_name="frozr",
-            long_name="Frozen precipitation",
+            long_name="Ice pellets",
             units="kg m-2",
+            comment=(
+                "Ice pellet (sleet) accumulation from the source's FROZR element, "
+                "despite this variable's name. For all frozen precipitation, multiply "
+                "total_precipitation_surface by percent_frozen_precipitation_surface / 100."
+            ),
         ),
         root_var(
             "categorical_snow_surface",
@@ -1384,7 +1418,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             element="TCDC",
             level="boundary layer cloud layer",
             short_name="tcc",
-            long_name="Total cloud cover",
+            long_name="Boundary layer cloud cover",
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
         ),
@@ -1442,7 +1476,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            comment="NaN where no cloud was detected.",
+            comment=(
+                "NaN where no cloud was detected. Due to bit-packing in the source, "
+                "heights above 8191.875 m wrap to that much below their true value, "
+                "affecting about 8% of cells with cloud; use pressure_cloud_base instead."
+            ),
         ),
         root_var(
             "pressure_cloud_base",
@@ -1528,6 +1566,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="vbdsf",
             long_name="Visible Beam Downward Solar Flux",
             units="W m-2",
+            comment=(
+                "Broadband and direct-normal despite this variable's name: not visible-band, "
+                "and measured perpendicular to the sun's rays rather than on a horizontal "
+                "surface."
+            ),
         ),
         root_var(
             "visible_diffuse_downward_solar_flux_surface",
@@ -1536,6 +1579,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="vddsf",
             long_name="Visible Diffuse Downward Solar Flux",
             units="W m-2",
+            comment=("Broadband despite this variable's name, not visible-band."),
         ),
         root_var(
             "upward_short_wave_radiation_flux_top_of_atmosphere",
@@ -1644,6 +1688,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=(
+                "Where the freezing level is at or below ground this reports the surface "
+                "pressure; geopotential_height_0c_isotherm is NaN in the same locations."
+            ),
         ),
         root_var(
             "geopotential_height_highest_tropospheric_freezing_level",
@@ -1673,6 +1721,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=(
+                "Where the freezing level is at or below ground this reports the surface "
+                "pressure; geopotential_height_highest_tropospheric_freezing_level is NaN "
+                "in the same locations."
+            ),
         ),
         root_var(
             "geopotential_height_263k",
@@ -1682,6 +1735,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the 263 K level is at or below ground.",
         ),
         root_var(
             "geopotential_height_253k",
@@ -1691,6 +1746,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the 253 K level is at or below ground.",
         ),
         root_var(
             "best_4_layer_lifted_index_180_0mb",
@@ -1862,6 +1919,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Land-sea mask",
             units="1",
             standard_name="land_binary_mask",
+            flag_values=(0, 1),
+            flag_meanings="sea land",
         ),
         root_var(
             "ice_cover_surface",

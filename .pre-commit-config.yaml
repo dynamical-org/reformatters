@@ -1,20 +1,22 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    # NOTE: keep this in sync with pyproject.toml
-    rev: v0.16.1
-    hooks:
-      # Run the linter.
-      - id: ruff-check
-      # Run the formatter.
-      - id: ruff-format
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: "uv run ruff check --force-exclude --fix"
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: "uv run ruff format --force-exclude"
+        language: system
+        types_or: [python, pyi]
       - id: ty
         name: ty
         entry: "uv run ty check"
         language: system
         types: [python]
+        pass_filenames: false
         require_serial: true
       - id: generate-manual-workflows
         name: generate manual workflows

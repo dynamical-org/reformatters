@@ -805,7 +805,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     long_name="Snow density",
                     units="kg m-3",
                     step_type="avg",
-                    comment="Mean snow density over the previous 24 hours. Land points only; sea points are missing.",
+                    comment="Mean snow density over the previous 24 hours. Missing where the surface carries no snowpack, including snow-free land.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_density",
@@ -824,7 +824,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     long_name="Snow albedo",
                     units="percent",
                     step_type="avg",
-                    comment="Mean snow albedo over the previous 24 hours. Land points only; sea points are missing.",
+                    comment="Mean snow albedo over the previous 24 hours. Missing where the surface carries no snowpack, including snow-free land.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_albedo",

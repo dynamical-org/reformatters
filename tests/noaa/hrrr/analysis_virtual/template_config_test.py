@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.pydantic import replace
@@ -101,8 +100,12 @@ def test_run_total_comment_does_not_overwrite_intrinsic_metadata() -> None:
     var = get_var("total_precipitation_run_total_surface")
     var = replace(var, attrs=replace(var.attrs, comment="Intrinsic source behavior."))
 
-    with pytest.raises(AssertionError, match="already has a comment"):
-        _with_run_total_comment(var, {v.name for v in CONFIG.data_vars})
+    result = _with_run_total_comment(var, {v.name for v in CONFIG.data_vars})
+
+    assert result.attrs.comment == (
+        "Identical to the one hour accumulated total_precipitation_surface in this "
+        "analysis dataset. Intrinsic source behavior."
+    )
 
 
 def test_one_chunk_per_message_encoding() -> None:

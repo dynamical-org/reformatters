@@ -1,8 +1,13 @@
+from pathlib import Path
+
+import icechunk
 import numpy as np
 import pandas as pd
 import xarray as xr
 
 from scripts.validation.utils import (
+    _anonymous_virtual_credentials,
+    _icechunk_storage,
     choose_level,
     get_random_spatial_indices,
     get_two_random_points,
@@ -160,3 +165,35 @@ def test_to_reference_longitude() -> None:
     assert to_reference_longitude(180.0) == -180.0
     # Already in the reference convention, so unchanged.
     assert to_reference_longitude(-110.0) == -110.0
+
+
+def test_icechunk_storage_routes_by_url_scheme() -> None:
+    https_url = "https://pub-abc.r2.dev/some-dataset/v0.1.0.icechunk"
+    s3_url = "s3://some-bucket/some-dataset/v0.1.0.icechunk"
+    assert _icechunk_storage(https_url) is not None
+    assert _icechunk_storage(s3_url) is not None
+    assert _icechunk_storage("s3://some-bucket/some-dataset/v0.1.0.zarr") is None
+    assert _icechunk_storage("https://example.com/report.html") is None
+
+
+def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) -> None:
+    """An HTTP virtual chunk container needs HttpAccess; icechunk rejects an S3
+    credential handed to one, so a wrong credential kind fails the store open."""
+    container = icechunk.VirtualChunkContainer(
+        "https://example.com/chunks/", icechunk.http_store()
+    )
+    config = icechunk.RepositoryConfig.default()
+    config.set_virtual_chunk_container(container)
+    storage = icechunk.local_filesystem_storage(str(tmp_path / "repo.icechunk"))
+    repo = icechunk.Repository.create(
+        storage,
+        config=config,
+        authorize_virtual_chunk_access={
+            container.url_prefix: icechunk.Credentials.HttpAccess()
+        },
+    )
+    repo.save_config()
+
+    credentials = _anonymous_virtual_credentials(storage)
+    assert credentials is not None
+    icechunk.Repository.open(storage, authorize_virtual_chunk_access=credentials)

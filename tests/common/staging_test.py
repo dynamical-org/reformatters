@@ -1,7 +1,10 @@
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
+from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.staging import (
     _MAX_KUBERNETES_NAME_LENGTH,
@@ -76,10 +79,10 @@ class TestRenameCronjobForStaging:
         assert result.dataset_id == cronjob.dataset_id
         assert result.cpu == cronjob.cpu
 
-    def test_asserts_on_unexpected_name_prefix(self) -> None:
-        cronjob = _make_cronjob("wrong-prefix-update")
-        with pytest.raises(AssertionError):
-            rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
+    def test_uses_the_command_not_the_name_as_the_suffix(self) -> None:
+        cronjob = _make_cronjob("abbreviated-name-update")
+        result = rename_cronjob_for_staging(cronjob, "unabbreviated-id", "0.3.0")
+        assert result.name == "stage-unabbreviated-id-v0-3-0-update"
 
     def test_longest_real_dataset_id_fits(self) -> None:
         # ecmwf-ifs-ens-forecast-15-day-0-25-degree is currently the longest
@@ -87,6 +90,30 @@ class TestRenameCronjobForStaging:
         cronjob = _make_cronjob(f"{dataset_id}-update")
         result = rename_cronjob_for_staging(cronjob, dataset_id, "0.3.0")
         assert len(result.name) <= _MAX_KUBERNETES_NAME_LENGTH
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=[d.dataset_id for d in DYNAMICAL_DATASETS],
+)
+def test_every_dataset_stages_within_the_kubernetes_limit(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    version = dataset.template_config.version
+    staged = [
+        rename_cronjob_for_staging(cronjob, dataset.dataset_id, version)
+        for cronjob in dataset.operational_kubernetes_resources("test:latest")
+    ]
+    for cronjob in staged:
+        assert len(cronjob.name) <= _MAX_KUBERNETES_NAME_LENGTH
+        assert cronjob.dataset_id == dataset.dataset_id
+
+    # cleanup-staging deletes the names it rebuilds from the dataset id, so they must
+    # be the names a staging deploy applies.
+    assert set(staging_cronjob_names(dataset.dataset_id, version)) <= {
+        cronjob.name for cronjob in staged
+    }
 
 
 class TestStagingCronjobNames:

@@ -52,8 +52,7 @@ dev = [
     "pytest~=9.1",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
-    # NOTE: keep this in sync with .pre-commit-config.yaml
-    "ruff==0.16.1",
+    "ruff==0.16.4",
     "ty~=0.0.65",
     "types-boto3>=1.43.5",
     "types-requests~=2.33",

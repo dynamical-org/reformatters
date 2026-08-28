@@ -69,8 +69,8 @@ def test_operational_product_has_lag_aware_crons_and_splits(tmp_path: Path) -> N
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
-    assert update.suspend is True
-    assert validate.suspend is True
+    assert update.suspend is False
+    assert validate.suspend is False
     (current,) = [
         item
         for item in dataset.validators()

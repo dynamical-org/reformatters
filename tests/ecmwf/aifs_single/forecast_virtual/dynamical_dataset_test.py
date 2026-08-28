@@ -65,6 +65,9 @@ def dataset(tmp_path: Path) -> EcmwfAifsSingleForecastVirtualDataset:
 
 
 @pytest.mark.slow
+@pytest.mark.skip(
+    reason="Temporary (2026-08-26): s3://ecmwf-forecasts answers reads with 503 SlowDown too often. Must be re-enabled before ecmwf-aifs-single-forecast-virtual ships to production."
+)
 def test_backfill_local_and_operational_update(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

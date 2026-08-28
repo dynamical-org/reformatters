@@ -168,9 +168,10 @@ class VirtualRegionJob(
         be a variable the file's refs actually cover. Default: the first instant var
         (most likely to have data at every step) among the vars the file carries —
         `coord.data_vars` if it declares which subset it packs, else all of
-        self.data_vars — falling back to the first such var. Override only for a
-        packing neither rule captures (e.g. one variable per file keyed off the
-        coord rather than its data_vars).
+        self.data_vars — falling back to the first such var. Override for a packing
+        neither rule captures (e.g. one variable per file keyed off the coord rather
+        than its data_vars), or to name variables the source has published in every
+        era when the default pick would land on one it added partway through.
         """
         file_vars = getattr(coord, "data_vars", None) or self.data_vars
         return next(

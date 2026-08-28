@@ -175,11 +175,11 @@ def test_as_kubernetes_object_comprehensive() -> None:
     assert k8s_obj["spec"] == expected_spec
 
 
-def _cron_job_with_name(name: str) -> CronJob:
-    return CronJob(
+def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> CronJob:
+    return cron_job_class(
         name=name,
         schedule="0 * * * *",
-        command=["archive-grib-files"],
+        command=[name.rsplit("-", maxsplit=1)[-1]],
         image="img:v1",
         dataset_id="archive",
         cpu="1",
@@ -189,10 +189,25 @@ def _cron_job_with_name(name: str) -> CronJob:
     )
 
 
-def test_cron_job_name_respects_kubernetes_length_limit() -> None:
-    _cron_job_with_name("a" * 52)
+@pytest.mark.parametrize(
+    ("cron_job_class", "suffix"),
+    [
+        (CronJob, "-update"),
+        (ReformatCronJob, "-update"),
+        (ValidationCronJob, "-validate"),
+    ],
+)
+def test_cron_job_name_respects_kubernetes_length_limit(
+    cron_job_class: type[CronJob], suffix: str
+) -> None:
+    """Every operational cron job class must enforce the limit, not just the base class.
+
+    A subclass that redeclares `name` without nesting `CronJobName` silently drops
+    the constraint.
+    """
+    _cron_job_with_name("a" * (52 - len(suffix)) + suffix, cron_job_class)
     with pytest.raises(ValidationError, match="at most 52 characters"):
-        _cron_job_with_name("a" * 53)
+        _cron_job_with_name("a" * (53 - len(suffix)) + suffix, cron_job_class)
 
 
 def test_do_not_disrupt_annotation_on_every_job() -> None:

@@ -192,7 +192,7 @@ class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
     k8s secret, which holds `icechunk.s3_storage` kwargs.
     """
 
-    base_path: str = "s3://dynamical-wn2"
+    base_path: str = "s3://dynamical-google-weathernext2"
     k8s_secret_name: str = "weathernext2-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 

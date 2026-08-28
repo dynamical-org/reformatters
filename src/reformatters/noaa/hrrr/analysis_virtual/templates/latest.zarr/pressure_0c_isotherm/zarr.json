@@ -37,6 +37,7 @@
     "short_name": "pres",
     "standard_name": "air_pressure",
     "units": "Pa",
+    "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_0c_isotherm is NaN in the same locations.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
