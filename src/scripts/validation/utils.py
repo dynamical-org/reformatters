@@ -539,17 +539,29 @@ def get_random_spatial_indices(
     return point1_sel, point2_sel
 
 
+def _longitude_difference(grid_longitude: np.ndarray, lon: float) -> np.ndarray:
+    """Signed degrees from `lon` to each grid longitude, the short way around.
+
+    Grids label longitude either -180 to 180 or 0 to 360, so a plain subtraction sends a
+    request in the other convention to the wrong side of the world: on a 0-360 grid the
+    cell nearest -100 is 260, whose difference is 360. Wrapping also makes the search
+    behave across the antimeridian seam.
+    """
+    return (grid_longitude - lon + 180) % 360 - 180
+
+
 def nearest_point_index(ds: xr.Dataset, lat: float, lon: float) -> dict[str, int]:
     """Grid-cell index dict nearest a target lat/lon, for 1D geographic or 2D projected grids."""
     lat_dim, lon_dim = get_spatial_dimensions(ds)
     if lat_dim == "latitude" and lon_dim == "longitude":
         lat_idx = int(np.abs(ds.latitude.values - lat).argmin())
-        lon_idx = int(np.abs(ds.longitude.values - lon).argmin())
+        lon_idx = int(np.abs(_longitude_difference(ds.longitude.values, lon)).argmin())
         return {lat_dim: lat_idx, lon_dim: lon_idx}
     lat2d = ds.latitude.values
     lon2d = ds.longitude.values
     # Equirectangular approximation; exact enough to pick a grid cell at CONUS scale.
-    dist = (lat2d - lat) ** 2 + ((lon2d - lon) * np.cos(np.deg2rad(lat))) ** 2
+    dlon = _longitude_difference(lon2d, lon)
+    dist = (lat2d - lat) ** 2 + (dlon * np.cos(np.deg2rad(lat))) ** 2
     y_idx, x_idx = (int(i) for i in np.unravel_index(int(np.argmin(dist)), dist.shape))
     return {"y": y_idx, "x": x_idx}
 

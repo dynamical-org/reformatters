@@ -236,3 +236,18 @@ def test_concurrent_load_workers_counts_only_the_chunks_a_load_spans() -> None:
     assert concurrent_load_workers(1000, chunk_nbytes, cap=4) == 1
     # A single-chunk load holds one chunk, so several run side by side.
     assert concurrent_load_workers(1, chunk_nbytes, cap=4) == 4
+
+
+def test_nearest_point_index_accepts_either_longitude_convention() -> None:
+    ds = xr.Dataset(
+        coords={
+            "latitude": np.arange(-90.0, 91.0, 1.0),
+            "longitude": np.arange(0.0, 360.0, 1.0),
+        }
+    )
+    # A 0-360 grid has no -100 label; the cell meant is 260, not the 0 a plain
+    # nearest-value search lands on.
+    assert nearest_point_index(ds, 40.0, -100.0) == {"latitude": 130, "longitude": 260}
+    assert nearest_point_index(ds, 40.0, 260.0) == {"latitude": 130, "longitude": 260}
+    # And the seam is crossed the short way round.
+    assert nearest_point_index(ds, 0.0, -0.4) == {"latitude": 90, "longitude": 0}
