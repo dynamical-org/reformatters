@@ -159,9 +159,10 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
 
     fig_height = max(3.0, 0.16 * len(var_names) + 1.5)
     fig, ax = plt.subplots(figsize=(_HEATMAP_WIDTH_INCHES, fig_height))
-    ax.set_facecolor("lightgrey")  # masked (not probed) cells show the axes background
+    # A position with no source file carrying the variable holds no data either, so it
+    # reads as unavailable rather than as a third, unactionable category.
     ax.imshow(
-        np.ma.masked_invalid(display),
+        np.nan_to_num(display, nan=0.0),
         aspect="auto",
         interpolation="nearest",
         cmap=_AVAILABILITY_CMAP,
