@@ -1,7 +1,9 @@
 import pytest
 
 from reformatters.common import validation
-from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    MATERIALIZED_PRODUCT_ECDS_VARIABLES,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
 )
@@ -27,20 +29,10 @@ def test_dataset_reuses_the_shared_region_job(
 def test_dataset_variables_are_archived_at_native_resolution(
     dataset: EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
 ) -> None:
-    assert (
-        {
-            data_var.internal_attrs.ecds_variable
-            for data_var in dataset.template_config.data_vars
-        }
-        == {
-            "total_precipitation",
-            "10_m_u_component_of_wind",
-            "10_m_v_component_of_wind",
-            "maximum_2_m_temperature_in_the_last_6_hours",
-            "minimum_2_m_temperature_in_the_last_6_hours",
-        }
-        <= set(ECDS_VARIABLES)
-    )
+    assert {
+        data_var.internal_attrs.ecds_variable
+        for data_var in dataset.template_config.data_vars
+    } == set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"])
 
 
 def test_operational_cron_jobs_are_suspended_and_do_not_collide_with_daily(
