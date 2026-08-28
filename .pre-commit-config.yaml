@@ -16,6 +16,7 @@ repos:
         entry: "uv run ty check"
         language: system
         types: [python]
+        pass_filenames: false
         require_serial: true
       - id: generate-manual-workflows
         name: generate manual workflows
