@@ -11,12 +11,14 @@ Entry points: the `decode-scan` command (URL-driven, resolves the registered dat
 the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`.
 """
 
+import math
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
 import typer
+import xarray as xr
 import zarr
 
 from reformatters.common import validation
@@ -33,7 +35,9 @@ from scripts.validation.scan_common import (
 )
 from scripts.validation.utils import (
     RunContext,
+    concurrent_load_workers,
     end_date_option,
+    largest_chunk_nbytes,
     output_dir_option,
     start_date_option,
     variables_option,
@@ -42,14 +46,54 @@ from scripts.validation.utils import (
 log = get_logger(__name__)
 
 MAX_SAMPLED_REGIONS = 20
+decode_samples_option = typer.Option(
+    MAX_SAMPLED_REGIONS,
+    "--decode-samples",
+    "--max-samples",
+    help="Max append-dim regions to decode-check. Lower it on a store whose fields are "
+    "large enough (deep ensembles, every level in one chunk) that the default sample "
+    "would decode terabytes.",
+)
 SAMPLED_LEADS = 5
 SAMPLED_LEVELS = 3
-JOB_CONCURRENCY = 4
+MAX_JOB_CONCURRENCY = 4
+MAX_DECODE_CONCURRENCY = 32
+# A decode pins the append dim and lead time and takes every other dim whole, so these
+# are the dims whose extent does not enter its footprint.
+_PINNED_DIMS = ("init_time", "time", "lead_time")
+
+
+def _decode_chunk_span(ds: xr.Dataset) -> int:
+    """Chunks in the largest field one decode materializes.
+
+    The footprint grows with ensemble size and with how much a chunk carries beyond one
+    field, so a 64-member store whose chunk spans every vertical level decodes orders of
+    magnitude more bytes per call than a single-member one.
+    """
+    spans = [
+        math.prod(
+            math.ceil((1 if dim in _PINNED_DIMS else size) / chunk)
+            for dim, size, chunk in zip(var.dims, var.shape, chunks, strict=True)
+        )
+        for var in ds.data_vars.values()
+        if (chunks := var.encoding.get("chunks")) is not None
+    ]
+    return max(spans, default=1)
+
+
+def _decode_concurrency(chunk_span: int, chunk_nbytes: int) -> tuple[int, int]:
+    """(region jobs, decodes per job) to run at once within the read memory budget."""
+    total = concurrent_load_workers(
+        chunk_span, chunk_nbytes, cap=MAX_JOB_CONCURRENCY * MAX_DECODE_CONCURRENCY
+    )
+    jobs = min(MAX_JOB_CONCURRENCY, total)
+    return jobs, max(1, total // jobs)
 
 
 def _decode_checker(
     dataset: DynamicalDataset[Any, Any],
     reference_exists: Callable[[str, Mapping[str, Any]], bool],
+    max_workers: int,
 ) -> validation.CheckVirtualDecodeHealth:
     configured = next(
         (
@@ -64,6 +108,7 @@ def _decode_checker(
             "positions": 1,
             "sampled_leads": SAMPLED_LEADS,
             "sampled_levels": SAMPLED_LEVELS,
+            "max_workers": max_workers,
             "reference_exists": reference_exists,
         }
     )
@@ -101,7 +146,14 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         f"(sampled_leads={SAMPLED_LEADS}, sampled_levels={SAMPLED_LEVELS})"
     )
 
-    checker = _decode_checker(dataset, reference_exists)
+    job_concurrency, decode_concurrency = _decode_concurrency(
+        _decode_chunk_span(ctx.validation_ds), largest_chunk_nbytes(ctx.validation_ds)
+    )
+    log.info(
+        f"Decode concurrency: {job_concurrency} region job(s) x {decode_concurrency} "
+        "decode(s)"
+    )
+    checker = _decode_checker(dataset, reference_exists, decode_concurrency)
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
         return checker.check(
@@ -118,7 +170,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     decoded_refs = 0
     # A job's decodes are network-latency-bound and parallelize only across its own
     # source files, so a few jobs run concurrently to fill the idle time.
-    with ThreadPoolExecutor(max_workers=JOB_CONCURRENCY) as pool:
+    with ThreadPoolExecutor(max_workers=job_concurrency) as pool:
         for i, result in enumerate(pool.map(check, sampled)):
             log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
             decoded_refs += result.checked_count or 0
@@ -160,11 +212,7 @@ def decode_scan(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     output_dir: Path | None = output_dir_option,
-    max_samples: int = typer.Option(
-        MAX_SAMPLED_REGIONS,
-        "--max-samples",
-        help="Max append-dim regions to decode-check",
-    ),
+    max_samples: int = decode_samples_option,
 ) -> None:
     """Decode a bounded sample of present references across the archive and check health."""
     ctx = build_run_context(

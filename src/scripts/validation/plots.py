@@ -19,7 +19,11 @@ from scripts.validation.compare_timeseries import (
     compare_timeseries,
     run_compare_timeseries,
 )
-from scripts.validation.decode_scan import decode_scan, run_decode_scan
+from scripts.validation.decode_scan import (
+    decode_samples_option,
+    decode_scan,
+    run_decode_scan,
+)
 from scripts.validation.probe_position import probe_position
 from scripts.validation.render import render_report_command
 from scripts.validation.summary import write_summary_md
@@ -105,6 +109,7 @@ def run_all(
     level: float | None = level_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
+    decode_samples: int = decode_samples_option,
 ) -> None:
     """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
@@ -177,7 +182,7 @@ def run_all(
         with ThreadPoolExecutor(max_workers=1) as pool:
             manifest_scan = pool.submit(run_manifest_scan, ctx)
             try:
-                run_decode_scan(ctx)
+                run_decode_scan(ctx, max_samples=decode_samples)
                 run_value_timeseries(ctx)
                 run_compare_timeseries(ctx)
                 run_compare_spatial(ctx)

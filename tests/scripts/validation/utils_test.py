@@ -6,14 +6,19 @@ import pandas as pd
 import xarray as xr
 
 from scripts.validation.utils import (
+    MAX_READ_CONCURRENCY,
+    READ_BUDGET_BYTES,
     _anonymous_virtual_credentials,
     _icechunk_storage,
     choose_level,
+    concurrent_load_workers,
     get_random_spatial_indices,
     get_two_random_points,
+    largest_chunk_nbytes,
     load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
+    read_workers,
     to_reference_longitude,
     var_slug,
     vertical_dims,
@@ -197,3 +202,37 @@ def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) 
     credentials = _anonymous_virtual_credentials(storage)
     assert credentials is not None
     icechunk.Repository.open(storage, authorize_virtual_chunk_access=credentials)
+
+
+def _chunked_var(name: str, chunks: tuple[int, ...]) -> xr.DataArray:
+    dims = tuple(f"{name}_{i}" for i in range(len(chunks)))
+    var = xr.DataArray(np.zeros(chunks, dtype="float32"), dims=dims)
+    var.encoding["chunks"] = chunks
+    return var
+
+
+def test_largest_chunk_nbytes_uses_the_biggest_chunked_variable() -> None:
+    ds = xr.Dataset(
+        {
+            "small": _chunked_var("small", (1, 2, 2)),
+            "big": _chunked_var("big", (1, 4, 2, 2)),
+            "unchunked": xr.DataArray(np.zeros(4, dtype="float32"), dims="u"),
+        }
+    )
+    assert largest_chunk_nbytes(ds) == 4 * 2 * 2 * 4
+
+
+def test_read_workers_scales_down_with_chunk_size() -> None:
+    assert read_workers(READ_BUDGET_BYTES // 64) == MAX_READ_CONCURRENCY
+    assert read_workers(READ_BUDGET_BYTES // 4) == 4
+    # A single chunk over budget still gets one worker rather than none.
+    assert read_workers(READ_BUDGET_BYTES * 4) == 1
+    assert read_workers(0) == MAX_READ_CONCURRENCY
+
+
+def test_concurrent_load_workers_counts_only_the_chunks_a_load_spans() -> None:
+    chunk_nbytes = READ_BUDGET_BYTES // MAX_READ_CONCURRENCY
+    # A load spanning many chunks fills zarr's in-flight budget on its own.
+    assert concurrent_load_workers(1000, chunk_nbytes, cap=4) == 1
+    # A single-chunk load holds one chunk, so several run side by side.
+    assert concurrent_load_workers(1, chunk_nbytes, cap=4) == 4

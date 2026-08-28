@@ -15,13 +15,20 @@ import xarray as xr
 import zarr
 from zarr.storage import ObjectStore, StoreLike
 
+from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.storage import anonymous_virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
 
-# Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
-# concurrency once here; every validation entry point imports this module.
-zarr.config.set({"async.concurrency": 32})
+log = get_logger(__name__)
+
+# Whole-archive scans issue many concurrent object-store reads, so validation raises
+# zarr's async concurrency above the default; every validation entry point imports this
+# module. Each in-flight read holds one decoded chunk, so load_zarr_dataset lowers the
+# count to whatever fits READ_BUDGET_BYTES for the store it just opened.
+READ_BUDGET_BYTES = 2 * 2**30
+MAX_READ_CONCURRENCY = 32
+zarr.config.set({"async.concurrency": MAX_READ_CONCURRENCY})
 
 OUTPUT_DIR = "data/output"
 
@@ -372,6 +379,40 @@ def load_retried(da: xr.DataArray) -> xr.DataArray:
     return retry(da.load)
 
 
+def read_workers(bytes_per_worker: int, cap: int = MAX_READ_CONCURRENCY) -> int:
+    """The largest worker count within `cap` whose in-flight decoded bytes fit the budget.
+
+    Sizing concurrency by operation count alone makes peak memory a property of the
+    store: 32 in-flight reads of a 4 MiB chunk is 128 MiB, but of the 206 MiB chunk a
+    64-member global field uses it is 6.4 GiB.
+    """
+    if bytes_per_worker <= 0:
+        return cap
+    return max(1, min(cap, READ_BUDGET_BYTES // bytes_per_worker))
+
+
+def concurrent_load_workers(chunks_per_load: int, chunk_nbytes: int, cap: int) -> int:
+    """Loads that can run at once within the read budget.
+
+    One load holds up to zarr's in-flight fetch count of decoded chunks, or fewer when
+    it spans fewer chunks than that.
+    """
+    in_flight = min(int(zarr.config.get("async.concurrency")), max(1, chunks_per_load))
+    return read_workers(in_flight * chunk_nbytes, cap=cap)
+
+
+def largest_chunk_nbytes(ds: xr.Dataset) -> int:
+    """Decoded bytes in one chunk of `ds`'s largest-chunked data variable."""
+    return max(
+        (
+            int(np.prod(var.encoding["chunks"])) * var.dtype.itemsize
+            for var in ds.data_vars.values()
+            if var.encoding.get("chunks") is not None
+        ),
+        default=0,
+    )
+
+
 def load_zarr_dataset(url: str) -> xr.Dataset:
     url = url.removesuffix("/")
     if url.endswith(".icechunk"):
@@ -407,6 +448,12 @@ def load_zarr_dataset(url: str) -> xr.Dataset:
     if "longitude" in ds.coords and "latitude" in ds.coords:
         ds.longitude.load()
         ds.latitude.load()
+    # zarr's concurrency is process-global, so a run that opens several stores keeps the
+    # count that fits the largest chunk any of them has.
+    workers = read_workers(largest_chunk_nbytes(ds))
+    if workers < zarr.config.get("async.concurrency"):
+        log.info(f"Lowering zarr read concurrency to {workers} for {url}")
+        zarr.config.set({"async.concurrency": workers})
     return ds
 
 

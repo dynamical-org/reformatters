@@ -13,9 +13,11 @@ from scripts.validation.utils import (
     SPATIAL_DIMS,
     RunContext,
     VariableStats,
+    concurrent_load_workers,
     end_date_option,
     get_two_random_points,
     is_virtual_store,
+    largest_chunk_nbytes,
     level_label,
     level_option,
     load_retried,
@@ -38,7 +40,7 @@ VIRTUAL_VALUE_TS_SAMPLES = 200
 # Per-variable loads run ahead of the plotting loop in a pool this size. Each virtual
 # per-variable load materializes ~200 full-field decodes (~GBs); keep the pipeline
 # shallow so concurrent loads stay within host memory.
-LOAD_CONCURRENCY = 2
+MAX_LOAD_CONCURRENCY = 2
 
 log = get_logger(__name__)
 
@@ -195,8 +197,14 @@ def run_value_timeseries(ctx: RunContext) -> None:
     log.info(f"value-timeseries: {n_vars} variables at {p1_label} / {p2_label}")
 
     # Loads are network-bound and independent per variable; they run ahead in a small
-    # pool while the main thread plots. Each result is just the two point series.
-    with ThreadPoolExecutor(max_workers=LOAD_CONCURRENCY) as pool:
+    # pool while the main thread plots. Each result is just the two point series, but a
+    # load holds the chunks it strides through, so its footprint sizes the pool.
+    load_concurrency = concurrent_load_workers(
+        VIRTUAL_VALUE_TS_SAMPLES,
+        largest_chunk_nbytes(ctx.validation_ds),
+        cap=MAX_LOAD_CONCURRENCY,
+    )
+    with ThreadPoolExecutor(max_workers=load_concurrency) as pool:
         loads = [
             pool.submit(_point_arrays, ctx, var, ctx.stats_for(var))
             for var in ctx.variables
