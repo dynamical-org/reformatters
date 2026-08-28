@@ -256,7 +256,7 @@ class RunContext:
     # the spatial snapshot), an analysis run uses time; each anchors both the spatial
     # snapshot and the temporal comparison so one flag places the whole report.
     init_time: str | None = None
-    lead_time: str | None = None
+    lead_time: int | None = None
     time: str | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None

@@ -104,7 +104,7 @@ def run_all(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     init_time: str | None = init_time_option,
-    lead_time: str | None = lead_time_option,
+    lead_time: int | None = lead_time_option,
     time: str | None = time_option,
     level: float | None = level_option,
     point: list[str] | None = point_option,

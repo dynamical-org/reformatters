@@ -54,7 +54,7 @@ def align_to_valid_time_forecast(
     ds: xr.Dataset,
     reference_ds: xr.Dataset,
     init_time: str | None,
-    lead_time: str | None,
+    lead_time: int | None,
 ) -> tuple[xr.Dataset, xr.Dataset]:
     rng = np.random.default_rng()
 
@@ -79,7 +79,7 @@ def align_to_valid_time_forecast(
         ]
         selected_lead_time = rng.choice(covered or candidate_leads, 1)[0]
     else:
-        selected_lead_time = pd.Timedelta(hours=int(lead_time))
+        selected_lead_time = pd.Timedelta(hours=lead_time)
 
     ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
     valid_time = pd.Timestamp(ds.valid_time.item())
@@ -416,7 +416,7 @@ def compare_spatial(
     variables: list[str] | None = variables_option,
     show_plot: bool = False,
     init_time: str | None = init_time_option,
-    lead_time: str | None = lead_time_option,
+    lead_time: int | None = lead_time_option,
     time: str | None = time_option,
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
