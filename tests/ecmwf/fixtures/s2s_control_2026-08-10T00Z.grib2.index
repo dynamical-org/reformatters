@@ -9,3 +9,16 @@
 {"ensemble_member": 0, "lead_hours": 0, "length": 206, "level": "", "offset": 373374, "variable": "convective_precipitation"}
 {"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 373580, "variable": "convective_precipitation"}
 {"ensemble_member": 0, "lead_hours": 48, "length": 58286, "level": "", "offset": 431866, "variable": "convective_precipitation"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 490152, "variable": "total_precipitation"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58262, "level": "", "offset": 548438, "variable": "10_m_u_component_of_wind"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58262, "level": "", "offset": 606700, "variable": "10_m_v_component_of_wind"}
+{"ensemble_member": 0, "lead_hours": 48, "length": 58286, "level": "", "offset": 664962, "variable": "total_precipitation"}
+{"ensemble_member": 0, "lead_hours": 6, "length": 58286, "level": "", "offset": 723248, "variable": "maximum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 6, "length": 58286, "level": "", "offset": 781534, "variable": "minimum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 12, "length": 58286, "level": "", "offset": 839820, "variable": "maximum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 12, "length": 58286, "level": "", "offset": 898106, "variable": "minimum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 18, "length": 58286, "level": "", "offset": 956392, "variable": "maximum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 18, "length": 58286, "level": "", "offset": 1014678, "variable": "minimum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 1072964, "variable": "maximum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 1131250, "variable": "minimum_2_m_temperature_in_the_last_6_hours"}
+{"ensemble_member": 0, "lead_hours": 24, "length": 58286, "level": "", "offset": 1189536, "variable": "convective_available_potential_energy"}

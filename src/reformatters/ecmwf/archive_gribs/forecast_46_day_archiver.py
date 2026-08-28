@@ -9,7 +9,7 @@ datasets — what a reformatter reading this bucket can expect to find.
 import os
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Literal
 
 import pandas as pd
 import typer
@@ -42,45 +42,71 @@ EARLIEST_INIT_TIME: Final = pd.Timestamp("2023-06-28")
 SOURCE_COOP_SECRET_NAME: Final = "source-coop-storage-options-key"  # noqa: S105
 ECDS_API_KEY_SECRET_NAME: Final = "ecmwf-ecds-api-key"  # noqa: S105
 
-# The ECDS variables archived for every initialization. A dataset reading this archive
-# maps its data variables onto these names; adding one here is what makes it available
-# to be mapped.
-ECDS_VARIABLES: Final[Sequence[str]] = (
-    "2_m_dewpoint_temperature",
-    "2_m_temperature",
-    "convective_precipitation",
-    "eastward_turbulent_surface_stress",
-    "geopotential_height",
-    "mean_sea_level_pressure",
-    "northward_turbulent_surface_stress",
-    "sea_ice_area_fraction",
-    "sea_surface_temperature",
-    "skin_temperature",
-    "snow_albedo",
-    "snow_density",
-    "snow_depth_water_equivalent",
-    "snow_fall_water_equivalent",
-    "soil_moisture_top_100_cm",
-    "soil_moisture_top_20_cm",
-    "soil_temperature_top_100_cm",
-    "soil_temperature_top_20_cm",
-    "specific_humidity",
-    "surface_latent_heat_flux",
-    "surface_net_solar_radiation",
-    "surface_net_thermal_radiation",
-    "surface_pressure",
-    "surface_runoff",
-    "surface_sensible_heat_flux",
-    "surface_solar_radiation_downwards",
-    "surface_thermal_radiation_downwards",
-    "temperature",
-    "top_net_thermal_radiation",
-    "total_cloud_cover",
-    "total_column_water",
-    "u_component_of_wind",
-    "v_component_of_wind",
-    "vertical_velocity",
-    "water_runoff_and_drainage",
+type MaterializedProductFrequency = Literal["6-hourly", "daily"]
+
+MATERIALIZED_PRODUCT_ECDS_VARIABLES: Final[
+    dict[MaterializedProductFrequency, tuple[str, ...]]
+] = {
+    "6-hourly": (
+        "10_m_u_component_of_wind",
+        "10_m_v_component_of_wind",
+        "maximum_2_m_temperature_in_the_last_6_hours",
+        "minimum_2_m_temperature_in_the_last_6_hours",
+        "total_precipitation",
+    ),
+    "daily": (
+        "10_m_u_component_of_wind",
+        "10_m_v_component_of_wind",
+        "2_m_dewpoint_temperature",
+        "2_m_temperature",
+        "convective_available_potential_energy",
+        "convective_precipitation",
+        "eastward_turbulent_surface_stress",
+        "geopotential_height",
+        "maximum_2_m_temperature_in_the_last_6_hours",
+        "mean_sea_level_pressure",
+        "minimum_2_m_temperature_in_the_last_6_hours",
+        "northward_turbulent_surface_stress",
+        "sea_ice_area_fraction",
+        "sea_surface_temperature",
+        "skin_temperature",
+        "snow_albedo",
+        "snow_density",
+        "snow_depth_water_equivalent",
+        "snow_fall_water_equivalent",
+        "soil_moisture_top_100_cm",
+        "soil_moisture_top_20_cm",
+        "soil_temperature_top_100_cm",
+        "soil_temperature_top_20_cm",
+        "specific_humidity",
+        "surface_latent_heat_flux",
+        "surface_net_solar_radiation",
+        "surface_net_thermal_radiation",
+        "surface_pressure",
+        "surface_runoff",
+        "surface_sensible_heat_flux",
+        "surface_solar_radiation_downwards",
+        "surface_thermal_radiation_downwards",
+        "temperature",
+        "top_net_thermal_radiation",
+        "total_cloud_cover",
+        "total_column_water",
+        "total_precipitation",
+        "u_component_of_wind",
+        "v_component_of_wind",
+        "vertical_velocity",
+        "water_runoff_and_drainage",
+    ),
+}
+
+ECDS_VARIABLES: Final[tuple[str, ...]] = tuple(
+    sorted(
+        {
+            variable
+            for product_variables in MATERIALIZED_PRODUCT_ECDS_VARIABLES.values()
+            for variable in product_variables
+        }
+    )
 )
 
 

@@ -6,6 +6,7 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EARLIEST_INIT_TIME,
     ECDS_VARIABLES,
+    MATERIALIZED_PRODUCT_ECDS_VARIABLES,
     EcmwfIfsEns46DayGribArchiver,
 )
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
@@ -71,7 +72,7 @@ def test_init_times_to_archive_stops_at_the_earliest_initialization() -> None:
 
 
 def test_ecds_variables_shard_into_the_archived_selections() -> None:
-    """One initialization is these 12 blobs; the archive's layout is what readers index.
+    """One initialization is these 16 blobs; the archive's layout is what readers index.
 
     The names are pinned because a reformatter addresses a blob by name: resharding or
     changing ECDS_VARIABLES renames files that every reader already indexes by.
@@ -87,10 +88,33 @@ def test_ecds_variables_shard_into_the_archived_selections() -> None:
         "pressure-perturbed_forecast-u_component_of_wind-09d82879.grib2",
         "pressure-perturbed_forecast-v_component_of_wind-b41ec9c0.grib2",
         "pressure-perturbed_forecast-vertical_velocity-6a845ed1.grib2",
-        "single_level-control_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-control_forecast-10_m_u_component_of_wind-86cda6f2.grib2",
+        "single_level-control_forecast-2_m_dewpoint_temperature-c21fee3e.grib2",
         "single_level-control_forecast-convective_precipitation-c91f8c5b.grib2",
-        "single_level-perturbed_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-control_forecast-maximum_2_m_temperature_in_the_last_6_hours-3c5108f7.grib2",
+        "single_level-perturbed_forecast-10_m_u_component_of_wind-86cda6f2.grib2",
+        "single_level-perturbed_forecast-2_m_dewpoint_temperature-c21fee3e.grib2",
         "single_level-perturbed_forecast-convective_precipitation-c91f8c5b.grib2",
+        "single_level-perturbed_forecast-maximum_2_m_temperature_in_the_last_6_hours-3c5108f7.grib2",
+    }
+
+
+def test_archive_variables_are_configured_by_materialized_product() -> None:
+    assert MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"] == (
+        "10_m_u_component_of_wind",
+        "10_m_v_component_of_wind",
+        "maximum_2_m_temperature_in_the_last_6_hours",
+        "minimum_2_m_temperature_in_the_last_6_hours",
+        "total_precipitation",
+    )
+    assert len(MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"]) == 41
+    assert set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"]) < set(
+        MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"]
+    )
+    assert set(ECDS_VARIABLES) == {
+        variable
+        for variables in MATERIALIZED_PRODUCT_ECDS_VARIABLES.values()
+        for variable in variables
     }
 
 

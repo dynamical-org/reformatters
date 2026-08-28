@@ -1,7 +1,20 @@
 from typing import Literal
 
 from reformatters.common.config_models import BaseInternalAttrs, DataVar
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import Timedelta
+
+
+class SubStepReduction(FrozenBaseModel):
+    """How several source messages are combined into one lead time's values.
+
+    The source publishes some variables over a window shorter than this dataset's
+    24 hour step, so a set of messages tiles each step. `offsets` are subtracted from
+    the lead time to name them, and their values are reduced by `operation`.
+    """
+
+    operation: Literal["maximum", "minimum"]
+    offsets: tuple[Timedelta, ...]
 
 
 class EcmwfIfsEns46DayInternalAttrs(BaseInternalAttrs):
@@ -24,6 +37,8 @@ class EcmwfIfsEns46DayInternalAttrs(BaseInternalAttrs):
     deaccumulation_type: Literal["nonnegative", "signed"] = "nonnegative"
     deaccumulation_invalid_below_threshold_rate: float | None = None
     window_reset_frequency: Timedelta | None = None
+
+    sub_step_reduction: SubStepReduction | None = None
 
 
 class EcmwfIfsEns46DayDataVar(DataVar[EcmwfIfsEns46DayInternalAttrs]):

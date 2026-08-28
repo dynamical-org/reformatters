@@ -5,7 +5,9 @@ import xarray as xr
 
 from reformatters.common import validation
 from reformatters.common.types import DatetimeLike
-from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    MATERIALIZED_PRODUCT_ECDS_VARIABLES,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
 )
@@ -52,7 +54,7 @@ def test_archive_contains_every_dataset_source_variable(
     assert {
         data_var.internal_attrs.ecds_variable
         for data_var in dataset.template_config.data_vars
-    } == set(ECDS_VARIABLES)
+    } == set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"])
 
 
 LEVELS = (1000, 925, 850, 700, 500, 300, 200, 100, 50, 10)

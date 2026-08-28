@@ -26,12 +26,17 @@ from reformatters.common.zarr import (
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
     EcmwfIfsEns46DayInternalAttrs,
+    SubStepReduction,
 )
 from reformatters.ecmwf.ifs_ens.forecast_46_day_template_config import (
     EcmwfIfsEns46DayCommonTemplateConfig,
 )
 
 PRESSURE_LEVELS = [1000, 925, 850, 700, 500, 300, 200, 100, 50, 10]
+
+# The source publishes the 2 metre extremes over 6 hour windows; four of them
+# tile each of this dataset's 24 hour steps.
+SIX_HOURLY_WINDOW_OFFSETS = tuple(pd.Timedelta(hours=hours) for hours in (18, 12, 6, 0))
 
 
 class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
@@ -183,6 +188,65 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     grib_description='0[-] MSL="Mean sea level"',
                     grib_unit="[Pa]",
                     keep_mantissa_bits=11,
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
+                name="wind_u_10m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="10u",
+                    long_name="10 metre U wind component",
+                    standard_name="eastward_wind",
+                    units="m s-1",
+                    step_type="instant",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="10_m_u_component_of_wind",
+                    grib_element="UGRD",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
+                    grib_unit="[m/s]",
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
+                name="wind_v_10m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="10v",
+                    long_name="10 metre V wind component",
+                    standard_name="northward_wind",
+                    units="m s-1",
+                    step_type="instant",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="10_m_v_component_of_wind",
+                    grib_element="VGRD",
+                    grib_description='10[m] HTGL="Specified height level above ground"',
+                    grib_unit="[m/s]",
+                    keep_mantissa_bits=6,
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
+                name="precipitation_surface",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="prate",
+                    long_name="Precipitation rate",
+                    standard_name="precipitation_flux",
+                    units="kg m-2 s-1",
+                    step_type="avg",
+                    comment="Average precipitation rate over the previous 24 hours. Units equivalent to mm/s.",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="total_precipitation",
+                    grib_element="TPRATE",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_unit="[kg/(m^2*s)]",
+                    keep_mantissa_bits=8,
+                    deaccumulate_to_rate=True,
+                    window_reset_frequency=pd.Timedelta.max,
+                    hour_0_values_override=True,
+                    deaccumulation_invalid_below_threshold_rate=PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
                 ),
             ),
             EcmwfIfsEns46DayDataVar(
@@ -507,6 +571,52 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                 ),
             ),
             EcmwfIfsEns46DayDataVar(
+                name="maximum_temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="tmax",
+                    long_name="Maximum temperature",
+                    standard_name="air_temperature",
+                    units="degree_Celsius",
+                    step_type="max",
+                    comment="Maximum temperature at 2 metres over the previous 24 hours.",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="maximum_2_m_temperature_in_the_last_6_hours",
+                    grib_element="TMP",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
+                    grib_unit="[K]",
+                    keep_mantissa_bits=7,
+                    add_offset=-273.15,
+                    sub_step_reduction=SubStepReduction(
+                        operation="maximum", offsets=SIX_HOURLY_WINDOW_OFFSETS
+                    ),
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
+                name="minimum_temperature_2m",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="tmin",
+                    long_name="Minimum temperature",
+                    standard_name="air_temperature",
+                    units="degree_Celsius",
+                    step_type="min",
+                    comment="Minimum temperature at 2 metres over the previous 24 hours.",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="minimum_2_m_temperature_in_the_last_6_hours",
+                    grib_element="TMP",
+                    grib_description='2[m] HTGL="Specified height level above ground"',
+                    grib_unit="[K]",
+                    keep_mantissa_bits=7,
+                    add_offset=-273.15,
+                    sub_step_reduction=SubStepReduction(
+                        operation="minimum", offsets=SIX_HOURLY_WINDOW_OFFSETS
+                    ),
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
                 name="average_dew_point_temperature_2m",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
@@ -741,6 +851,25 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     grib_element="TCDC",
                     grib_description='0[-] SFC="Ground or water surface"',
                     grib_unit="[%]",
+                    keep_mantissa_bits=7,
+                ),
+            ),
+            EcmwfIfsEns46DayDataVar(
+                name="average_convective_available_potential_energy_atmosphere",
+                encoding=encoding_float32_default,
+                attrs=DataVarAttrs(
+                    short_name="cape",
+                    long_name="Convective available potential energy",
+                    standard_name="atmosphere_convective_available_potential_energy",
+                    units="J kg-1",
+                    step_type="avg",
+                    comment="Mean convective available potential energy over the previous 24 hours.",
+                ),
+                internal_attrs=EcmwfIfsEns46DayInternalAttrs(
+                    ecds_variable="convective_available_potential_energy",
+                    grib_element="CAPE",
+                    grib_description='0[-] SFC="Ground or water surface"',
+                    grib_unit="[J/kg]",
                     keep_mantissa_bits=7,
                 ),
             ),
