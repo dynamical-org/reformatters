@@ -102,14 +102,23 @@ def _decode_ds(shape: tuple[int, ...], chunks: tuple[int, ...]) -> xr.Dataset:
     return xr.Dataset({"var": var})
 
 
-def test_decode_chunk_span_ignores_the_dims_a_decode_pins() -> None:
+def test_decode_chunk_span_follows_how_the_checker_samples_each_dim() -> None:
     # 100 inits and 60 leads, one chunk each: a decode pins both, so it spans one chunk.
     ds = _decode_ds((100, 1, 60, 4, 4), (1, 1, 1, 4, 4))
     assert decode_scan._decode_chunk_span(ds) == 1
 
-    # 64 members in chunks of 4: a decode covers every member, so it spans 16 chunks.
+    # 64 members in chunks of 4: the checker samples SAMPLED_LEVELS of them, spread far
+    # enough apart to land in that many distinct chunks.
     ds = _decode_ds((100, 64, 60, 4, 4), (1, 4, 1, 4, 4))
-    assert decode_scan._decode_chunk_span(ds) == 16
+    assert decode_scan._decode_chunk_span(ds) == decode_scan.SAMPLED_LEVELS
+
+    # Members already in one chunk are one chunk however many the checker samples.
+    ds = _decode_ds((100, 64, 60, 4, 4), (1, 64, 1, 4, 4))
+    assert decode_scan._decode_chunk_span(ds) == 1
+
+    # Spatial dims are taken whole: a 4x4 grid in 2x2 chunks is 4 chunks.
+    ds = _decode_ds((100, 1, 60, 4, 4), (1, 1, 1, 2, 2))
+    assert decode_scan._decode_chunk_span(ds) == 4
 
 
 def test_decode_concurrency_falls_to_one_when_a_single_decode_fills_the_budget() -> (

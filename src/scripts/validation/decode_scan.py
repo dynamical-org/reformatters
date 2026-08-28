@@ -58,21 +58,32 @@ SAMPLED_LEADS = 5
 SAMPLED_LEVELS = 3
 MAX_JOB_CONCURRENCY = 4
 MAX_DECODE_CONCURRENCY = 32
-# A decode pins the append dim and lead time and takes every other dim whole, so these
-# are the dims whose extent does not enter its footprint.
 _PINNED_DIMS = ("init_time", "time", "lead_time")
+_SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
+
+
+def _dim_chunk_span(dim: str, size: int, chunk: int) -> int:
+    """Chunks one decode touches along `dim`, mirroring how the checker selects it: the
+    append dim and lead time pinned to one position, spatial dims whole, and every other
+    dim (ensemble member, vertical level) down-sampled to SAMPLED_LEVELS."""
+    if dim in _PINNED_DIMS:
+        return 1
+    chunks_along_dim = math.ceil(size / chunk)
+    if dim in _SPATIAL_DIMS:
+        return chunks_along_dim
+    return min(SAMPLED_LEVELS, chunks_along_dim)
 
 
 def _decode_chunk_span(ds: xr.Dataset) -> int:
     """Chunks in the largest field one decode materializes.
 
-    The footprint grows with ensemble size and with how much a chunk carries beyond one
-    field, so a 64-member store whose chunk spans every vertical level decodes orders of
-    magnitude more bytes per call than a single-member one.
+    The footprint grows with how much a chunk carries beyond the one field being checked,
+    so a store whose chunk spans four ensemble members and every vertical level decodes
+    orders of magnitude more bytes per call than one chunked a field at a time.
     """
     spans = [
         math.prod(
-            math.ceil((1 if dim in _PINNED_DIMS else size) / chunk)
+            _dim_chunk_span(str(dim), size, chunk)
             for dim, size, chunk in zip(var.dims, var.shape, chunks, strict=True)
         )
         for var in ds.data_vars.values()

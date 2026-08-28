@@ -1049,9 +1049,10 @@ class CheckVirtualDecodeHealth(Validator):
     validation, not a cycle later; use more when the newest position does not carry every
     variable), while "all" covers the whole window, optionally capped to `max_positions`
     evenly spaced positions for a whole-archive offline sweep. Within a position it
-    samples `sampled_leads` lead times (first + last + evenly spaced interior) across
-    every member, and `sampled_levels` levels of any vertical dim (e.g. pressure_level)
-    so a group var is decode-checked at a bounded set of levels rather than every one.
+    samples `sampled_leads` lead times (first + last + evenly spaced interior), and
+    `sampled_levels` values of every remaining non-spatial dim - vertical levels and
+    ensemble members alike - so a var is decode-checked at a bounded set of them rather
+    than every one.
     A variable fails if any sampled chunk errors or all of its sampled chunks decode
     entirely NaN. Fails — never silently passes — when no references are present.
 
