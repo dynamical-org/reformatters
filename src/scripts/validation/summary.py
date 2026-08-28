@@ -316,7 +316,9 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
     if ctx.combined_availability_plot:
         lines.append(
             "The plot below shows the availability of each variable over time — "
-            "light red marks unavailable data, dark green marks present data."
+            "dark green marks present data, light red marks a source file that did "
+            "not contain the variable, and grey marks hours that were not checked "
+            "because no source file carrying the variable was present."
         )
         lines.append("")
         lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
