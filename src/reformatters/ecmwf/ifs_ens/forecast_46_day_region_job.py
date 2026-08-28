@@ -6,6 +6,7 @@ blob carries a byte-range index written when its inventory was validated, which 
 makes a single message readable without scanning the whole blob.
 """
 
+import functools
 import itertools
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
@@ -58,6 +59,7 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
 )
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
+    SubStepReduction,
 )
 
 log = get_logger(__name__)
@@ -89,6 +91,9 @@ class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
     `levels` is the variable's ECDS level values in output order, `None` where the
     source has no such level and the output stays NaN. It is empty for a single-level
     variable, whose one message fills a 2D slot.
+
+    `sub_step_lead_times` is empty unless several source messages tile this slot's
+    lead time, in which case it names them and their values are reduced on read.
     """
 
     init_time: Timestamp
@@ -97,6 +102,7 @@ class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
     ecds_variable: str
     levels: tuple[str | None, ...]
     selection: EcdsSelection
+    sub_step_lead_times: tuple[Timedelta, ...] = ()
 
     def get_url(self) -> str:
         return (
@@ -117,6 +123,10 @@ class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
     @property
     def present_levels(self) -> tuple[str, ...]:
         return tuple(level for level in self.levels if level is not None)
+
+    @property
+    def source_lead_times(self) -> tuple[Timedelta, ...]:
+        return self.sub_step_lead_times or (self.lead_time,)
 
 
 class EcmwfIfsEns46DayRegionJob(
@@ -151,6 +161,8 @@ class EcmwfIfsEns46DayRegionJob(
         selections = selections_by_variable()
         levels = _output_levels(processing_region_ds, ecds_variable, data_var)
 
+        reduction = data_var.internal_attrs.sub_step_reduction
+
         return [
             EcmwfIfsEns46DaySourceFileCoord(
                 init_time=init_time,
@@ -159,6 +171,7 @@ class EcmwfIfsEns46DayRegionJob(
                 ecds_variable=ecds_variable,
                 levels=levels,
                 selection=selections[(ecds_variable, _forecast_type(ensemble_member))],
+                sub_step_lead_times=_sub_step_lead_times(lead_time, reduction),
             )
             for init_time, lead_time, ensemble_member in itertools.product(
                 processing_region_ds["init_time"].values,
@@ -194,8 +207,11 @@ class EcmwfIfsEns46DayRegionJob(
             Env(GRIB_NORMALIZE_UNITS="NO"),
             rasterio.open(coord.downloaded_path) as reader,
         ):
-            assert reader.count == len(coord.present_levels or (None,)), (
-                f"Expected {len(coord.present_levels or (None,))} messages, "
+            expected_messages = len(coord.source_lead_times) * len(
+                coord.present_levels or (None,)
+            )
+            assert reader.count == expected_messages, (
+                f"Expected {expected_messages} messages, "
                 f"found {reader.count} in {coord.downloaded_path}"
             )
             _validate_grib_metadata(reader, data_var)
@@ -205,7 +221,15 @@ class EcmwfIfsEns46DayRegionJob(
                 for band in range(1, reader.count + 1)
             ]
 
-        if not coord.levels:
+        reduction = data_var.internal_attrs.sub_step_reduction
+        if reduction is not None:
+            assert not coord.levels, (
+                f"{data_var.name}: reducing sub step messages is only supported "
+                "for single level variables"
+            )
+            reduce = np.maximum if reduction.operation == "maximum" else np.minimum
+            values = functools.reduce(reduce, present)
+        elif not coord.levels:
             values = item(present)
         else:
             missing = np.full(GRID_SHAPE, np.nan, dtype=np.float32)
@@ -292,6 +316,14 @@ def _deaccumulate_signed_inplace(data_array: xr.DataArray) -> None:
     values[0] = np.nan
 
 
+def _sub_step_lead_times(
+    lead_time: Timedelta, reduction: SubStepReduction | None
+) -> tuple[Timedelta, ...]:
+    if reduction is None:
+        return ()
+    return tuple(lead_time - offset for offset in reduction.offsets)
+
+
 def _forecast_type(ensemble_member: object) -> str:
     if int(ensemble_member) == CONTROL_MEMBER:  # ty: ignore[invalid-argument-type]
         return "control_forecast"
@@ -331,14 +363,15 @@ def _message_byte_ranges(
     index_path: Path, coord: EcmwfIfsEns46DaySourceFileCoord
 ) -> tuple[list[int], list[int]]:
     index = _index_by_message(index_path)
-    lead_hours = whole_hours(pd.Timedelta(coord.lead_time))
     starts, ends = [], []
-    for level in coord.present_levels or ("",):
-        key = (coord.ecds_variable, level, coord.ensemble_member, lead_hours)
-        record = index.get(key)
-        assert record is not None, f"{key} is not in {index_path}"
-        starts.append(record.offset)
-        ends.append(record.offset + record.length)
+    for lead_time in coord.source_lead_times:
+        lead_hours = whole_hours(pd.Timedelta(lead_time))
+        for level in coord.present_levels or ("",):
+            key = (coord.ecds_variable, level, coord.ensemble_member, lead_hours)
+            record = index.get(key)
+            assert record is not None, f"{key} is not in {index_path}"
+            starts.append(record.offset)
+            ends.append(record.offset + record.length)
     return starts, ends
 
 

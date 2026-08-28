@@ -46,12 +46,17 @@ ECDS_API_KEY_SECRET_NAME: Final = "ecmwf-ecds-api-key"  # noqa: S105
 # maps its data variables onto these names; adding one here is what makes it available
 # to be mapped.
 ECDS_VARIABLES: Final[Sequence[str]] = (
+    "10_m_u_component_of_wind",
+    "10_m_v_component_of_wind",
     "2_m_dewpoint_temperature",
     "2_m_temperature",
+    "convective_available_potential_energy",
     "convective_precipitation",
     "eastward_turbulent_surface_stress",
     "geopotential_height",
+    "maximum_2_m_temperature_in_the_last_6_hours",
     "mean_sea_level_pressure",
+    "minimum_2_m_temperature_in_the_last_6_hours",
     "northward_turbulent_surface_stress",
     "sea_ice_area_fraction",
     "sea_surface_temperature",
@@ -77,6 +82,7 @@ ECDS_VARIABLES: Final[Sequence[str]] = (
     "top_net_thermal_radiation",
     "total_cloud_cover",
     "total_column_water",
+    "total_precipitation",
     "u_component_of_wind",
     "v_component_of_wind",
     "vertical_velocity",

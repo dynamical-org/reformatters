@@ -71,7 +71,7 @@ def test_init_times_to_archive_stops_at_the_earliest_initialization() -> None:
 
 
 def test_ecds_variables_shard_into_the_archived_selections() -> None:
-    """One initialization is these 12 blobs; the archive's layout is what readers index.
+    """One initialization is these 16 blobs; the archive's layout is what readers index.
 
     The names are pinned because a reformatter addresses a blob by name: resharding or
     changing ECDS_VARIABLES renames files that every reader already indexes by.
@@ -87,10 +87,14 @@ def test_ecds_variables_shard_into_the_archived_selections() -> None:
         "pressure-perturbed_forecast-u_component_of_wind-09d82879.grib2",
         "pressure-perturbed_forecast-v_component_of_wind-b41ec9c0.grib2",
         "pressure-perturbed_forecast-vertical_velocity-6a845ed1.grib2",
-        "single_level-control_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-control_forecast-10_m_u_component_of_wind-86cda6f2.grib2",
+        "single_level-control_forecast-2_m_dewpoint_temperature-c21fee3e.grib2",
         "single_level-control_forecast-convective_precipitation-c91f8c5b.grib2",
-        "single_level-perturbed_forecast-2_m_dewpoint_temperature-52703092.grib2",
+        "single_level-control_forecast-maximum_2_m_temperature_in_the_last_6_hours-3c5108f7.grib2",
+        "single_level-perturbed_forecast-10_m_u_component_of_wind-86cda6f2.grib2",
+        "single_level-perturbed_forecast-2_m_dewpoint_temperature-c21fee3e.grib2",
         "single_level-perturbed_forecast-convective_precipitation-c91f8c5b.grib2",
+        "single_level-perturbed_forecast-maximum_2_m_temperature_in_the_last_6_hours-3c5108f7.grib2",
     }
 
 

@@ -5,7 +5,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import rasterio
 import xarray as xr
+from rasterio.env import Env
 
 from reformatters.common.iterating import item
 from reformatters.common.types import Group
@@ -24,6 +26,7 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     EcmwfIfsEns46DayRegionJob,
     EcmwfIfsEns46DaySourceFileCoord,
     _deaccumulate_signed_inplace,
+    _sub_step_lead_times,
     selections_by_variable,
 )
 from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
@@ -66,14 +69,17 @@ def source_file_coord(
     levels: tuple[str | None, ...] = (),
 ) -> EcmwfIfsEns46DaySourceFileCoord:
     ecds_variable = data_var.internal_attrs.ecds_variable
+    reduction = data_var.internal_attrs.sub_step_reduction
+    lead_time = pd.Timedelta(hours=lead_hours)
     return EcmwfIfsEns46DaySourceFileCoord(
         init_time=INIT_TIME,
-        lead_time=pd.Timedelta(hours=lead_hours),
+        lead_time=lead_time,
         ensemble_member=0,
         ecds_variable=ecds_variable,
         levels=levels,
         selection=selections_by_variable()[(ecds_variable, "control_forecast")],
         downloaded_path=downloaded_path,
+        sub_step_lead_times=_sub_step_lead_times(lead_time, reduction),
     )
 
 
@@ -265,6 +271,137 @@ def test_a_24_hour_mean_variable_has_no_lead_time_zero_coord() -> None:
     assert not mean_var.has_hour_0_values()
     assert point_var.has_hour_0_values()
     assert DAILY_LEAD_TIMES[0] == "0"
+
+
+def read_reduced(name: str, lead_hours: int, tmp_path: Path) -> np.ndarray:  # type: ignore[type-arg]
+    """Read one lead time of a variable whose step is tiled by several messages."""
+    data_var = daily_var(name)
+    ecds_variable = data_var.internal_attrs.ecds_variable
+    coord = source_file_coord(data_var, lead_hours, tmp_path / "unset.grib2")
+    path = extract_messages(
+        tmp_path / f"reduced_{name}.grib2",
+        *(
+            blob_record(ecds_variable, "", int(lead / pd.Timedelta("1h")))
+            for lead in coord.source_lead_times
+        ),
+    )
+    coord = source_file_coord(data_var, lead_hours, path)
+    return region_job(data_var, tmp_path).read_data(coord, data_var)
+
+
+def six_hourly_windows(ecds_variable: str, tmp_path: Path) -> np.ndarray:  # type: ignore[type-arg]
+    """The four source windows tiling lead time 24, read one message at a time."""
+    windows = []
+    for hours in (6, 12, 18, 24):
+        path = extract_messages(
+            tmp_path / f"window_{hours}.grib2",
+            blob_record(ecds_variable, "", hours),
+        )
+        with Env(GRIB_NORMALIZE_UNITS="NO"), rasterio.open(path) as reader:
+            windows.append(reader.read(1, out_dtype=np.float32))
+    return np.stack(windows)
+
+
+def test_a_daily_extreme_reads_the_four_windows_tiling_its_step() -> None:
+    """The source publishes 6 hour windows, so lead 24 covers hours 6, 12, 18 and 24."""
+    data_var = daily_var("maximum_temperature_2m")
+    reduction = data_var.internal_attrs.sub_step_reduction
+    assert reduction is not None
+
+    assert _sub_step_lead_times(pd.Timedelta("24h"), reduction) == tuple(
+        pd.to_timedelta(["6h", "12h", "18h", "24h"])
+    )
+    assert _sub_step_lead_times(pd.Timedelta("1104h"), reduction) == tuple(
+        pd.to_timedelta(["1086h", "1092h", "1098h", "1104h"])
+    )
+
+
+def test_reduces_six_hourly_windows_to_a_daily_maximum(tmp_path: Path) -> None:
+    values = read_reduced("maximum_temperature_2m", 24, tmp_path)
+    windows = six_hourly_windows(
+        "maximum_2_m_temperature_in_the_last_6_hours", tmp_path
+    )
+
+    assert values.shape == (121, 240)
+    np.testing.assert_array_equal(values, windows.max(axis=0))
+    # A daily maximum must exceed at least one window somewhere, or the reduction
+    # is silently returning a single message.
+    assert (values > windows[0]).any()
+
+
+def test_reduces_six_hourly_windows_to_a_daily_minimum(tmp_path: Path) -> None:
+    values = read_reduced("minimum_temperature_2m", 24, tmp_path)
+    windows = six_hourly_windows(
+        "minimum_2_m_temperature_in_the_last_6_hours", tmp_path
+    )
+
+    np.testing.assert_array_equal(values, windows.min(axis=0))
+    assert (values < windows[0]).any()
+
+
+def test_the_daily_extremes_bracket_the_daily_mean(tmp_path: Path) -> None:
+    maximum = read_reduced("maximum_temperature_2m", 24, tmp_path)
+    minimum = read_reduced("minimum_temperature_2m", 24, tmp_path)
+    mean = read_one("average_temperature_2m", 24, tmp_path)
+
+    assert (minimum <= mean).all()
+    assert (mean <= maximum).all()
+
+
+def test_deaccumulates_total_precipitation_to_a_daily_rate(tmp_path: Path) -> None:
+    data_var = daily_var("precipitation_surface")
+    lead_hours = (0, 24, 48)
+    job = region_job(data_var, tmp_path)
+    accumulated = np.stack(
+        [
+            job.read_data(
+                source_file_coord(
+                    data_var,
+                    hours,
+                    extract_messages(
+                        tmp_path / f"tp_{hours}.grib2",
+                        blob_record("total_precipitation", "", hours),
+                    ),
+                ),
+                data_var,
+            )
+            for hours in lead_hours
+        ]
+    )
+    array = data_array(
+        data_var, accumulated.copy(), pd.to_timedelta([f"{h}h" for h in lead_hours])
+    )
+    wettest = np.unravel_index(np.argmax(accumulated[2]), accumulated[2].shape)
+
+    job.apply_data_transformations(array, data_var)
+
+    twenty_four_hours = 24 * 3600
+    assert np.isnan(array.values[0]).all()
+    assert array.values[2][wettest] == pytest.approx(
+        (accumulated[2][wettest] - accumulated[1][wettest]) / twenty_four_hours,
+        rel=5e-3,
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "ecds_variable"),
+    [
+        ("wind_u_10m", "10_m_u_component_of_wind"),
+        ("wind_v_10m", "10_m_v_component_of_wind"),
+        (
+            "average_convective_available_potential_energy_atmosphere",
+            "convective_available_potential_energy",
+        ),
+    ],
+)
+def test_reads_a_single_message_variable(
+    name: str, ecds_variable: str, tmp_path: Path
+) -> None:
+    values = read_one(name, 24, tmp_path)
+
+    assert values.shape == (121, 240)
+    assert values.dtype == np.float32
+    assert np.isfinite(values).all()
 
 
 def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:

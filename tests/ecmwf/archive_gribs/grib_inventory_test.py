@@ -79,6 +79,19 @@ def test_names_every_message_of_a_real_blob() -> None:
         ("convective_precipitation", "", 0),
         ("convective_precipitation", "", 24),
         ("convective_precipitation", "", 48),
+        ("total_precipitation", "", 24),
+        ("10_m_u_component_of_wind", "", 24),
+        ("10_m_v_component_of_wind", "", 24),
+        ("total_precipitation", "", 48),
+        ("maximum_2_m_temperature_in_the_last_6_hours", "", 6),
+        ("minimum_2_m_temperature_in_the_last_6_hours", "", 6),
+        ("maximum_2_m_temperature_in_the_last_6_hours", "", 12),
+        ("minimum_2_m_temperature_in_the_last_6_hours", "", 12),
+        ("maximum_2_m_temperature_in_the_last_6_hours", "", 18),
+        ("minimum_2_m_temperature_in_the_last_6_hours", "", 18),
+        ("maximum_2_m_temperature_in_the_last_6_hours", "", 24),
+        ("minimum_2_m_temperature_in_the_last_6_hours", "", 24),
+        ("convective_available_potential_energy", "", 24),
     ]
 
 
@@ -125,7 +138,7 @@ def test_writes_an_index_that_locates_every_message(tmp_path: Path) -> None:
 
     contents = CONTROL_BLOB.read_bytes()
     records = read_index(index_path)
-    assert len(records) == 11
+    assert len(records) == 24
     for record in records:
         message = contents[record.offset : record.offset + record.length]
         assert message.startswith(b"GRIB")
