@@ -708,6 +708,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "Small negative values are raw model artifacts.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1299,7 +1300,7 @@
           "short_name": "sst",
           "standard_name": "sea_surface_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over land where sea surface temperature does not apply.",
+          "comment": "NaN over land where sea surface temperature does not apply. The underlying field changes once per 24 hours.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
