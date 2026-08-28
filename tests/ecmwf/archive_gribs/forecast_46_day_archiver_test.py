@@ -6,6 +6,7 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationC
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EARLIEST_INIT_TIME,
     ECDS_VARIABLES,
+    MATERIALIZED_PRODUCT_ECDS_VARIABLES,
     EcmwfIfsEns46DayGribArchiver,
 )
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
@@ -95,6 +96,25 @@ def test_ecds_variables_shard_into_the_archived_selections() -> None:
         "single_level-perturbed_forecast-2_m_dewpoint_temperature-c21fee3e.grib2",
         "single_level-perturbed_forecast-convective_precipitation-c91f8c5b.grib2",
         "single_level-perturbed_forecast-maximum_2_m_temperature_in_the_last_6_hours-3c5108f7.grib2",
+    }
+
+
+def test_archive_variables_are_configured_by_materialized_product() -> None:
+    assert MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"] == (
+        "10_m_u_component_of_wind",
+        "10_m_v_component_of_wind",
+        "maximum_2_m_temperature_in_the_last_6_hours",
+        "minimum_2_m_temperature_in_the_last_6_hours",
+        "total_precipitation",
+    )
+    assert len(MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"]) == 41
+    assert set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"]) < set(
+        MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"]
+    )
+    assert set(ECDS_VARIABLES) == {
+        variable
+        for variables in MATERIALIZED_PRODUCT_ECDS_VARIABLES.values()
+        for variable in variables
     }
 
 
