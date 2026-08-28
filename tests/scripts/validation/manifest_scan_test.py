@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -9,6 +10,7 @@ import xarray as xr
 import zarr
 from zarr.storage import MemoryStore
 
+from scripts.validation import manifest_scan
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
     _flush_var_probes,
@@ -336,3 +338,29 @@ def test_result_availability_series_marks_unprobed_positions_nan() -> None:
     )
     np.testing.assert_array_equal(series.fraction[:2], [1.0, 0.0])
     assert np.isnan(series.fraction[2])
+
+
+def test_merge_batch_adds_counts_and_ors_variable_availability() -> None:
+    p1 = pd.Timestamp("2024-01-01")
+    p2 = pd.Timestamp("2024-01-02")
+    totals: manifest_scan._BatchResult = ({}, {})
+    manifest_scan._merge_batch(({p1: [2, 3]}, {"t2m": {p1: False}}), totals)
+    # A position split across two batches contributes its source files to both.
+    manifest_scan._merge_batch(
+        ({p1: [1, 1], p2: [4, 4]}, {"t2m": {p1: True, p2: True}}), totals
+    )
+    assert totals[0] == {p1: [3, 4], p2: [4, 4]}
+    assert totals[1] == {"t2m": {p1: True, p2: True}}
+
+
+def test_checkpoint_round_trips_through_disk(tmp_path: Path) -> None:
+    position = pd.Timestamp("2024-03-04T06:00")
+    batch: manifest_scan._BatchResult = (
+        {position: [7, 8]},
+        {"pressure_level/temperature": {position: True}},
+    )
+    path = tmp_path / "batch-00000.json"
+    assert manifest_scan._read_checkpoint(path) is None
+    manifest_scan._write_checkpoint(path, batch)
+    assert manifest_scan._read_checkpoint(path) == batch
+    assert not path.with_suffix(".partial").exists()

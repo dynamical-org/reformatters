@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import typer
 import xarray as xr
 from matplotlib.axes import Axes
 
@@ -11,6 +12,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     SPATIAL_DIMS,
+    VIRTUAL_VALUE_TS_SAMPLES,
     RunContext,
     VariableStats,
     concurrent_load_workers,
@@ -34,9 +36,13 @@ from scripts.validation.utils import (
     variables_option,
 )
 
-# Target number of append-dim positions to sample on a virtual store, where each
-# sampled position is one source-file decode (both run points share the message).
-VIRTUAL_VALUE_TS_SAMPLES = 200
+value_samples_option = typer.Option(
+    VIRTUAL_VALUE_TS_SAMPLES,
+    "--value-samples",
+    help="Append-dim positions the full-period value series samples on a virtual "
+    "store, one decode each. Lower it on a store whose chunks are large enough that "
+    "the default sample decodes hundreds of GB.",
+)
 # Per-variable loads run ahead of the plotting loop in a pool this size. Each virtual
 # per-variable load materializes ~200 full-field decodes (~GBs); keep the pipeline
 # shallow so concurrent loads stay within host memory.
@@ -135,7 +141,7 @@ def _sample_virtual_points(
     """
     da = ctx.validation_ds[var]
     append_dim = "init_time" if "init_time" in da.dims else "time"
-    stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
+    stride = max(1, da.sizes[append_dim] // ctx.value_ts_samples)
     da = da.isel({append_dim: slice(None, None, stride)})
 
     indexers: dict[str, xr.DataArray | int] = {
@@ -200,7 +206,7 @@ def run_value_timeseries(ctx: RunContext) -> None:
     # pool while the main thread plots. Each result is just the two point series, but a
     # load holds the chunks it strides through, so its footprint sizes the pool.
     load_concurrency = concurrent_load_workers(
-        VIRTUAL_VALUE_TS_SAMPLES,
+        ctx.value_ts_samples,
         largest_chunk_nbytes(ctx.validation_ds),
         cap=MAX_LOAD_CONCURRENCY,
     )
@@ -263,6 +269,7 @@ def value_timeseries(
     level: float | None = level_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
+    value_samples: int = value_samples_option,
 ) -> None:
     """Plot per-timestep mean ± std of each variable at two spatial points over all time."""
     ds = load_zarr_dataset(dataset_url)
@@ -294,6 +301,7 @@ def value_timeseries(
         variables=selected_vars,
         is_virtual=is_virtual_store(dataset_url),
         level_override=level,
+        value_ts_samples=value_samples,
     )
     run_value_timeseries(ctx)
 

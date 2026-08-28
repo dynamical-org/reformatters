@@ -15,6 +15,8 @@ from the store's `dataset_id` attribute) and `run-all`, via
 `availability.run_manifest_availability`. See docs/validation.md.
 """
 
+import hashlib
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -45,6 +47,9 @@ from scripts.validation.utils import (
 log = get_logger(__name__)
 
 _EXISTS_BATCH_SIZE = 20_000
+# Region jobs per checkpoint. A whole-archive scan that is killed loses at most this
+# much work, so keep a batch to a few minutes on a slow store.
+_CHECKPOINT_BATCH_JOBS = 128
 # A whole-archive scan issues enough object-store reads that a transient outage
 # (e.g. a connect timeout) is near-certain; ride out a few minutes of trouble rather
 # than let one blip kill the whole scan. Backoff grows with attempt in retry(), so
@@ -305,6 +310,106 @@ def _flush_var_probes(
     probes.clear()
 
 
+_BatchResult = tuple[dict[pd.Timestamp, list[int]], dict[str, dict[pd.Timestamp, bool]]]
+
+
+def _probe_batch(
+    jobs: Sequence[VirtualRegionJob[Any, Any]],
+    store: IcechunkStore,
+    lead_limits: dict[pd.Timestamp, pd.Timedelta],
+    group: zarr.Group,
+    keys_by_var: dict[str, _VarKeys],
+) -> _BatchResult:
+    """Probe one batch of region jobs, folding as each completes so only per-position
+    counts, per-var booleans and one _exists_many batch of probes stay resident."""
+    file_counts: dict[pd.Timestamp, list[int]] = {}
+    var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    pending_probes: list[tuple[str, pd.Timestamp, str]] = []
+    for job, coord_presence in probe_jobs(jobs, store):
+        _fold_file_availability(coord_presence, lead_limits, file_counts)
+        for var in job.data_vars:
+            var_availability.setdefault(var.path, {})
+        pending_probes.extend(_var_probes(job, coord_presence, group, keys_by_var))
+        if len(pending_probes) >= _EXISTS_BATCH_SIZE:
+            _flush_var_probes(store, pending_probes, var_availability)
+    _flush_var_probes(store, pending_probes, var_availability)
+    return file_counts, var_availability
+
+
+def _merge_batch(batch: _BatchResult, into: _BatchResult) -> None:
+    """Add one batch's counts and availability into the running totals. Batches are
+    contiguous job ranges, and a position split across two of them contributes its
+    source files to both, so counts add and a variable is available where any batch
+    found its ref."""
+    batch_counts, batch_vars = batch
+    file_counts, var_availability = into
+    for position, (present, expected) in batch_counts.items():
+        totals = file_counts.setdefault(position, [0, 0])
+        totals[0] += present
+        totals[1] += expected
+    for var_path, series in batch_vars.items():
+        merged = var_availability.setdefault(var_path, {})
+        for position, present in series.items():
+            merged[position] = merged.get(position, False) or present
+
+
+def _checkpoint_key(
+    dataset: DynamicalDataset[Any, Any],
+    store: IcechunkStore,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    variables: list[str] | None,
+    job_count: int,
+) -> str:
+    """Identifies what a checkpoint set describes. The store's snapshot is part of it,
+    so a scan of an archive that has been written since starts fresh rather than
+    reporting a previous snapshot's availability."""
+    parts = [
+        dataset.dataset_id,
+        store.session.snapshot_id,
+        str(start),
+        str(end),
+        ",".join(sorted(variables)) if variables else "all",
+        str(job_count),
+    ]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+def _read_checkpoint(path: Path) -> _BatchResult | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text())
+    file_counts = {
+        pd.Timestamp(position): list(counts)
+        for position, counts in payload["file_counts"].items()
+    }
+    var_availability = {
+        var_path: {
+            pd.Timestamp(position): present for position, present in series.items()
+        }
+        for var_path, series in payload["var_availability"].items()
+    }
+    return file_counts, var_availability
+
+
+def _write_checkpoint(path: Path, batch: _BatchResult) -> None:
+    file_counts, var_availability = batch
+    payload = {
+        "file_counts": {
+            str(position): counts for position, counts in file_counts.items()
+        },
+        "var_availability": {
+            var_path: {str(position): present for position, present in series.items()}
+            for var_path, series in var_availability.items()
+        },
+    }
+    # Rename into place so a process killed mid-write leaves no half-written file for
+    # the next run to read back as a completed batch.
+    partial = path.with_suffix(".partial")
+    partial.write_text(json.dumps(payload))
+    partial.rename(path)
+
+
 def scan_manifest(
     dataset: DynamicalDataset[Any, Any],
     store: IcechunkStore,
@@ -312,11 +417,17 @@ def scan_manifest(
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     variables: list[str] | None = None,
+    checkpoint_root: Path | None = None,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
     `dataset` supplies the region-job machinery (expected source files, chunk keys);
     `store` is the archive actually probed, so a staging store is scanned as itself.
+
+    A whole-archive scan runs for hours, so each batch of region jobs is written under
+    `checkpoint_root` as it completes and a later scan of the same window and snapshot
+    replays those batches instead of reprobing them. Pass None to scan without
+    checkpoints.
     """
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
@@ -328,23 +439,37 @@ def scan_manifest(
     group = zarr.open_group(store, mode="r")
     keys_by_var: dict[str, _VarKeys] = {}
 
-    # Fold each job's probes as it completes; only per-position counts, per-var
-    # booleans, and at most one _exists_many batch of pending probes stay resident.
-    file_counts: dict[pd.Timestamp, list[int]] = {}
-    var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
-    pending_probes: list[tuple[str, pd.Timestamp, str]] = []
-    progress_every = max(1, len(jobs) // 20)
-    for i, (job, coord_presence) in enumerate(probe_jobs(jobs, store), start=1):
-        _fold_file_availability(coord_presence, lead_limits, file_counts)
-        for var in job.data_vars:
-            var_availability.setdefault(var.path, {})
-        pending_probes.extend(_var_probes(job, coord_presence, group, keys_by_var))
-        if len(pending_probes) >= _EXISTS_BATCH_SIZE:
-            _flush_var_probes(store, pending_probes, var_availability)
-        if i % progress_every == 0 or i == len(jobs):
-            log.info(f"  probed {i}/{len(jobs)} region jobs")
-    _flush_var_probes(store, pending_probes, var_availability)
+    checkpoint_dir: Path | None = None
+    if checkpoint_root is not None:
+        key = _checkpoint_key(dataset, store, start, end, variables, len(jobs))
+        checkpoint_dir = checkpoint_root / key
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    totals: _BatchResult = ({}, {})
+    batches = [
+        jobs[i : i + _CHECKPOINT_BATCH_JOBS]
+        for i in range(0, len(jobs), _CHECKPOINT_BATCH_JOBS)
+    ]
+    for batch_index, batch_jobs in enumerate(batches):
+        path = (
+            checkpoint_dir / f"batch-{batch_index:05d}.json"
+            if checkpoint_dir is not None
+            else None
+        )
+        batch = _read_checkpoint(path) if path is not None else None
+        replayed = batch is not None
+        if batch is None:
+            batch = _probe_batch(batch_jobs, store, lead_limits, group, keys_by_var)
+            if path is not None:
+                _write_checkpoint(path, batch)
+        _merge_batch(batch, totals)
+        probed = min((batch_index + 1) * _CHECKPOINT_BATCH_JOBS, len(jobs))
+        log.info(
+            f"  probed {probed}/{len(jobs)} region jobs"
+            f"{' (replayed from checkpoint)' if replayed else ''}"
+        )
+
+    file_counts, var_availability = totals
     file_availability = {position: (p, e) for position, (p, e) in file_counts.items()}
     assert file_availability, "No source files generated for the requested window"
     return ManifestScanResult(

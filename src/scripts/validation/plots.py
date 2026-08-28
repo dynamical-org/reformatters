@@ -52,6 +52,7 @@ from scripts.validation.utils import (
 )
 from scripts.validation.value_timeseries import (
     run_value_timeseries,
+    value_samples_option,
     value_timeseries,
 )
 
@@ -110,6 +111,7 @@ def run_all(
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
     decode_samples: int = decode_samples_option,
+    value_samples: int = value_samples_option,
 ) -> None:
     """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
@@ -173,6 +175,7 @@ def run_all(
         init_time=init_time,
         lead_time=lead_time,
         time=time,
+        value_ts_samples=value_samples,
     )
 
     if ctx.is_virtual:

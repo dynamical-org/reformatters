@@ -32,6 +32,10 @@ zarr.config.set({"async.concurrency": MAX_READ_CONCURRENCY})
 
 OUTPUT_DIR = "data/output"
 
+# Append-dim positions the full-period value series samples on a virtual store, where
+# each sampled position is one source-file decode (both run points share the message).
+VIRTUAL_VALUE_TS_SAMPLES = 200
+
 STAC_CATALOG_URL = "https://stac.dynamical.org/catalog.json"
 GEFS_ANALYSIS_COLLECTION_ID = "noaa-gefs-analysis"
 
@@ -257,6 +261,7 @@ class RunContext:
     # snapshot and the temporal comparison so one flag places the whole report.
     init_time: str | None = None
     lead_time: int | None = None
+    value_ts_samples: int = VIRTUAL_VALUE_TS_SAMPLES
     time: str | None = None
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
@@ -736,6 +741,15 @@ def create_run_output_dir(
     run_dir = Path(OUTPUT_DIR) / dataset_id / f"{version}_{timestamp_str}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
+
+
+def manifest_checkpoint_root(dataset_id: str) -> Path:
+    """Where a manifest scan's per-batch checkpoints live.
+
+    Outside any one run's directory, so a rerun after an interrupted scan replays the
+    batches the previous attempt completed instead of starting the archive over.
+    """
+    return Path(OUTPUT_DIR) / dataset_id / "manifest_scan_checkpoints"
 
 
 def resolve_output_dir(validation_url: str, output_dir: Path | str | None) -> Path:

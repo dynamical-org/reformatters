@@ -39,6 +39,7 @@ from scripts.validation.utils import (
     level_option,
     load_retried,
     load_zarr_dataset,
+    manifest_checkpoint_root,
     output_dir_option,
     resolve_output_dir,
     scope_time_period,
@@ -475,7 +476,12 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     """
     dataset, store, start, end = resolve_scan_window(ctx)
     result = scan_manifest(
-        dataset, store, start=start, end=end, variables=ctx.variables
+        dataset,
+        store,
+        start=start,
+        end=end,
+        variables=ctx.variables,
+        checkpoint_root=manifest_checkpoint_root(dataset.dataset_id),
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}

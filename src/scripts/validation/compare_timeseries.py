@@ -166,8 +166,20 @@ def _load_timeseries_for_var(
     val = validation_subset[var]
     if level_sel:
         val = val.sel(level_sel)
-    val_p1 = load_retried(val.isel(ctx.point1_sel))
-    val_p2 = load_retried(val.isel(ctx.point2_sel))
+    # Both points come out of one read: a chunk is a full spatial field, so loading them
+    # separately decodes every chunk in the series twice.
+    points = load_retried(
+        val.isel(
+            {
+                dim: xr.DataArray(
+                    [ctx.point1_sel[dim], ctx.point2_sel[dim]], dims="point"
+                )
+                for dim in ctx.point1_sel
+            }
+        )
+    )
+    val_p1 = points.isel(point=0)
+    val_p2 = points.isel(point=1)
     ref_p1: xr.DataArray | None = None
     ref_p2: xr.DataArray | None = None
     if var in reference_subset.data_vars and (
