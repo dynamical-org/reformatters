@@ -1,5 +1,6 @@
 import mimetypes
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import boto3
@@ -12,6 +13,8 @@ from scripts.validation.render import REPORT_FILENAME, render_report
 log = get_logger(__name__)
 
 BUCKET = "dataset-validation-reports"
+# A report is hundreds of small files, so uploads are round-trip bound, not bandwidth bound.
+UPLOAD_CONCURRENCY = 32
 PUBLIC_BASE_URL = "https://dataset-validation-reports.dynamical.org"
 
 
@@ -49,16 +52,22 @@ def upload(run_dir: Path, publish: bool) -> str:
         region_name="auto",
     )
     files = [f for f in sorted(run_dir.rglob("*")) if f.is_file()]
+
+    def put(target: tuple[str, Path]) -> None:
+        prefix, f = target
+        client.upload_file(
+            str(f),
+            BUCKET,
+            f"{prefix}/{f.relative_to(run_dir).as_posix()}",
+            ExtraArgs={"ContentType": _content_type(f)},
+        )
+
+    targets = [(prefix, f) for prefix in prefixes for f in files]
+    with ThreadPoolExecutor(UPLOAD_CONCURRENCY) as pool:
+        # list() raises the first failure rather than discarding it with the iterator.
+        list(pool.map(put, targets))
     for prefix in prefixes:
-        for f in files:
-            key = f"{prefix}/{f.relative_to(run_dir).as_posix()}"
-            client.upload_file(
-                str(f),
-                BUCKET,
-                key,
-                ExtraArgs={"ContentType": _content_type(f)},
-            )
-            log.info(f"uploaded {key}")
+        log.info(f"uploaded {len(files)} files to {prefix}/")
     if publish:
         _trigger_pages_deploy()
     return f"{PUBLIC_BASE_URL}/{prefixes[0]}/{REPORT_FILENAME}"
