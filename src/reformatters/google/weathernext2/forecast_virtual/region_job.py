@@ -3,12 +3,13 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
-from typing import ClassVar, NamedTuple, Self
+from typing import ClassVar, NamedTuple, Self, cast
 
 import httpx
 import icechunk
 import pandas as pd
 import xarray as xr
+import zarr
 from pydantic import Field
 from zarr.abc.store import Store
 
@@ -203,7 +204,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=publication_cutoff,
+            job_fire_time=_end_covering_store(
+                get_template_fn, primary_store, append_dim, publication_cutoff
+            ),
         )
         (job,) = jobs
         assert isinstance(job, cls)
@@ -419,6 +422,27 @@ def _utc_now() -> Timestamp:
 
 def _current_publication_cutoff() -> Timestamp:
     return _utc_now() - _PUBLICATION_LAG
+
+
+def _end_covering_store(
+    get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+    primary_store: Store,
+    append_dim: AppendDim,
+    end: Timestamp,
+) -> Timestamp:
+    """`end`, extended to cover every append dim label the store already holds.
+
+    The publication lag pulls this product's end backwards, and trimming a store is
+    never supported, so an end behind the store's newest label would fail every update
+    until the clock caught up to it.
+    """
+    index = get_template_fn(end).to_dataset().get_index(append_dim)
+    store_append_dim = zarr.open_group(primary_store, mode="r")[append_dim]
+    assert isinstance(store_append_dim, zarr.Array)
+    missing = int(store_append_dim.shape[0]) - len(index)
+    if missing <= 0:
+        return end
+    return cast("Timestamp", end + missing * (index[-1] - index[-2]))
 
 
 def _list_objects(

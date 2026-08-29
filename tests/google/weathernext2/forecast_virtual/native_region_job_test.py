@@ -6,6 +6,7 @@ import httpx
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
@@ -321,6 +322,12 @@ def test_historical_validation_job_uses_final_fixed_window() -> None:
     )
 
 
+def _store_with_init_times(count: int) -> MemoryStore:
+    store = MemoryStore()
+    zarr.create_group(store).create_array("init_time", shape=(count,), dtype="int64")
+    return store
+
+
 def test_direct_operational_update_uses_utc_clock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -329,7 +336,7 @@ def test_direct_operational_update_uses_utc_clock(
 
     jobs, template = (
         GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
-            primary_store=MemoryStore(),
+            primary_store=_store_with_init_times(0),
             tmp_store=Path("unused.zarr"),
             get_template_fn=OPERATIONAL.get_template,
             append_dim="init_time",
@@ -379,3 +386,29 @@ def test_object_listing_retries_transient_response() -> None:
         )
     }
     assert client.get.call_count == 2
+
+
+def test_operational_update_template_never_trims_the_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A backfill can leave initializations the publication lag now puts in the future.
+    # refresh_store_metadata refuses to trim, so the update must still cover them.
+    now = pd.Timestamp("2025-03-20T12:00")
+    monkeypatch.setattr(region_job_module, "_utc_now", lambda: now)
+    cutoff = now - pd.Timedelta("48h")
+    at_cutoff = len(
+        OPERATIONAL.get_template(cutoff).to_dataset().get_index("init_time")
+    )
+
+    _jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=_store_with_init_times(at_cutoff + 3),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="test",
+        )
+    )
+
+    assert len(template.to_dataset().get_index("init_time")) == at_cutoff + 3
