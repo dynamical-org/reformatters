@@ -219,7 +219,7 @@ def validate_dataset(
         validators: the checks to run.
         store: the zarr/icechunk store to validate.
         append_dim: the dataset's append dimension.
-        dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
+        dataset_id: names the dataset in the failure message and Sentry fingerprint.
         append_dim_frequency: the template config's append-dim frequency.
         data_vars: the template config's declared variables (see ValidationContext).
         region_job: the operational-window job, required when any validator sets
@@ -229,7 +229,7 @@ def validate_dataset(
     Raises:
         OperationalValidationError: If any validation checks fail
     """
-    log.info(f"Validating zarr {store}")
+    log.info(f"Validating {dataset_id} {store}")
 
     virtual_checks = [v.name for v in validators if v.requires_virtual_dataset]
     assert not virtual_checks or region_job is not None, (
@@ -265,7 +265,7 @@ def validate_dataset(
         del ds
 
     if failures:
-        message = "Zarr validation failed:\n" + "\n".join(
+        message = f"{dataset_id} validation failed:\n" + "\n".join(
             f"- {name}: {message}" for name, message in failures
         )
         # Fingerprint by (dataset_id, failed check names), not message text, so repeated
@@ -276,7 +276,7 @@ def validate_dataset(
         ]
         raise OperationalValidationError(message)
 
-    log.info("Zarr validation passed all checks")
+    log.info(f"{dataset_id} validation passed all checks")
 
 
 class CheckCurrentData(Validator):
