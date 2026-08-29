@@ -195,6 +195,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 job_fire_time=PER_INIT_STORE_DATE,
             )
         fire_time = job_fire_time or _utc_now()
+        publication_cutoff = fire_time - _PUBLICATION_LAG
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -202,12 +203,12 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=fire_time,
+            job_fire_time=publication_cutoff,
         )
         (job,) = jobs
         assert isinstance(job, cls)
         return [
-            job.model_copy(update={"publication_cutoff": fire_time - _PUBLICATION_LAG})
+            job.model_copy(update={"publication_cutoff": publication_cutoff})
         ], template_ds
 
     def generate_source_file_coords(
@@ -222,13 +223,13 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 self.source_layout == "operational"
             ):
                 continue
+            if (
+                self.source_layout == "operational"
+                and init_time >= self.publication_cutoff
+            ):
+                continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
-                if (
-                    self.source_layout == "operational"
-                    and init_time + lead_time >= self.publication_cutoff
-                ):
-                    continue
                 coords.extend(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
                         source_layout=self.source_layout,
