@@ -276,7 +276,7 @@ def validate_dataset(
         ]
         raise OperationalValidationError(message)
 
-    log.info("Zarr validation passed all checks")
+    log.info(f"{dataset_id} validation passed all checks")
 
 
 class CheckCurrentData(Validator):
