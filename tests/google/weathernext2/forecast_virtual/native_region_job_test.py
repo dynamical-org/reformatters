@@ -211,22 +211,32 @@ def test_operational_refs_keep_singleton_member_and_level_chunks(
     )
 
 
-def test_operational_generation_enforces_strict_valid_time_cutoff() -> None:
+def test_operational_generation_enforces_strict_init_time_cutoff() -> None:
     init_time = pd.Timestamp("2025-03-01T00:00")
     template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
     var = _var(OPERATIONAL, "temperature_2m")
-    job = _job(
-        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
-        OPERATIONAL,
-        template,
-        [var],
-        publication_cutoff=init_time + pd.Timedelta("12h"),
-    )
     region = template.to_dataset().sel(init_time=[init_time])
+    all_lead_times = list(OPERATIONAL.dimension_coordinates()["lead_time"])
 
-    coords = job.generate_source_file_coords(region, [var])
+    def coords_with_cutoff(cutoff: pd.Timestamp) -> list[pd.Timedelta]:
+        job = _job(
+            GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+            OPERATIONAL,
+            template,
+            [var],
+            publication_cutoff=cutoff,
+        )
+        return [
+            coord.lead_time for coord in job.generate_source_file_coords(region, [var])
+        ]
 
-    assert [coord.lead_time for coord in coords] == [pd.Timedelta("6h")]
+    # An initialization before the cutoff publishes every lead time, however far ahead
+    # it forecasts; one at the cutoff publishes nothing.
+    assert (
+        coords_with_cutoff(init_time + OPERATIONAL.append_dim_frequency)
+        == all_lead_times
+    )
+    assert coords_with_cutoff(init_time) == []
 
 
 def test_source_file_coords_are_independent_per_variable() -> None:
@@ -255,7 +265,7 @@ def test_source_file_coords_are_independent_per_variable() -> None:
     }
 
 
-def test_operational_backfill_jobs_share_strict_valid_time_cutoff(
+def test_operational_backfill_jobs_share_strict_init_time_cutoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_time = pd.Timestamp("2025-01-01T00:00")
@@ -281,7 +291,9 @@ def test_operational_backfill_jobs_share_strict_valid_time_cutoff(
         region,
         [_var(OPERATIONAL, "temperature_2m")],
     )
-    assert [coord.lead_time for coord in coords] == [pd.Timedelta("6h")]
+    assert [coord.lead_time for coord in coords] == list(
+        OPERATIONAL.dimension_coordinates()["lead_time"]
+    )
 
 
 def test_historical_validation_job_uses_final_fixed_window() -> None:
@@ -329,7 +341,10 @@ def test_direct_operational_update_uses_utc_clock(
     [job] = jobs
     assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
     assert job.publication_cutoff == now - pd.Timedelta("48h")
-    assert template.to_dataset().get_index("init_time")[-1] == now - pd.Timedelta("6h")
+    # The newest initialization kept is the newest one outside the publication lag.
+    last_init = template.to_dataset().get_index("init_time")[-1]
+    assert last_init < job.publication_cutoff
+    assert last_init + OPERATIONAL.append_dim_frequency >= job.publication_cutoff
 
 
 def test_object_listing_retries_transient_response() -> None:
