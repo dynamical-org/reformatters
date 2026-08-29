@@ -476,6 +476,7 @@ def _pressure_var(
     units: str,
     source_layout: SourceLayout,
     standard_name: str | None = None,
+    comment: str | None = None,
     filters: Sequence[CodecConfig] = (),
 ) -> GoogleWeathernext2DataVar:
     return _var(
@@ -487,7 +488,7 @@ def _pressure_var(
         units=units,
         standard_name=standard_name,
         step_type="instant",
-        comment=None,
+        comment=comment,
         date_available=None,
         filters=filters,
         source_layout=source_layout,
@@ -558,7 +559,10 @@ def _root_data_vars(source_layout: SourceLayout) -> list[GoogleWeathernext2DataV
             long_name="Sea surface temperature",
             units="degree_Celsius",
             standard_name="sea_surface_temperature",
-            comment="NaN over land where sea surface temperature does not apply.",
+            comment=(
+                "NaN over land where sea surface temperature does not apply. "
+                "Value changes once every 24 hours."
+            ),
             filters=[_KELVIN_TO_CELSIUS],
             source_layout=source_layout,
         ),
@@ -638,6 +642,9 @@ def _pressure_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=(
+                "Small negative values are raw model artifacts; set values < 0 to zero."
+            ),
             source_layout=source_layout,
         ),
     ]
