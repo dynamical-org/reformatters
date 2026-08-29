@@ -229,7 +229,7 @@ def validate_dataset(
     Raises:
         OperationalValidationError: If any validation checks fail
     """
-    log.info(f"Validating zarr {store}")
+    log.info(f"Validating {dataset_id} {store}")
 
     virtual_checks = [v.name for v in validators if v.requires_virtual_dataset]
     assert not virtual_checks or region_job is not None, (
