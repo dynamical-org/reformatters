@@ -219,7 +219,7 @@ def validate_dataset(
         validators: the checks to run.
         store: the zarr/icechunk store to validate.
         append_dim: the dataset's append dimension.
-        dataset_id: identifies the dataset in the Sentry fingerprint of a failure.
+        dataset_id: names the dataset in the failure message and Sentry fingerprint.
         append_dim_frequency: the template config's append-dim frequency.
         data_vars: the template config's declared variables (see ValidationContext).
         region_job: the operational-window job, required when any validator sets
@@ -265,7 +265,7 @@ def validate_dataset(
         del ds
 
     if failures:
-        message = "Zarr validation failed:\n" + "\n".join(
+        message = f"{dataset_id} validation failed:\n" + "\n".join(
             f"- {name}: {message}" for name, message in failures
         )
         # Fingerprint by (dataset_id, failed check names), not message text, so repeated

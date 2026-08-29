@@ -1041,11 +1041,12 @@ def _write_test_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
 def test_validate_dataset_raises_on_failed_validator(
     rng: np.random.Generator,
 ) -> None:
-    """validate_dataset raises listing failed check names and messages."""
+    """validate_dataset raises naming the dataset and listing failed check names and messages."""
     store = _write_test_store(rng)
 
     with pytest.raises(
-        validation.OperationalValidationError, match="FailingCheck: bad thing"
+        validation.OperationalValidationError,
+        match="d validation failed:\n- FailingCheck: bad thing",
     ):
         validation.validate_dataset(
             [PassingCheck(), FailingCheck()],
