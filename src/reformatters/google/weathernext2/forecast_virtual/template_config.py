@@ -560,8 +560,8 @@ def _root_data_vars(source_layout: SourceLayout) -> list[GoogleWeathernext2DataV
             units="degree_Celsius",
             standard_name="sea_surface_temperature",
             comment=(
-                "NaN over land where sea surface temperature does not apply. The "
-                "underlying field changes once per 24 hours."
+                "NaN over land where sea surface temperature does not apply. "
+                "Value changes once every 24 hours."
             ),
             filters=[_KELVIN_TO_CELSIUS],
             source_layout=source_layout,
@@ -642,7 +642,9 @@ def _pressure_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment="Small negative values are raw model artifacts.",
+            comment=(
+                "Small negative values are raw model artifacts; set values < 0 to zero."
+            ),
             source_layout=source_layout,
         ),
     ]
