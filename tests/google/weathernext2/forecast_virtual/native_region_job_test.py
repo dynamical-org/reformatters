@@ -345,7 +345,7 @@ def test_direct_operational_update_uses_utc_clock(
     last_init = template.to_dataset().get_index("init_time")[-1]
     assert last_init < job.publication_cutoff
     assert last_init + OPERATIONAL.append_dim_frequency >= job.publication_cutoff
-    window_start = job.publication_cutoff - pd.Timedelta("72h")
+    window_start = job.publication_cutoff - pd.Timedelta("24h")
     oldest_init = min(coord.init_time for coord in job.source_file_coords())
     assert oldest_init >= window_start
     assert oldest_init - OPERATIONAL.append_dim_frequency < window_start

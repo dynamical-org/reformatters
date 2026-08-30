@@ -406,9 +406,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     source_layout: ClassVar[SourceLayout] = "operational"
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
-    operational_update_window: ClassVar[Timedelta] = (
-        pd.Timedelta("24h") + _PUBLICATION_LAG
-    )
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
 
 
 def _store_key(url: str) -> str:
