@@ -487,7 +487,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # lifecycle and commit cadence behind this one call.
         worker_results: dict[str, list[SourceFileResult]] = (
             self.region_job_class.process_worker_jobs(
-                worker_jobs, self.store_factory, branch_name, worker_index
+                worker_jobs,
+                self.store_factory,
+                branch_name,
+                worker_index,
+                overwrite_chunks=overwrite_chunks,
             )
             if worker_jobs
             else {}

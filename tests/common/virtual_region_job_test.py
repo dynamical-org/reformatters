@@ -1089,6 +1089,30 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     assert job.filter_already_present(candidates, readonly) == []
 
 
+def test_overwrite_chunks_rewrites_already_present_refs(tmp_path: Path) -> None:
+    """Without this, a variable whose refs all point at the wrong source file could
+    never be corrected: its own stale refs mark every file as already done."""
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    _process_virtual(job, repo)
+    snapshots_after_first = _snapshot_count(repo)
+
+    # Resuming skips everything, which is what a plain re-run should do.
+    VirtualTestRegionJob.process_worker_jobs([job], dataset.store_factory, "main", 0)
+    assert _snapshot_count(repo) == snapshots_after_first
+
+    # Asking for a rewrite writes the refs again rather than skipping them.
+    VirtualTestRegionJob.process_worker_jobs(
+        [job], dataset.store_factory, "main", 0, overwrite_chunks=True
+    )
+    assert _snapshot_count(repo) > snapshots_after_first
+    _assert_store_values(repo.readonly_session("main").store, n_inits=4)
+
+
 def test_filter_already_present_mixed_candidates(tmp_path: Path) -> None:
     # One filter call over a mix: already-emitted (dropped), not-yet-emitted (kept),
     # and an out-of-template label whose chunk_key is None (kept as remaining).
