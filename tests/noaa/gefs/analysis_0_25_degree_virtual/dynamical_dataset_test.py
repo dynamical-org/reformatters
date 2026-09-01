@@ -24,6 +24,8 @@ from tests.common.dynamical_dataset_test import assert_configured_validators
 _LATITUDE, _LONGITUDE = 200, 320
 # 0N 160W, open Pacific, where those same bitmaps are masked.
 _OCEAN_LATITUDE, _OCEAN_LONGITUDE = 360, 80
+# 72N 40W, the Greenland ice sheet, the only probe with non-zero snow in June.
+_SNOW_LATITUDE, _SNOW_LONGITUDE = 72, 560
 
 _FILTER_VARS = [
     "temperature_2m",  # Kelvin source, Celsius filter
@@ -94,6 +96,14 @@ def test_backfill_local_and_operational_update(
     np.testing.assert_allclose(
         between["pressure_reduced_to_mean_sea_level"].values, 101426.13750000001
     )
+
+    # 146 kg m-2 of snow water equivalent decodes to 0.146 m. Zero and NaN are both
+    # fixed points of the divide-by-1000 filter, so only a non-zero cell can tell a
+    # correct scale from a missing or inverted one.
+    snowy = ds.isel(latitude=_SNOW_LATITUDE, longitude=_SNOW_LONGITUDE).sel(
+        time="2024-06-01T00:00"
+    )
+    np.testing.assert_allclose(snowy["snow_water_equivalent_surface"].values, 0.146)
 
     # The source bitmaps soil and snow over open water; gribberish decodes those cells
     # to NaN, which is what the declared fill value means to a CF-aware reader.
@@ -229,9 +239,10 @@ def test_manifest_split_holds_four_years_of_three_hourly_refs(
     assert split_size == 4 * 365 * 8
 
     # Above the 1000 refs icechunk needs before it compresses ref locations, and well
-    # inside the 3 MiB a reader downloads to resolve any one chunk.
+    # inside the 3 MiB a reader downloads to resolve any one chunk. 19.7 bytes/ref is
+    # measured on this dataset's own manifests, not carried over from another.
     assert split_size > 1000
-    assert split_size * 16.4 < 3 * 1024 * 1024
+    assert split_size * 19.7 < 3 * 1024 * 1024
 
 
 def test_virtual_container_matches_ref_prefix(

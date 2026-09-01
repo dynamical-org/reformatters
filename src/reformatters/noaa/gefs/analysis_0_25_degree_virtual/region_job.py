@@ -60,13 +60,15 @@ class NoaaGefsAnalysis025DegreeVirtualRegionJob(
         for time in pd.to_datetime(processing_region_ds["time"].values):
             cycle = time.floor(cycle_frequency)
             for var in data_var_group:
-                available_from = var.internal_attrs.available_from
-                if available_from is not None and time < available_from:
-                    continue
                 init_time = cycle
                 if cycle == time and not var.has_hour_0_values():
                     init_time -= GEFS_INIT_TIME_FREQUENCY
                 if init_time < GEFS_CURRENT_ARCHIVE_START:
+                    continue
+                # Whether a variable exists is a property of the cycle that produced the
+                # file, not of the valid time it lands on.
+                available_from = var.internal_attrs.available_from
+                if available_from is not None and init_time < available_from:
                     continue
                 key = (
                     init_time,
@@ -84,27 +86,6 @@ class NoaaGefsAnalysis025DegreeVirtualRegionJob(
             )
             for (init_time, lead_time, source_file_type), data_vars in grouped.items()
         ]
-
-    def representative_var(
-        self, coord: NoaaGefsAnalysis025DegreeVirtualSourceFileCoord
-    ) -> NoaaGefsVirtualDataVar:
-        """Probe file presence through a variable the archive published in every era,
-        preferring an instant one so the probe lands where data exists at every step.
-
-        Probing a variable the source added partway through would leave every older file
-        permanently un-ingestable, since its chunk can never appear.
-        """
-        era_stable = [
-            var for var in coord.data_vars if var.internal_attrs.available_from is None
-        ]
-        assert era_stable, (
-            f"every variable in {coord.get_url()} postdates the archive start; probing "
-            "one would leave this file permanently un-ingestable"
-        )
-        return next(
-            (var for var in era_stable if var.attrs.step_type == "instant"),
-            era_stable[0],
-        )
 
     def discover_available(
         self, pending: list[NoaaGefsAnalysis025DegreeVirtualSourceFileCoord]
