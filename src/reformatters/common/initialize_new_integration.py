@@ -20,17 +20,9 @@ class DatasetKind(StrEnum):
     virtual = "virtual"
 
 
-_EXAMPLE_DIRS: dict[DatasetKind, str] = {
-    DatasetKind.materialized: "example_materialized",
-    DatasetKind.virtual: "example_virtual",
-}
-
-# A dataset's class names encode how it is used, not how it is built: materialized
-# datasets are time-optimized (Temporal), virtual datasets are spatial-optimized
-# (Spatial). The teaching templates are named to match.
-_KIND_INFIX: dict[DatasetKind, str] = {
-    DatasetKind.materialized: "Temporal",
-    DatasetKind.virtual: "Spatial",
+_EXAMPLES: dict[DatasetKind, tuple[str, str]] = {
+    DatasetKind.materialized: ("example_materialized", "Temporal"),
+    DatasetKind.virtual: ("example_virtual", "Spatial"),
 }
 
 
@@ -57,14 +49,23 @@ def initialize_new_integration(
     provider = _sanitize_identifier(provider)
     model = _sanitize_identifier(model)
     variant = _sanitize_identifier(variant)
+    if kind is DatasetKind.virtual and (
+        variant == "virtual" or variant.endswith("_virtual")
+    ):
+        raise typer.BadParameter(
+            "variant must omit the 'virtual' suffix when --kind virtual is used",
+            param_hint="variant",
+        )
+
+    module_variant = f"{variant}_virtual" if kind is DatasetKind.virtual else variant
 
     # Convert to PascalCase for class names
     provider_pascal = _pascal_case(provider)
     model_pascal = _pascal_case(model)
-    variant_pascal = _pascal_case(variant)
+    module_variant_pascal = _pascal_case(module_variant)
 
     # Set up paths
-    dataset_path = f"{provider}/{model}/{variant}"
+    dataset_path = f"{provider}/{model}/{module_variant}"
     src_path = Path("src/reformatters") / dataset_path
     test_path = Path("tests") / dataset_path
 
@@ -81,7 +82,7 @@ def initialize_new_integration(
             (current / "__init__.py").touch(exist_ok=True)
 
     # Copy from the chosen example template
-    example_dirname = _EXAMPLE_DIRS[kind]
+    example_dirname, example_class_prefix = _EXAMPLES[kind]
     example_src = Path("src/reformatters") / example_dirname
     example_test = Path("tests") / example_dirname
 
@@ -93,23 +94,16 @@ def initialize_new_integration(
         if file.is_file():
             shutil.copy(file, test_path / file.name)
 
-    # Perform renames in copied files. The dataset class names carry the kind's infix
-    # (Temporal / Spatial); DataVar and InternalAttrs are model-level config models
-    # shared across a model's datasets, so they stay {provider}{model}-scoped. The
-    # import-prefix key uses the chosen example package so virtual copies aren't
-    # half-renamed by a "reformatters.example" prefix match.
-    infix = _KIND_INFIX[kind]
-    dataset_class_name = (
-        f"{provider_pascal}{model_pascal}{variant_pascal}{infix}DynamicalDataset"
-    )
+    class_prefix = f"{provider_pascal}{model_pascal}{module_variant_pascal}"
+    dataset_class_name = f"{class_prefix}Dataset"
     example_to_actual_mappings = {
-        f"Example{infix}DynamicalDataset": dataset_class_name,
-        f"Example{infix}TemplateConfig": f"{provider_pascal}{model_pascal}{variant_pascal}{infix}TemplateConfig",
-        f"Example{infix}RegionJob": f"{provider_pascal}{model_pascal}{variant_pascal}{infix}RegionJob",
-        f"Example{infix}SourceFileCoord": f"{provider_pascal}{model_pascal}{variant_pascal}{infix}SourceFileCoord",
+        f"Example{example_class_prefix}DynamicalDataset": dataset_class_name,
+        f"Example{example_class_prefix}TemplateConfig": f"{class_prefix}TemplateConfig",
+        f"Example{example_class_prefix}RegionJob": f"{class_prefix}RegionJob",
+        f"Example{example_class_prefix}SourceFileCoord": f"{class_prefix}SourceFileCoord",
         "ExampleDataVar": f"{provider_pascal}{model_pascal}DataVar",
         "ExampleInternalAttrs": f"{provider_pascal}{model_pascal}InternalAttrs",
-        f"reformatters.{example_dirname}": f"reformatters.{provider}.{model}.{variant}",
+        f"reformatters.{example_dirname}": f"reformatters.{provider}.{model}.{module_variant}",
     }
 
     # Process all Python files in both src and test directories
