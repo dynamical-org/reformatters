@@ -10,15 +10,15 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_REFORECAST_END,
     GEFS_REFORECAST_START,
     GEFS_S_FILE_MAX,
-    GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSFileType,
-    GEFSInternalAttrs,
+    NoaaGefsDataVar,
+    NoaaGefsInternalAttrs,
 )
 
 
-def _make_gefs_var(gefs_file_type: GEFSFileType) -> GEFSDataVar:
-    return GEFSDataVar(
+def _make_gefs_var(gefs_file_type: GEFSFileType) -> NoaaGefsDataVar:
+    return NoaaGefsDataVar(
         name="test_var",
         encoding=Encoding(
             dtype="float32",
@@ -32,7 +32,7 @@ def _make_gefs_var(gefs_file_type: GEFSFileType) -> GEFSDataVar:
             short_name="test",
             step_type="instant",
         ),
-        internal_attrs=GEFSInternalAttrs(
+        internal_attrs=NoaaGefsInternalAttrs(
             keep_mantissa_bits=10,
             grib_element="TMP",
             grib_description="2 m temperature",

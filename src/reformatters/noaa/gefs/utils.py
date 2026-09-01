@@ -8,8 +8,8 @@ from reformatters.common.download import http_download_to_disk, httpx_download_t
 from reformatters.common.iterating import digest
 from reformatters.common.pydantic import replace
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFSDataVar,
     GefsSourceFileCoord,
+    NoaaGefsDataVar,
     get_grib_element,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
@@ -21,7 +21,7 @@ from reformatters.noaa.noaa_utils import (
 type _DownloadFn = Callable[..., Path]
 
 
-def _index_data_vars(coord: GefsSourceFileCoord) -> Sequence[GEFSDataVar]:
+def _index_data_vars(coord: GefsSourceFileCoord) -> Sequence[NoaaGefsDataVar]:
     """coord.data_vars carrying the element names this file's index uses.
 
     The v12 reforecast labels some messages with a different element name than the
