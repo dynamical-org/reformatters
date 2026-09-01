@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.pydantic import replace
 from reformatters.noaa.gefs import virtual_region_job as region_job_module
 from reformatters.noaa.gefs.analysis_0_25_degree_virtual.region_job import (
     NoaaGefsAnalysis025DegreeVirtualRegionJob,
@@ -14,7 +15,10 @@ from reformatters.noaa.gefs.analysis_0_25_degree_virtual.region_job import (
 from reformatters.noaa.gefs.analysis_0_25_degree_virtual.template_config import (
     NoaaGefsAnalysis025DegreeVirtualTemplateConfig,
 )
-from reformatters.noaa.gefs.gefs_config_models import NoaaGefsVirtualDataVar
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_B22_TRANSITION_DATE,
+    NoaaGefsVirtualDataVar,
+)
 from reformatters.noaa.gefs.virtual_region_job import NoaaGefsVirtualRegionJob
 
 TEMPLATE_CONFIG = NoaaGefsAnalysis025DegreeVirtualTemplateConfig()
@@ -212,9 +216,11 @@ def test_representative_var_prefers_instant_over_windowed(
     assert job.representative_var(coord).name == instant.name
 
 
-def test_representative_var_refuses_a_file_of_only_later_added_variables(
+def test_representative_var_falls_back_when_every_variable_was_added_later(
     template_ds: xr.DataTree,
 ) -> None:
+    """A run filtered to one later-added variable has no era-stable choice, and the
+    files it reads do carry that variable, so it must not refuse."""
     late = get_var("visibility_surface")
     coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
         init_time=pd.Timestamp("2024-06-01T06:00"),
@@ -223,8 +229,7 @@ def test_representative_var_refuses_a_file_of_only_later_added_variables(
     )
     job = make_job(template_ds, data_vars=[late])
 
-    with pytest.raises(AssertionError, match="permanently un-ingestable"):
-        job.representative_var(coord)
+    assert job.representative_var(coord).name == late.name
 
 
 def test_file_refs_span_each_message_and_end_at_the_file_end(
@@ -269,10 +274,11 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
     assert all(r.location == coord.get_url() for r in refs)
 
 
-def test_file_refs_skips_a_message_whose_window_does_not_match(
+def test_file_refs_refuses_an_index_missing_a_requested_variable(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """At lead 6 the accumulation window is 0-6, so a 0-3 line is a different message."""
+    """At lead 6 the accumulation window is 0-6, so a 0-3 line is a different message.
+    Committing the file anyway would leave a NaN column nothing ever retries."""
 
     def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
         path = tmp_path / "index.idx"
@@ -291,7 +297,8 @@ def test_file_refs_skips_a_message_whose_window_does_not_match(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    assert job.file_refs(coord, file_size=1200) == []
+    with pytest.raises(AssertionError, match="has no message for"):
+        job.file_refs(coord, file_size=1200)
 
 
 def test_operational_update_jobs_single_polling_job(
@@ -409,3 +416,120 @@ def test_an_empty_store_waits_for_a_shortest_lead_file(
     assert job.ingested_through is None
 
     assert discover(job, coords, [lead_6], monkeypatch) == []
+
+
+_IDX_FIXTURES = sorted(
+    p.name for p in (Path(__file__).parent / "idx_fixtures").glob("*.idx")
+)
+# An empty parametrize set skips rather than fails, which would silently retire the
+# only check that compares this catalog against real archived indexes.
+assert len(_IDX_FIXTURES) == 18, _IDX_FIXTURES
+
+
+@pytest.mark.parametrize("fixture_name", _IDX_FIXTURES)
+def test_every_requested_variable_maps_to_a_real_message(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    fixture_name: str,
+) -> None:
+    """Run the real coord generation and ref building against real archived indexes.
+
+    Catches an element, level or window string that is wrong for any of the 38
+    variables, which declaration-derived tests cannot: they compare the config to
+    itself. The fixtures straddle both inventory changes (MSLET at 2021-07-20T12, the
+    other three at 2022-10-18T12), so a variable requested one cycle too early fails
+    here rather than committing a NaN column.
+    """
+    fixture = Path(__file__).parent / "idx_fixtures" / fixture_name
+    stem, lead_str = fixture_name.removesuffix(".idx").split("_f")
+    init_time = pd.Timestamp(stem)
+    lead_time = pd.Timedelta(hours=int(lead_str))
+    index_text = fixture.read_text()
+
+    # file_refs unlinks the index it is given, so hand it a copy rather than the fixture.
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+        copy = tmp_path / fixture_name
+        copy.write_text(index_text)
+        return copy
+
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+
+    data_vars = TEMPLATE_CONFIG.data_vars
+    coords = coords_at(template_ds, [init_time + lead_time], data_vars)
+    matching = [
+        c for c in coords if c.init_time == init_time and c.lead_time == lead_time
+    ]
+    assert len(matching) == 1, f"no coord reads {fixture_name}"
+    coord = matching[0]
+
+    last_start = max(int(line.split(":")[1]) for line in index_text.splitlines())
+    job = make_job(template_ds, data_vars=data_vars)
+    refs = job.file_refs(coord, file_size=last_start + 1_000_000)
+
+    # file_refs asserts nothing was requested but absent; this pins the other direction,
+    # that every requested variable got exactly one ref.
+    assert sorted(r.data_var.name for r in refs) == sorted(
+        v.name for v in coord.data_vars
+    )
+    assert len({r.data_var.name for r in refs}) == len(refs)
+
+
+@pytest.mark.parametrize("hour", [0, 3, 6, 9, 12, 15, 18, 21])
+def test_lead_assignment_at_every_three_hourly_time(
+    template_ds: xr.DataTree, hour: int
+) -> None:
+    """The instant/windowed split behaves differently only at 00/06/12/18, and only
+    00:00 rolls the date backwards, so every hour is asserted rather than sampled."""
+    day = pd.Timestamp("2024-06-02")
+    time = day + pd.Timedelta(hours=hour)
+    instant = get_var("temperature_2m")
+    windowed = get_var("total_precipitation_surface")
+
+    by_var = {
+        v.name: (c.init_time, c.lead_time)
+        for c in coords_at(template_ds, [time], [instant, windowed])
+        for v in c.data_vars
+    }
+
+    on_cycle = hour % 6 == 0
+    cycle = day + pd.Timedelta(hours=hour - hour % 6)
+    assert by_var[instant.name] == (cycle, pd.Timedelta(hours=hour % 6))
+    assert by_var[windowed.name] == (
+        (cycle - pd.Timedelta("6h"), pd.Timedelta("6h"))
+        if on_cycle
+        else (cycle, pd.Timedelta(hours=hour % 6))
+    )
+    if hour == 0:
+        # The only time whose windowed source file is on the previous day.
+        assert by_var[windowed.name][0] == pd.Timestamp("2024-06-01T18:00")
+
+
+def test_available_from_is_judged_against_the_cycle_not_the_valid_time(
+    template_ds: xr.DataTree,
+) -> None:
+    """Whether a variable exists is a property of the cycle that wrote the file.
+
+    A windowed variable at a cycle boundary reads the *previous* cycle, so a valid time
+    at or after a transition can still resolve to a file from before it. No shipped
+    variable is both windowed and late-added, so this constructs that combination to pin
+    the rule for the forecast datasets, whose longer leads reach it with real variables.
+    """
+    transition = GEFS_B22_TRANSITION_DATE
+    windowed = get_var("total_precipitation_surface")
+    assert windowed.internal_attrs.available_from is None
+    late_windowed = replace(
+        windowed,
+        internal_attrs=replace(windowed.internal_attrs, available_from=transition),
+    )
+
+    # Valid time is exactly the transition, but a windowed variable reads the 06z cycle,
+    # which predates it and does not carry the variable.
+    coords = coords_at(template_ds, [transition], [late_windowed])
+    assert coords == []
+
+    # One step later the same cycle is the transition cycle itself, so it is requested.
+    later = coords_at(template_ds, [transition + pd.Timedelta("3h")], [late_windowed])
+    assert [(c.init_time, c.lead_time) for c in later] == [
+        (transition, pd.Timedelta("3h"))
+    ]

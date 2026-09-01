@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -34,8 +34,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 
 # GEFS resets every windowed quantity's accumulation at each 6 hour synoptic time, so a
-# lead time that is not a multiple of 6 carries a partial window. Verified against idx
-# window strings at leads 0 through 240 across the v12 archive.
+# lead time that is not a multiple of 6 carries a partial window.
 WINDOW_RESET_FREQUENCY = pd.Timedelta("6h")
 
 # The catalog's spelling of each grid FILE_RESOLUTIONS resolves to.
@@ -45,9 +44,8 @@ _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {0.25: "0.25 degrees (~20
 # 273.15 on read, matching the materialized GEFS datasets' degree_Celsius temperatures.
 # ScaleOffset decodes as value / scale + offset.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
-# TSOIL is absent here deliberately: GDAL labels it [C] but returns Kelvin, so the
-# materialized products have no Celsius precedent for it. It is converted explicitly at
-# its variable definition so every temperature in this dataset shares one unit.
+# TSOIL is absent here deliberately; it carries the same filter explicitly at its
+# variable definition, where the reason it cannot be inferred from GDAL is recorded.
 _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN"})
 
 # WEASD decodes as kg m-2 of water; 1 kg m-2 = 0.001 m lwe, so scale=1000 yields metres,
@@ -58,25 +56,19 @@ _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 # GEFS_B22_TRANSITION_DATE. Bisected against the published idx files.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
 
-_WINDOW_COMMENTS = {
-    "avg": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
-    "accum": "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
-    "max": "Maximum value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
-    "min": "Minimum value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
-}
-
 
 class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     """Virtual GEFS template: one chunk per GRIB message on the source's native
     latitude/longitude grid.
 
-    `source_file_types` selects both the grid and the variable catalog: the 0.25 degree
-    `s` file carries a surface-only subset, while the 0.5 degree `a` and `b` files carry
-    the full inventory including pressure levels. A subclass declares dims and time
-    structure.
+    `source_file_types` selects both the grid and the variable catalog. A subclass
+    declares dims, time structure and the window wording its time axis implies.
     """
 
     source_file_types: frozenset[GEFSSourceFileType]
+    # The window a value covers depends on the dataset's time structure, so the wording
+    # cannot be shared: keyed by step_type, applied to every windowed variable.
+    window_comments: dict[str, str]
 
     @property
     def resolution_degrees(self) -> float:
@@ -119,7 +111,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
             "only the s file catalog is populated; the a and b catalogs land with the "
             "0.5 degree datasets"
         )
-        return _s_file_data_vars(self._message_chunks(ROOT))
+        return _s_file_data_vars(self._message_chunks(ROOT), self.window_comments)
 
     def _message_chunks(self, group: Group) -> tuple[int, ...]:
         """One chunk per GRIB message: the full grid, size 1 along every other dim."""
@@ -159,6 +151,7 @@ def _data_var(
     name: str,
     *,
     chunks: tuple[int, ...],
+    window_comments: Mapping[str, str],
     element: str,
     level: str,
     source_file_type: GEFSSourceFileType,
@@ -178,7 +171,9 @@ def _data_var(
         if filters is not None
         else ([_KELVIN_TO_CELSIUS] if element in _CELSIUS_ELEMENTS else ())
     )
-    window_comment = _WINDOW_COMMENTS.get(step_type)
+    # A flag variable's values are codes, not an average, so the window wording would
+    # contradict flag_values; its codes carry the meaning instead.
+    window_comment = None if flag_values else window_comments.get(step_type)
     if window_comment is not None:
         comment = f"{window_comment} {comment}" if comment else window_comment
     return NoaaGefsVirtualDataVar(
@@ -211,14 +206,21 @@ def _data_var(
     )
 
 
-def _s_file_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
+def _s_file_data_vars(
+    chunks: tuple[int, ...], window_comments: Mapping[str, str]
+) -> list[NoaaGefsVirtualDataVar]:
     """Every message the pgrb2s.0p25 file publishes, except HGT at the surface.
 
     The s file carries surface geopotential height only at lead 0, unlike every other
     message in it. The 0.5 degree pgrb2b file publishes the same quantity at ordinary
     leads, so it is served there rather than given a lead-0-only shape here.
     """
-    var = functools.partial(_data_var, chunks=chunks, source_file_type="s")
+    var = functools.partial(
+        _data_var,
+        chunks=chunks,
+        source_file_type="s",
+        window_comments=window_comments,
+    )
     return [
         var(
             "visibility_surface",

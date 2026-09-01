@@ -1,0 +1,35 @@
+1:0:d=2021072012:GUST:surface:6 hour fcst:ENS=low-res ctl
+2:535481:d=2021072012:MSLET:mean sea level:6 hour fcst:ENS=low-res ctl
+3:1449564:d=2021072012:PRES:surface:6 hour fcst:ENS=low-res ctl
+4:2190237:d=2021072012:TSOIL:0-0.1 m below ground:6 hour fcst:ENS=low-res ctl
+5:2556443:d=2021072012:SOILW:0-0.1 m below ground:6 hour fcst:ENS=low-res ctl
+6:2908203:d=2021072012:WEASD:surface:6 hour fcst:ENS=low-res ctl
+7:3125313:d=2021072012:SNOD:surface:6 hour fcst:ENS=low-res ctl
+8:3332168:d=2021072012:ICETK:surface:6 hour fcst:ENS=low-res ctl
+9:3415756:d=2021072012:TMP:2 m above ground:6 hour fcst:ENS=low-res ctl
+10:3850785:d=2021072012:DPT:2 m above ground:6 hour fcst:ENS=low-res ctl
+11:4288439:d=2021072012:RH:2 m above ground:6 hour fcst:ENS=low-res ctl
+12:4956155:d=2021072012:TMAX:2 m above ground:0-6 hour max fcst:ENS=low-res ctl
+13:5386209:d=2021072012:TMIN:2 m above ground:0-6 hour min fcst:ENS=low-res ctl
+14:5813083:d=2021072012:UGRD:10 m above ground:6 hour fcst:ENS=low-res ctl
+15:6651804:d=2021072012:VGRD:10 m above ground:6 hour fcst:ENS=low-res ctl
+16:7467809:d=2021072012:APCP:surface:0-6 hour acc fcst:ENS=low-res ctl
+17:7755039:d=2021072012:CSNOW:surface:0-6 hour ave fcst:ENS=low-res ctl
+18:7770965:d=2021072012:CICEP:surface:0-6 hour ave fcst:ENS=low-res ctl
+19:7771171:d=2021072012:CFRZR:surface:0-6 hour ave fcst:ENS=low-res ctl
+20:7772307:d=2021072012:CRAIN:surface:0-6 hour ave fcst:ENS=low-res ctl
+21:7858460:d=2021072012:LHTFL:surface:0-6 hour ave fcst:ENS=low-res ctl
+22:8347062:d=2021072012:SHTFL:surface:0-6 hour ave fcst:ENS=low-res ctl
+23:9111865:d=2021072012:CAPE:surface:6 hour fcst:ENS=low-res ctl
+24:9623693:d=2021072012:CIN:surface:6 hour fcst:ENS=low-res ctl
+25:9981809:d=2021072012:PWAT:entire atmosphere (considered as a single layer):6 hour fcst:ENS=low-res ctl
+26:10454399:d=2021072012:TCDC:entire atmosphere:0-6 hour ave fcst:ENS=low-res ctl
+27:11014058:d=2021072012:DSWRF:surface:0-6 hour ave fcst:ENS=low-res ctl
+28:11439237:d=2021072012:DLWRF:surface:0-6 hour ave fcst:ENS=low-res ctl
+29:11917478:d=2021072012:USWRF:surface:0-6 hour ave fcst:ENS=low-res ctl
+30:12209907:d=2021072012:ULWRF:surface:0-6 hour ave fcst:ENS=low-res ctl
+31:12584975:d=2021072012:ULWRF:top of atmosphere:0-6 hour ave fcst:ENS=low-res ctl
+32:13025152:d=2021072012:HLCY:3000-0 m above ground:6 hour fcst:ENS=low-res ctl
+33:13626155:d=2021072012:CAPE:180-0 mb above ground:6 hour fcst:ENS=low-res ctl
+34:14153194:d=2021072012:CIN:180-0 mb above ground:6 hour fcst:ENS=low-res ctl
+35:14503731:d=2021072012:PRMSL:mean sea level:6 hour fcst:ENS=low-res ctl

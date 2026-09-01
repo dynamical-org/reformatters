@@ -104,7 +104,7 @@ class NoaaGefsVirtualRegionJob(
         location = coord.get_url()
         refs = []
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
-            matches = lookup.get((element, level, window))
+            matches = lookup.pop((element, level, window), None)
             if not matches:
                 continue
             # Byte ranges past the data file mean a stale/mismatched index; skip it.
@@ -124,6 +124,14 @@ class NoaaGefsVirtualRegionJob(
                 )
                 for var in matches
             )
+
+        # A variable with no matching message would otherwise be committed as a silent
+        # NaN column: the file counts as ingested through its representative variable,
+        # so nothing ever retries it.
+        assert not lookup, (
+            f"{location} has no message for {sorted({v.name for m in lookup.values() for v in m})}; "
+            "the source era is not modelled by this catalog"
+        )
         return refs
 
     def _message_lookup(
@@ -133,22 +141,29 @@ class NoaaGefsVirtualRegionJob(
         fills. Two variables share a key where one message serves both."""
         lookup: dict[tuple[str, str, str], list[NoaaGefsVirtualDataVar]] = {}
         for var in data_vars:
-            key = (
+            window = _lead_time_str(var, lead_hours)
+            # Index element spellings vary by era and by the wgrib2 build that made the
+            # index, so match grib_element_alternatives too; a file carries only one.
+            for element in (
                 var.internal_attrs.grib_element,
-                var.internal_attrs.grib_index_level,
-                _lead_time_str(var, lead_hours),
-            )
-            lookup.setdefault(key, []).append(var)
+                *var.internal_attrs.grib_element_alternatives,
+            ):
+                key = (element, var.internal_attrs.grib_index_level, window)
+                lookup.setdefault(key, []).append(var)
         return lookup
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
-        """Probe file presence through a variable the archive has published in every
-        era, never one it added partway through."""
+        """Probe file presence through a variable the archive published in every era,
+        preferring an instant one so the probe lands where data exists at every step.
+
+        Probing a variable the source added partway through would leave every older file
+        permanently un-ingestable. A run filtered to only such variables has no other
+        choice, and those files do carry them, so it falls back rather than refusing.
+        """
+        candidates = [
+            var for var in coord.data_vars if var.internal_attrs.available_from is None
+        ] or list(coord.data_vars)
         return next(
-            (
-                var
-                for var in coord.data_vars
-                if var.internal_attrs.available_from is None
-            ),
-            coord.data_vars[0],
+            (var for var in candidates if var.attrs.step_type == "instant"),
+            candidates[0],
         )

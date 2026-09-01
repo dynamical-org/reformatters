@@ -1,0 +1,34 @@
+1:0:d=2020092312:GUST:surface:3 hour fcst:ENS=low-res ctl
+2:532434:d=2020092312:PRES:surface:3 hour fcst:ENS=low-res ctl
+3:1265603:d=2020092312:TSOIL:0-0.1 m below ground:3 hour fcst:ENS=low-res ctl
+4:1628193:d=2020092312:SOILW:0-0.1 m below ground:3 hour fcst:ENS=low-res ctl
+5:1977687:d=2020092312:WEASD:surface:3 hour fcst:ENS=low-res ctl
+6:2220493:d=2020092312:SNOD:surface:3 hour fcst:ENS=low-res ctl
+7:2446479:d=2020092312:ICETK:surface:3 hour fcst:ENS=low-res ctl
+8:2520222:d=2020092312:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl
+9:3269961:d=2020092312:DPT:2 m above ground:3 hour fcst:ENS=low-res ctl
+10:4048719:d=2020092312:RH:2 m above ground:3 hour fcst:ENS=low-res ctl
+11:4714109:d=2020092312:TMAX:2 m above ground:0-3 hour max fcst:ENS=low-res ctl
+12:5447413:d=2020092312:TMIN:2 m above ground:0-3 hour min fcst:ENS=low-res ctl
+13:6189006:d=2020092312:UGRD:10 m above ground:3 hour fcst:ENS=low-res ctl
+14:7019219:d=2020092312:VGRD:10 m above ground:3 hour fcst:ENS=low-res ctl
+15:7829184:d=2020092312:APCP:surface:0-3 hour acc fcst:ENS=low-res ctl
+16:8252243:d=2020092312:CSNOW:surface:0-3 hour ave fcst:ENS=low-res ctl
+17:8271706:d=2020092312:CICEP:surface:0-3 hour ave fcst:ENS=low-res ctl
+18:8271962:d=2020092312:CFRZR:surface:0-3 hour ave fcst:ENS=low-res ctl
+19:8273269:d=2020092312:CRAIN:surface:0-3 hour ave fcst:ENS=low-res ctl
+20:8364044:d=2020092312:LHTFL:surface:0-3 hour ave fcst:ENS=low-res ctl
+21:8866653:d=2020092312:SHTFL:surface:0-3 hour ave fcst:ENS=low-res ctl
+22:9645898:d=2020092312:CAPE:surface:3 hour fcst:ENS=low-res ctl
+23:10131690:d=2020092312:CIN:surface:3 hour fcst:ENS=low-res ctl
+24:10681220:d=2020092312:PWAT:entire atmosphere (considered as a single layer):3 hour fcst:ENS=low-res ctl
+25:11142414:d=2020092312:TCDC:entire atmosphere:0-3 hour ave fcst:ENS=low-res ctl
+26:11691610:d=2020092312:DSWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+27:11911892:d=2020092312:DLWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+28:12416673:d=2020092312:USWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+29:12691654:d=2020092312:ULWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+30:13068432:d=2020092312:ULWRF:top of atmosphere:0-3 hour ave fcst:ENS=low-res ctl
+31:13538758:d=2020092312:HLCY:3000-0 m above ground:3 hour fcst:ENS=low-res ctl
+32:13873769:d=2020092312:CAPE:180-0 mb above ground:3 hour fcst:ENS=low-res ctl
+33:14363993:d=2020092312:CIN:180-0 mb above ground:3 hour fcst:ENS=low-res ctl
+34:14913219:d=2020092312:PRMSL:mean sea level:3 hour fcst:ENS=low-res ctl

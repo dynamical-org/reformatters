@@ -36,7 +36,7 @@
     "long_name": "Categorical rain",
     "short_name": "crain",
     "units": "1",
-    "comment": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC). 0=no; 1=yes",
+    "comment": "0=no; 1=yes",
     "step_type": "avg",
     "flag_values": [
       0,

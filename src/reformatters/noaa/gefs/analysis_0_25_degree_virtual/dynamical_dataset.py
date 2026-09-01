@@ -38,10 +38,10 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
             # Four years of 3-hourly steps. Every array holds one ref per step, so at
-            # ~16.4 bytes/ref a full manifest is ~187 KiB: well inside the 3 MiB reader
-            # budget, well above the 1000 refs zstd location compression needs, and
-            # small enough that re-writing all 38 arrays' active splits costs under a
-            # second of commit CPU.
+            # the 19.7 bytes/ref measured on this dataset a full manifest is ~224 KiB:
+            # well inside the 3 MiB reader budget, well above the 1000 refs zstd
+            # location compression needs, and small enough that re-writing all 38
+            # arrays' active splits costs under a second of commit CPU.
             manifest_split=manifest_append_dim_split(
                 split_size=4 * 365 * 8, dim="time"
             ),
