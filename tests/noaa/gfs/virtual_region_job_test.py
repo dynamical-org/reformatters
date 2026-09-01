@@ -376,10 +376,7 @@ def test_cloud_mixing_ratio_element_was_respelled_at_a_single_cycle() -> None:
     boundary rather than sampled either side of it.
 
     This is the positive control for the era parametrization: a test suite that cannot
-    see this transition cannot see an unknown one. The announced GFS v16.x upgrades
-    (v16.1 2021-05-18, v16.2.1 2022-07-05, v16.3.0 2022-11-29, v16.3.16 2024-06-26) were
-    each diffed on the full (element, level, window) key set and are inventory-neutral,
-    so they are deliberately not sampled here.
+    see this transition cannot see an unknown one.
     """
     spellings = {
         (era, hour, file_type): {

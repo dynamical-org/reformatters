@@ -85,8 +85,9 @@ class NoaaGfsAnalysisVirtualDataset(
             # the newest of them stamped 5 hours after it, so just before the next cycle
             # lands the newest time is ~5h old. 11 hours also covers one missed cycle.
             validation.CheckCurrentData(max_delay=timedelta(hours=11)),
-            # discover_available extends time only to an hour holding every file it
-            # needs, so every ingested position is whole.
+            # discover_available holds the frontier back to a whole hour, but releases
+            # an earlier incomplete hour once a later one is complete, so an interior
+            # gap is reachable and this is what finds it.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

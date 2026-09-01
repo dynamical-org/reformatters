@@ -36,13 +36,9 @@ def stub_grib_index_download(
     `make_index` maps a source URL to either the index text to write or the path of a
     real index to copy; either way each call yields a new file under `tmp_path`.
 
-    A virtual region job's `file_refs` deletes the index it downloads, in a `finally`
-    block, and that is correct: the index is a temporary download and cleaning it up is
-    that function's job. The trap is on the test side. A test that writes its `.idx`
-    fixture once at the download path has that fixture consumed by the first call and is
-    meaningless on every run after, while still reporting green -- which is the state CI
-    and a reviewer see. Fix it here by handing over a fresh copy per call; never by
-    making the production path skip the unlink.
+    A fresh copy per call is the contract: `file_refs` deletes the index it is given, so
+    a fixture written once at the download path is consumed by the first call and every
+    later call in the same run sees nothing.
     """
 
     def download(url: str, dataset_id: str, **kwargs: object) -> Path:
