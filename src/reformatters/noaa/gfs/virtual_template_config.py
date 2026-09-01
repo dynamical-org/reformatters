@@ -200,13 +200,14 @@ def _virtual_encoding(
     element: str,
     chunks: tuple[int, ...],
     filters: Sequence[CodecConfig],
+    fill_value: float,
 ) -> Encoding:
     """No shards, no compressors; GribberishCodec decodes the raw message and any
     array->array filters (K->C, unit scaling) are chained on read."""
     return Encoding(
         # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
         dtype="float64",
-        fill_value=np.nan,
+        fill_value=fill_value,
         chunks=chunks,
         shards=None,
         compressors=(),
@@ -232,6 +233,7 @@ def _data_var(
     standard_name: str | None,
     comment: str | None,
     hour_0: bool | None,
+    fill_value: float = np.nan,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
@@ -245,7 +247,7 @@ def _data_var(
     return NoaaDataVar(
         name=name,
         group=group,
-        encoding=_virtual_encoding(element, chunks, resolved_filters),
+        encoding=_virtual_encoding(element, chunks, resolved_filters, fill_value),
         attrs=DataVarAttrs(
             short_name=short_name,
             long_name=long_name,
@@ -287,6 +289,7 @@ def _root_var(
     standard_name: str | None = None,
     comment: str | None = None,
     hour_0: bool | None = None,
+    fill_value: float = np.nan,
     filters: Sequence[CodecConfig] | None = None,
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
@@ -305,6 +308,7 @@ def _root_var(
         standard_name=standard_name,
         comment=comment,
         hour_0=hour_0,
+        fill_value=fill_value,
         filters=filters,
         flag_values=flag_values,
         flag_meanings=flag_meanings,
@@ -360,6 +364,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Maximum/Composite radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "visibility_surface",
@@ -441,6 +449,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "derived_radar_reflectivity_1000m",
@@ -450,6 +462,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
+            comment=(
+                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
+            ),
         ),
         root_var(
             "pressure_surface",
@@ -1914,6 +1930,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the freezing level is at or below ground.",
         ),
         root_var(
             "relative_humidity_0c_isotherm",
@@ -1932,6 +1950,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            fill_value=0.0,
+            comment="NaN where the freezing level is at or below ground.",
         ),
         root_var(
             "relative_humidity_highest_tropospheric_freezing_level",
@@ -3312,8 +3332,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
             comment=(
-                "GFS model level 1, the lowest native hybrid sigma-pressure layer, "
-                "immediately above the ground."
+                "GFS model level 1, the lowest native hybrid sigma-pressure layer, immediately above the ground. "
+                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
             ),
         ),
         root_var(
@@ -3325,8 +3346,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
             comment=(
-                "GFS model level 2, the second native hybrid sigma-pressure layer above "
-                "the ground."
+                "GFS model level 2, the second native hybrid sigma-pressure layer above the ground. "
+                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
+                "was detected, not a measured value."
             ),
         ),
     ]

@@ -145,8 +145,36 @@ def test_flag_variables_only_where_the_source_is_categorical() -> None:
         assert get_var(path).attrs.flag_values is None, path
 
 
-def test_every_variable_declares_nan_missing() -> None:
+def test_every_variable_declares_nan_missing_but_the_freezing_level_heights() -> None:
+    """The source marks a freezing level at or below ground with an exact 0, so those
+    two declare it as the fill value and a CF-aware reader sees NaN there."""
     assert len(CONFIG.data_vars) == 293
+    declared_zero = {
+        var.path for var in CONFIG.data_vars if var.encoding.fill_value == 0.0
+    }
+    assert declared_zero == {
+        "geopotential_height_0c_isotherm",
+        "geopotential_height_highest_tropospheric_freezing_level",
+    }
+    for path in declared_zero:
+        assert get_var(path).attrs.comment == (
+            "NaN where the freezing level is at or below ground."
+        )
     for var in CONFIG.data_vars:
-        assert np.isnan(var.encoding.fill_value), var.path
+        assert np.isnan(var.encoding.fill_value) or var.path in declared_zero, var.path
         assert var.internal_attrs.source_fill_value is None, var.path
+
+
+def test_reflectivity_arrays_name_the_no_echo_floor() -> None:
+    """GFS floors reflectivity at -20 dBZ, where HRRR floors it at -10, so the value in
+    the comment is GFS's own rather than the one the identically-named HRRR arrays use."""
+    floored = [
+        var
+        for var in CONFIG.data_vars
+        if var.internal_attrs.grib_element in ("REFC", "REFD")
+    ]
+    assert len(floored) == 5
+    for var in floored:
+        assert "-20 dBZ is the source's no-echo floor" in str(var.attrs.comment), (
+            var.path
+        )

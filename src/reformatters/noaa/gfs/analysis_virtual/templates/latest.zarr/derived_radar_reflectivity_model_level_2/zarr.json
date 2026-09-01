@@ -37,7 +37,7 @@
     "short_name": "refd",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "GFS model level 2, the second native hybrid sigma-pressure layer above the ground.",
+    "comment": "GFS model level 2, the second native hybrid sigma-pressure layer above the ground. -20 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

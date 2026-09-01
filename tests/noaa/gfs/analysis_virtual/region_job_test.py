@@ -89,7 +89,7 @@ def test_every_hour_of_a_day_takes_the_shortest_published_lead(
 def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None:
     """Away from a synoptic hour the two variable sets share a file, so a time costs two
     coords; at a synoptic hour they come from different cycles and it costs four."""
-    data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
+    data_vars = TEMPLATE_CONFIG.data_vars
 
     for time, expected in (
         (pd.Timestamp("2021-03-24T07:00"), 2),
@@ -207,7 +207,14 @@ def gate_setup(
 ) -> tuple[
     NoaaGfsAnalysisVirtualRegionJob, list[NoaaGfsAnalysisVirtualSourceFileCoord]
 ]:
-    data_vars = [get_var("temperature_2m"), get_var("total_precipitation_surface")]
+    # One variable of each (product, hour-0) combination, so a synoptic hour needs all
+    # four files and an hour away from one needs two.
+    data_vars = [
+        get_var("temperature_2m"),
+        get_var("total_precipitation_surface"),
+        get_var("temperature_305m_amsl"),
+        get_var("uv_b_downward_solar_flux_surface"),
+    ]
     return (
         make_job(template_ds, data_vars=data_vars),
         coords_for_times(template_ds, data_vars, times),
@@ -265,3 +272,41 @@ def test_an_empty_store_waits_for_a_whole_time(
         discover(job, coords, [c for c in coords if c.init_time < time], monkeypatch)
         == []
     )
+
+
+def test_a_variable_filtered_job_reads_only_the_product_carrying_its_variables(
+    template_ds: xr.DataTree,
+) -> None:
+    """A filter spanning both products must probe each file on a variable that file
+    fills, and a filter naming one product's variables must not fetch the other's file."""
+    pgrb2_only = get_var("wind_gust_surface")
+    pgrb2b_only = get_var("temperature_457m_amsl")
+    time = pd.Timestamp("2021-03-24T07:00")
+    job = make_job(template_ds, data_vars=[pgrb2_only, pgrb2b_only])
+
+    both = coords_for_times(template_ds, [pgrb2_only, pgrb2b_only], [time])
+    probes = {c.file_type: job.representative_var(c) for c in both}
+    assert {c.file_type for c in both} == {"pgrb2", "pgrb2b"}
+    assert probes["pgrb2"].name == pgrb2_only.name
+    assert probes["pgrb2b"].name == pgrb2b_only.name
+    for coord in both:
+        assert job.representative_var(coord) in coord.data_vars
+
+    for only, expected in ((pgrb2_only, "pgrb2"), (pgrb2b_only, "pgrb2b")):
+        coords = coords_for_times(template_ds, [only], [time])
+        assert [c.file_type for c in coords] == [expected], only.name
+
+
+def test_specific_humidity_and_ozone_are_read_from_pgrb2_alone(
+    template_ds: xr.DataTree,
+) -> None:
+    """Both products carry most isobaric elements, but pgrb2b's copies of these two are
+    the duplicates pgrb2 owns, so a pgrb2b file fills nothing for them."""
+    data_vars = [
+        get_var("pressure_level/specific_humidity"),
+        get_var("pressure_level/ozone_mixing_ratio"),
+    ]
+    coords = coords_for_times(
+        template_ds, data_vars, [pd.Timestamp("2021-03-24T07:00")]
+    )
+    assert [c.file_type for c in coords] == ["pgrb2"]

@@ -53,6 +53,47 @@ PGRB2_PREFERRED_MESSAGES: frozenset[tuple[str, str]] = frozenset(
 )
 
 
+# The idx level strings, and the two surface elements, that only pgrb2b publishes. Every
+# other root variable comes from pgrb2. Isobaric variables are carried by both products
+# except SPFH and O3MR, whose pgrb2b copies are all in PGRB2_PREFERRED_MESSAGES.
+# test_product_membership_matches_the_real_indexes pins all three against real indexes.
+_PGRB2B_ONLY_ROOT_LEVELS: frozenset[str] = frozenset(
+    [
+        *(
+            f"PV={sign}{value}e-0{exponent} (Km^2/kg/s) surface"
+            for sign in ("", "-")
+            for value, exponent in (("5", "7"), ("1", "6"), ("1.5", "6"))
+        ),
+        *(
+            f"{top}-{bottom} mb above ground"
+            for top, bottom in ((60, 30), (90, 60), (120, 90), (150, 120), (180, 150))
+        ),
+        *(f"{height} m above mean sea level" for height in (305, 457, 610, 914, 4572)),
+    ]
+)
+_PGRB2B_ONLY_SURFACE_ELEMENTS: frozenset[str] = frozenset({"DUVB", "CDUVB"})
+_PGRB2_ONLY_ISOBARIC_ELEMENTS: frozenset[str] = frozenset({"SPFH", "O3MR"})
+
+
+def carried_by(var: NoaaDataVar, file_type: NoaaGfsFileType) -> bool:
+    """Whether `file_type` publishes any message this variable is built from.
+
+    A file is read only for the variables it carries, and the chunk whose presence marks
+    it ingested has to be one of them, so a job filtered to a subset of the catalog needs
+    this rather than offering every variable to both products.
+    """
+    if var.group is not ROOT:
+        return (
+            file_type == "pgrb2"
+            or var.internal_attrs.grib_element not in _PGRB2_ONLY_ISOBARIC_ELEMENTS
+        )
+    pgrb2b_only = (
+        var.internal_attrs.grib_index_level in _PGRB2B_ONLY_ROOT_LEVELS
+        or var.internal_attrs.grib_element in _PGRB2B_ONLY_SURFACE_ELEMENTS
+    )
+    return pgrb2b_only == (file_type == "pgrb2b")
+
+
 def gfs_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
     """Fresh container objects per call; icechunk containers can't be shared
     pydantic defaults."""
@@ -118,7 +159,11 @@ class NoaaGfsVirtualRegionJob(
         prefer_pgrb2 = coord.file_type == "pgrb2b"
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
-        refs = []
+        refs: list[VirtualRef] = []
+        # At leads 1-6 the 6 hour accumulation bucket and the running total of APCP and
+        # ACPCP render one window string and the source emits two identical messages for
+        # it, so one array position matches twice. Keep the first: a chunk is one message.
+        filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
             if prefer_pgrb2 and (element, level) in PGRB2_PREFERRED_MESSAGES:
                 continue
@@ -133,10 +178,15 @@ class NoaaGfsVirtualRegionJob(
                 )
                 return []
             for var, level_label in matches:
+                out_loc = {**out_loc_base, **level_label}
+                position = (var.path, tuple(out_loc.items()))
+                if position in filled:
+                    continue
+                filled.add(position)
                 refs.append(
                     VirtualRef(
                         data_var=var,
-                        out_loc={**out_loc_base, **level_label},
+                        out_loc=out_loc,
                         location=location,
                         offset=start,
                         length=end - start,

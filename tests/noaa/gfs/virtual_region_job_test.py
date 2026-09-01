@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +17,7 @@ from reformatters.noaa.gfs.analysis_virtual.template_config import (
 from reformatters.noaa.gfs.virtual_region_job import (
     PGRB2_PREFERRED_MESSAGES,
     NoaaGfsFileType,
+    carried_by,
 )
 from reformatters.noaa.gfs.virtual_template_config import (
     PRESSURE_LEVEL_INDEX_FORMAT,
@@ -318,3 +320,90 @@ def test_cloud_mixing_ratio_element_was_respelled_between_the_2021_and_2026_eras
         "20230401": {"CLMR"},
         "20260828": {"CLMR"},
     }
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("era", _ERAS)
+@pytest.mark.parametrize("file_type", ["pgrb2", "pgrb2b"])
+def test_product_membership_matches_the_real_indexes(
+    era: str, file_type: NoaaGfsFileType
+) -> None:
+    """`carried_by` must agree with the product's real inventory for every variable.
+
+    A false positive sends a job to a file with nothing in it for that variable, and
+    lets `representative_var` probe a chunk the file never fills, which would make the
+    file re-ingest forever.
+    """
+    published = {
+        (element, level) for _, element, level, _ in index_lines(era, file_type, 9)
+    }
+    # A pgrb2b index's copies of the messages pgrb2 owns are skipped, so they are not
+    # part of what this product supplies.
+    if file_type == "pgrb2b":
+        published -= PGRB2_PREFERRED_MESSAGES
+    assert published
+
+    for var in TEMPLATE_CONFIG.data_vars:
+        levels = (
+            [
+                PRESSURE_LEVEL_INDEX_FORMAT.format(level=level)
+                for level in PRESSURE_LEVELS
+            ]
+            if var.group is not ROOT
+            else [var.internal_attrs.grib_index_level]
+        )
+        elements = (
+            var.internal_attrs.grib_element,
+            *var.internal_attrs.grib_element_alternatives,
+        )
+        in_product = any(
+            (element, level) in published for element in elements for level in levels
+        )
+        assert carried_by(var, file_type) == in_product, (var.path, file_type)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("era", _ERAS)
+@pytest.mark.parametrize("lead_hours", [1, 3, 6])
+def test_one_ref_per_position_at_the_leads_that_duplicate_accumulations(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    era: str,
+    lead_hours: int,
+) -> None:
+    """At leads 1-6 the bucket and the running total of APCP and ACPCP render one window
+    string and the index carries two identical messages for it, so the analysis's single
+    bucket array matches twice."""
+    index_path = cached_grib_index(index_url(era, "pgrb2", lead_hours), _DATASET_ID)
+    duplicated = Counter(
+        (element, level, window)
+        for _, element, level, window in parse_grib_index_lines(index_path)
+    )
+    assert [key for key, count in duplicated.items() if count > 1] == [
+        ("APCP", "surface", f"0-{lead_hours} hour acc fcst"),
+        ("ACPCP", "surface", f"0-{lead_hours} hour acc fcst"),
+    ]
+
+    stub_grib_index_download(
+        monkeypatch,
+        region_job_module,
+        tmp_path,
+        lambda url: cached_grib_index(url, _DATASET_ID),
+    )
+    data_vars = TEMPLATE_CONFIG.data_vars
+    job = _job(template_ds, [v.path for v in data_vars])
+    coord = NoaaGfsAnalysisVirtualSourceFileCoord(
+        init_time=pd.Timestamp(f"{era[:4]}-{era[4:6]}-{era[6:]}T12:00"),
+        lead_time=pd.Timedelta(hours=lead_hours),
+        file_type="pgrb2",
+        data_vars=data_vars,
+    )
+
+    refs = job.file_refs(coord, file_size=10**10)
+
+    positions = {
+        (ref.data_var.path, tuple(sorted(ref.out_loc.items()))) for ref in refs
+    }
+    assert len(positions) == len(refs)
+    assert sum(ref.data_var.name == "total_precipitation_surface" for ref in refs) == 1
