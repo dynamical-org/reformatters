@@ -1,0 +1,56 @@
+{
+  "shape": [
+    1,
+    209,
+    721,
+    1440
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "TCDC",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Boundary layer cloud cover",
+    "short_name": "tcc",
+    "standard_name": "cloud_area_fraction_in_atmosphere_layer",
+    "units": "percent",
+    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval.",
+    "step_type": "avg",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

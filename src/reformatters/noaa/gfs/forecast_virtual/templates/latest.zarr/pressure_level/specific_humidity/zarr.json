@@ -1,0 +1,59 @@
+{
+  "shape": [
+    1,
+    209,
+    721,
+    1440,
+    57
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        721,
+        1440,
+        1
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "SPFH",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Specific humidity",
+    "short_name": "q",
+    "standard_name": "specific_humidity",
+    "units": "1",
+    "comment": "Not published at the 16 levels 125, 175, 225, 275, 325, 375, 425, 475, 525, 575, 625, 675, 725, 775, 825 and 875 hPa, which are NaN at every step.",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "latitude",
+    "longitude",
+    "pressure_level"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
