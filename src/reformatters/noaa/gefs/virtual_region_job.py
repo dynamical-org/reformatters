@@ -107,8 +107,7 @@ class NoaaGefsForecastVirtualSourceFileCoord(NoaaGefsVirtualSourceFileCoord):
 class NoaaGefsForecastVirtualRegionJob(
     NoaaGefsVirtualRegionJob[NoaaGefsForecastVirtualSourceFileCoord]
 ):
-    """RegionJob shared by the GEFS virtual forecast datasets; a forecast-length
-    subclass declares operational_update_window."""
+    """RegionJob shared by the GEFS virtual forecast datasets."""
 
     def generate_source_file_coords(
         self,

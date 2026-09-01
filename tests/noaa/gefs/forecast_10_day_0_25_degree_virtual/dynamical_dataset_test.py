@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import icechunk
 import numpy as np
@@ -206,7 +207,7 @@ def test_operational_kubernetes_resources(
     )
 
     # f000 publishes ~init+3h47m and the last member's f240 ~init+5h37m, so the fire
-    # leads the burst and the deadline covers its end with slack.
+    # leads the burst and the deadline covers its end with over half an hour to spare.
     assert update_cron_job.schedule == "45 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=30)
     # Virtual updates are single writer.
@@ -214,8 +215,11 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
 
-    # The update's fire plus its pod_active_deadline.
-    assert validation_cron_job.schedule == "15 6,12,18,0 * * *"
+    # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
+    # validator never reads the store while the update is still committing.
+    assert validation_cron_job.schedule == "25 6,12,18,0 * * *"
+    # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
+    assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
 
     # Both stay suspended until the archive is backfilled.
     assert update_cron_job.suspend
@@ -234,7 +238,10 @@ def test_cron_job_names_fit_the_kubernetes_limit(
         assert cron_job.dataset_id == dataset.dataset_id
 
 
-def test_validators(dataset: NoaaGefsForecast10Day025DegreeVirtualDataset) -> None:
+def test_validators(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
 
@@ -244,7 +251,7 @@ def test_validators(dataset: NoaaGefsForecast10Day025DegreeVirtualDataset) -> No
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
     assert current_data.max_delay == timedelta(hours=12)
-    assert _stalled_cycles_before_alerting(current_data.max_delay) == 2
+    assert _stalled_cycles_before_alerting(current_data.max_delay, monkeypatch) == 2
 
     completeness = next(
         v
@@ -265,6 +272,11 @@ def test_validators(dataset: NoaaGefsForecast10Day025DegreeVirtualDataset) -> No
     # The last four lead times of every member, which the source lays down in its final
     # ~20 minutes; a fifth lead time's worth would fail.
     assert 4 * 31 <= allowed_missing < 5 * 31
+    # Absorbing that tail costs more than one member's worth of files, so a member
+    # missing entirely passes while its init is newest. It is caught one fire later,
+    # when the 18 hour update window still covers that init under the 1.0 tier.
+    # Asserted so the comment beside the validator cannot claim otherwise.
+    assert 81 < allowed_missing
 
     decode_health = next(
         v for v in validators if isinstance(v, validation.CheckVirtualDecodeHealth)
@@ -273,18 +285,30 @@ def test_validators(dataset: NoaaGefsForecast10Day025DegreeVirtualDataset) -> No
     assert decode_health.allow_all_nan_vars == ()
 
 
-def _stalled_cycles_before_alerting(max_delay: timedelta) -> int:
-    """How many consecutive un-ingested cycles CheckCurrentData tolerates when it fires
-    on its own schedule, by replaying the due-position arithmetic it uses."""
-    first = pd.Timestamp("2020-09-23T12:00")
+def _stalled_cycles_before_alerting(
+    max_delay: timedelta, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    """The number of consecutive un-ingested cycles at which CheckCurrentData first
+    fails, running the real check rather than re-deriving its due-position arithmetic.
+    One more than the number it tolerates."""
     frequency = pd.Timedelta("6h")
-    now = pd.Timestamp("2026-09-01T06:15")  # a validation fire
+    fire = pd.Timestamp("2026-09-01T06:25")  # a validation fire
     newest_normal = pd.Timestamp("2026-09-01T00:00")  # the init that fire validates
-    due = first + ((now - max_delay - first) // frequency) * frequency
-    stalled = 0
-    while newest_normal - stalled * frequency >= due:
-        stalled += 1
-    return stalled
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
+
+    for stalled in range(1, 6):
+        init_times = pd.date_range(
+            "2026-08-01T00:00", newest_normal - stalled * frequency, freq=frequency
+        )
+        context = validation.ValidationContext(
+            store=Mock(),
+            ds=xr.Dataset(coords={"init_time": init_times}),
+            append_dim="init_time",
+            append_dim_frequency=frequency,
+        )
+        if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
+            return stalled
+    raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
 
 
 def _resolved_split_size(

@@ -40,8 +40,10 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             # measures 0.68 MiB (17.8 bytes/ref) on this dataset's own manifests: well
             # inside the 3 MiB reader budget and far above the 1000 refs zstd location
             # compression needs. Splitting finer would cut per-commit flush cost but
-            # multiply the manifest count all 38 arrays share; see "Manifest splitting"
-            # in docs/virtual_datasets.md for the cost model.
+            # multiply the manifest count, which every commit pays in the snapshot's
+            # manifest list: 16 puts the archive near 550 splits per array, so ~21k
+            # manifests across the 38 arrays. See "Manifest splitting" in
+            # docs/virtual_datasets.md for the cost model.
             manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
         )
     )
@@ -52,8 +54,8 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
         cron_job_name_prefix = self.dataset_id.replace("-0-25-degree", "-0p25")
         # The whole run publishes in one burst: f000 lands ~init+3h47m and the last
         # member's f240 ~init+5h37m. Fire just before the burst starts and poll through
-        # it; the deadline leaves ~35 minutes of slack past the observed end and still
-        # ends well before the next cycle's fire.
+        # it; the deadline clears the observed end by over half an hour and still ends
+        # well before the next cycle's fire.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="45 3,9,15,21 * * *",
@@ -69,9 +71,11 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="15 6,12,18,0 * * *",
+            # The update's fire plus its pod_active_deadline, plus 10 minutes: the
+            # update stops polling 30 seconds before its deadline, so a validator
+            # firing at exactly the deadline could read the store while the update is
+            # still committing its last batch.
+            schedule="25 6,12,18,0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -85,15 +89,18 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The newest init is 6h15m old when validation fires, so 12h adds a
-            # cycle of slack: a run that rolls its last files to the next fire still
-            # passes, while two cycles with nothing ingested fail.
+            # The newest init is 6h25m old when validation fires, so 12h adds a cycle
+            # of slack: a run that rolls its last files to the next fire still passes,
+            # while two cycles with nothing ingested fail. A cycle that published
+            # nothing is caught here rather than by the completeness check below, which
+            # skips append dim positions the store does not reach.
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
-            # The newest init is fully published ~38 minutes before validation fires, so
-            # its leading tier only absorbs a slow cycle: 0.95 is the ~2500 files of a
-            # run less the last four lead times of every member, which the source lays
-            # down in its final ~20 minutes. A cycle that published nothing, or a run
-            # missing a member or a variable's whole lead range, still fails.
+            # The leading tier covers the newest init, which the source may still be
+            # finishing: 0.95 of its 81 x 31 files leaves room for the last four lead
+            # times of every member, the tail the source lays down in its final ~20
+            # minutes. That is looser than one whole member (81 files, 3.2%), so a
+            # member missing entirely passes while its init is newest and fails at the
+            # next fire, where the 18 hour window still covers it under the 1.0 tier.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.95, 1.0)
             ),
