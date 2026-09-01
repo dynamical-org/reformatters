@@ -35,18 +35,16 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # The largest split that fits a commit-time budget of about 2-3 seconds,
-            # floored by S3 object count and per-operation cost. Coarser splits cost
-            # linearly more commit time; there is no quadratic manifest-count term
-            # pulling the other way. Per entry, measured full manifest and modelled
-            # contribution to a commit:
-            #   root            4096  0.04 MiB  1.76 s
-            #   pressure_level   512  0.27 MiB  0.51 s
-            #   height           4096  0.30 MiB  0.11 s
-            # about 2.37 s in total. Every vertical group needs its own entry: the
-            # catch-all is sized for root arrays, so a group that falls through silently
-            # gets a window multiplied by its level count. Re-windowing after a change
-            # rewrites every touched array's history in one commit, so treat as frozen.
+            # Sized so refs per commit (arrays touched x refs per split) sits in
+            # line with the operationally tuned HRRR virtual datasets: 1.6M here, well
+            # under the 10.2-10.7M those three carry, whose end-to-end publish to
+            # reader-visible latency is measured in production at p50 2.8s. Coarser is
+            # also protective: fewer manifests means a smaller manifest scan, which is
+            # superlinear in the deployed icechunk version. Every vertical group needs
+            # its own entry -- the catch-all is sized for root arrays, so a group that
+            # falls through silently gets a window multiplied by its level count.
+            # Re-windowing after a change rewrites every touched array's history in one
+            # commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 512,
