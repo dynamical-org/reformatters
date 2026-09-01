@@ -37,7 +37,7 @@
     "short_name": "vis",
     "standard_name": "visibility_in_air",
     "units": "m",
-    "comment": "Saturates at the model's maximum reported visibility, about 24 km. That ceiling means unlimited visibility rather than missing data.",
+    "comment": "Clipped at the maximum visibility this field encodes, about 24 km, where a large fraction of cells sit. The true visibility there is at least that far rather than absent, so the ceiling is data and masking it would discard the clearest cells.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -182,6 +182,26 @@ def test_in_band_markers_are_described_where_the_source_uses_them() -> None:
     )
 
 
+def test_right_censored_variables_say_the_ceiling_is_data() -> None:
+    """Three fields pile a large share of cells on their encodable maximum.
+
+    A saturated value is indistinguishable from a sentinel in the value distribution;
+    each of these was settled by physical co-occurrence instead (surface pressure above
+    the PLPL ceiling, CAPE nonzero there). The comment has to say the ceiling is
+    clipped data, because a reader who masks it loses exactly the cells that matter.
+    """
+    for path in (
+        "pressure_of_lifted_parcel_level_255_0mb",
+        "visibility_surface",
+    ):
+        comment = str(get_var(path).attrs.comment)
+        assert comment.startswith("Clipped at the"), path
+        assert "rather than absent" in comment, path
+        # No mask range and no fill value: masking would discard real data.
+        assert "Mask" not in comment, path
+        assert np.isnan(get_var(path).encoding.fill_value), path
+
+
 def test_sunshine_duration_is_a_six_hour_bucket_despite_its_instant_label() -> None:
     """The index labels SUNSD instantaneous, which is what makes the window string
     match, but the values accumulate and reset every 6 hours of lead time."""

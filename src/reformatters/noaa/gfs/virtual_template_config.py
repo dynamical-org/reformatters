@@ -485,8 +485,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="m",
             standard_name="visibility_in_air",
             comment=(
-                "Saturates at the model's maximum reported visibility, about 24 km. "
-                "That ceiling means unlimited visibility rather than missing data."
+                "Clipped at the maximum visibility this field encodes, about 24 km, "
+                "where a large fraction of cells sit. The true visibility there is at "
+                "least that far rather than absent, so the ceiling is data and masking "
+                "it would discard the clearest cells."
             ),
         ),
         root_var(
@@ -2212,6 +2214,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure of level from which parcel was lifted",
             units="Pa",
             standard_name="original_air_pressure_of_lifted_parcel",
+            comment=(
+                "Clipped at the highest pressure this field encodes, near 100000 Pa, "
+                "where a large fraction of cells sit. Those cells have a surface "
+                "pressure above that ceiling, so the parcel's true level is at or "
+                "below the reported value rather than absent, and they carry most of "
+                "the convective signal: masking them would discard real data."
+            ),
         ),
         root_var(
             "land_sea_mask_surface",
