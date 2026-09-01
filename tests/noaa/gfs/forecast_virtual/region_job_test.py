@@ -31,9 +31,11 @@ from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_do
 TEMPLATE_CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-forecast-virtual-test"
 
-# Spans the whole intended archive: the first weeks, the CLWMR -> CLMR rename era, and
-# the present.
-_ERAS = ("20210323", "20230401", "20260828")
+# Spans the whole intended archive: its first init, a few days later, the CLWMR ->
+# CLMR rename era, and the present. The claims these tests pin are frozen into published
+# coordinates, so the domain to sample is the archive, whose first init is
+# append_dim_start rather than a date near it.
+_ERAS = ("20210322", "20210325", "20230401", "20260828")
 # f000 (no windowed message at all), the leads where the 6 hour bucket and the running
 # total collapse onto one index line, the first lead where they separate, both forms of
 # the running total's day-vs-hour window switch, and the last lead.
