@@ -1,0 +1,38 @@
+1:0:d=2026082800:VIS:surface:120 hour fcst:ENS=low-res ctl
+2:316046:d=2026082800:GUST:surface:120 hour fcst:ENS=low-res ctl
+3:859872:d=2026082800:MSLET:mean sea level:120 hour fcst:ENS=low-res ctl
+4:1608922:d=2026082800:PRES:surface:120 hour fcst:ENS=low-res ctl
+5:2348635:d=2026082800:TSOIL:0-0.1 m below ground:120 hour fcst:ENS=low-res ctl
+6:2705226:d=2026082800:SOILW:0-0.1 m below ground:120 hour fcst:ENS=low-res ctl
+7:3053616:d=2026082800:WEASD:surface:120 hour fcst:ENS=low-res ctl
+8:3283522:d=2026082800:SNOD:surface:120 hour fcst:ENS=low-res ctl
+9:3496244:d=2026082800:ICETK:surface:120 hour fcst:ENS=low-res ctl
+10:3569815:d=2026082800:TMP:2 m above ground:120 hour fcst:ENS=low-res ctl
+11:3998290:d=2026082800:DPT:2 m above ground:120 hour fcst:ENS=low-res ctl
+12:4436478:d=2026082800:RH:2 m above ground:120 hour fcst:ENS=low-res ctl
+13:5102953:d=2026082800:TMAX:2 m above ground:114-120 hour max fcst:ENS=low-res ctl
+14:5524405:d=2026082800:TMIN:2 m above ground:114-120 hour min fcst:ENS=low-res ctl
+15:5951706:d=2026082800:UGRD:10 m above ground:120 hour fcst:ENS=low-res ctl
+16:6792911:d=2026082800:VGRD:10 m above ground:120 hour fcst:ENS=low-res ctl
+17:7616335:d=2026082800:CPOFP:surface:120 hour fcst:ENS=low-res ctl
+18:8189689:d=2026082800:APCP:surface:114-120 hour acc fcst:ENS=low-res ctl
+19:8473508:d=2026082800:CSNOW:surface:114-120 hour ave fcst:ENS=low-res ctl
+20:8488936:d=2026082800:CICEP:surface:114-120 hour ave fcst:ENS=low-res ctl
+21:8489142:d=2026082800:CFRZR:surface:114-120 hour ave fcst:ENS=low-res ctl
+22:8491184:d=2026082800:CRAIN:surface:114-120 hour ave fcst:ENS=low-res ctl
+23:8577945:d=2026082800:LHTFL:surface:114-120 hour ave fcst:ENS=low-res ctl
+24:9408759:d=2026082800:SHTFL:surface:114-120 hour ave fcst:ENS=low-res ctl
+25:10173757:d=2026082800:CAPE:surface:120 hour fcst:ENS=low-res ctl
+26:10671901:d=2026082800:CIN:surface:120 hour fcst:ENS=low-res ctl
+27:11016571:d=2026082800:PWAT:entire atmosphere (considered as a single layer):120 hour fcst:ENS=low-res ctl
+28:11487854:d=2026082800:TCDC:entire atmosphere:114-120 hour ave fcst:ENS=low-res ctl
+29:12034550:d=2026082800:HGT:cloud ceiling:120 hour fcst:ENS=low-res ctl
+30:13089384:d=2026082800:DSWRF:surface:114-120 hour ave fcst:ENS=low-res ctl
+31:14016218:d=2026082800:DLWRF:surface:114-120 hour ave fcst:ENS=low-res ctl
+32:14504926:d=2026082800:USWRF:surface:114-120 hour ave fcst:ENS=low-res ctl
+33:15321709:d=2026082800:ULWRF:surface:114-120 hour ave fcst:ENS=low-res ctl
+34:15697718:d=2026082800:ULWRF:top of atmosphere:114-120 hour ave fcst:ENS=low-res ctl
+35:16140367:d=2026082800:HLCY:3000-0 m above ground:120 hour fcst:ENS=low-res ctl
+36:16767752:d=2026082800:CAPE:180-0 mb above ground:120 hour fcst:ENS=low-res ctl
+37:17281936:d=2026082800:CIN:180-0 mb above ground:120 hour fcst:ENS=low-res ctl
+38:17655397:d=2026082800:PRMSL:mean sea level:120 hour fcst:ENS=low-res ctl

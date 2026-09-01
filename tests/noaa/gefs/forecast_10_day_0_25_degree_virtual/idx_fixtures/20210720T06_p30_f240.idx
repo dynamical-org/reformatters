@@ -1,0 +1,34 @@
+1:0:d=2021072006:GUST:surface:240 hour fcst:ENS=+30
+2:551710:d=2021072006:PRES:surface:240 hour fcst:ENS=+30
+3:1298388:d=2021072006:TSOIL:0-0.1 m below ground:240 hour fcst:ENS=+30
+4:1659526:d=2021072006:SOILW:0-0.1 m below ground:240 hour fcst:ENS=+30
+5:2009376:d=2021072006:WEASD:surface:240 hour fcst:ENS=+30
+6:2226760:d=2021072006:SNOD:surface:240 hour fcst:ENS=+30
+7:2429912:d=2021072006:ICETK:surface:240 hour fcst:ENS=+30
+8:2511658:d=2021072006:TMP:2 m above ground:240 hour fcst:ENS=+30
+9:2938588:d=2021072006:DPT:2 m above ground:240 hour fcst:ENS=+30
+10:3375504:d=2021072006:RH:2 m above ground:240 hour fcst:ENS=+30
+11:4037526:d=2021072006:TMAX:2 m above ground:234-240 hour max fcst:ENS=+30
+12:4457075:d=2021072006:TMIN:2 m above ground:234-240 hour min fcst:ENS=+30
+13:4874834:d=2021072006:UGRD:10 m above ground:240 hour fcst:ENS=+30
+14:5718576:d=2021072006:VGRD:10 m above ground:240 hour fcst:ENS=+30
+15:6543042:d=2021072006:APCP:surface:234-240 hour acc fcst:ENS=+30
+16:6825612:d=2021072006:CSNOW:surface:234-240 hour ave fcst:ENS=+30
+17:6843921:d=2021072006:CICEP:surface:234-240 hour ave fcst:ENS=+30
+18:6844169:d=2021072006:CFRZR:surface:234-240 hour ave fcst:ENS=+30
+19:6844919:d=2021072006:CRAIN:surface:234-240 hour ave fcst:ENS=+30
+20:6929582:d=2021072006:LHTFL:surface:234-240 hour ave fcst:ENS=+30
+21:7746970:d=2021072006:SHTFL:surface:234-240 hour ave fcst:ENS=+30
+22:8504277:d=2021072006:CAPE:surface:240 hour fcst:ENS=+30
+23:8994143:d=2021072006:CIN:surface:240 hour fcst:ENS=+30
+24:9316608:d=2021072006:PWAT:entire atmosphere (considered as a single layer):240 hour fcst:ENS=+30
+25:9782214:d=2021072006:TCDC:entire atmosphere:234-240 hour ave fcst:ENS=+30
+26:10328420:d=2021072006:DSWRF:surface:234-240 hour ave fcst:ENS=+30
+27:10756742:d=2021072006:DLWRF:surface:234-240 hour ave fcst:ENS=+30
+28:11242155:d=2021072006:USWRF:surface:234-240 hour ave fcst:ENS=+30
+29:11526102:d=2021072006:ULWRF:surface:234-240 hour ave fcst:ENS=+30
+30:11892455:d=2021072006:ULWRF:top of atmosphere:234-240 hour ave fcst:ENS=+30
+31:12329101:d=2021072006:HLCY:3000-0 m above ground:240 hour fcst:ENS=+30
+32:12952669:d=2021072006:CAPE:180-0 mb above ground:240 hour fcst:ENS=+30
+33:13455827:d=2021072006:CIN:180-0 mb above ground:240 hour fcst:ENS=+30
+34:13810378:d=2021072006:PRMSL:mean sea level:240 hour fcst:ENS=+30

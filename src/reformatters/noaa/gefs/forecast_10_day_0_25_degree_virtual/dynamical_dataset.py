@@ -36,10 +36,12 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
             # Four days of 6 hourly inits. Every array holds one ref per (lead time,
-            # ensemble member), so a full manifest is 16 x 81 x 31 = 40176 refs: at the
-            # 14.9 bytes/ref measured on this dataset ~0.57 MiB, well inside the 3 MiB
-            # reader budget and far above the 1000 refs zstd location compression needs.
-            # See "Manifest splitting" in docs/virtual_datasets.md for the cost model.
+            # ensemble member), so a full manifest is 16 x 81 x 31 = 40176 refs, which
+            # measures 0.68 MiB (17.8 bytes/ref) on this dataset's own manifests: well
+            # inside the 3 MiB reader budget and far above the 1000 refs zstd location
+            # compression needs. Splitting finer would cut per-commit flush cost but
+            # multiply the manifest count all 38 arrays share; see "Manifest splitting"
+            # in docs/virtual_datasets.md for the cost model.
             manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
         )
     )
