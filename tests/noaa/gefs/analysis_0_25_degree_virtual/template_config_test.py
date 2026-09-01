@@ -100,8 +100,8 @@ def test_windowed_variables_declare_the_six_hour_reset_and_say_so() -> None:
     assert len(windowed) == 15
     for var in windowed:
         assert var.internal_attrs.window_reset_frequency == pd.Timedelta("6h"), var.name
-        assert var.attrs.comment is not None, var.name
         if var.attrs.flag_values is None:
+            assert var.attrs.comment is not None, var.name
             assert "(00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC)" in (
                 var.attrs.comment
             ), var.name
@@ -117,8 +117,10 @@ def test_windowed_variables_declare_the_six_hour_reset_and_say_so() -> None:
 
 
 def test_flag_variables_carry_only_their_codes() -> None:
-    """A window sentence would contradict flag_values by describing a fraction. The
-    published materialized twin carries only the codes here too."""
+    """flag_values and flag_meanings are the whole meaning of a categorical variable, so
+    it carries no comment: a window sentence would contradict them by describing a
+    fraction, and restating the codes in prose would let the two representations drift.
+    """
     for name in (
         "categorical_snow_surface",
         "categorical_ice_pellets_surface",
@@ -127,7 +129,8 @@ def test_flag_variables_carry_only_their_codes() -> None:
     ):
         var = get_var(name)
         assert var.attrs.flag_values == (0, 1), name
-        assert var.attrs.comment == "0=no; 1=yes", name
+        assert var.attrs.flag_meanings == "no yes", name
+        assert var.attrs.comment is None, name
 
 
 def test_extreme_temperatures_are_not_read_from_the_degenerate_lead_0_window() -> None:

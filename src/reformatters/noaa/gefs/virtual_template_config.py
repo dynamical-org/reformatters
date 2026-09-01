@@ -27,15 +27,12 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
+    GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_B22_TRANSITION_DATE,
     GEFSSourceFileType,
     NoaaGefsVirtualDataVar,
     NoaaGefsVirtualInternalAttrs,
 )
-
-# GEFS resets every windowed quantity's accumulation at each 6 hour synoptic time, so a
-# lead time that is not a multiple of 6 carries a partial window.
-WINDOW_RESET_FREQUENCY = pd.Timedelta("6h")
 
 # The catalog's spelling of each grid FILE_RESOLUTIONS resolves to.
 _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {0.25: "0.25 degrees (~20km)"}
@@ -195,7 +192,7 @@ def _data_var(
             source_file_type=source_file_type,
             available_from=available_from,
             window_reset_frequency=(
-                WINDOW_RESET_FREQUENCY if step_type != "instant" else None
+                GEFS_ACCUMULATION_RESET_FREQUENCY if step_type != "instant" else None
             ),
             # Virtual chunks are never rewritten, so no rounding and no rasterio band
             # description / index position (unused fields the base model requires).
@@ -404,7 +401,6 @@ def _s_file_data_vars(
             short_name="csnow",
             long_name="Categorical snow",
             units="1",
-            comment="0=no; 1=yes",
             flag_values=(0, 1),
             flag_meanings="no yes",
         ),
@@ -416,7 +412,6 @@ def _s_file_data_vars(
             short_name="cicep",
             long_name="Categorical ice pellets",
             units="1",
-            comment="0=no; 1=yes",
             flag_values=(0, 1),
             flag_meanings="no yes",
         ),
@@ -428,7 +423,6 @@ def _s_file_data_vars(
             short_name="cfrzr",
             long_name="Categorical freezing rain",
             units="1",
-            comment="0=no; 1=yes",
             flag_values=(0, 1),
             flag_meanings="no yes",
         ),
@@ -440,7 +434,6 @@ def _s_file_data_vars(
             short_name="crain",
             long_name="Categorical rain",
             units="1",
-            comment="0=no; 1=yes",
             flag_values=(0, 1),
             flag_meanings="no yes",
         ),
