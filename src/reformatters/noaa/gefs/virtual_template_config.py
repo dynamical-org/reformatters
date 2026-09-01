@@ -140,10 +140,12 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
 
 def _window_length(lead_time: Timedelta) -> Timedelta:
     """The window a lead time's windowed messages cover: the span since the last whole
-    multiple of WINDOW_RESET_FREQUENCY at or below it."""
-    partial_window = lead_time % WINDOW_RESET_FREQUENCY
+    multiple of GEFS_ACCUMULATION_RESET_FREQUENCY at or below it."""
+    partial_window = lead_time % GEFS_ACCUMULATION_RESET_FREQUENCY
     return (
-        partial_window if partial_window > pd.Timedelta(0) else WINDOW_RESET_FREQUENCY
+        partial_window
+        if partial_window > pd.Timedelta(0)
+        else GEFS_ACCUMULATION_RESET_FREQUENCY
     )
 
 
@@ -161,7 +163,7 @@ def _window_lead_time_sequences() -> dict[Timedelta, str]:
     sequences: dict[Timedelta, list[int]] = {}
     for lead_time in pd.timedelta_range(
         GEFS_S_FILE_LEAD_FREQUENCY,
-        WINDOW_RESET_FREQUENCY * _WINDOW_SEQUENCE_LENGTH,
+        GEFS_ACCUMULATION_RESET_FREQUENCY * _WINDOW_SEQUENCE_LENGTH,
         freq=GEFS_S_FILE_LEAD_FREQUENCY,
     ):
         sequences.setdefault(_window_length(lead_time), []).append(
@@ -171,7 +173,7 @@ def _window_lead_time_sequences() -> dict[Timedelta, str]:
         len(lead_hours) == _WINDOW_SEQUENCE_LENGTH for lead_hours in sequences.values()
     ), (
         f"lead times every {GEFS_S_FILE_LEAD_FREQUENCY} do not repeat their windows "
-        f"every {WINDOW_RESET_FREQUENCY}, so no sequence describes them: {sequences}"
+        f"every {GEFS_ACCUMULATION_RESET_FREQUENCY}, so no sequence describes them: {sequences}"
     )
     # Longest window first: the whole reset period, then the partial ones.
     return {
@@ -188,7 +190,9 @@ _WINDOW_PERIODS = " or ".join(
 
 
 class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
-    """Virtual GEFS forecast on init_time x ensemble_member x lead_time."""
+    """Virtual GEFS forecast on init_time x ensemble_member x lead_time; a
+    forecast-length subclass declares source_file_types, forecast_length and
+    dataset_attributes."""
 
     forecast_length: Timedelta
 

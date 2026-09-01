@@ -40,7 +40,6 @@
     "long_name": "Categorical ice pellets",
     "short_name": "cicep",
     "units": "1",
-    "comment": "0=no; 1=yes",
     "step_type": "avg",
     "flag_values": [
       0,
