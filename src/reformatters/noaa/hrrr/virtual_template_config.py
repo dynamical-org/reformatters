@@ -71,7 +71,7 @@ type WindowKind = Literal["instant", "max", "min", "avg", "acc_run", "acc_1h"]
 
 # Each windowed kind's (step_type, window_reset_frequency). acc_run is the
 # accumulation since init (window 0->lead, grows with lead); acc_1h is the
-# preceding-hour bucket. noaa_grib_index._lead_time_str renders the matching idx
+# preceding-hour bucket. noaa_grib_index.grib_index_window_str renders the matching idx
 # window string per lead from step_type + window_reset_frequency.
 _WINDOW_ATTRS: dict[WindowKind, tuple[str, Timedelta | None]] = {
     "instant": ("instant", None),
@@ -436,7 +436,7 @@ def _data_var(
         internal_attrs=NoaaHrrrInternalAttrs(
             grib_element=element,
             grib_element_alternatives=element_alternatives,
-            # Group vars carry a "{level} ..." format string the region job fills per
+            # Group vars carry a "{level:g} ..." format string the region job fills per
             # level; root vars carry the literal idx level string.
             grib_index_level=grib_index_level,
             hrrr_file_type=file_type,
@@ -513,7 +513,7 @@ def _pressure_var(
         chunks=chunks,
         element=element,
         element_alternatives=element_alternatives,
-        grib_index_level="{level} mb",
+        grib_index_level="{level:g} mb",
         file_type="prs",
         group="pressure_level",
         window="instant",
@@ -545,7 +545,7 @@ def _model_var(
         chunks=chunks,
         element=element,
         element_alternatives=element_alternatives,
-        grib_index_level="{level} hybrid level",
+        grib_index_level="{level:g} hybrid level",
         file_type="nat",
         group="model_level",
         window="instant",

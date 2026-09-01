@@ -14,7 +14,7 @@ from reformatters.noaa.models import NoaaInternalAttrs
 GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
 
 
-def _lead_time_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
+def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
     if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
         # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
         # windowed vars compute the start of the current accumulation window.
@@ -87,7 +87,7 @@ def grib_message_byte_ranges_from_index(
     init_time_str = init_time.strftime("d=%Y%m%d%H")
 
     for var in data_vars:
-        lead_time_str = _lead_time_str(var, lead_hours)
+        lead_time_str = grib_index_window_str(var, lead_hours)
 
         grib_elements = (
             var.internal_attrs.grib_element,
