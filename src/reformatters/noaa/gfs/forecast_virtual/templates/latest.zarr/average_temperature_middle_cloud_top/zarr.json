@@ -45,7 +45,7 @@
     "short_name": "t",
     "standard_name": "air_temperature_at_cloud_top",
     "units": "degree_Celsius",
-    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time strictly before this step and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

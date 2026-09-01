@@ -26,14 +26,14 @@ FORECAST_LENGTH = pd.Timedelta("384h")
 
 _BUCKET_EXTENT = (
     "the 6 hour window containing this step: the window opens at the most recent "
-    "multiple of 6 hours of forecast lead time and closes at this step, so it "
-    "lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a "
-    "fixed interval."
+    "multiple of 6 hours of forecast lead time strictly before this step and closes "
+    "at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours "
+    "rather than covering a fixed interval."
 )
 _BUCKET_COMMENTS = {
     "accum": (
         f"Accumulated over {_BUCKET_EXTENT} Subtracting the value at an earlier step "
-        "in the same window gives the exact total between those two steps."
+        "with the same window start gives the exact total between those two steps."
     ),
     "avg": f"Averaged over {_BUCKET_EXTENT}",
     "max": f"Maximum over {_BUCKET_EXTENT}",

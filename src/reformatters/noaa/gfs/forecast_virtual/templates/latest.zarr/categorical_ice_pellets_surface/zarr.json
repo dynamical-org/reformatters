@@ -38,7 +38,7 @@
     "long_name": "Categorical ice pellets",
     "short_name": "cicep",
     "units": "1",
-    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. 0=no; 1=yes.",
+    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time strictly before this step and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. 0=no; 1=yes.",
     "step_type": "avg",
     "flag_values": [
       0,
