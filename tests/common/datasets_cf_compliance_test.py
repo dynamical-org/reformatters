@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, Literal, get_args
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
@@ -1020,9 +1020,320 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("y", "units", "eccc-hrdps-forecast"),
 }
 
+type MetadataValue = str | tuple[int, ...] | None
+type QuantityMetadataExceptionStatus = Literal[
+    "legitimate-divergence", "unresolved-pending-human-decision"
+]
+type QuantityMetadataException = tuple[
+    QuantityMetadataExceptionStatus,
+    str,
+    dict[MetadataValue, frozenset[str]],
+]
+
+QUANTITY_METADATA_CONSISTENCY_EXCEPTIONS: dict[
+    tuple[str, str], QuantityMetadataException
+] = {
+    ("categorical_snow_surface", "step_type"): (
+        "legitimate-divergence",
+        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("categorical_ice_pellets_surface", "step_type"): (
+        "legitimate-divergence",
+        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("categorical_freezing_rain_surface", "step_type"): (
+        "legitimate-divergence",
+        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("categorical_rain_surface", "step_type"): (
+        "legitimate-divergence",
+        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("total_cloud_cover_atmosphere", "step_type"): (
+        "unresolved-pending-human-decision",
+        "The IFS ENS 15-day product is instantaneous while the 46-day product is a 24-hour mean under the same variable name.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+                    "ecmwf-aifs-single-forecast",
+                    "ecmwf-aifs-single-forecast-virtual",
+                    "ecmwf-aifs-ens-forecast",
+                    "dwd-icon-eu-forecast-5-day",
+                    "eccc-hrdps-forecast",
+                }
+            ),
+        },
+    ),
+    ("downward_short_wave_radiation_flux_surface", "step_type"): (
+        "legitimate-divergence",
+        "HRRR publishes an instantaneous flux while the other sources publish interval-average fluxes.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+                    "ecmwf-aifs-single-forecast",
+                    "ecmwf-aifs-ens-forecast",
+                    "eccc-hrdps-forecast",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("downward_long_wave_radiation_flux_surface", "step_type"): (
+        "legitimate-divergence",
+        "HRRR publishes an instantaneous flux while the other sources publish interval-average fluxes.",
+        {
+            "avg": frozenset(
+                {
+                    "noaa-gfs-forecast",
+                    "noaa-gfs-analysis",
+                    "noaa-gefs-analysis",
+                    "noaa-gefs-forecast-35-day",
+                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+                    "ecmwf-aifs-single-forecast",
+                    "ecmwf-aifs-ens-forecast",
+                    "eccc-hrdps-forecast",
+                }
+            ),
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+        },
+    ),
+    ("snow_water_equivalent_surface", "step_type"): (
+        "legitimate-divergence",
+        "IFS ENS 46-day publishes a 24-hour mean while HRRR, ICON-EU, and HRDPS publish instantaneous snow water equivalent.",
+        {
+            "instant": frozenset(
+                {
+                    "noaa-hrrr-forecast-48-hour",
+                    "noaa-hrrr-analysis",
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                    "dwd-icon-eu-forecast-5-day",
+                    "eccc-hrdps-forecast",
+                }
+            ),
+            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
+        },
+    ),
+    ("land_sea_mask_surface", "flag_values"): (
+        "legitimate-divergence",
+        "HRRR carries a binary land mask while AIFS carries a continuous land-area fraction.",
+        {
+            (0, 1): frozenset(
+                {
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+            None: frozenset({"ecmwf-aifs-single-forecast-virtual"}),
+        },
+    ),
+    ("land_sea_mask_surface", "flag_meanings"): (
+        "legitimate-divergence",
+        "HRRR carries a binary land mask while AIFS carries a continuous land-area fraction.",
+        {
+            "sea land": frozenset(
+                {
+                    "noaa-hrrr-analysis-virtual",
+                    "noaa-hrrr-forecast-48-hour-virtual",
+                    "noaa-hrrr-forecast-18-hour-virtual",
+                }
+            ),
+            None: frozenset({"ecmwf-aifs-single-forecast-virtual"}),
+        },
+    ),
+    ("categorical_precipitation_type_surface", "flag_values"): (
+        "legitimate-divergence",
+        "MRMS, IFS ENS, and HRDPS use distinct source-defined precipitation-type code tables.",
+        {
+            (-3, 0, 1, 3, 6, 7, 10, 91, 96): frozenset(
+                {"noaa-mrms-conus-analysis-hourly"}
+            ),
+            (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 255): frozenset(
+                {"ecmwf-ifs-ens-forecast-15-day-0-25-degree"}
+            ),
+            (1, 2, 3, 4, 5, 6, 7, 8, 9): frozenset({"eccc-hrdps-forecast"}),
+        },
+    ),
+    ("categorical_precipitation_type_surface", "flag_meanings"): (
+        "legitimate-divergence",
+        "MRMS, IFS ENS, and HRDPS use distinct source-defined precipitation-type code tables.",
+        {
+            "no_coverage no_precipitation warm_stratiform_rain snow convective_rain rain_mixed_with_hail cold_stratiform_rain tropical_stratiform_rain_mix tropical_convective_rain_mix": frozenset(
+                {"noaa-mrms-conus-analysis-hourly"}
+            ),
+            "no_precipitation rain thunderstorm freezing_rain mixed_ice snow wet_snow mixture_of_rain_and_snow ice_pellets graupel hail drizzle freezing_drizzle hail_less_than_5mm hail_greater_than_or_equal_to_5mm missing": frozenset(
+                {"ecmwf-ifs-ens-forecast-15-day-0-25-degree"}
+            ),
+            "rain mixture_of_rain_and_snow freezing_rain ice_pellets snow no_precipitation drizzle freezing_drizzle mixture_of_freezing_rain_and_ice_pellets": frozenset(
+                {"eccc-hrdps-forecast"}
+            ),
+        },
+    ),
+    ("wind_gust_10m", "step_type"): (
+        "legitimate-divergence",
+        "HRDPS publishes the gust at the valid time while IFS ENS and ICON-EU publish the maximum since the previous step.",
+        {
+            "max": frozenset(
+                {
+                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+                    "dwd-icon-eu-forecast-5-day",
+                }
+            ),
+            "instant": frozenset({"eccc-hrdps-forecast"}),
+        },
+    ),
+    ("skin_temperature_surface", "step_type"): (
+        "legitimate-divergence",
+        "IFS ENS 46-day publishes a 24-hour mean while AIFS publishes instantaneous skin temperature.",
+        {
+            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
+            "instant": frozenset({"ecmwf-aifs-single-forecast-virtual"}),
+        },
+    ),
+    ("sea_surface_temperature", "step_type"): (
+        "legitimate-divergence",
+        "IFS ENS 46-day publishes a 24-hour mean while WeatherNext 2 publishes an instantaneous daily field.",
+        {
+            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
+            "instant": frozenset(
+                {
+                    "google-weathernext2-forecast-historical-virtual",
+                    "google-weathernext2-forecast-operational-virtual",
+                }
+            ),
+        },
+    ),
+    ("total_column_water_atmosphere", "step_type"): (
+        "legitimate-divergence",
+        "IFS ENS 46-day publishes a 24-hour mean while AIFS publishes instantaneous total-column water.",
+        {
+            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
+            "instant": frozenset({"ecmwf-aifs-single-forecast-virtual"}),
+        },
+    ),
+}
+
 
 def _format_conflict(
-    var_name: str, attr_name: str, values_to_datasets: dict[str | None, list[str]]
+    var_name: str,
+    attr_name: str,
+    values_to_datasets: dict[MetadataValue, list[str]],
 ) -> str:
     """Format a conflict message showing which datasets use which values."""
     values_list = list(values_to_datasets.keys())
@@ -1037,7 +1348,7 @@ def _format_conflict(
 
 
 def _check_consistency(
-    metadata_by_name: dict[str, dict[str, dict[str, str | None]]],
+    metadata_by_name: dict[str, dict[str, dict[str, MetadataValue]]],
     attrs_to_check: list[str],
 ) -> list[str]:
     """
@@ -1051,7 +1362,7 @@ def _check_consistency(
             continue
 
         for attr_name in attrs_to_check:
-            values_to_datasets: dict[str | None, list[str]] = {}
+            values_to_datasets: dict[MetadataValue, list[str]] = {}
             for dataset_id, metadata in datasets_metadata.items():
                 value = metadata.get(attr_name)
                 values_to_datasets.setdefault(value, []).append(dataset_id)
@@ -1059,8 +1370,20 @@ def _check_consistency(
             if len(values_to_datasets) <= 1:
                 continue
 
+            quantity_exception = QUANTITY_METADATA_CONSISTENCY_EXCEPTIONS.get(
+                (name, attr_name)
+            )
+            if quantity_exception is not None:
+                _, _, expected_values = quantity_exception
+                actual_values = {
+                    value: frozenset(dataset_ids)
+                    for value, dataset_ids in values_to_datasets.items()
+                }
+                if actual_values == expected_values:
+                    continue
+
             # Filter out allowed exceptions
-            filtered_values: dict[str | None, list[str]] = {}
+            filtered_values: dict[MetadataValue, list[str]] = {}
             for value, dataset_ids in values_to_datasets.items():
                 remaining = [
                     ds_id
@@ -1081,15 +1404,16 @@ def test_metadata_consistency_across_datasets() -> None:
     """
     Ensure metadata is consistent across all datasets. Checks:
 
-    1. Same var_name → same (short_name, long_name, standard_name, units)
+    1. Same var_name → same (short_name, long_name, standard_name, units,
+       step_type, flag_values, flag_meanings)
     2. Same short_name → same (long_name, standard_name, units)
     3. Same long_name → same (short_name, standard_name, units)
     4. Same coord_name → same (long_name, standard_name, units)
     """
     # Collect data variable metadata grouped by var_name, short_name, and long_name
-    by_var_name: dict[str, dict[str, dict[str, str | None]]] = {}
-    by_short_name: dict[str, dict[str, dict[str, str | None]]] = {}
-    by_long_name: dict[str, dict[str, dict[str, str | None]]] = {}
+    by_var_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
+    by_short_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
+    by_long_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
@@ -1099,6 +1423,9 @@ def test_metadata_consistency_across_datasets() -> None:
                 "units": var_config.attrs.units,
                 "standard_name": var_config.attrs.standard_name,
                 "long_name": var_config.attrs.long_name,
+                "step_type": var_config.attrs.step_type,
+                "flag_values": var_config.attrs.flag_values,
+                "flag_meanings": var_config.attrs.flag_meanings,
             }
 
             by_var_name.setdefault(var_config.name, {})[dataset.dataset_id] = attrs
@@ -1114,7 +1441,16 @@ def test_metadata_consistency_across_datasets() -> None:
     # Same var_name → consistent metadata
     conflicts.extend(
         _check_consistency(
-            by_var_name, ["short_name", "long_name", "standard_name", "units"]
+            by_var_name,
+            [
+                "short_name",
+                "long_name",
+                "standard_name",
+                "units",
+                "step_type",
+                "flag_values",
+                "flag_meanings",
+            ],
         )
     )
 
@@ -1129,7 +1465,7 @@ def test_metadata_consistency_across_datasets() -> None:
     )
 
     # Collect coordinate metadata and check consistency
-    by_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
+    by_coord_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
