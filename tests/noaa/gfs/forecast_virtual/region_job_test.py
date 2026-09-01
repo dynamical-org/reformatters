@@ -22,7 +22,10 @@ from reformatters.noaa.gfs.virtual_template_config import (
     PRESSURE_LEVELS,
 )
 from reformatters.noaa.models import NoaaDataVar
-from reformatters.noaa.noaa_grib_index import _lead_time_str, parse_grib_index_lines
+from reformatters.noaa.noaa_grib_index import (
+    grib_index_window_str,
+    parse_grib_index_lines,
+)
 from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_download
 
 TEMPLATE_CONFIG = NoaaGfsForecastVirtualTemplateConfig()
@@ -316,7 +319,7 @@ def test_every_windowed_window_string_matches_the_real_index(
     assert len(windowed) == 44
 
     for var in windowed:
-        window = _lead_time_str(var, lead_hours)
+        window = grib_index_window_str(var, lead_hours)
         elements = (
             var.internal_attrs.grib_element,
             *var.internal_attrs.grib_element_alternatives,
@@ -359,13 +362,13 @@ def test_the_running_totals_render_the_window_the_source_uses(
         ("total_precipitation_run_total_surface", "APCP"),
         ("convective_precipitation_run_total_surface", "ACPCP"),
     ):
-        assert _lead_time_str(get_var(name), lead_hours) == expected, name
+        assert grib_index_window_str(get_var(name), lead_hours) == expected, name
         assert (element, "surface", expected) in published, name
     for name, element in (
         ("total_precipitation_surface", "APCP"),
         ("convective_precipitation_surface", "ACPCP"),
     ):
-        assert _lead_time_str(get_var(name), lead_hours) == bucket_expected, name
+        assert grib_index_window_str(get_var(name), lead_hours) == bucket_expected, name
         assert (element, "surface", bucket_expected) in published, name
 
 
