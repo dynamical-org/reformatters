@@ -35,8 +35,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Convective precipitation (water)",
-    "short_name": "acpcp",
+    "long_name": "Convective precipitation",
+    "short_name": "cp",
     "standard_name": "convective_precipitation_amount",
     "units": "kg m-2",
     "comment": "Accumulated over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. Subtracting the value at an earlier step in the same window gives the exact total between those two steps.",
