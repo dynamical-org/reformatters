@@ -15,6 +15,9 @@ from reformatters.noaa.models import NoaaInternalAttrs
 # but `s` stops after forecast lead time 240h at which point the variable is still in `a` or `b`.
 # `s+b-b22` is the same as `s+b` when init time >= 2022-10-18T12 and `b` before.
 type GEFSFileType = Literal["a", "b", "s+a", "s+b", "s+b-b22"]
+# The concrete published file, as opposed to the GEFSFileType values above which
+# resolve to one of these per init and lead time.
+type GEFSSourceFileType = Literal["s", "a", "b"]
 GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
 
 # Lead times through GEFS_PRE_EXTENSION_MAX are published within ~6.7h of init. The
@@ -37,6 +40,18 @@ class NoaaGefsInternalAttrs(NoaaInternalAttrs):
 
 
 class NoaaGefsDataVar(DataVar[NoaaGefsInternalAttrs]):
+    pass
+
+
+class NoaaGefsVirtualInternalAttrs(NoaaInternalAttrs):
+    """A virtual variable names the one file its messages live in, rather than the
+    lead-time-dependent GEFSFileType the materialized datasets resolve per coord."""
+
+    source_file_type: GEFSSourceFileType
+    available_from: Timestamp | None = None
+
+
+class NoaaGefsVirtualDataVar(DataVar[NoaaGefsVirtualInternalAttrs]):
     pass
 
 
