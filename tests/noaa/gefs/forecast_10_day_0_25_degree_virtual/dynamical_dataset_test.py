@@ -1,0 +1,323 @@
+import re
+from collections.abc import Sequence
+from datetime import timedelta
+from pathlib import Path
+from typing import Any
+
+import icechunk
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
+
+from reformatters.common import validation
+from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.dynamical_dataset import (
+    NoaaGefsForecast10Day025DegreeVirtualDataset,
+)
+from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.region_job import (
+    NoaaGefsForecast10Day025DegreeVirtualRegionJob,
+)
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsVirtualDataVar
+from reformatters.noaa.gefs.virtual_region_job import (
+    NoaaGefsForecastVirtualSourceFileCoord,
+)
+from tests.common.dynamical_dataset_test import assert_configured_validators
+
+# 40N 100W, a land cell so the soil and snow bitmaps carry values there.
+_LATITUDE, _LONGITUDE = 200, 320
+# 0N 160W, open Pacific, where those same bitmaps are masked.
+_OCEAN_LATITUDE, _OCEAN_LONGITUDE = 360, 80
+
+_FILTER_VARS = [
+    "temperature_2m",  # Kelvin source, Celsius filter
+    "soil_temperature_0_10cm",  # Kelvin source GDAL mislabels as Celsius
+    "snow_water_equivalent_surface",  # kg m-2 source scaled to metres, bitmapped
+    "total_precipitation_surface",  # accumulation, absent at lead 0
+    "pressure_reduced_to_mean_sea_level",  # unscaled
+]
+# One init is 81 lead times x 31 members of source files. Keep the ends of both axes
+# (lead 0's structural gap, the 6 hour window at lead 6, the 240 hour end of the s file,
+# the control and the last perturbed member) and drop the interior.
+_TEST_LEAD_TIMES = (
+    pd.Timedelta("0h"),
+    pd.Timedelta("3h"),
+    pd.Timedelta("6h"),
+    pd.Timedelta("240h"),
+)
+_TEST_ENSEMBLE_MEMBERS = (0, 30)
+
+
+def make_dataset(tmp_path: Path) -> NoaaGefsForecast10Day025DegreeVirtualDataset:
+    return NoaaGefsForecast10Day025DegreeVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        ),
+    )
+
+
+@pytest.fixture
+def dataset(tmp_path: Path) -> NoaaGefsForecast10Day025DegreeVirtualDataset:
+    return make_dataset(tmp_path)
+
+
+def _narrow_source_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the real coord generation but read only the corner lead times and members."""
+    original = (
+        NoaaGefsForecast10Day025DegreeVirtualRegionJob.generate_source_file_coords
+    )
+
+    def narrowed(
+        self: NoaaGefsForecast10Day025DegreeVirtualRegionJob,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[NoaaGefsVirtualDataVar],
+    ) -> Sequence[NoaaGefsForecastVirtualSourceFileCoord]:
+        return [
+            coord
+            for coord in original(self, processing_region_ds, data_var_group)
+            if coord.lead_time in _TEST_LEAD_TIMES
+            and coord.ensemble_member in _TEST_ENSEMBLE_MEMBERS
+        ]
+
+    monkeypatch.setattr(
+        NoaaGefsForecast10Day025DegreeVirtualRegionJob,
+        "generate_source_file_coords",
+        narrowed,
+    )
+
+
+@pytest.mark.slow
+def test_backfill_local_and_operational_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = make_dataset(tmp_path)
+    _narrow_source_files(monkeypatch)
+
+    dataset.backfill_local(
+        append_dim_end=pd.Timestamp("2024-06-01T06:00"),
+        filter_start=pd.Timestamp("2024-06-01T00:00"),
+        filter_variable_names=_FILTER_VARS,
+    )
+
+    ds = validation.open_flattened_dataset(
+        dataset.store_factory.primary_store(), consolidated=False
+    )
+    assert float(ds["latitude"][_LATITUDE]) == 40.0
+    assert float(ds["longitude"][_LONGITUDE]) == -100.0
+
+    cell = ds.isel(latitude=_LATITUDE, longitude=_LONGITUDE).sel(
+        init_time="2024-06-01T00:00"
+    )
+
+    # Lead 0 is the analysis step: the accumulation has no window there and stays NaN,
+    # while the instant variables carry the same values noaa-gefs-analysis-0-25-degree-
+    # virtual reads from this very file.
+    lead_0 = cell.sel(lead_time=pd.Timedelta("0h"), ensemble_member=0)
+    np.testing.assert_allclose(
+        [lead_0[name].item() for name in _FILTER_VARS],
+        [22.70626953125003, 21.750000000000057, 0.0, np.nan, 101227.65000000001],
+    )
+
+    # Lead 3's accumulation window is 0-3 hours, lead 6's is 0-6, so the same forecast
+    # accumulates more by lead 6. Both differ from the lead 3 and 6 values of any other
+    # init, which is why the window comment is phrased in lead time.
+    for lead, expected in (
+        ("3h", [17.959492187500018, 21.01998046875002, 0.0, 0.13, 101426.13750000001]),
+        ("6h", [16.147812500000043, 19.950000000000045, 0.0, 0.2, 101535.95625]),
+        ("240h", [24.30976562500001, 22.789282226562534, 0.0, 0.0, 101352.375]),
+    ):
+        values = cell.sel(lead_time=pd.Timedelta(lead), ensemble_member=0)
+        np.testing.assert_allclose(
+            [values[name].item() for name in _FILTER_VARS], expected, err_msg=lead
+        )
+
+    # A perturbed member is a different forecast, read from a different source file.
+    member_30 = cell.sel(lead_time=pd.Timedelta("3h"), ensemble_member=30)
+    np.testing.assert_allclose(
+        [member_30[name].item() for name in _FILTER_VARS],
+        [
+            18.278652343750025,
+            21.000000000000057,
+            0.0,
+            0.30000000000000004,
+            101446.49375000001,
+        ],
+    )
+
+    # The source bitmaps soil and snow over open water; gribberish decodes those cells
+    # to NaN, which is what the declared fill value means to a CF-aware reader.
+    ocean = ds.isel(latitude=_OCEAN_LATITUDE, longitude=_OCEAN_LONGITUDE).sel(
+        init_time="2024-06-01T00:00", lead_time=pd.Timedelta("3h"), ensemble_member=0
+    )
+    assert np.isnan(ocean["soil_temperature_0_10cm"].values)
+    assert np.isnan(ocean["snow_water_equivalent_surface"].values)
+    assert not np.isnan(ocean["temperature_2m"].values)
+
+    original_update_jobs = (
+        NoaaGefsForecast10Day025DegreeVirtualRegionJob.operational_update_jobs.__func__
+    )
+
+    def filtered_update_jobs(
+        cls: type[NoaaGefsForecast10Day025DegreeVirtualRegionJob],
+        *,
+        all_data_vars: Sequence[NoaaGefsVirtualDataVar],
+        **kwargs: Any,  # noqa: ANN401 - passthrough to the wrapped classmethod
+    ) -> object:
+        return original_update_jobs(
+            cls,
+            all_data_vars=[v for v in all_data_vars if v.name in _FILTER_VARS],
+            **kwargs,
+        )
+
+    with monkeypatch.context() as update_monkeypatch:
+        update_monkeypatch.setattr(
+            pd.Timestamp,
+            "now",
+            classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-01T12:00")),
+        )
+        update_monkeypatch.setattr(
+            NoaaGefsForecast10Day025DegreeVirtualRegionJob,
+            "operational_update_jobs",
+            classmethod(filtered_update_jobs),
+        )
+        dataset.update("test-update")
+
+    updated = validation.open_flattened_dataset(
+        dataset.store_factory.primary_store(), consolidated=False
+    )
+    assert updated.get_index("init_time").max() == pd.Timestamp("2024-06-01T06:00")
+
+    appended = updated.isel(latitude=_LATITUDE, longitude=_LONGITUDE).sel(
+        init_time="2024-06-01T06:00", lead_time=pd.Timedelta("3h"), ensemble_member=0
+    )
+    np.testing.assert_allclose(
+        [appended[name].item() for name in _FILTER_VARS],
+        [14.74871093750005, 18.750000000000057, 0.0, 0.02, 101404.38125],
+    )
+
+    assert_configured_validators(dataset)
+
+
+def test_operational_kubernetes_resources(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+) -> None:
+    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
+        "test-image-tag"
+    )
+
+    # f000 publishes ~init+3h47m and the last member's f240 ~init+5h37m, so the fire
+    # leads the burst and the deadline covers its end with slack.
+    assert update_cron_job.schedule == "45 3,9,15,21 * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=30)
+    # Virtual updates are single writer.
+    assert update_cron_job.workers_total == 1
+    assert update_cron_job.parallelism == 1
+    assert len(update_cron_job.secret_names) > 0
+
+    # The update's fire plus its pod_active_deadline.
+    assert validation_cron_job.schedule == "15 6,12,18,0 * * *"
+
+    # Both stay suspended until the archive is backfilled.
+    assert update_cron_job.suspend
+    assert validation_cron_job.suspend
+
+
+def test_cron_job_names_fit_the_kubernetes_limit(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+) -> None:
+    """The dataset id plus "-validate" is two characters over, so the names abbreviate
+    the resolution. Constructing the CronJobs at all is the check -- the field validator
+    rejects a longer name -- but pin the abbreviation so it stays recognizable."""
+    for cron_job in dataset.operational_kubernetes_resources("test-image-tag"):
+        assert cron_job.name.startswith("noaa-gefs-forecast-10-day-0p25-virtual-")
+        assert len(cron_job.name) <= 52
+        assert cron_job.dataset_id == dataset.dataset_id
+
+
+def test_validators(dataset: NoaaGefsForecast10Day025DegreeVirtualDataset) -> None:
+    validators = tuple(dataset.validators())
+    assert len(validators) == 3
+
+    # The newest init is 6h15m old when validation fires, so one cycle that rolled its
+    # files to the next fire still passes and two stalled cycles fail.
+    current_data = next(
+        v for v in validators if isinstance(v, validation.CheckCurrentData)
+    )
+    assert current_data.max_delay == timedelta(hours=12)
+    assert _stalled_cycles_before_alerting(current_data.max_delay) == 2
+
+    completeness = next(
+        v
+        for v in validators
+        if isinstance(v, validation.CheckVirtualManifestCompleteness)
+    )
+    assert completeness.include_vars == "all"
+    assert completeness.exclude_vars == ()
+    # The leading tier covers the newest init, which the source may still be finishing;
+    # every older init must be whole.
+    assert completeness.min_present_fraction == (0.95, 1.0)
+    expected_files_per_init = 81 * 31
+    allowed_missing = max(
+        missing
+        for missing in range(expected_files_per_init)
+        if (expected_files_per_init - missing) / expected_files_per_init >= 0.95
+    )
+    # The last four lead times of every member, which the source lays down in its final
+    # ~20 minutes; a fifth lead time's worth would fail.
+    assert 4 * 31 <= allowed_missing < 5 * 31
+
+    decode_health = next(
+        v for v in validators if isinstance(v, validation.CheckVirtualDecodeHealth)
+    )
+    assert decode_health.positions == 1
+    assert decode_health.allow_all_nan_vars == ()
+
+
+def _stalled_cycles_before_alerting(max_delay: timedelta) -> int:
+    """How many consecutive un-ingested cycles CheckCurrentData tolerates when it fires
+    on its own schedule, by replaying the due-position arithmetic it uses."""
+    first = pd.Timestamp("2020-09-23T12:00")
+    frequency = pd.Timedelta("6h")
+    now = pd.Timestamp("2026-09-01T06:15")  # a validation fire
+    newest_normal = pd.Timestamp("2026-09-01T00:00")  # the init that fire validates
+    due = first + ((now - max_delay - first) // frequency) * frequency
+    stalled = 0
+    while newest_normal - stalled * frequency >= due:
+        stalled += 1
+    return stalled
+
+
+def _resolved_split_size(
+    split: icechunk.ManifestSplittingConfig, array_path: str
+) -> int:
+    for condition, dim_splits in split.split_sizes:
+        regex = getattr(condition, "regex", None)
+        if regex is None or re.search(regex, array_path):
+            [(_dim_condition, size)] = dim_splits
+            return size
+    raise AssertionError(f"no split rule matched {array_path}")
+
+
+def test_manifest_split_holds_four_days_of_inits(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+) -> None:
+    """Every array holds one ref per (lead time, ensemble member) of every init in the
+    split, so the split size fixes both the manifest's ref count and its bytes."""
+    split = dataset.icechunk_virtual_config.manifest_split
+    split_size = _resolved_split_size(split, "/temperature_2m")
+    assert split_size == 16
+
+    refs_per_manifest = split_size * 81 * 31
+    assert refs_per_manifest == 40176
+    # Above the 1000 refs icechunk needs before it compresses ref locations, and well
+    # inside the 3 MiB a reader downloads to resolve any one chunk. 17.8 bytes/ref is
+    # measured on this dataset's own manifests, not carried over from another.
+    assert refs_per_manifest > 1000
+    assert refs_per_manifest * 17.8 < 3 * 1024 * 1024
+
+
+def test_virtual_container_matches_ref_prefix(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+) -> None:
+    (container,) = dataset.icechunk_virtual_config.containers
+    assert container.url_prefix == "s3://noaa-gefs-pds/"

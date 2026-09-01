@@ -1,0 +1,38 @@
+1:0:d=2022101812:VIS:surface:3 hour fcst:ENS=low-res ctl
+2:337765:d=2022101812:GUST:surface:3 hour fcst:ENS=low-res ctl
+3:866380:d=2022101812:MSLET:mean sea level:3 hour fcst:ENS=low-res ctl
+4:1772027:d=2022101812:PRES:surface:3 hour fcst:ENS=low-res ctl
+5:2514125:d=2022101812:TSOIL:0-0.1 m below ground:3 hour fcst:ENS=low-res ctl
+6:2878843:d=2022101812:SOILW:0-0.1 m below ground:3 hour fcst:ENS=low-res ctl
+7:3236409:d=2022101812:WEASD:surface:3 hour fcst:ENS=low-res ctl
+8:3504813:d=2022101812:SNOD:surface:3 hour fcst:ENS=low-res ctl
+9:3753996:d=2022101812:ICETK:surface:3 hour fcst:ENS=low-res ctl
+10:3836214:d=2022101812:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl
+11:4586870:d=2022101812:DPT:2 m above ground:3 hour fcst:ENS=low-res ctl
+12:5365843:d=2022101812:RH:2 m above ground:3 hour fcst:ENS=low-res ctl
+13:6034227:d=2022101812:TMAX:2 m above ground:0-3 hour max fcst:ENS=low-res ctl
+14:6775604:d=2022101812:TMIN:2 m above ground:0-3 hour min fcst:ENS=low-res ctl
+15:7535646:d=2022101812:UGRD:10 m above ground:3 hour fcst:ENS=low-res ctl
+16:8371046:d=2022101812:VGRD:10 m above ground:3 hour fcst:ENS=low-res ctl
+17:9179184:d=2022101812:CPOFP:surface:3 hour fcst:ENS=low-res ctl
+18:9767318:d=2022101812:APCP:surface:0-3 hour acc fcst:ENS=low-res ctl
+19:10208691:d=2022101812:CSNOW:surface:0-3 hour ave fcst:ENS=low-res ctl
+20:10235807:d=2022101812:CICEP:surface:0-3 hour ave fcst:ENS=low-res ctl
+21:10236122:d=2022101812:CFRZR:surface:0-3 hour ave fcst:ENS=low-res ctl
+22:10237247:d=2022101812:CRAIN:surface:0-3 hour ave fcst:ENS=low-res ctl
+23:10327255:d=2022101812:LHTFL:surface:0-3 hour ave fcst:ENS=low-res ctl
+24:10824503:d=2022101812:SHTFL:surface:0-3 hour ave fcst:ENS=low-res ctl
+25:11606535:d=2022101812:CAPE:surface:3 hour fcst:ENS=low-res ctl
+26:12089902:d=2022101812:CIN:surface:3 hour fcst:ENS=low-res ctl
+27:12626856:d=2022101812:PWAT:entire atmosphere (considered as a single layer):3 hour fcst:ENS=low-res ctl
+28:13085433:d=2022101812:TCDC:entire atmosphere:0-3 hour ave fcst:ENS=low-res ctl
+29:13672964:d=2022101812:HGT:cloud ceiling:3 hour fcst:ENS=low-res ctl
+30:14730428:d=2022101812:DSWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+31:14949078:d=2022101812:DLWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+32:15451394:d=2022101812:USWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+33:15727446:d=2022101812:ULWRF:surface:0-3 hour ave fcst:ENS=low-res ctl
+34:16104447:d=2022101812:ULWRF:top of atmosphere:0-3 hour ave fcst:ENS=low-res ctl
+35:16571141:d=2022101812:HLCY:3000-0 m above ground:3 hour fcst:ENS=low-res ctl
+36:17160673:d=2022101812:CAPE:180-0 mb above ground:3 hour fcst:ENS=low-res ctl
+37:17631586:d=2022101812:CIN:180-0 mb above ground:3 hour fcst:ENS=low-res ctl
+38:18147685:d=2022101812:PRMSL:mean sea level:3 hour fcst:ENS=low-res ctl
