@@ -26,8 +26,9 @@ class NoaaGfsForecastVirtualRegionJob(
     # A cycle's f000 publishes ~init+3h33m and its f384 ~init+5h19m, so a run firing at
     # init+3h30m reaches back over the two cycles before its own.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18h")
-    # A commit rewrites every touched array's active manifest, ~12 s for this dataset's
-    # 295 arrays, so poll on a clock rather than committing each lead as it lands.
+    # A commit rewrites the active manifest of every array it touches, which for this
+    # dataset's 295 arrays costs seconds however few refs it carries, so batch the 209
+    # leads of a cycle on a clock rather than committing each one as it lands.
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("5min")
 
     def generate_source_file_coords(

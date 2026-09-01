@@ -907,6 +907,8 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # "boundary layer cloud layer", so one dataset carries the two meanings.
     ("tcc", "long_name", "noaa-gfs-analysis-virtual"),
     ("tcc", "standard_name", "noaa-gfs-analysis-virtual"),
+    ("tcc", "long_name", "noaa-gfs-forecast-virtual"),
+    ("tcc", "standard_name", "noaa-gfs-forecast-virtual"),
     # HRRR is on a Lambert-conformal grid whose GRIB messages set the grid-relative
     # wind flag, so its components follow the grid axes (x_wind/y_wind) rather than
     # east and north. The lat-lon datasets carry genuinely earth-relative winds.

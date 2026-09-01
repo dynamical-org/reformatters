@@ -35,8 +35,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Convective precipitation (water)",
-    "short_name": "acpcp",
+    "long_name": "Convective precipitation",
+    "short_name": "cp",
     "standard_name": "convective_precipitation_amount",
     "units": "kg m-2",
     "comment": "Accumulated from the forecast initialization time to this step, so the window lengthens with lead time and never resets. Subtracting the value at an earlier step gives the exact total between those two steps.",
