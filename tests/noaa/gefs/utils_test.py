@@ -2,11 +2,11 @@ import pandas as pd
 
 from reformatters.noaa.gefs.analysis.region_job import GefsAnalysisSourceFileCoord
 from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplateConfig
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 from reformatters.noaa.gefs.utils import _index_data_vars
 
 
-def _mean_sea_level_pressure() -> GEFSDataVar:
+def _mean_sea_level_pressure() -> NoaaGefsDataVar:
     return next(
         var
         for var in GefsAnalysisTemplateConfig().data_vars

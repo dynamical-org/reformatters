@@ -28,9 +28,9 @@ from reformatters.noaa.gefs.forecast_35_day.template_config import (
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_EXTENSION_REQUEST_MIN_AGE,
     GEFS_S_FILE_MAX,
-    GEFSDataVar,
     GefsEnsembleSourceFileCoord,
-    GEFSInternalAttrs,
+    NoaaGefsDataVar,
+    NoaaGefsInternalAttrs,
 )
 
 
@@ -93,7 +93,7 @@ def template_ds() -> xr.Dataset:
 
 
 @pytest.fixture
-def example_data_vars() -> list[GEFSDataVar]:
+def example_data_vars() -> list[NoaaGefsDataVar]:
     """Create example GEFS data variables for testing."""
     encoding = Encoding(
         dtype="float32",
@@ -103,7 +103,7 @@ def example_data_vars() -> list[GEFSDataVar]:
     )
 
     return [
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="temperature_2m",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -112,7 +112,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 units="C",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMP",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -121,7 +121,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 keep_mantissa_bits=10,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="precipitation_surface",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -130,7 +130,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 units="mm",
                 step_type="accum",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="APCP",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -150,7 +150,7 @@ def test_max_vars_per_job() -> None:
 
 def test_get_processing_region(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test processing region includes proper buffer."""
     tmp_store = get_local_tmp_store()
@@ -170,7 +170,7 @@ def test_get_processing_region(
     assert processing_region == slice(1, 2)
 
 
-def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
+def test_source_groups(example_data_vars: list[NoaaGefsDataVar]) -> None:
     """Test source groups based on GEFS file type and ensemble statistic."""
     groups = GefsForecast35DayRegionJob.source_file_var_groups(example_data_vars)
 
@@ -184,7 +184,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
 
 def test_generate_source_file_coords_ensemble(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test generation of source file coordinates for ensemble data."""
     tmp_store = get_local_tmp_store()
@@ -211,7 +211,9 @@ def test_generate_source_file_coords_ensemble(
     assert all(isinstance(c, GefsEnsembleSourceFileCoord) for c in coords)
 
 
-def _extension_region_ds(init_time: pd.Timestamp, data_var: GEFSDataVar) -> xr.Dataset:
+def _extension_region_ds(
+    init_time: pd.Timestamp, data_var: NoaaGefsDataVar
+) -> xr.Dataset:
     """A region spanning lead times either side of the 384h extension boundary."""
     lead_times = pd.to_timedelta([0, 240, 384, 390, 840], unit="h")
     return xr.Dataset(
@@ -230,7 +232,7 @@ def _extension_region_ds(init_time: pd.Timestamp, data_var: GEFSDataVar) -> xr.D
 
 
 def _job_for(
-    region_ds: xr.Dataset, data_var: GEFSDataVar
+    region_ds: xr.Dataset, data_var: NoaaGefsDataVar
 ) -> GefsForecast35DayRegionJob:
     return GefsForecast35DayRegionJob(
         tmp_store=get_local_tmp_store(),
@@ -243,7 +245,7 @@ def _job_for(
 
 
 def test_generate_source_file_coords_skips_the_unpublished_extension(
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """A cycle too young to hold its 840h extension yields no lead time past 384h."""
     data_var = example_data_vars[0]
@@ -260,7 +262,7 @@ def test_generate_source_file_coords_skips_the_unpublished_extension(
 
 
 def test_generate_source_file_coords_includes_a_settled_extension(
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Once a cycle is older than the extension delay, every lead time is requested."""
     data_var = example_data_vars[0]
@@ -277,7 +279,9 @@ def test_generate_source_file_coords_includes_a_settled_extension(
     assert len(coords) == 10  # 5 lead times * 2 ensemble members
 
 
-def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
+def test_source_file_coord_url_generation(
+    example_data_vars: list[NoaaGefsDataVar],
+) -> None:
     """Test source file coordinate URL generation."""
     coord = GefsEnsembleSourceFileCoord(
         init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
@@ -293,7 +297,9 @@ def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) 
     assert "pgrb2s.0p25.f003" in url
 
 
-def test_source_file_coord_fallback_url(example_data_vars: list[GEFSDataVar]) -> None:
+def test_source_file_coord_fallback_url(
+    example_data_vars: list[NoaaGefsDataVar],
+) -> None:
     """Test fallback URL generation for source file coordinates."""
     coord = GefsEnsembleSourceFileCoord(
         init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
@@ -316,7 +322,7 @@ def test_source_file_coord_fallback_url(example_data_vars: list[GEFSDataVar]) ->
 
 
 def test_source_file_coord_out_loc_forecast(
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test source file coordinate output location for forecast data."""
     coord = GefsEnsembleSourceFileCoord(
@@ -337,7 +343,7 @@ def test_source_file_coord_out_loc_forecast(
 
 def test_download_file(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file method."""
@@ -411,7 +417,7 @@ def test_download_file(
 
 def test_download_file_fallback(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file falls back to alternative source when primary fails for recent data."""
@@ -488,7 +494,7 @@ def test_download_file_fallback(
 
 def test_download_file_no_fallback_for_old_data(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file does not fallback for old data (>4 days)."""
@@ -537,7 +543,7 @@ def test_download_file_no_fallback_for_old_data(
 def test_read_data(
     mock_read_data: MagicMock,
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test read_data method."""
     mock_data = np.ones((10, 15), dtype=np.float32)
@@ -574,7 +580,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
     # Create test data with known values
     data = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32).reshape((1, 1, 1, 4))
 
-    var_with_rounding = GEFSDataVar(
+    var_with_rounding = NoaaGefsDataVar(
         name="test_var",
         encoding=Encoding(
             dtype="float32",
@@ -588,7 +594,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
             units="test",
             step_type="instant",
         ),
-        internal_attrs=GEFSInternalAttrs(
+        internal_attrs=NoaaGefsInternalAttrs(
             grib_element="TEST",
             grib_description="Test variable",
             grib_index_level="surface",
@@ -630,7 +636,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
 @patch("xarray.open_zarr")
 def test_operational_update_jobs(
     mock_open_zarr: MagicMock,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test operational_update_jobs method."""
     store_factory = StoreFactory(
@@ -764,7 +770,7 @@ def test_download_and_read_all_vars_current(lead_time: pd.Timedelta) -> None:
     region_job = _make_forecast_region_job()
     init_time = pd.Timestamp("2024-01-01T00:00")
 
-    def _download_and_check(group: list[GEFSDataVar]) -> None:
+    def _download_and_check(group: list[NoaaGefsDataVar]) -> None:
         coord = GefsForecast35DaySourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,

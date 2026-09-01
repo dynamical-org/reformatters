@@ -30,8 +30,8 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_REFORECAST_END,
     GEFS_REFORECAST_INIT_TIME_FREQUENCY,
     GEFS_REFORECAST_START,
-    GEFSDataVar,
     GefsEnsembleSourceFileCoord,
+    NoaaGefsDataVar,
     is_v12_index,
 )
 from reformatters.noaa.gefs.read_data import read_data
@@ -61,7 +61,7 @@ class GefsAnalysisSourceFileCoord(GefsEnsembleSourceFileCoord):
 
 
 class GefsAnalysisRegionJob(
-    MaterializedRegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]
+    MaterializedRegionJob[NoaaGefsDataVar, GefsAnalysisSourceFileCoord]
 ):
     """RegionJob for GEFS Analysis dataset processing."""
 
@@ -81,13 +81,15 @@ class GefsAnalysisRegionJob(
 
     @classmethod
     def source_file_var_groups(
-        cls, data_vars: Sequence[GEFSDataVar]
-    ) -> Sequence[Sequence[GEFSDataVar]]:
+        cls, data_vars: Sequence[NoaaGefsDataVar]
+    ) -> Sequence[Sequence[NoaaGefsDataVar]]:
         # max_vars_per_download_group = 1 will cause all variables to be processed independently
         return [data_vars]
 
     def generate_source_file_coords(
-        self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[NoaaGefsDataVar],
     ) -> Sequence[GefsAnalysisSourceFileCoord]:
         """Generate source file coordinates for analysis data from forecast files."""
         times = pd.to_datetime(processing_region_ds["time"].values)
@@ -157,13 +159,13 @@ class GefsAnalysisRegionJob(
         return gefs_download_file(self.dataset_id, coord)
 
     def read_data(
-        self, coord: GefsAnalysisSourceFileCoord, data_var: GEFSDataVar
+        self, coord: GefsAnalysisSourceFileCoord, data_var: NoaaGefsDataVar
     ) -> ArrayND[np.generic]:
         """Read data from the source file for the given coordinate and variable."""
         return read_data(self.template_ds.to_dataset(), coord, data_var)
 
     def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: GEFSDataVar
+        self, data_array: xr.DataArray, data_var: NoaaGefsDataVar
     ) -> None:
         """
         Apply transformations to data array in place.
@@ -205,10 +207,10 @@ class GefsAnalysisRegionJob(
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
-        all_data_vars: Sequence[GEFSDataVar],
+        all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[GEFSDataVar, GefsAnalysisSourceFileCoord]], xr.DataTree
+        Sequence[RegionJob[NoaaGefsDataVar, GefsAnalysisSourceFileCoord]], xr.DataTree
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

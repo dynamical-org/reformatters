@@ -17,8 +17,8 @@ from reformatters.common.zarr import (
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_REFORECAST_END,
-    GEFSDataVar,
-    GEFSInternalAttrs,
+    NoaaGefsDataVar,
+    NoaaGefsInternalAttrs,
 )
 
 
@@ -105,7 +105,7 @@ def get_shared_coordinate_configs() -> Sequence[Coordinate]:
 
 def get_shared_data_var_configs(
     chunks: tuple[int, ...], shards: tuple[int, ...]
-) -> Sequence[GEFSDataVar]:
+) -> Sequence[NoaaGefsDataVar]:
     assert len(chunks) == len(shards)
 
     encoding_float32 = Encoding(
@@ -122,7 +122,7 @@ def get_shared_data_var_configs(
     keep_mantissa_bits_categorical: Literal["no-rounding"] = "no-rounding"
 
     return (
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_gust_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -132,7 +132,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="wind_speed_of_gust",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="GUST",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -141,7 +141,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="pressure_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -151,7 +151,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="surface_air_pressure",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="PRES",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -160,7 +160,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=10,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="temperature_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -170,7 +170,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="air_temperature",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMP",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -179,7 +179,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="relative_humidity_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -189,7 +189,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="relative_humidity",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="RH",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -198,7 +198,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="maximum_temperature_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -208,7 +208,7 @@ def get_shared_data_var_configs(
                 units="degree_Celsius",
                 step_type="max",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMAX",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -218,7 +218,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="minimum_temperature_2m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -228,7 +228,7 @@ def get_shared_data_var_configs(
                 units="degree_Celsius",
                 step_type="min",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMIN",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -238,7 +238,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_u_10m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -248,7 +248,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="eastward_wind",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="UGRD",
                 grib_description='10[m] HTGL="Specified height level above ground"',
                 grib_index_level="10 m above ground",
@@ -257,7 +257,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_v_10m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -267,7 +267,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="northward_wind",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="VGRD",
                 grib_description='10[m] HTGL="Specified height level above ground"',
                 grib_index_level="10 m above ground",
@@ -276,7 +276,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_u_100m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -286,7 +286,7 @@ def get_shared_data_var_configs(
                 units="m s-1",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="UGRD",
                 grib_description='100[m] HTGL="Specified height level above ground"',
                 grib_index_level="100 m above ground",
@@ -295,7 +295,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_v_100m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -305,7 +305,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="northward_wind",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="VGRD",
                 grib_description='100[m] HTGL="Specified height level above ground"',
                 grib_index_level="100 m above ground",
@@ -314,7 +314,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="temperature_80m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -324,7 +324,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="air_temperature",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMP",
                 grib_description='80[m] HTGL="Specified height level above ground"',
                 grib_index_level="80 m above ground",
@@ -334,7 +334,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="pressure_80m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -344,7 +344,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="air_pressure",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="PRES",
                 grib_description='80[m] HTGL="Specified height level above ground"',
                 grib_index_level="80 m above ground",
@@ -354,7 +354,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=10,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_u_80m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -364,7 +364,7 @@ def get_shared_data_var_configs(
                 units="m s-1",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="UGRD",
                 grib_description='80[m] HTGL="Specified height level above ground"',
                 grib_index_level="80 m above ground",
@@ -374,7 +374,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_v_80m",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -384,7 +384,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="northward_wind",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="VGRD",
                 grib_index_level="80 m above ground",
                 grib_description='80[m] HTGL="Specified height level above ground"',
@@ -394,7 +394,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=6,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="percent_frozen_precipitation_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -404,7 +404,7 @@ def get_shared_data_var_configs(
                 comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="CPOFP",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -413,7 +413,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="precipitation_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -424,7 +424,7 @@ def get_shared_data_var_configs(
                 comment="Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
                 step_type="avg",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="APCP",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -436,7 +436,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="categorical_snow_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -448,7 +448,7 @@ def get_shared_data_var_configs(
                 flag_values=(0, 1),
                 flag_meanings="no yes",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="CSNOW",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -458,7 +458,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="categorical_ice_pellets_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -470,7 +470,7 @@ def get_shared_data_var_configs(
                 flag_values=(0, 1),
                 flag_meanings="no yes",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="CICEP",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -480,7 +480,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="categorical_freezing_rain_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -492,7 +492,7 @@ def get_shared_data_var_configs(
                 flag_values=(0, 1),
                 flag_meanings="no yes",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="CFRZR",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -502,7 +502,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="categorical_rain_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -514,7 +514,7 @@ def get_shared_data_var_configs(
                 flag_values=(0, 1),
                 flag_meanings="no yes",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="CRAIN",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -524,7 +524,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_categorical,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="precipitable_water_atmosphere",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -534,7 +534,7 @@ def get_shared_data_var_configs(
                 units="kg m-2",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="PWAT",
                 grib_description='0[-] EATM="Entire atmosphere (considered as a single layer)"',
                 grib_index_level="entire atmosphere (considered as a single layer)",
@@ -543,7 +543,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="total_cloud_cover_atmosphere",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -554,7 +554,7 @@ def get_shared_data_var_configs(
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TCDC",
                 grib_description='0[-] EATM="Entire Atmosphere"',
                 grib_index_level="entire atmosphere",
@@ -564,7 +564,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="geopotential_height_cloud_ceiling",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -575,7 +575,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="geopotential_height",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="HGT",
                 grib_description='0[-] CEIL="Cloud ceiling"',
                 grib_index_level="cloud ceiling",
@@ -584,7 +584,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=8,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="geopotential_height_500hpa",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -594,7 +594,7 @@ def get_shared_data_var_configs(
                 step_type="instant",
                 standard_name="geopotential_height",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="HGT",
                 grib_description='50000[Pa] ISBL="Isobaric surface"',
                 grib_index_level="500 mb",
@@ -603,7 +603,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=11,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="downward_short_wave_radiation_flux_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -614,7 +614,7 @@ def get_shared_data_var_configs(
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="DSWRF",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -624,7 +624,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="downward_long_wave_radiation_flux_surface",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -635,7 +635,7 @@ def get_shared_data_var_configs(
                 comment="Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
                 step_type="avg",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="DLWRF",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -645,7 +645,7 @@ def get_shared_data_var_configs(
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="pressure_reduced_to_mean_sea_level",
             encoding=encoding_float32,
             attrs=DataVarAttrs(
@@ -655,7 +655,7 @@ def get_shared_data_var_configs(
                 units="Pa",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="PRMSL",
                 grib_description='0[-] MSL="Mean sea level"',
                 grib_index_level="mean sea level",
