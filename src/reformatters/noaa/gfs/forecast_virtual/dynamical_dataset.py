@@ -35,15 +35,13 @@ class NoaaGfsForecastVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # An init contributes one ref per lead time to a root array and up to one
-            # per lead time and level to a pressure-level one, so both terms of the
-            # commit cost (an O(total manifests squared) scan plus a rewrite linear in
-            # arrays touched x active manifest bytes) bind well before the reader budget
-            # does. These sizes minimize their sum over a fifteen year archive: 0.24 MiB
-            # per full root manifest and 1.8 MiB per pressure-level one, both well
-            # inside the reader budget. See "Manifest splitting" in
-            # docs/virtual_datasets.md; re-windowing after a change is a whole-archive
-            # rewrite, so treat these as frozen.
+            # The basis for these values is under review: sizing splits to a
+            # commit-time budget puts this dataset's commit well over it, and the
+            # dominant contributor is the root entry rather than either group. Values
+            # are held as-is meanwhile, because re-windowing after a change rewrites
+            # every touched array's history in one commit. Every vertical group still
+            # needs its own entry: the catch-all is sized for root arrays, so a group
+            # that falls through silently gets a window multiplied by its level count.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 16,
