@@ -67,8 +67,8 @@ def test_window_comments_are_phrased_in_lead_time() -> None:
     assert len(windowed) == 15
     for var in windowed:
         assert var.internal_attrs.window_reset_frequency == pd.Timedelta("6h"), var.name
-        assert var.attrs.comment is not None, var.name
         if var.attrs.flag_values is None:
+            assert var.attrs.comment is not None, var.name
             assert "UTC" not in var.attrs.comment, var.name
             assert (
                 "(lead times 6, 12, 18, ... hours) or 3 hour period "
@@ -126,6 +126,10 @@ def test_differencing_only_holds_within_a_window_start() -> None:
 
 
 def test_flag_variables_carry_only_their_codes() -> None:
+    """flag_values and flag_meanings are the whole meaning of a categorical variable, so
+    it carries no comment: a window sentence would contradict them by describing a
+    fraction, and restating the codes in prose would let the two representations drift.
+    """
     for name in (
         "categorical_snow_surface",
         "categorical_ice_pellets_surface",
@@ -134,7 +138,8 @@ def test_flag_variables_carry_only_their_codes() -> None:
     ):
         var = get_var(name)
         assert var.attrs.flag_values == (0, 1), name
-        assert var.attrs.comment == "0=no; 1=yes", name
+        assert var.attrs.flag_meanings == "no yes", name
+        assert var.attrs.comment is None, name
 
 
 def test_dataset_attributes() -> None:
