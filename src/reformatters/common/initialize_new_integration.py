@@ -49,11 +49,14 @@ def initialize_new_integration(
     provider = _sanitize_identifier(provider)
     model = _sanitize_identifier(model)
     variant = _sanitize_identifier(variant)
-    if kind is DatasetKind.virtual and (
-        variant == "virtual" or variant.endswith("_virtual")
-    ):
+    if variant == "virtual" or variant.endswith("_virtual"):
+        message = (
+            "variant must omit the 'virtual' suffix when --kind virtual is used"
+            if kind is DatasetKind.virtual
+            else "variant cannot use the 'virtual' suffix with --kind materialized"
+        )
         raise typer.BadParameter(
-            "variant must omit the 'virtual' suffix when --kind virtual is used",
+            message,
             param_hint="variant",
         )
 
@@ -101,6 +104,8 @@ def initialize_new_integration(
         f"Example{example_class_prefix}TemplateConfig": f"{class_prefix}TemplateConfig",
         f"Example{example_class_prefix}RegionJob": f"{class_prefix}RegionJob",
         f"Example{example_class_prefix}SourceFileCoord": f"{class_prefix}SourceFileCoord",
+        # DataVar and InternalAttrs are model-level config models shared across a
+        # model's datasets, so they stay {provider}{model}-scoped.
         "ExampleDataVar": f"{provider_pascal}{model_pascal}DataVar",
         "ExampleInternalAttrs": f"{provider_pascal}{model_pascal}InternalAttrs",
         f"reformatters.{example_dirname}": f"reformatters.{provider}.{model}.{module_variant}",
