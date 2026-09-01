@@ -21,8 +21,7 @@ S3_LOCATION_PREFIX = "s3://noaa-gfs-bdp-pds/"
 S3_BUCKET_REGION = "us-east-1"
 _S3_HTTPS_PREFIX = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/"
 
-# Every message of both products is curated, so a step is complete only once both
-# files are read.
+# Both products are curated in full, so a step's variables span both files.
 GFS_FILE_TYPES: tuple[NoaaGfsFileType, ...] = ("pgrb2", "pgrb2b")
 
 # 41 messages that pgrb2b repeats byte for byte from pgrb2. Building refs from both
