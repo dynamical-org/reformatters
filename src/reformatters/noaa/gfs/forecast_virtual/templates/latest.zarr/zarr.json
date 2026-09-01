@@ -2760,7 +2760,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "gribberish",
@@ -2776,10 +2776,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Zero marks a freezing level at or below the surface rather than missing data; over water, where the surface is at zero height, it is a genuine value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAAAAA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time",
@@ -3096,7 +3096,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "gribberish",
@@ -3112,10 +3112,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Zero marks a freezing level at or below the surface rather than missing data; over water, where the surface is at zero height, it is a genuine value.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
-          "_FillValue": "AAAAAAAAAAA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "init_time",
@@ -4004,7 +4004,7 @@
           "long_name": "Sea ice surface temperature",
           "short_name": "sist",
           "units": "degree_Celsius",
-          "comment": "Temperature of the ice surface, covering lake ice as well as sea ice despite the source parameter name. NaN where there is no ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+          "comment": "Temperature of the ice surface, covering lake ice as well as sea ice despite the source parameter name. NaN where there is no ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9388,7 +9388,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water; the source reports this quantity only over land and sea ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+          "comment": "NaN over open water; the source reports this quantity only over land and sea ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9450,7 +9450,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water; the source reports this quantity only over land and sea ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+          "comment": "NaN over open water; the source reports this quantity only over land and sea ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9512,7 +9512,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water; the source reports this quantity only over land and sea ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+          "comment": "NaN over open water; the source reports this quantity only over land and sea ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9574,7 +9574,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water; the source reports this quantity only over land and sea ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+          "comment": "NaN over open water; the source reports this quantity only over land and sea ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10229,6 +10229,7 @@
           "short_name": "SUNSD",
           "standard_name": "duration_of_sunshine",
           "units": "s",
+          "comment": "Sunshine accumulated within the 6 hour window containing this step, not an instantaneous value: the total restarts every 6 hours of forecast lead time and so reaches at most 21600 s. The source index labels it instantaneous, which is why it carries no window step type.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13516,6 +13517,7 @@
           "short_name": "vis",
           "standard_name": "visibility_in_air",
           "units": "m",
+          "comment": "Saturates at the model's maximum reported visibility, about 24 km. That ceiling means unlimited visibility rather than missing data.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
