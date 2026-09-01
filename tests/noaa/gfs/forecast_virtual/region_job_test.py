@@ -8,7 +8,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.config_models import ROOT
-from reformatters.noaa.gfs import virtual_region_job as region_job_module
+from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.gfs.forecast_virtual.region_job import (
     NoaaGfsForecastVirtualRegionJob,
     NoaaGfsForecastVirtualSourceFileCoord,
@@ -405,7 +405,7 @@ def test_every_source_message_reaches_an_array(
     """
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )
@@ -446,7 +446,7 @@ def test_a_job_filtered_to_a_pressure_level_variable_probes_a_level_it_fills(
     single-variable backfill of docs/add_new_variable.md."""
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )
@@ -492,7 +492,7 @@ def test_the_bucket_and_the_run_total_share_one_index_line_at_short_leads(
 
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )
@@ -535,7 +535,7 @@ def test_the_bucket_and_the_run_total_separate_past_lead_6(
 ) -> None:
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )
