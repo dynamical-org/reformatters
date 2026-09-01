@@ -245,8 +245,10 @@ def test_manifest_split_size_resolves_per_group(
 ) -> None:
     split = dataset.icechunk_virtual_config.manifest_split
     assert _resolved_split_size(split, "/pressure_level/temperature") == 512
+    # Stated explicitly rather than inherited from the catch-all, though it is the same
+    # value: a group that falls through is a silent defect even when the value is right.
     assert (
-        _resolved_split_size(split, "/height_above_mean_sea_level/temperature") == 512
+        _resolved_split_size(split, "/height_above_mean_sea_level/temperature") == 4096
     )
     assert _resolved_split_size(split, "/temperature_2m") == 4096
 

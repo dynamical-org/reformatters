@@ -35,19 +35,20 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Set by the reader manifest budget and the ~1000 ref compression floor:
-            # a full manifest is 38 KiB at the root, 277 KiB for a pressure_level array
-            # and 39 KiB for a height_above_mean_sea_level one, all far inside the
-            # budget. Every vertical group needs its own entry -- the catch-all is sized
-            # for root arrays, so a group falling through gets a window multiplied by
-            # its level count. Commit cost is dominated by a fixed term no split can
-            # affect, so these are sized for a whole-archive horizon rather than tuned;
-            # re-windowing after a change rewrites every touched array's history in one
-            # commit, so treat as frozen.
+            # Chosen so each full manifest stays inside the reader budget while keeping
+            # the total manifest count low: 0.04 MiB at the root, 0.27 MiB for a
+            # pressure_level array and 0.30 MiB for a height_above_mean_sea_level one,
+            # against budgets of 3 MiB single-level and 5-8 MiB per vertical group.
+            # Every group needs its own entry: the catch-all is sized for root arrays,
+            # so a group that falls through silently gets a window multiplied by its
+            # level count. The height group's 4096 is the value it inherited from the
+            # catch-all, stated explicitly, pending a review of whether all four entries
+            # are finer than they need to be. Re-windowing after a change rewrites every
+            # touched array's history in one commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 512,
-                    r"^/height_above_mean_sea_level/": 512,
+                    r"^/height_above_mean_sea_level/": 4096,
                     None: 4096,
                 },
                 dim="time",
