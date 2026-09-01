@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import pandas as pd
 
@@ -7,6 +9,7 @@ from reformatters.noaa.gfs.forecast_virtual.template_config import (
 )
 from reformatters.noaa.gfs.virtual_template_config import NoaaGfsVirtualTemplateConfig
 from reformatters.noaa.models import NoaaDataVar
+from reformatters.noaa.noaa_grib_index import _lead_time_str
 
 CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 
@@ -100,10 +103,11 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
 
     assert get_var("total_precipitation_surface").attrs.comment == (
         "Accumulated over the 6 hour window containing this step: the window opens at "
-        "the most recent multiple of 6 hours of forecast lead time and closes at this "
-        "step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather "
-        "than covering a fixed interval. Subtracting the value at an earlier step in "
-        "the same window gives the exact total between those two steps."
+        "the most recent multiple of 6 hours of forecast lead time strictly before "
+        "this step and closes at this step, so it lengthens from 1 to 6 hours and "
+        "restarts every 6 hours rather than covering a fixed interval. Subtracting "
+        "the value at an earlier step with the same window start gives the exact "
+        "total between those two steps."
     )
     assert get_var("total_precipitation_run_total_surface").attrs.comment == (
         "Accumulated from the forecast initialization time to this step, so the window "
@@ -112,9 +116,9 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
     )
     assert get_var("albedo_surface").attrs.comment == (
         "Averaged over the 6 hour window containing this step: the window opens at the "
-        "most recent multiple of 6 hours of forecast lead time and closes at this "
-        "step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather "
-        "than covering a fixed interval."
+        "most recent multiple of 6 hours of forecast lead time strictly before this "
+        "step and closes at this step, so it lengthens from 1 to 6 hours and restarts "
+        "every 6 hours rather than covering a fixed interval."
     )
     assert str(get_var("maximum_temperature_2m").attrs.comment).startswith(
         "Maximum over the 6 hour window"
@@ -124,6 +128,48 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
     )
     # Only accumulations can be differenced; an average over a lengthening window cannot.
     assert "Subtracting" not in str(get_var("albedo_surface").attrs.comment)
+
+
+def _window_start_hours(var: NoaaDataVar, lead_hours: int) -> int:
+    """The window start the source's own index string declares for this step."""
+    start, _, end = _lead_time_str(var, lead_hours).split(" ")[0].partition("-")
+    scale = 24 if _lead_time_str(var, lead_hours).split(" ")[1] == "day" else 1
+    assert int(end) * scale == lead_hours
+    return int(start) * scale
+
+
+def test_the_differencing_sentences_are_true_for_the_pairs_they_claim() -> None:
+    """Two accumulations of one element, and only one of them differences freely.
+
+    A running total's window always starts at initialization, so any pair of steps
+    differences exactly. A 6 hour bucket's window restarts every 6 hours, so only
+    1.6% of this dataset's lead pairs share a window start and 63 of the 207 adjacent
+    pairs do not: an unqualified differencing sentence on the bucket would be false
+    for almost every pair a reader tries.
+    """
+    lead_hours = [
+        int(lead / pd.Timedelta("1h"))
+        for lead in CONFIG.dimension_coordinates()["lead_time"]
+        if lead > pd.Timedelta(0)
+    ]
+    assert len(lead_hours) == 208
+    pairs = list(itertools.combinations(lead_hours, 2))
+
+    def shared_window_starts(var: NoaaDataVar) -> int:
+        starts = {lead: _window_start_hours(var, lead) for lead in lead_hours}
+        return sum(starts[a] == starts[b] for a, b in pairs)
+
+    run_total = get_var("total_precipitation_run_total_surface")
+    bucket = get_var("total_precipitation_surface")
+    assert shared_window_starts(run_total) == len(pairs)
+    assert shared_window_starts(bucket) == 344
+
+    assert "Subtracting the value at an earlier step gives the exact total" in str(
+        run_total.attrs.comment
+    )
+    assert "Subtracting the value at an earlier step with the same window start" in str(
+        bucket.attrs.comment
+    )
 
 
 def test_a_windowed_variables_own_comment_survives_the_window_sentence() -> None:

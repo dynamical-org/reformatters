@@ -39,7 +39,7 @@
     "short_name": "gflux",
     "standard_name": "upward_heat_flux_at_ground_level_in_soil",
     "units": "W m-2",
-    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. NaN over open water; the source reports this quantity only over land and sea ice.",
+    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time strictly before this step and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. NaN over open water; the source reports this quantity only over land and sea ice.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
