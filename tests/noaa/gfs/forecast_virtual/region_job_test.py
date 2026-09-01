@@ -185,8 +185,8 @@ def test_representative_var_is_carried_only_by_its_own_product(
     assert picked == {
         ("pgrb2", pd.Timedelta(0)): "temperature_2m",
         ("pgrb2", pd.Timedelta("9h")): "temperature_2m",
-        ("pgrb2b", pd.Timedelta(0)): "temperature_305m_amsl",
-        ("pgrb2b", pd.Timedelta("9h")): "temperature_305m_amsl",
+        ("pgrb2b", pd.Timedelta(0)): "geopotential_height_0p5pvu",
+        ("pgrb2b", pd.Timedelta("9h")): "geopotential_height_0p5pvu",
     }
     for coord in coords:
         var = job.representative_var(coord)

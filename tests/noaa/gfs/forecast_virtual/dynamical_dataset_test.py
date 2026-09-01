@@ -34,9 +34,10 @@ _FILTER_VARS = [
     "temperature_2m",  # pgrb2 root, instantaneous, K -> C filter
     "total_precipitation_surface",  # pgrb2 root, 6 hour accumulation bucket
     "total_precipitation_run_total_surface",  # the same element, since initialization
-    "temperature_305m_amsl",  # pgrb2b root, instantaneous
     "snow_water_equivalent_surface",  # pgrb2 root, kg m-2 -> m lwe filter
-    "temperature",  # pressure_level, fed by both products
+    # A bare name selects the variable in every group, covering the pressure_level and
+    # height_above_mean_sea_level copies of temperature.
+    "temperature",
 ]
 
 
@@ -92,7 +93,9 @@ def test_backfill_local_and_operational_update(
             step["temperature_2m"].item(),
             step["total_precipitation_surface"].item(),
             step["total_precipitation_run_total_surface"].item(),
-            step["temperature_305m_amsl"].item(),
+            step["height_above_mean_sea_level/temperature"]
+            .sel(height_above_mean_sea_level=305)
+            .item(),
             step["pressure_level/temperature"].sel(pressure_level=500).item(),
             # 875 hPa is one of the 16 levels only pgrb2b carries.
             step["pressure_level/temperature"].sel(pressure_level=875).item(),
@@ -229,7 +232,9 @@ def test_backfill_local_and_operational_update(
             update_cell["temperature_2m"].item(),
             update_cell["total_precipitation_surface"].item(),
             update_cell["total_precipitation_run_total_surface"].item(),
-            update_cell["temperature_305m_amsl"].item(),
+            update_cell["height_above_mean_sea_level/temperature"]
+            .sel(height_above_mean_sea_level=305)
+            .item(),
             update_cell["pressure_level/temperature"].sel(pressure_level=500).item(),
         ],
         [

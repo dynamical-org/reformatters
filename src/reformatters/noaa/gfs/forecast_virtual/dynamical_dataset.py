@@ -45,7 +45,11 @@ class NoaaGfsForecastVirtualDataset(
             # docs/virtual_datasets.md; re-windowing after a change is a whole-archive
             # rewrite, so treat these as frozen.
             manifest_split=manifest_append_dim_split(
-                split_size={r"^/pressure_level/": 16, None: 128},
+                split_size={
+                    r"^/pressure_level/": 16,
+                    r"^/height_above_mean_sea_level/": 16,
+                    None: 128,
+                },
                 dim="init_time",
             ),
         )
