@@ -53,7 +53,7 @@ def test_serves_the_whole_shared_catalog() -> None:
     shared = {v.path for v in NoaaGfsVirtualTemplateConfig._catalog_data_vars(CONFIG)}
     served = {v.path for v in CONFIG.data_vars}
     assert served == shared
-    assert len(served) == 295
+    assert len(served) == 274
     assert {
         "total_precipitation_run_total_surface",
         "convective_precipitation_run_total_surface",

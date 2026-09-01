@@ -59,6 +59,13 @@ class NoaaGfsForecastVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
             "longitude",
             "pressure_level",
         ),
+        "height_above_mean_sea_level": (
+            "init_time",
+            "lead_time",
+            "latitude",
+            "longitude",
+            "height_above_mean_sea_level",
+        ),
     }
     append_dim: AppendDim = "init_time"
     # First cycle of the 0.25 degree archive on noaa-gfs-bdp-pds.
