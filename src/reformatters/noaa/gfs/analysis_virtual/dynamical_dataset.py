@@ -35,21 +35,30 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Sized so refs per commit (arrays touched x refs per split) sits in
-            # line with the operationally tuned HRRR virtual datasets: 1.6M here, well
-            # under the 10.2-10.7M those three carry, whose end-to-end publish to
-            # reader-visible latency is measured in production at p50 2.8s. Coarser is
-            # also protective: fewer manifests means a smaller manifest scan, which is
-            # superlinear in the deployed icechunk version. Every vertical group needs
-            # its own entry -- the catch-all is sized for root arrays, so a group that
-            # falls through silently gets a window multiplied by its level count.
-            # Re-windowing after a change rewrites every touched array's history in one
-            # commit, so treat as frozen.
+            # A repartitioning of the same references, not an efficiency gain: the
+            # store holds the same refs either way and total stored manifest bytes are
+            # essentially unchanged, so what the split picks is where on that
+            # partitioning we sit. Before, ~4,050 manifests of ~4,096 refs (0.04 MiB) --
+            # too small to be worth being objects. After, ~800 manifests of 30,000 /
+            # 171,000 / 160,000 refs, i.e. 0.27 / 1.59 / 1.48 MiB, all inside the reader
+            # budgets. Bytes rewritten per commit do rise, about 6.8x, which is what
+            # taking refs per commit from 1.6M to 10.8M means; that is deliberate, to
+            # meet the operational reference below.
+            #
+            # The reference is one measured configuration, not a family:
+            # noaa-hrrr-forecast-48-hour-virtual, 12.1M refs per commit, p50 2.8s end to
+            # end from source publish to reader-visible, 12,936 samples over 88 inits.
+            # HRRR's 18 hour forecast and analysis carry comparable refs per commit but
+            # have never been latency tested; they corroborate rather than measure. The
+            # group splits are HRRR analysis's group manifest sizes divided by our level
+            # counts and the catch-all is the value it runs -- a config match, not a
+            # measurement. Re-windowing after a change rewrites every touched array's
+            # history in one commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 512,
-                    r"^/height_above_mean_sea_level/": 4096,
-                    None: 4096,
+                    r"^/pressure_level/": 3_000,
+                    r"^/height_above_mean_sea_level/": 20_000,
+                    None: 30_000,
                 },
                 dim="time",
             ),
