@@ -35,14 +35,15 @@ class NoaaGfsForecastVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # An init contributes 209 refs to a root array and 209 x 57 to a
-            # pressure-level one, so both terms of the commit cost (an O(total
-            # manifests squared) scan plus a rewrite linear in arrays touched x active
-            # manifest bytes) bind here well before the reader budget does. These sizes
-            # minimize their sum over a fifteen year archive: 0.35 MiB per full root
-            # manifest and 2.0 MiB per pressure-level one, both inside the reader
-            # budget. See "Manifest splitting" in docs/virtual_datasets.md; re-windowing
-            # after a change is a whole-archive rewrite, so treat them as frozen.
+            # An init contributes one ref per lead time to a root array and up to one
+            # per lead time and level to a pressure-level one, so both terms of the
+            # commit cost (an O(total manifests squared) scan plus a rewrite linear in
+            # arrays touched x active manifest bytes) bind well before the reader budget
+            # does. These sizes minimize their sum over a fifteen year archive: 0.35 MiB
+            # per full root manifest and 2.0 MiB per pressure-level one, both inside the
+            # reader budget. See "Manifest splitting" in docs/virtual_datasets.md;
+            # re-windowing after a change is a whole-archive rewrite, so treat these as
+            # frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={r"^/pressure_level/": 16, None: 128},
                 dim="init_time",
@@ -67,9 +68,9 @@ class NoaaGfsForecastVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="45 5,11,17,23 * * *",
+            # Ten minutes past the update's fire plus its pod_active_deadline, so the
+            # run being validated has always stopped writing.
+            schedule="55 5,11,17,23 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -83,9 +84,9 @@ class NoaaGfsForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A cycle's newest init is ingested by ~init+5h20m and validation fires at
-            # init+5h45m; 12 hours also covers one missed cycle.
-            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
+            # An init is ingested ~5h20m after it and validation fires at init+5h55m,
+            # so 11 hours is the tightest deadline that still absorbs one missed cycle.
+            validation.CheckCurrentData(max_delay=timedelta(hours=11)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

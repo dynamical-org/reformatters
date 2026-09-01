@@ -396,8 +396,9 @@ def test_every_source_message_reaches_an_array(
     """Run the whole catalog against a real index at the leads that stress it.
 
     A wrong idx level string, element spelling or rendered window string shows up here
-    as a missing ref and a duplicated one as an extra. Unlike the analysis, which has no
-    running totals, the forecast turns every one of pgrb2's 743 messages into a ref.
+    as a missing ref and a duplicated one as an extra. The counts equal the source's own
+    message counts: every array position a file can fill is filled, and the leads where
+    two index lines describe one message still yield one ref per position.
     """
     stub_grib_index_download(
         monkeypatch,
@@ -425,6 +426,44 @@ def test_every_source_message_reaches_an_array(
         (ref.data_var.path, tuple(sorted(ref.out_loc.items()))) for ref in refs
     }
     assert len(positions) == len(refs)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("era", _ERAS)
+@pytest.mark.parametrize("file_type", ["pgrb2", "pgrb2b"])
+def test_a_job_filtered_to_a_pressure_level_variable_probes_a_level_it_fills(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    era: str,
+    tmp_path: Path,
+    file_type: NoaaGfsFileType,
+) -> None:
+    """The two products split the isobaric coordinate, so the probe cell of a job
+    carrying only a vertical-group variable has to be chosen per product. This is the
+    single-variable backfill of docs/add_new_variable.md."""
+    stub_grib_index_download(
+        monkeypatch,
+        region_job_module,
+        tmp_path,
+        lambda url: cached_grib_index(url, _DATASET_ID),
+    )
+    var = get_var("pressure_level/temperature")
+    job = make_job(template_ds, [var])
+    coord = NoaaGfsForecastVirtualSourceFileCoord(
+        init_time=pd.Timestamp(f"{era[:4]}-{era[4:6]}-{era[6:]}T12:00"),
+        lead_time=pd.Timedelta("9h"),
+        file_type=file_type,
+        data_vars=[var],
+    )
+
+    refs = job.file_refs(coord, file_size=10**10)
+
+    levels = {dict(ref.out_loc)["pressure_level"] for ref in refs}
+    assert len(levels) == (41 if file_type == "pgrb2" else 16)
+    assert dict(job.representative_probe_loc(coord, var))["pressure_level"] == (
+        1000.0 if file_type == "pgrb2" else 875.0
+    )
+    job._assert_probe_chunk_covered(coord, refs)
 
 
 @pytest.mark.slow
