@@ -212,9 +212,8 @@ def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
     )
     assert current_data.max_delay == timedelta(hours=11)
 
-    # discover_available extends time only to an hour holding every file it needs, so
-    # one instance covering every variable at a whole 1.0 is the right check: no
-    # ingested position is ever partially published.
+    # The gate holds the frontier to a complete hour but can still release an earlier
+    # incomplete one, so a whole 1.0 over every variable is what catches that.
     completeness = next(
         v
         for v in validators

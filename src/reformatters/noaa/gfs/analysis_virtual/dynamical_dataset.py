@@ -35,11 +35,15 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Set by the reader manifest budget and the ~1000 ref compression floor.
-            # Commit cost is dominated by a fixed per-array term no split can affect;
-            # the split-dependent part is a few percent of a commit, so these are sized
-            # for a whole-archive horizon rather than tuned. Re-windowing after a change
-            # rewrites every touched array's history in one commit, so treat as frozen.
+            # Set by the reader manifest budget and the ~1000 ref compression floor:
+            # a full manifest is 38 KiB at the root, 277 KiB for a pressure_level array
+            # and 39 KiB for a height_above_mean_sea_level one, all far inside the
+            # budget. Every vertical group needs its own entry -- the catch-all is sized
+            # for root arrays, so a group falling through gets a window multiplied by
+            # its level count. Commit cost is dominated by a fixed term no split can
+            # affect, so these are sized for a whole-archive horizon rather than tuned;
+            # re-windowing after a change rewrites every touched array's history in one
+            # commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 512,

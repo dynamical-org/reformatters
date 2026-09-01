@@ -86,8 +86,12 @@ class NoaaGfsAnalysisVirtualRegionJob(
         At a synoptic hour the windowed variables come from the previous cycle and
         publish about six hours before that hour's own instantaneous files, so ungated
         discovery would extend `time` to an hour carrying only some of its variables.
-        Files past the limit stay pending and are offered again next tick, so an hour is
-        first visible complete.
+        Files past the limit stay pending and are offered again next tick.
+
+        The limit is the newest complete hour, not a contiguous complete prefix, so an
+        earlier hour that can never complete is published with the files it has rather
+        than blocking every later hour forever. `CheckVirtualManifestCompleteness` is
+        what finds the interior gap that leaves.
 
         A time the store already covers is never withheld: nothing extends there, and a
         file the archive never published must not block the files beside it forever. A

@@ -143,8 +143,8 @@ _WINDOW_ATTRS: dict[WindowKind, tuple[str, Timedelta | None]] = {
 
 class NoaaGfsVirtualTemplateConfig(NoaaGfsCommonTemplateConfig):
     """Virtual GFS template: one chunk per GRIB message on the source 0.25 degree
-    latitude/longitude grid, covering every pgrb2 and pgrb2b message as a root array or
-    a pressure_level group array. A subclass declares dims and time structure.
+    latitude/longitude grid. Every pgrb2 and pgrb2b message becomes a root array or a
+    member of a vertical group. A subclass declares dims and time structure.
     """
 
     def _vertical_dimension_coordinates(self) -> dict[str, Any]:

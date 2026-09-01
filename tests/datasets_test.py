@@ -1,10 +1,12 @@
 import json
+import re
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
+from reformatters.common.config_models import ROOT
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob, ValidationCronJob
 from reformatters.common.storage import DatasetFormat
@@ -32,6 +34,52 @@ def test_all_datasets_have_unique_versions() -> None:
         (d.dataset_id, d.template_config.version) for d in DYNAMICAL_DATASETS
     ]
     assert len(id_version_pairs) == len(set(id_version_pairs))
+
+
+@pytest.mark.parametrize(
+    "dataset", IMPLEMENTED_DATASETS, ids=[d.dataset_id for d in IMPLEMENTED_DATASETS]
+)
+def test_every_vertical_group_has_its_own_manifest_split(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """A dataset with any vertical group needs a per-group `split_size` mapping.
+
+    A group's window is multiplied by its vertical dimension's length, so a split sized
+    for root arrays is never right for one. Both ways of getting this wrong are silent:
+    a scalar `split_size` applies one size to everything, and a mapping missing a
+    group's key lets it fall through to the catch-all. Neither raises; the only symptom
+    is a manifest larger than intended by the group's level count.
+    """
+    virtual_config = getattr(dataset, "icechunk_virtual_config", None)
+    if virtual_config is None:
+        pytest.skip("not a virtual dataset")
+
+    conditions = [
+        getattr(condition, "regex", None)
+        for condition, _ in virtual_config.manifest_split.split_sizes
+    ]
+    # A scalar split_size normalises to a lone catch-all condition.
+    is_scalar = conditions == [None]
+    group_paths = {
+        (var.group, f"/{var.group}/{var.name}")
+        for var in dataset.template_config.data_vars
+        if var.group is not ROOT
+    }
+
+    for group, path in sorted(group_paths):
+        matched = any(
+            regex is not None and re.search(regex, path) for regex in conditions
+        )
+        assert matched, (
+            f"{dataset.dataset_id}: group '{group}' has no explicit split_size entry "
+            + (
+                "-- split_size is a scalar, which is permitted only for a root-only "
+                "dataset"
+                if is_scalar
+                else "-- split_size is a mapping but has no key matching this group, "
+                "so it falls through to the catch-all sized for root arrays"
+            )
+        )
 
 
 # --- CLI wiring tests ---

@@ -23,10 +23,12 @@ from reformatters.noaa.gfs.virtual_region_job import (
     carried_by,
 )
 from reformatters.noaa.gfs.virtual_template_config import (
+    HEIGHT_ABOVE_MEAN_SEA_LEVELS,
     HEIGHT_LEVEL_INDEX_FORMAT,
     PRESSURE_LEVEL_INDEX_FORMAT,
     PRESSURE_LEVELS,
 )
+from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
 from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_download
 
@@ -99,6 +101,25 @@ def test_pressure_level_coordinate_covers_every_isobaric_level(era: str) -> None
     assert in_source == published
 
 
+_GROUP_LEVELS: dict[Dim, list[float]] = {
+    "pressure_level": PRESSURE_LEVELS,
+    "height_above_mean_sea_level": HEIGHT_ABOVE_MEAN_SEA_LEVELS,
+}
+
+
+def _index_levels(var: NoaaDataVar) -> list[str]:
+    """Every index level string a variable can match.
+
+    Keyed on the variable's own group: a height-group element such as TMP also exists at
+    pressure levels, so filling in the wrong group's coordinate would let it pass
+    against levels it is never published at.
+    """
+    if var.group is ROOT:
+        return [var.internal_attrs.grib_index_level]
+    level_format = var.internal_attrs.grib_index_level
+    return [level_format.format(level=level) for level in _GROUP_LEVELS[var.group]]
+
+
 _LEVEL_FORMAT: dict[Dim, str] = {
     "pressure_level": PRESSURE_LEVEL_INDEX_FORMAT,
     "height_above_mean_sea_level": HEIGHT_LEVEL_INDEX_FORMAT,
@@ -145,6 +166,39 @@ def test_probe_levels_are_published_by_their_product(
             var.path,
             probe_level,
         )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("era", _ERAS)
+def test_height_coordinate_covers_every_published_height(era: str) -> None:
+    """The published coordinate is exactly the heights both products publish.
+
+    Set equality, not membership: the hour-0 and product-membership sweeps ask whether a
+    variable appears at *any* of its levels, so a single wrong coordinate value is
+    invisible to them. This is what pins the coordinate itself.
+
+    Restricted to the group's own elements, because the source also publishes a 10 m
+    height for ICEG, which stays a root variable. Matching the level string alone would
+    pull that in and make the coordinate look nine levels wide.
+    """
+    published = {
+        HEIGHT_LEVEL_INDEX_FORMAT.format(level=level)
+        for level in HEIGHT_ABOVE_MEAN_SEA_LEVELS
+    }
+    elements = {
+        var.internal_attrs.grib_element
+        for var in TEMPLATE_CONFIG.data_vars
+        if var.group == "height_above_mean_sea_level"
+    }
+    in_source = {
+        level
+        for file_type in ("pgrb2", "pgrb2b")
+        for _, element, level, _ in index_lines(era, file_type, 9)
+        if level.endswith(" m above mean sea level") and element in elements
+    }
+    assert elements == {"TMP", "UGRD", "VGRD"}
+    assert len(published) == 8
+    assert in_source == published
 
 
 def test_pressure_level_index_format_is_lossless() -> None:
@@ -340,14 +394,7 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
     ]
     assert len(instant_vars) == 230
     for var in instant_vars:
-        levels = (
-            [
-                PRESSURE_LEVEL_INDEX_FORMAT.format(level=level)
-                for level in PRESSURE_LEVELS
-            ]
-            if var.group is not ROOT
-            else [var.internal_attrs.grib_index_level]
-        )
+        levels = _index_levels(var)
         elements = (
             var.internal_attrs.grib_element,
             *var.internal_attrs.grib_element_alternatives,
@@ -468,14 +515,7 @@ def test_product_membership_matches_the_real_indexes(
     assert published
 
     for var in TEMPLATE_CONFIG.data_vars:
-        levels = (
-            [
-                PRESSURE_LEVEL_INDEX_FORMAT.format(level=level)
-                for level in PRESSURE_LEVELS
-            ]
-            if var.group is not ROOT
-            else [var.internal_attrs.grib_index_level]
-        )
+        levels = _index_levels(var)
         elements = (
             var.internal_attrs.grib_element,
             *var.internal_attrs.grib_element_alternatives,
