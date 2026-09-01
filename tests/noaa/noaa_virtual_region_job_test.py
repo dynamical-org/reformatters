@@ -154,6 +154,52 @@ def test_file_refs_one_message_fills_two_variables_sharing_a_window(
         assert (ref.offset, ref.length) == (0, 1000)
 
 
+def test_file_refs_duplicate_messages_keep_the_first_and_still_fill_every_variable(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A source may publish the same field twice, byte-distinct but identical in value.
+    # Each variable takes the first message; the two variables that legitimately share
+    # this window must still both be filled.
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:APCP:surface:0-1 hour acc fcst:\n"
+        "2:1000:d=2018071312:APCP:surface:0-1 hour acc fcst:\n",
+    )
+    data_vars = [
+        get_var("total_precipitation_run_total_surface"),
+        get_var("total_precipitation_surface"),
+    ]
+    job = make_job(template_ds, data_vars)
+    refs = job.file_refs(
+        coord("sfc", data_vars, lead_time=pd.Timedelta("1h")), file_size=2000
+    )
+
+    assert sorted(r.data_var.name for r in refs) == [
+        "total_precipitation_run_total_surface",
+        "total_precipitation_surface",
+    ]
+    for ref in refs:
+        assert (ref.offset, ref.length) == (0, 1000)
+
+
+def test_file_refs_skips_index_whose_bad_range_is_on_an_unmatched_message(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Rejecting the index discards the whole file, so every message's range is
+    # checked - a corrupt range on a message no variable wants condemns it too.
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        "2:1000:d=2018071312:REFC:entire atmosphere:6 hour fcst:\n",
+    )
+    data_vars = [get_var("temperature_2m")]  # REFC is not requested
+    job = make_job(template_ds, data_vars)
+    # REFC starts at the last byte, so its range is empty; TMP's range is fine.
+    assert job.file_refs(coord("sfc", data_vars), file_size=1000) == []
+
+
 def test_file_refs_matches_element_alternative_spellings(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

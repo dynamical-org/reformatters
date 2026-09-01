@@ -90,22 +90,33 @@ class NoaaVirtualRegionJob(
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
+        filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
-            matches = lookup.get((element, level, window))
-            if not matches:
-                continue
             # Byte ranges past the data file mean a stale/mismatched index; skip it.
+            # Checked for every message, matched or not: the whole file is discarded,
+            # so a corrupt range anywhere in the index condemns all of it.
             if end > file_size or end <= start:
                 log.warning(
                     f"Skipping {location}: index byte ranges fall outside the "
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
                 return []
+            matches = lookup.get((element, level, window))
+            if not matches:
+                continue
             for var, level_label in matches:
+                out_loc = {**out_loc_base, **level_label}
+                # A source may publish the same field twice (byte-distinct, identical
+                # values); the first message wins, as it does when reading materialized.
+                # One message filling several variables is a different case and stands.
+                cell = (var.path, tuple(sorted(out_loc.items())))
+                if cell in filled:
+                    continue
+                filled.add(cell)
                 refs.append(
                     VirtualRef(
                         data_var=var,
-                        out_loc={**out_loc_base, **level_label},
+                        out_loc=out_loc,
                         location=location,
                         offset=start,
                         length=end - start,
