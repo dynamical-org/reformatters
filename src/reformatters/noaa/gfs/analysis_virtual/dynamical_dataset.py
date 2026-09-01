@@ -35,17 +35,18 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Chosen so each full manifest stays inside the reader budget (3 MiB
-            # single-level, 5-8 MiB per vertical group) while keeping the total manifest
-            # count low. Measured full manifests: 0.04 MiB at the root, 0.27 MiB for a
-            # pressure_level array, 0.30 MiB for a height_above_mean_sea_level one.
-            # The height group measured at both candidate values:
-            #   4096: 0.30 MiB per manifest, M contribution  36
-            #    512: 0.04 MiB per manifest, M contribution 282
-            # Every group needs its own entry: the catch-all is sized for root arrays,
-            # so a group that falls through silently gets a window multiplied by its
-            # level count. Re-windowing after a change rewrites every touched array's
-            # history in one commit, so treat as frozen.
+            # The largest split that fits a commit-time budget of about 2-3 seconds,
+            # floored by S3 object count and per-operation cost. Coarser splits cost
+            # linearly more commit time; there is no quadratic manifest-count term
+            # pulling the other way. Per entry, measured full manifest and modelled
+            # contribution to a commit:
+            #   root            4096  0.04 MiB  1.76 s
+            #   pressure_level   512  0.27 MiB  0.51 s
+            #   height           4096  0.30 MiB  0.11 s
+            # about 2.37 s in total. Every vertical group needs its own entry: the
+            # catch-all is sized for root arrays, so a group that falls through silently
+            # gets a window multiplied by its level count. Re-windowing after a change
+            # rewrites every touched array's history in one commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 512,
