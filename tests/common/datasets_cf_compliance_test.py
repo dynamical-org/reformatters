@@ -2,7 +2,7 @@ import json
 import xml.etree.ElementTree as ET
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, get_args
 
 import cf_xarray  # noqa: F401 - needed for ds.cf accessor
 import pytest
@@ -1005,10 +1005,149 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_values", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_meanings", "ecmwf-aifs-single-forecast-virtual"),
     # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
+    ("wind_gust_10m", "step_type", "eccc-hrdps-forecast"),
+    # GFS and GEFS report categorical precipitation presence over a source-defined
+    # window, while HRRR reports presence at the valid time.
+    ("categorical_snow_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_snow_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_snow_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gefs-analysis"),
+    (
+        "categorical_ice_pellets_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gefs-analysis"),
+    (
+        "categorical_freezing_rain_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_rain_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    # GFS and GEFS publish window-average total cloud cover.
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis"),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gefs-analysis"),
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    # Unresolved pending human decision: IFS ENS 15-day is instantaneous while
+    # IFS ENS 46-day is a 24-hour mean under the same variable name.
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    # HRRR publishes instantaneous downward radiation fluxes while the other
+    # sources publish interval averages.
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis-virtual",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    # IFS ENS 46-day publishes 24-hour means for these state variables.
+    (
+        "snow_water_equivalent_surface",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "skin_temperature_surface",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "sea_surface_temperature",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "total_column_water_atmosphere",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    # MRMS, IFS ENS, and HRDPS use source-defined precipitation-type code tables.
+    (
+        "categorical_precipitation_type_surface",
+        "flag_values",
+        "noaa-mrms-conus-analysis-hourly",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_meanings",
+        "noaa-mrms-conus-analysis-hourly",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_values",
+        "eccc-hrdps-forecast",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_meanings",
+        "eccc-hrdps-forecast",
+    ),
     # HRDPS is on a rotated pole grid, whose CF axes are grid_longitude/grid_latitude in
     # degrees, rather than the metre based projection_[xy]_coordinate of the other
     # projected datasets.
@@ -1021,313 +1160,6 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
 }
 
 type MetadataValue = str | tuple[int, ...] | None
-type QuantityMetadataExceptionStatus = Literal[
-    "legitimate-divergence", "unresolved-pending-human-decision"
-]
-type QuantityMetadataException = tuple[
-    QuantityMetadataExceptionStatus,
-    str,
-    dict[MetadataValue, frozenset[str]],
-]
-
-QUANTITY_METADATA_CONSISTENCY_EXCEPTIONS: dict[
-    tuple[str, str], QuantityMetadataException
-] = {
-    ("categorical_snow_surface", "step_type"): (
-        "legitimate-divergence",
-        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("categorical_ice_pellets_surface", "step_type"): (
-        "legitimate-divergence",
-        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("categorical_freezing_rain_surface", "step_type"): (
-        "legitimate-divergence",
-        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("categorical_rain_surface", "step_type"): (
-        "legitimate-divergence",
-        "GFS and GEFS report presence during a source-defined window; HRRR reports presence at the valid time.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("total_cloud_cover_atmosphere", "step_type"): (
-        "unresolved-pending-human-decision",
-        "The IFS ENS 15-day product is instantaneous while the 46-day product is a 24-hour mean under the same variable name.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
-                    "ecmwf-aifs-single-forecast",
-                    "ecmwf-aifs-single-forecast-virtual",
-                    "ecmwf-aifs-ens-forecast",
-                    "dwd-icon-eu-forecast-5-day",
-                    "eccc-hrdps-forecast",
-                }
-            ),
-        },
-    ),
-    ("downward_short_wave_radiation_flux_surface", "step_type"): (
-        "legitimate-divergence",
-        "HRRR publishes an instantaneous flux while the other sources publish interval-average fluxes.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
-                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-                    "ecmwf-aifs-single-forecast",
-                    "ecmwf-aifs-ens-forecast",
-                    "eccc-hrdps-forecast",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("downward_long_wave_radiation_flux_surface", "step_type"): (
-        "legitimate-divergence",
-        "HRRR publishes an instantaneous flux while the other sources publish interval-average fluxes.",
-        {
-            "avg": frozenset(
-                {
-                    "noaa-gfs-forecast",
-                    "noaa-gfs-analysis",
-                    "noaa-gefs-analysis",
-                    "noaa-gefs-forecast-35-day",
-                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
-                    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-                    "ecmwf-aifs-single-forecast",
-                    "ecmwf-aifs-ens-forecast",
-                    "eccc-hrdps-forecast",
-                }
-            ),
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-        },
-    ),
-    ("snow_water_equivalent_surface", "step_type"): (
-        "legitimate-divergence",
-        "IFS ENS 46-day publishes a 24-hour mean while HRRR, ICON-EU, and HRDPS publish instantaneous snow water equivalent.",
-        {
-            "instant": frozenset(
-                {
-                    "noaa-hrrr-forecast-48-hour",
-                    "noaa-hrrr-analysis",
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                    "dwd-icon-eu-forecast-5-day",
-                    "eccc-hrdps-forecast",
-                }
-            ),
-            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
-        },
-    ),
-    ("land_sea_mask_surface", "flag_values"): (
-        "legitimate-divergence",
-        "HRRR carries a binary land mask while AIFS carries a continuous land-area fraction.",
-        {
-            (0, 1): frozenset(
-                {
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-            None: frozenset({"ecmwf-aifs-single-forecast-virtual"}),
-        },
-    ),
-    ("land_sea_mask_surface", "flag_meanings"): (
-        "legitimate-divergence",
-        "HRRR carries a binary land mask while AIFS carries a continuous land-area fraction.",
-        {
-            "sea land": frozenset(
-                {
-                    "noaa-hrrr-analysis-virtual",
-                    "noaa-hrrr-forecast-48-hour-virtual",
-                    "noaa-hrrr-forecast-18-hour-virtual",
-                }
-            ),
-            None: frozenset({"ecmwf-aifs-single-forecast-virtual"}),
-        },
-    ),
-    ("categorical_precipitation_type_surface", "flag_values"): (
-        "legitimate-divergence",
-        "MRMS, IFS ENS, and HRDPS use distinct source-defined precipitation-type code tables.",
-        {
-            (-3, 0, 1, 3, 6, 7, 10, 91, 96): frozenset(
-                {"noaa-mrms-conus-analysis-hourly"}
-            ),
-            (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 255): frozenset(
-                {"ecmwf-ifs-ens-forecast-15-day-0-25-degree"}
-            ),
-            (1, 2, 3, 4, 5, 6, 7, 8, 9): frozenset({"eccc-hrdps-forecast"}),
-        },
-    ),
-    ("categorical_precipitation_type_surface", "flag_meanings"): (
-        "legitimate-divergence",
-        "MRMS, IFS ENS, and HRDPS use distinct source-defined precipitation-type code tables.",
-        {
-            "no_coverage no_precipitation warm_stratiform_rain snow convective_rain rain_mixed_with_hail cold_stratiform_rain tropical_stratiform_rain_mix tropical_convective_rain_mix": frozenset(
-                {"noaa-mrms-conus-analysis-hourly"}
-            ),
-            "no_precipitation rain thunderstorm freezing_rain mixed_ice snow wet_snow mixture_of_rain_and_snow ice_pellets graupel hail drizzle freezing_drizzle hail_less_than_5mm hail_greater_than_or_equal_to_5mm missing": frozenset(
-                {"ecmwf-ifs-ens-forecast-15-day-0-25-degree"}
-            ),
-            "rain mixture_of_rain_and_snow freezing_rain ice_pellets snow no_precipitation drizzle freezing_drizzle mixture_of_freezing_rain_and_ice_pellets": frozenset(
-                {"eccc-hrdps-forecast"}
-            ),
-        },
-    ),
-    ("wind_gust_10m", "step_type"): (
-        "legitimate-divergence",
-        "HRDPS publishes the gust at the valid time while IFS ENS and ICON-EU publish the maximum since the previous step.",
-        {
-            "max": frozenset(
-                {
-                    "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
-                    "dwd-icon-eu-forecast-5-day",
-                }
-            ),
-            "instant": frozenset({"eccc-hrdps-forecast"}),
-        },
-    ),
-    ("skin_temperature_surface", "step_type"): (
-        "legitimate-divergence",
-        "IFS ENS 46-day publishes a 24-hour mean while AIFS publishes instantaneous skin temperature.",
-        {
-            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
-            "instant": frozenset({"ecmwf-aifs-single-forecast-virtual"}),
-        },
-    ),
-    ("sea_surface_temperature", "step_type"): (
-        "legitimate-divergence",
-        "IFS ENS 46-day publishes a 24-hour mean while WeatherNext 2 publishes an instantaneous daily field.",
-        {
-            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
-            "instant": frozenset(
-                {
-                    "google-weathernext2-forecast-historical-virtual",
-                    "google-weathernext2-forecast-operational-virtual",
-                }
-            ),
-        },
-    ),
-    ("total_column_water_atmosphere", "step_type"): (
-        "legitimate-divergence",
-        "IFS ENS 46-day publishes a 24-hour mean while AIFS publishes instantaneous total-column water.",
-        {
-            "avg": frozenset({"ecmwf-ifs-ens-forecast-46-day-1-5-degree"}),
-            "instant": frozenset({"ecmwf-aifs-single-forecast-virtual"}),
-        },
-    ),
-}
 
 
 def _format_conflict(
@@ -1369,18 +1201,6 @@ def _check_consistency(
 
             if len(values_to_datasets) <= 1:
                 continue
-
-            quantity_exception = QUANTITY_METADATA_CONSISTENCY_EXCEPTIONS.get(
-                (name, attr_name)
-            )
-            if quantity_exception is not None:
-                _, _, expected_values = quantity_exception
-                actual_values = {
-                    value: frozenset(dataset_ids)
-                    for value, dataset_ids in values_to_datasets.items()
-                }
-                if actual_values == expected_values:
-                    continue
 
             # Filter out allowed exceptions
             filtered_values: dict[MetadataValue, list[str]] = {}
