@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 import pytest
@@ -318,4 +319,48 @@ def test_no_zarr3_primary_with_icechunk_replica(
         f"{dataset.dataset_id}: zarr v3 primary with icechunk replica(s) "
         f"{icechunk_replicas}; make the icechunk store the primary and the zarr v3 "
         "store its replica"
+    )
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_virtual_group_manifest_splits_are_explicit(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """A per-array manifest split map must name every vertical group.
+
+    A group's arrays carry their vertical dimension's length times the refs of a root
+    array, so a catch-all sized for root arrays leaves a group's manifests oversized by
+    that factor. A missing key is not an error at construction: the catch-all absorbs
+    it silently. A scalar `split_size` is uniform by construction and has no such
+    fallthrough, so only mapping configs are checked.
+    """
+    virtual_config = dataset.icechunk_virtual_config
+    if virtual_config is None:
+        return
+
+    patterns = [
+        match.group(1)
+        for condition, _ in virtual_config.manifest_split.split_sizes
+        if (match := re.search(r'path_matches\("(.*?)"\)', repr(condition)))
+    ]
+    if not patterns:  # scalar split_size: uniform, nothing to fall through
+        return
+
+    template = dataset.template_config.get_template(
+        dataset.template_config.append_dim_start
+    )
+    groups = [path.lstrip("/") for path in template.groups if path.strip("/")]
+    unmatched = [
+        group
+        for group in groups
+        if not any(re.search(pattern, f"/{group}/") for pattern in patterns)
+    ]
+    assert not unmatched, (
+        f"{dataset.dataset_id}: vertical group(s) {unmatched} have no entry in the "
+        f"manifest split map {patterns}; they silently fall through to the catch-all, "
+        "which is sized for root arrays"
     )
