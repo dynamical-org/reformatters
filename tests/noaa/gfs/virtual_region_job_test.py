@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.config_models import ROOT
-from reformatters.noaa.gfs import virtual_region_job as region_job_module
+from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualRegionJob,
     NoaaGfsAnalysisVirtualSourceFileCoord,
@@ -97,7 +97,7 @@ def test_pressure_level_index_format_is_lossless() -> None:
 
 def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
     stub_grib_index_download(
-        monkeypatch, region_job_module, tmp_path, lambda _url: content
+        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
     )
 
 
@@ -235,7 +235,7 @@ def test_every_source_message_reaches_an_array(
     """
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )
@@ -387,7 +387,7 @@ def test_one_ref_per_position_at_the_leads_that_duplicate_accumulations(
 
     stub_grib_index_download(
         monkeypatch,
-        region_job_module,
+        shared_region_job_module,
         tmp_path,
         lambda url: cached_grib_index(url, _DATASET_ID),
     )

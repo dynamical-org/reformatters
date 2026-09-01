@@ -112,7 +112,7 @@ type WindowKind = Literal["instant", "max", "min", "avg", "acc_6h", "acc_run"]
 
 # Each windowed kind's (step_type, window_reset_frequency). acc_6h and the avg/max/min
 # kinds are the bucket since the most recent multiple of 6 hours of lead time; acc_run is
-# the accumulation since initialization. noaa_grib_index._lead_time_str renders the
+# the accumulation since initialization. noaa_grib_index.grib_index_window_str renders the
 # matching idx window string per lead from step_type + window_reset_frequency.
 _WINDOW_ATTRS: dict[WindowKind, tuple[str, Timedelta | None]] = {
     "instant": ("instant", None),
