@@ -15,13 +15,17 @@ import xarray as xr
 from reformatters.common import validation
 from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.dynamical_dataset import (
     NoaaGefsForecast10Day025DegreeVirtualDataset,
 )
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.region_job import (
     NoaaGefsForecast10Day025DegreeVirtualRegionJob,
 )
-from reformatters.noaa.gefs.gefs_config_models import NoaaGefsVirtualDataVar
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_INIT_TIME_FREQUENCY,
+    NoaaGefsVirtualDataVar,
+)
 from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
 )
@@ -279,13 +283,29 @@ def test_validators(
     validators = tuple(dataset.validators())
     assert len(validators) == 3
 
+    _, validation_cron_job = dataset.operational_kubernetes_resources("test-image-tag")
+    validation_fire = pd.Timestamp("2026-09-01") + pd.Timedelta(
+        minutes=min(_fire_minutes(validation_cron_job.schedule))
+    )
+    # The cycle the update that this fire follows ingested.
+    newest_init = (
+        validation_fire.floor(f"{whole_hours(GEFS_INIT_TIME_FREQUENCY)}h")
+        - GEFS_INIT_TIME_FREQUENCY
+    )
+
     # The newest init is 6h25m old when validation fires, so one cycle that rolled its
     # files to the next fire still passes and two stalled cycles fail.
+    assert validation_fire - newest_init == pd.Timedelta("6h25m")
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
     assert current_data.max_delay == timedelta(hours=12)
-    assert _stalled_cycles_before_alerting(current_data.max_delay, monkeypatch) == 2
+    assert (
+        _stalled_cycles_before_alerting(
+            current_data.max_delay, validation_fire, newest_init, monkeypatch
+        )
+        == 2
+    )
 
     completeness = next(
         v
@@ -320,14 +340,15 @@ def test_validators(
 
 
 def _stalled_cycles_before_alerting(
-    max_delay: timedelta, monkeypatch: pytest.MonkeyPatch
+    max_delay: timedelta,
+    fire: pd.Timestamp,
+    newest_normal: pd.Timestamp,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> int:
     """The number of consecutive un-ingested cycles at which CheckCurrentData first
     fails, running the real check rather than re-deriving its due-position arithmetic.
     One more than the number it tolerates."""
-    frequency = pd.Timedelta("6h")
-    fire = pd.Timestamp("2026-09-01T06:25")  # a validation fire
-    newest_normal = pd.Timestamp("2026-09-01T00:00")  # the init that fire validates
+    frequency = GEFS_INIT_TIME_FREQUENCY
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
 
     for stalled in range(1, 6):
