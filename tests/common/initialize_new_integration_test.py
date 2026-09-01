@@ -29,20 +29,20 @@ def scaffold_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "kind",
         "module_variant",
         "class_prefix",
-        "example_class_prefix",
+        "example_dataset_class_name",
     ),
     [
         (
             DatasetKind.materialized,
             "forecast",
             "NoaaGfsForecast",
-            "ExampleTemporal",
+            "ExampleDataset",
         ),
         (
             DatasetKind.virtual,
             "forecast_virtual",
             "NoaaGfsForecastVirtual",
-            "ExampleSpatial",
+            "ExampleVirtualDataset",
         ),
     ],
 )
@@ -51,7 +51,7 @@ def test_initialize_new_integration_names_follow_dataset_id(
     kind: DatasetKind,
     module_variant: str,
     class_prefix: str,
-    example_class_prefix: str,
+    example_dataset_class_name: str,
 ) -> None:
     initialize_new_integration("noaa", "gfs", "forecast", kind)
 
@@ -69,7 +69,7 @@ def test_initialize_new_integration_names_follow_dataset_id(
     assert f"class {class_prefix}TemplateConfig(" in generated_python
     assert f"class {class_prefix}RegionJob(" in generated_python
     assert f"class {class_prefix}SourceFileCoord(" in generated_python
-    assert example_class_prefix not in generated_python
+    assert f"class {example_dataset_class_name}(" not in generated_python
     assert f"reformatters.noaa.gfs.{module_variant}" in generated_python
     assert (source_path / "__init__.py").read_text() == (
         f"from .dynamical_dataset import {class_prefix}Dataset as {class_prefix}Dataset\n"

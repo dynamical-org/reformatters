@@ -1,1 +1,1 @@
-from .dynamical_dataset import ExampleSpatialDataset as ExampleSpatialDataset
+from .dynamical_dataset import ExampleVirtualDataset as ExampleVirtualDataset

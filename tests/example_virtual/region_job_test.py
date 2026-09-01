@@ -3,14 +3,14 @@
 # import pandas as pd
 
 # from reformatters.example_virtual.region_job import (
-#     ExampleSpatialRegionJob,
-#     ExampleSpatialSourceFileCoord,
+#     ExampleVirtualRegionJob,
+#     ExampleVirtualSourceFileCoord,
 # )
-# from reformatters.example_virtual.template_config import ExampleSpatialTemplateConfig
+# from reformatters.example_virtual.template_config import ExampleVirtualTemplateConfig
 
 
 # def test_source_file_coord_url_uses_container_prefix() -> None:
-#     coord = ExampleSpatialSourceFileCoord(
+#     coord = ExampleVirtualSourceFileCoord(
 #         init_time=pd.Timestamp("2020-01-01"),
 #         lead_time=pd.Timedelta("3h"),
 #         data_vars=[Mock()],
@@ -22,7 +22,7 @@
 
 
 # def test_out_loc_excludes_non_dim_fields() -> None:
-#     coord = ExampleSpatialSourceFileCoord(
+#     coord = ExampleVirtualSourceFileCoord(
 #         init_time=pd.Timestamp("2020-01-01"),
 #         lead_time=pd.Timedelta("3h"),
 #         data_vars=[Mock()],
@@ -32,10 +32,10 @@
 
 
 # def test_generate_source_file_coords() -> None:
-#     template_config = ExampleSpatialTemplateConfig()
+#     template_config = ExampleVirtualTemplateConfig()
 #     template_ds = template_config.get_template(pd.Timestamp("2020-01-02"))
 
-#     region_job = ExampleSpatialRegionJob(
+#     region_job = ExampleVirtualRegionJob(
 #         tmp_store=Mock(),
 #         template_ds=template_ds,
 #         data_vars=template_config.data_vars,

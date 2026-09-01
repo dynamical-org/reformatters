@@ -16,17 +16,17 @@ from reformatters.common.storage import (  # noqa: F401
     manifest_append_dim_split,
 )
 
-from .region_job import ExampleSpatialRegionJob, ExampleSpatialSourceFileCoord
+from .region_job import ExampleVirtualRegionJob, ExampleVirtualSourceFileCoord
 
 # from .region_job import _SOURCE_PREFIX, _SOURCE_REGION
-from .template_config import ExampleDataVar, ExampleSpatialTemplateConfig
+from .template_config import ExampleDataVar, ExampleVirtualTemplateConfig
 
 
-class ExampleSpatialDataset(
-    DynamicalDataset[ExampleDataVar, ExampleSpatialSourceFileCoord]
+class ExampleVirtualDataset(
+    DynamicalDataset[ExampleDataVar, ExampleVirtualSourceFileCoord]
 ):
-    template_config: ExampleSpatialTemplateConfig = ExampleSpatialTemplateConfig()
-    region_job_class: type[ExampleSpatialRegionJob] = ExampleSpatialRegionJob
+    template_config: ExampleVirtualTemplateConfig = ExampleVirtualTemplateConfig()
+    region_job_class: type[ExampleVirtualRegionJob] = ExampleVirtualRegionJob
 
     # A virtual dataset MUST set icechunk_virtual_config (a materialized dataset
     # leaves it None). It declares which source buckets the refs are allowed to point

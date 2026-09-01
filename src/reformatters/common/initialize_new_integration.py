@@ -21,8 +21,8 @@ class DatasetKind(StrEnum):
 
 
 _EXAMPLES: dict[DatasetKind, tuple[str, str]] = {
-    DatasetKind.materialized: ("example_materialized", "Temporal"),
-    DatasetKind.virtual: ("example_virtual", "Spatial"),
+    DatasetKind.materialized: ("example_materialized", ""),
+    DatasetKind.virtual: ("example_virtual", "Virtual"),
 }
 
 
@@ -85,7 +85,7 @@ def initialize_new_integration(
             (current / "__init__.py").touch(exist_ok=True)
 
     # Copy from the chosen example template
-    example_dirname, example_class_prefix = _EXAMPLES[kind]
+    example_dirname, example_class_suffix = _EXAMPLES[kind]
     example_src = Path("src/reformatters") / example_dirname
     example_test = Path("tests") / example_dirname
 
@@ -100,10 +100,10 @@ def initialize_new_integration(
     class_prefix = f"{provider_pascal}{model_pascal}{module_variant_pascal}"
     dataset_class_name = f"{class_prefix}Dataset"
     example_to_actual_mappings = {
-        f"Example{example_class_prefix}Dataset": dataset_class_name,
-        f"Example{example_class_prefix}TemplateConfig": f"{class_prefix}TemplateConfig",
-        f"Example{example_class_prefix}RegionJob": f"{class_prefix}RegionJob",
-        f"Example{example_class_prefix}SourceFileCoord": f"{class_prefix}SourceFileCoord",
+        f"Example{example_class_suffix}Dataset": dataset_class_name,
+        f"Example{example_class_suffix}TemplateConfig": f"{class_prefix}TemplateConfig",
+        f"Example{example_class_suffix}RegionJob": f"{class_prefix}RegionJob",
+        f"Example{example_class_suffix}SourceFileCoord": f"{class_prefix}SourceFileCoord",
         # DataVar and InternalAttrs are model-level config models shared across a
         # model's datasets, so they stay {provider}{model}-scoped.
         "ExampleDataVar": f"{provider_pascal}{model_pascal}DataVar",
