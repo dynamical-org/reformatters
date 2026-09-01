@@ -435,6 +435,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # GEFS ice thickness covers lake as well as sea ice, matching the broader
+    # floating_ice_area_fraction used for ice cover; CF names no floating-ice thickness.
+    "ice_thickness_surface",
     # ECMWF S2S soil moisture is a mass per soil volume (kg m-3), snow albedo a
     # percentage and snow density a mass per snow volume; CF names none of them.
     "soil_moisture_0_20cm",
