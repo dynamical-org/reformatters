@@ -322,6 +322,13 @@ def test_no_zarr3_primary_with_icechunk_replica(
     )
 
 
+# google-weathernext2-forecast-historical-virtual applies one split to every array,
+# including its pressure_level group, and its region job batches writes on that same
+# constant (manifest_init_split), so the two must move together. Whether that shared
+# value meets the group's reader budget has not been audited; exempted until it is.
+_UNSTATED_GROUP_SPLIT_EXEMPTIONS = {"google-weathernext2-forecast-historical-virtual"}
+
+
 @pytest.mark.parametrize(
     "dataset",
     DYNAMICAL_DATASETS,
@@ -330,14 +337,16 @@ def test_no_zarr3_primary_with_icechunk_replica(
 def test_virtual_group_manifest_splits_are_explicit(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    """A per-array manifest split map must name every vertical group.
+    """Every vertical group must have its own manifest split entry.
 
     A group's arrays carry their vertical dimension's length times the refs of a root
-    array, so a catch-all sized for root arrays leaves a group's manifests oversized by
-    that factor. A missing key is not an error at construction: the catch-all absorbs
-    it silently. A scalar `split_size` is uniform by construction and has no such
-    fallthrough, so only mapping configs are checked.
+    array, so a split sized for root arrays leaves a group's manifests that factor
+    oversized. Neither a missing map key nor a scalar `split_size` is an error at
+    construction, so an unstated group split is inherited silently; the split each
+    group gets must be written down and justified against the reader budget.
     """
+    if dataset.dataset_id in _UNSTATED_GROUP_SPLIT_EXEMPTIONS:
+        return
     virtual_config = dataset.icechunk_virtual_config
     if virtual_config is None:
         return
@@ -347,8 +356,6 @@ def test_virtual_group_manifest_splits_are_explicit(
         for condition, _ in virtual_config.manifest_split.split_sizes
         if (match := re.search(r'path_matches\("(.*?)"\)', repr(condition)))
     ]
-    if not patterns:  # scalar split_size: uniform, nothing to fall through
-        return
 
     template = dataset.template_config.get_template(
         dataset.template_config.append_dim_start
