@@ -42,7 +42,9 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_B22_TRANSITION_DATE,
     GEFS_CURRENT_ARCHIVE_START,
+    GEFS_ENSEMBLE_MEMBERS,
     GEFS_INIT_TIME_FREQUENCY,
+    GEFS_S_FILE_LEAD_FREQUENCY,
     GEFSSourceFileType,
     NoaaGefsVirtualDataVar,
     NoaaGefsVirtualInternalAttrs,
@@ -70,12 +72,6 @@ _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 # MSLET entered the s file at this cycle; CPOFP, HGT@cloud ceiling and VIS entered at
 # GEFS_B22_TRANSITION_DATE.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
-
-# gec00 plus gep01..gep30, the members GEFS v12 publishes at every cycle.
-GEFS_ENSEMBLE_MEMBERS = 31
-
-# The s file publishes every 3 hours through lead 240.
-GEFS_S_FILE_LEAD_FREQUENCY = pd.Timedelta("3h")
 
 
 class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
@@ -150,8 +146,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
 
 
 class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
-    """Virtual GEFS forecast on init_time x ensemble_member x lead_time; a
-    forecast-length subclass declares forecast_length and dataset_attributes."""
+    """Virtual GEFS forecast on init_time x ensemble_member x lead_time."""
 
     forecast_length: Timedelta
 
@@ -183,26 +178,10 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
     }
 
     def lead_times(self) -> pd.TimedeltaIndex:
-        """Every lead time this dataset serves. The 0.25 degree s file steps 3 hourly;
-        a dataset reaching past its 240 hour end appends its coarser tail."""
+        """Every lead time this dataset serves, from 0 to forecast_length."""
         return pd.timedelta_range(
             "0h", self.forecast_length, freq=GEFS_S_FILE_LEAD_FREQUENCY
         )
-
-    def _expected_forecast_length_values(self, ds: xr.Dataset) -> np.ndarray[Any, Any]:
-        """Per-init expected forecast length; a constant forecast_length unless
-        overridden, as by the 00 UTC cycle's longer run."""
-        return np.full(ds[self.append_dim].size, self.forecast_length.to_timedelta64())
-
-    def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
-        return StatisticsApproximate(
-            min=str(self.forecast_length), max=str(self.forecast_length)
-        )
-
-    def _forecast_resolution(self) -> str:
-        """How lead_time steps, as a reader-facing sentence; a dataset whose leads
-        change spacing partway spells both spans out."""
-        return f"Forecast step {whole_hours(GEFS_S_FILE_LEAD_FREQUENCY)} hourly"
 
     def _dataset_attributes(
         self, *, dataset_id: str, dataset_version: str, name: str, description: str
@@ -217,7 +196,7 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {whole_hours(self.append_dim_frequency)} hours",
             forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
-            forecast_resolution=self._forecast_resolution(),
+            forecast_resolution=f"Forecast step {whole_hours(GEFS_S_FILE_LEAD_FREQUENCY)} hourly",
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -237,7 +216,9 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
             "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (
                 ("init_time",),
-                self._expected_forecast_length_values(ds),
+                np.full(
+                    ds[self.append_dim].size, self.forecast_length.to_timedelta64()
+                ),
             ),
             "spatial_ref": SPATIAL_REF_COORDS,
         }
@@ -345,7 +326,9 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
                 attrs=CoordinateAttrs(
                     long_name="Expected forecast length",
                     units="seconds",
-                    statistics_approximate=self._expected_forecast_length_statistics(),
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(self.forecast_length), max=str(self.forecast_length)
+                    ),
                 ),
             ),
         )

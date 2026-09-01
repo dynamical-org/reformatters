@@ -22,7 +22,6 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
-    NoaaGefsVirtualRegionJob,
 )
 
 TEMPLATE_CONFIG = NoaaGefsForecast10Day025DegreeVirtualTemplateConfig()
@@ -192,13 +191,38 @@ def test_representative_var_is_an_era_stable_instant_variable(
         assert rep.attrs.step_type == "instant"
 
 
-def test_forecast_discovery_is_not_gated(template_ds: xr.DataTree) -> None:
-    """A forecast publishes one lead at a time over hours; withholding an init until
-    every lead of every member landed would delay the first lead by the length of the
-    whole run. Ragged leading edges are handled by min_present_fraction instead."""
-    assert (
-        NoaaGefsForecast10Day025DegreeVirtualRegionJob.discover_available
-        is NoaaGefsVirtualRegionJob.discover_available
+def test_forecast_discovery_releases_a_partly_published_init(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A forecast publishes one lead at a time over ~110 minutes; withholding an init
+    until every lead of every member landed would delay its first lead by the length of
+    the whole run. So every file the source has published is released immediately, and
+    the ragged leading edge is absorbed by min_present_fraction instead.
+
+    The analysis dataset deliberately does the opposite, which is why this is asserted
+    on behaviour rather than on discover_available being left unoverridden.
+    """
+    data_vars = [get_var("temperature_2m")]
+    coords = coords_for(
+        template_ds,
+        data_vars,
+        init_times=[pd.Timestamp("2024-06-01T00:00")],
+        lead_times=[pd.Timedelta("0h"), pd.Timedelta("3h"), pd.Timedelta("240h")],
+        ensemble_members=[0, 30],
+    )
+    # The source has published the two shortest leads of every member and nothing else.
+    published = [c for c in coords if c.lead_time != pd.Timedelta("240h")]
+    monkeypatch.setattr(
+        region_job_module,
+        "discover_available_by_obstore_listing",
+        lambda pending, **kwargs: [(c, 100) for c in pending if c in published],
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    available = job.discover_available(list(coords))
+
+    assert sorted((c.lead_time, c.ensemble_member) for c, _ in available) == sorted(
+        (c.lead_time, c.ensemble_member) for c in published
     )
 
 
@@ -370,6 +394,23 @@ def test_every_requested_variable_maps_to_a_real_message(
         v.name for v in coord.data_vars
     )
     assert len({r.data_var.name for r in refs}) == len(refs)
+
+    # Both sides above come from the same available_from filter, so together they would
+    # still hold if a variable stopped being requested in an era that publishes it.
+    # Count what the file itself offers instead: every message except the two kinds this
+    # dataset deliberately declines -- surface geopotential height, which the s file
+    # carries only at lead 0, and the degenerate zero length TMAX/TMIN window there.
+    messages = [line.split(":") for line in index_text.splitlines() if line]
+    declined = [
+        fields
+        for fields in messages
+        if (fields[3] == "HGT" and fields[4] == "surface")
+        or (fields[3] in ("TMAX", "TMIN") and fields[5].startswith("0-0 "))
+    ]
+    assert len(refs) == len(messages) - len(declined), (
+        f"{fixture_name}: {len(refs)} refs for {len(messages)} messages "
+        f"less {len(declined)} declined"
+    )
 
 
 def test_a_windowed_variable_added_late_is_gated_on_its_own_cycle(
