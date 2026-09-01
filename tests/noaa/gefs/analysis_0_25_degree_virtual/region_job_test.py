@@ -301,6 +301,44 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
         job.file_refs(coord, file_size=1200)
 
 
+def test_file_refs_refuses_two_element_spellings_for_one_chunk(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """grib_element_alternatives give a variable one lookup key per spelling. A file
+    carrying two of them would hand the variable two refs for one chunk, writing the
+    same bytes twice with no way to tell which won."""
+
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+        path = tmp_path / "index.idx"
+        path.write_text(
+            "1:0:d=2024060106:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
+            "2:500:d=2024060106:TMPK:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
+        )
+        return path
+
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+
+    temperature = get_var("temperature_2m")
+    assert temperature.internal_attrs.grib_element == "TMP"
+    two_spellings = replace(
+        temperature,
+        internal_attrs=replace(
+            temperature.internal_attrs, grib_element_alternatives=("TMPK",)
+        ),
+    )
+    coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2024-06-01T06:00"),
+        lead_time=pd.Timedelta("3h"),
+        data_vars=[two_spellings],
+    )
+    job = make_job(template_ds, data_vars=[two_spellings])
+
+    with pytest.raises(
+        AssertionError, match=r"has two messages for temperature_2m at .*09:00"
+    ):
+        job.file_refs(coord, file_size=1200)
+
+
 def test_operational_update_jobs_single_polling_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

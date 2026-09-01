@@ -36,6 +36,12 @@ _FILTER_VARS = [
 ]
 
 
+def _fire_minutes(schedule: str) -> list[int]:
+    """Minutes past midnight a `<minute> <hours> * * *` cron schedule fires at."""
+    minute, hours, *_ = schedule.split()
+    return [int(hour) * 60 + int(minute) for hour in hours.split(",")]
+
+
 def make_dataset(tmp_path: Path) -> NoaaGefsAnalysis025DegreeVirtualDataset:
     return NoaaGefsAnalysis025DegreeVirtualDataset(
         primary_storage_config=StorageConfig(
@@ -182,8 +188,13 @@ def test_operational_kubernetes_resources(
     assert len(update_cron_job.secret_names) > 0
 
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    # The update's fire plus its pod_active_deadline.
-    assert validation_cron_job.schedule == "21 4,10,16,22 * * *"
+    # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
+    # validator never reads the store while the update is still committing.
+    assert validation_cron_job.schedule == "31 4,10,16,22 * * *"
+    assert _fire_minutes(validation_cron_job.schedule) == [
+        minute + int(update_cron_job.pod_active_deadline.total_seconds() // 60) + 10
+        for minute in _fire_minutes(update_cron_job.schedule)
+    ]
 
     # Both stay suspended until the archive is backfilled.
     assert update_cron_job.suspend

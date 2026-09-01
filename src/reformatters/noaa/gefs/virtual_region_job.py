@@ -103,6 +103,7 @@ class NoaaGefsVirtualRegionJob(
         out_loc = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
+        ref_paths: set[str] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
             matches = lookup.pop((element, level, window), None)
             if not matches:
@@ -114,16 +115,23 @@ class NoaaGefsVirtualRegionJob(
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
                 return []
-            refs.extend(
-                VirtualRef(
-                    data_var=var,
-                    out_loc=out_loc,
-                    location=location,
-                    offset=start,
-                    length=end - start,
+            for var in matches:
+                # grib_element_alternatives give a variable one lookup key per
+                # spelling, so a file carrying two of them writes one chunk twice.
+                assert var.path not in ref_paths, (
+                    f"{location} has two messages for {var.path} at {out_loc}; "
+                    "the catalog matches more than one message per chunk"
                 )
-                for var in matches
-            )
+                ref_paths.add(var.path)
+                refs.append(
+                    VirtualRef(
+                        data_var=var,
+                        out_loc=out_loc,
+                        location=location,
+                        offset=start,
+                        length=end - start,
+                    )
+                )
 
         # A variable with no matching message would otherwise be committed as a silent
         # NaN column: the file counts as ingested through its representative variable,

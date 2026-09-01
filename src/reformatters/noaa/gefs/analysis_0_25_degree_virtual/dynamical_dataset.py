@@ -65,9 +65,11 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="21 4,10,16,22 * * *",
+            # The update's fire plus its pod_active_deadline, plus 10 minutes: the
+            # update stops polling 30 seconds before its deadline, so a validator
+            # firing at exactly the deadline could read the store while the update is
+            # still committing its last batch.
+            schedule="31 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
