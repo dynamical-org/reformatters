@@ -146,24 +146,51 @@ def test_flag_variables_only_where_the_source_is_categorical() -> None:
         assert get_var(path).attrs.flag_values is None, path
 
 
-def test_every_variable_declares_nan_missing_but_the_freezing_level_heights() -> None:
-    """The source marks a freezing level at or below ground with an exact 0, so those
-    two declare it as the fill value and a CF-aware reader sees NaN there."""
+def test_every_variable_declares_nan_missing() -> None:
+    """No variable declares a non-NaN fill value.
+
+    The two freezing-level heights are the case that makes this worth pinning: the
+    source writes an exact 0 where the level is at or below the surface, but over water
+    the surface is at zero height, so 0 is also a real answer there. Declaring it as the
+    fill value turned roughly 130,000 legitimate ocean cells per field into NaN for a
+    CF-aware reader.
+    """
     assert len(CONFIG.data_vars) == 293
-    declared_zero = {
-        var.path for var in CONFIG.data_vars if var.encoding.fill_value == 0.0
-    }
-    assert declared_zero == {
+    for var in CONFIG.data_vars:
+        assert np.isnan(var.encoding.fill_value), var.path
+        assert var.internal_attrs.source_fill_value is None, var.path
+    for path in (
         "geopotential_height_0c_isotherm",
         "geopotential_height_highest_tropospheric_freezing_level",
-    }
-    for path in declared_zero:
+    ):
         assert get_var(path).attrs.comment == (
-            "NaN where the freezing level is at or below ground."
-        )
-    for var in CONFIG.data_vars:
-        assert np.isnan(var.encoding.fill_value) or var.path in declared_zero, var.path
-        assert var.internal_attrs.source_fill_value is None, var.path
+            "Zero marks a freezing level at or below the surface rather than missing "
+            "data; over water, where the surface is at zero height, it is a genuine "
+            "value."
+        ), path
+
+
+def test_in_band_markers_are_described_where_the_source_uses_them() -> None:
+    """A variable whose no-data condition is physical rather than instrumental has no
+    bitmap, so the source encodes it in band and only the comment can carry it."""
+    assert "about 24 km" in str(get_var("visibility_surface").attrs.comment)
+    assert "20,000m mark no cloud ceiling" in str(
+        get_var("geopotential_height_cloud_ceiling").attrs.comment
+    )
+    assert "Negative values mark no precipitation" in str(
+        get_var("percent_frozen_precipitation_surface").attrs.comment
+    )
+
+
+def test_sunshine_duration_is_a_six_hour_bucket_despite_its_instant_label() -> None:
+    """The index labels SUNSD instantaneous, which is what makes the window string
+    match, but the values accumulate and reset every 6 hours of lead time."""
+    var = get_var("sunshine_duration_surface")
+    assert var.attrs.step_type == "instant"
+    assert var.internal_attrs.window_reset_frequency is None
+    comment = str(var.attrs.comment)
+    assert "accumulated within the 6 hour window" in comment
+    assert "at most 21600 s" in comment
 
 
 def test_reflectivity_arrays_name_the_no_echo_floor() -> None:

@@ -377,6 +377,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Visibility",
             units="m",
             standard_name="visibility_in_air",
+            comment=(
+                "Saturates at the model's maximum reported visibility, about 24 km. "
+                "That ceiling means unlimited visibility rather than missing data."
+            ),
         ),
         root_var(
             "wind_u_planetary_boundary_layer",
@@ -1145,6 +1149,12 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Sunshine Duration",
             units="s",
             standard_name="duration_of_sunshine",
+            comment=(
+                "Sunshine accumulated within the 6 hour window containing this step, "
+                "not an instantaneous value: the total restarts every 6 hours of "
+                "forecast lead time and so reaches at most 21600 s. The source index "
+                "labels it instantaneous, which is why it carries no window step type."
+            ),
         ),
         root_var(
             "surface_lifted_index_surface",
@@ -1930,8 +1940,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            fill_value=0.0,
-            comment="NaN where the freezing level is at or below ground.",
+            comment=(
+                "Zero marks a freezing level at or below the surface rather than "
+                "missing data; over water, where the surface is at zero height, it "
+                "is a genuine value."
+            ),
         ),
         root_var(
             "relative_humidity_0c_isotherm",
@@ -1950,8 +1963,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            fill_value=0.0,
-            comment="NaN where the freezing level is at or below ground.",
+            comment=(
+                "Zero marks a freezing level at or below the surface rather than "
+                "missing data; over water, where the surface is at zero height, it "
+                "is a genuine value."
+            ),
         ),
         root_var(
             "relative_humidity_highest_tropospheric_freezing_level",

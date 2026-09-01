@@ -21,7 +21,7 @@
       "separator": "/"
     }
   },
-  "fill_value": 0.0,
+  "fill_value": "NaN",
   "codecs": [
     {
       "name": "gribberish",
@@ -37,10 +37,10 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "NaN where the freezing level is at or below ground.",
+    "comment": "Zero marks a freezing level at or below the surface rather than missing data; over water, where the surface is at zero height, it is a genuine value.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
-    "_FillValue": "AAAAAAAAAAA="
+    "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
     "time",

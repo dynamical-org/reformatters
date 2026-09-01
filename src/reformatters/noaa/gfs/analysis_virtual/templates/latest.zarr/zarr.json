@@ -2507,7 +2507,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "gribberish",
@@ -2523,10 +2523,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Zero marks a freezing level at or below the surface rather than missing data; over water, where the surface is at zero height, it is a genuine value.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
-          "_FillValue": "AAAAAAAAAAA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "time",
@@ -2825,7 +2825,7 @@
             "separator": "/"
           }
         },
-        "fill_value": 0.0,
+        "fill_value": "NaN",
         "codecs": [
           {
             "name": "gribberish",
@@ -2841,10 +2841,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Zero marks a freezing level at or below the surface rather than missing data; over water, where the surface is at zero height, it is a genuine value.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
-          "_FillValue": "AAAAAAAAAAA="
+          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "time",
@@ -9338,6 +9338,7 @@
           "short_name": "SUNSD",
           "standard_name": "duration_of_sunshine",
           "units": "s",
+          "comment": "Sunshine accumulated within the 6 hour window containing this step, not an instantaneous value: the total restarts every 6 hours of forecast lead time and so reaches at most 21600 s. The source index labels it instantaneous, which is why it carries no window step type.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12405,6 +12406,7 @@
           "short_name": "vis",
           "standard_name": "visibility_in_air",
           "units": "m",
+          "comment": "Saturates at the model's maximum reported visibility, about 24 km. That ceiling means unlimited visibility rather than missing data.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
