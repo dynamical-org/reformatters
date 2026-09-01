@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 from gribberish.zarr import GribberishCodec
 from pydantic import computed_field
 from zarr.codecs import ScaleOffset
@@ -11,16 +12,27 @@ from zarr.codecs import ScaleOffset
 from reformatters.common.config_models import (
     ROOT,
     Coordinate,
+    CoordinateAttrs,
     DatasetAttributes,
     DataVarAttrs,
     Encoding,
     Group,
     SpatialResolution,
+    StatisticsApproximate,
 )
 from reformatters.common.iterating import item
-from reformatters.common.template_config import TemplateConfig
+from reformatters.common.pydantic import replace
+from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import CodecConfig, Dim, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    CodecConfig,
+    Dim,
+    Dims,
+    Timedelta,
+    Timestamp,
+)
+from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
     get_shared_template_dimension_coordinates,
@@ -29,6 +41,8 @@ from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
     GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_B22_TRANSITION_DATE,
+    GEFS_CURRENT_ARCHIVE_START,
+    GEFS_INIT_TIME_FREQUENCY,
     GEFSSourceFileType,
     NoaaGefsVirtualDataVar,
     NoaaGefsVirtualInternalAttrs,
@@ -56,6 +70,12 @@ _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 # MSLET entered the s file at this cycle; CPOFP, HGT@cloud ceiling and VIS entered at
 # GEFS_B22_TRANSITION_DATE.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
+
+# gec00 plus gep01..gep30, the members GEFS v12 publishes at every cycle.
+GEFS_ENSEMBLE_MEMBERS = 31
+
+# The s file publishes every 3 hours through lead 240.
+GEFS_S_FILE_LEAD_FREQUENCY = pd.Timedelta("3h")
 
 
 class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
@@ -127,6 +147,208 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
             "longitude": len(dim_coords["longitude"]),
         }
         return tuple(sizes.get(dim, 1) for dim in dims)
+
+
+class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
+    """Virtual GEFS forecast on init_time x ensemble_member x lead_time; a
+    forecast-length subclass declares forecast_length and dataset_attributes."""
+
+    forecast_length: Timedelta
+
+    dims: Dims = {
+        ROOT: (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+        )
+    }
+    append_dim: AppendDim = "init_time"
+    append_dim_start: Timestamp = GEFS_CURRENT_ARCHIVE_START
+    append_dim_frequency: Timedelta = GEFS_INIT_TIME_FREQUENCY
+
+    # A lead time's window starts at the last whole multiple of WINDOW_RESET_FREQUENCY
+    # below it, so it spans 3 hours at lead times 3, 9, 15, ... and 6 hours at 6, 12, ...
+    window_comments: dict[str, str] = {
+        "avg": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
+        "accum": (
+            "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... "
+            "hours) or 3 hour period (lead times 3, 9, 15, ... hours). Subtracting the "
+            "value at an earlier lead time with the same window start gives the exact "
+            "total between those two lead times."
+        ),
+        "max": "Maximum value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
+        "min": "Minimum value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
+    }
+
+    def lead_times(self) -> pd.TimedeltaIndex:
+        """Every lead time this dataset serves. The 0.25 degree s file steps 3 hourly;
+        a dataset reaching past its 240 hour end appends its coarser tail."""
+        return pd.timedelta_range(
+            "0h", self.forecast_length, freq=GEFS_S_FILE_LEAD_FREQUENCY
+        )
+
+    def _expected_forecast_length_values(self, ds: xr.Dataset) -> np.ndarray[Any, Any]:
+        """Per-init expected forecast length; a constant forecast_length unless
+        overridden, as by the 00 UTC cycle's longer run."""
+        return np.full(ds[self.append_dim].size, self.forecast_length.to_timedelta64())
+
+    def _expected_forecast_length_statistics(self) -> StatisticsApproximate:
+        return StatisticsApproximate(
+            min=str(self.forecast_length), max=str(self.forecast_length)
+        )
+
+    def _forecast_resolution(self) -> str:
+        """How lead_time steps, as a reader-facing sentence; a dataset whose leads
+        change spacing partway spells both spans out."""
+        return f"Forecast step {whole_hours(GEFS_S_FILE_LEAD_FREQUENCY)} hourly"
+
+    def _dataset_attributes(
+        self, *, dataset_id: str, dataset_version: str, name: str, description: str
+    ) -> DatasetAttributes:
+        return replace(
+            super()._dataset_attributes(
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                name=name,
+                description=description,
+            ),
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=f"Forecasts initialized every {whole_hours(self.append_dim_frequency)} hours",
+            forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
+            forecast_resolution=self._forecast_resolution(),
+        )
+
+    def dimension_coordinates(self) -> dict[str, Any]:
+        return {
+            "init_time": self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "ensemble_member": np.arange(GEFS_ENSEMBLE_MEMBERS),
+            "lead_time": self.lead_times(),
+            **self._spatial_dimension_coordinates(),
+        }
+
+    def derive_coordinates(
+        self, ds: xr.Dataset
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+        return {
+            "valid_time": ds["init_time"] + ds["lead_time"],
+            "expected_forecast_length": (
+                ("init_time",),
+                self._expected_forecast_length_values(ds),
+            ),
+            "spatial_ref": SPATIAL_REF_COORDS,
+        }
+
+    @computed_field
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        dim_coords = self.dimension_coordinates()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+
+        return (
+            *self._spatial_coords(),
+            Coordinate(
+                name="init_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(), max="Present"
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ensemble_member",
+                encoding=Encoding(
+                    dtype="int16",
+                    fill_value=-1,
+                    chunks=len(dim_coords["ensemble_member"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Ensemble member",
+                    standard_name="realization",
+                    units="1",
+                    statistics_approximate=StatisticsApproximate(
+                        min=int(dim_coords["ensemble_member"].min()),
+                        max=int(dim_coords["ensemble_member"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="lead_time",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=float("nan"),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=len(dim_coords["lead_time"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="valid_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=(
+                        append_dim_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(),
+                        max=f"Present + {whole_hours(self.forecast_length)} hours",
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="expected_forecast_length",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=float("nan"),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
+                    units="seconds",
+                    statistics_approximate=self._expected_forecast_length_statistics(),
+                ),
+            ),
+        )
 
 
 def _virtual_encoding(
