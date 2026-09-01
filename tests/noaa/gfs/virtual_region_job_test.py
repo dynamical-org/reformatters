@@ -1,6 +1,7 @@
 from collections import Counter
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import pytest
 import xarray as xr
@@ -309,6 +310,67 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
 
 
 @pytest.mark.slow
+def _grib2_parameter(raw: bytes) -> tuple[int, int, int]:
+    """(discipline, parameter category, parameter number) from a GRIB2 message.
+
+    The sidecar carries none of these, which is why refs are matched on the element
+    string; reading them takes the message itself.
+    """
+    assert raw[:4] == b"GRIB", raw[:4]
+    offset = 16  # section 0 is 16 octets, discipline at octet 7
+    while offset < len(raw):
+        length = int.from_bytes(raw[offset : offset + 4], "big")
+        if raw[offset + 4] == 4:  # product definition section
+            body = raw[offset:]
+            return raw[6], body[9], body[10]
+        offset += length
+    raise AssertionError("no product definition section")
+
+
+@pytest.mark.slow
+def test_the_respelled_element_still_selects_the_same_grib_parameter(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One control on grib_element_alternatives: it must select the same physical
+    field either side of the respelling, not merely some message.
+
+    A string-level check cannot catch an alternatives tuple that picks up a spelling
+    belonging to a different parameter, which is the failure mode the mechanism has.
+    Cloud mixing ratio is GRIB2 discipline 0, category 1, number 22.
+    """
+    stub_grib_index_download(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda url: cached_grib_index(url, _DATASET_ID),
+    )
+    var = next(
+        v
+        for v in TEMPLATE_CONFIG.data_vars
+        if v.path == "pressure_level/cloud_mixing_ratio"
+    )
+    job = _job(template_ds, [var.path])
+
+    for era, hour in (("20230202", "18"), ("20230203", "00")):
+        coord = NoaaGfsAnalysisVirtualSourceFileCoord(
+            init_time=pd.Timestamp(f"{era[:4]}-{era[4:6]}-{era[6:]}T{hour}:00"),
+            lead_time=pd.Timedelta("9h"),
+            file_type="pgrb2",
+            data_vars=[var],
+        )
+        refs = job.file_refs(coord, file_size=10**10)
+        ref = next(r for r in refs if dict(r.out_loc)["pressure_level"] == 850.0)
+        raw = httpx.get(
+            ref.location.replace(
+                "s3://noaa-gfs-bdp-pds/",
+                "https://noaa-gfs-bdp-pds.s3.amazonaws.com/",
+            ),
+            headers={"Range": f"bytes={ref.offset}-{ref.offset + ref.length - 1}"},
+            timeout=60,
+        ).content
+        assert _grib2_parameter(raw) == (0, 1, 22), (era, hour)
+
+
 def test_cloud_mixing_ratio_element_was_respelled_at_a_single_cycle() -> None:
     """The one inventory change the archive is known to contain, pinned at its exact
     boundary rather than sampled either side of it.
