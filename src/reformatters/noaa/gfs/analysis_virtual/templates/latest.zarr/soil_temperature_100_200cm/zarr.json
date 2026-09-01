@@ -1,0 +1,59 @@
+{
+  "shape": [
+    1,
+    721,
+    1440
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "offset": -273.15
+      }
+    },
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "TSOIL",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Soil temperature",
+    "short_name": "sot",
+    "standard_name": "soil_temperature",
+    "units": "degree_Celsius",
+    "comment": "NaN over open water; the source reports this quantity only over land and sea ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+    "step_type": "instant",
+    "coordinates": "spatial_ref",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
