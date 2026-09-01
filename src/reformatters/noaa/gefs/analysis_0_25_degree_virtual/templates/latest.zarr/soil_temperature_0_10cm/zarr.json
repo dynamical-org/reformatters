@@ -39,8 +39,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Soil temperature top 10 cm",
-    "short_name": "st10",
+    "long_name": "Soil temperature",
+    "short_name": "sot",
     "standard_name": "soil_temperature",
     "units": "degree_Celsius",
     "comment": "NaN over water, where there is no soil.",

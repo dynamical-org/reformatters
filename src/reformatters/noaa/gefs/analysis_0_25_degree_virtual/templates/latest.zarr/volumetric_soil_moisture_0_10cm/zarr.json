@@ -33,8 +33,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Volumetric soil moisture content top 10 cm",
-    "short_name": "sm10",
+    "long_name": "Volumetric soil moisture",
+    "short_name": "vsw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
     "comment": "NaN over water, where there is no soil.",

@@ -114,6 +114,15 @@ def test_windowed_variables_declare_the_six_hour_reset_and_say_so() -> None:
     )
 
 
+def test_extreme_temperatures_are_not_read_from_the_degenerate_lead_0_window() -> None:
+    """The source publishes TMAX/TMIN at lead 0 with a zero-length window ("0-0 day max
+    fcst"), which is the instantaneous value rather than an extreme. Treating them as
+    having no hour-0 values sends the analysis to lead 3 or 6, so the window is always a
+    real one and matches what the comment promises."""
+    for name in ("maximum_temperature_2m", "minimum_temperature_2m"):
+        assert not get_var(name).has_hour_0_values(), name
+
+
 def test_instant_variables_carry_no_window_reset() -> None:
     for var in CONFIG.data_vars:
         if var.attrs.step_type == "instant":
