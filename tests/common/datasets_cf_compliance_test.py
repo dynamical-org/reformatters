@@ -1005,10 +1005,149 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_values", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_meanings", "ecmwf-aifs-single-forecast-virtual"),
     # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
+    ("wind_gust_10m", "step_type", "eccc-hrdps-forecast"),
+    # GFS and GEFS report categorical precipitation presence over a source-defined
+    # window, while HRRR reports presence at the valid time.
+    ("categorical_snow_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_snow_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_snow_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gefs-analysis"),
+    (
+        "categorical_ice_pellets_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gefs-analysis"),
+    (
+        "categorical_freezing_rain_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-forecast"),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-analysis"),
+    ("categorical_rain_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    # GFS and GEFS publish window-average total cloud cover.
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis"),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gefs-analysis"),
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day",
+    ),
+    # IFS ENS 15-day is instantaneous while IFS ENS 46-day is a 24-hour mean
+    # under the same variable name.
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    # HRRR publishes instantaneous downward radiation fluxes while the other
+    # sources publish interval averages.
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis-virtual",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "downward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-analysis-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-48-hour-virtual",
+    ),
+    (
+        "downward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    # IFS ENS 46-day publishes 24-hour means for these state variables.
+    (
+        "snow_water_equivalent_surface",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "skin_temperature_surface",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "sea_surface_temperature",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    (
+        "total_column_water_atmosphere",
+        "step_type",
+        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    # MRMS, IFS ENS, and HRDPS use source-defined precipitation-type code tables.
+    (
+        "categorical_precipitation_type_surface",
+        "flag_values",
+        "noaa-mrms-conus-analysis-hourly",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_meanings",
+        "noaa-mrms-conus-analysis-hourly",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_values",
+        "eccc-hrdps-forecast",
+    ),
+    (
+        "categorical_precipitation_type_surface",
+        "flag_meanings",
+        "eccc-hrdps-forecast",
+    ),
     # HRDPS is on a rotated pole grid, whose CF axes are grid_longitude/grid_latitude in
     # degrees, rather than the metre based projection_[xy]_coordinate of the other
     # projected datasets.
@@ -1020,9 +1159,13 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("y", "units", "eccc-hrdps-forecast"),
 }
 
+type MetadataValue = str | tuple[int, ...] | None
+
 
 def _format_conflict(
-    var_name: str, attr_name: str, values_to_datasets: dict[str | None, list[str]]
+    var_name: str,
+    attr_name: str,
+    values_to_datasets: dict[MetadataValue, list[str]],
 ) -> str:
     """Format a conflict message showing which datasets use which values."""
     values_list = list(values_to_datasets.keys())
@@ -1037,7 +1180,7 @@ def _format_conflict(
 
 
 def _check_consistency(
-    metadata_by_name: dict[str, dict[str, dict[str, str | None]]],
+    metadata_by_name: dict[str, dict[str, dict[str, MetadataValue]]],
     attrs_to_check: list[str],
 ) -> list[str]:
     """
@@ -1051,7 +1194,7 @@ def _check_consistency(
             continue
 
         for attr_name in attrs_to_check:
-            values_to_datasets: dict[str | None, list[str]] = {}
+            values_to_datasets: dict[MetadataValue, list[str]] = {}
             for dataset_id, metadata in datasets_metadata.items():
                 value = metadata.get(attr_name)
                 values_to_datasets.setdefault(value, []).append(dataset_id)
@@ -1060,7 +1203,7 @@ def _check_consistency(
                 continue
 
             # Filter out allowed exceptions
-            filtered_values: dict[str | None, list[str]] = {}
+            filtered_values: dict[MetadataValue, list[str]] = {}
             for value, dataset_ids in values_to_datasets.items():
                 remaining = [
                     ds_id
@@ -1081,15 +1224,16 @@ def test_metadata_consistency_across_datasets() -> None:
     """
     Ensure metadata is consistent across all datasets. Checks:
 
-    1. Same var_name → same (short_name, long_name, standard_name, units)
+    1. Same var_name → same (short_name, long_name, standard_name, units,
+       step_type, flag_values, flag_meanings)
     2. Same short_name → same (long_name, standard_name, units)
     3. Same long_name → same (short_name, standard_name, units)
     4. Same coord_name → same (long_name, standard_name, units)
     """
     # Collect data variable metadata grouped by var_name, short_name, and long_name
-    by_var_name: dict[str, dict[str, dict[str, str | None]]] = {}
-    by_short_name: dict[str, dict[str, dict[str, str | None]]] = {}
-    by_long_name: dict[str, dict[str, dict[str, str | None]]] = {}
+    by_var_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
+    by_short_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
+    by_long_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
@@ -1099,6 +1243,9 @@ def test_metadata_consistency_across_datasets() -> None:
                 "units": var_config.attrs.units,
                 "standard_name": var_config.attrs.standard_name,
                 "long_name": var_config.attrs.long_name,
+                "step_type": var_config.attrs.step_type,
+                "flag_values": var_config.attrs.flag_values,
+                "flag_meanings": var_config.attrs.flag_meanings,
             }
 
             by_var_name.setdefault(var_config.name, {})[dataset.dataset_id] = attrs
@@ -1114,7 +1261,16 @@ def test_metadata_consistency_across_datasets() -> None:
     # Same var_name → consistent metadata
     conflicts.extend(
         _check_consistency(
-            by_var_name, ["short_name", "long_name", "standard_name", "units"]
+            by_var_name,
+            [
+                "short_name",
+                "long_name",
+                "standard_name",
+                "units",
+                "step_type",
+                "flag_values",
+                "flag_meanings",
+            ],
         )
     )
 
@@ -1129,7 +1285,7 @@ def test_metadata_consistency_across_datasets() -> None:
     )
 
     # Collect coordinate metadata and check consistency
-    by_coord_name: dict[str, dict[str, dict[str, str | None]]] = {}
+    by_coord_name: dict[str, dict[str, dict[str, MetadataValue]]] = {}
 
     for dataset in IMPLEMENTED_DATASETS:
         template_config = dataset.template_config
