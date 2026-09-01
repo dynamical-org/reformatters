@@ -33,7 +33,7 @@ log = get_logger(__name__)
 # _SOURCE_REGION = "us-east-1"
 
 
-class ExampleSpatialSourceFileCoord(SourceFileCoord):
+class ExampleVirtualSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file, plus the data variables it packs.
 
     A virtual dataset turns each source GRIB message into one chunk reference, so a
@@ -84,12 +84,12 @@ class ExampleSpatialSourceFileCoord(SourceFileCoord):
         )
 
 
-class ExampleSpatialRegionJob(
-    VirtualRegionJob[ExampleDataVar, ExampleSpatialSourceFileCoord]
+class ExampleVirtualRegionJob(
+    VirtualRegionJob[ExampleDataVar, ExampleVirtualSourceFileCoord]
 ):
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[ExampleDataVar]
-    ) -> Sequence[ExampleSpatialSourceFileCoord]:
+    ) -> Sequence[ExampleVirtualSourceFileCoord]:
         """One coord per source file covering the data in processing_region_ds.
 
         Reused by operational validation to probe the manifest, so it must list exactly
@@ -97,7 +97,7 @@ class ExampleSpatialRegionJob(
         accumulated variables at hour 0).
         """
         # return [
-        #     ExampleSpatialSourceFileCoord(
+        #     ExampleVirtualSourceFileCoord(
         #         init_time=pd.Timestamp(init_time),
         #         lead_time=pd.Timedelta(lead_time),
         #         data_vars=data_var_group,
@@ -110,8 +110,8 @@ class ExampleSpatialRegionJob(
         )
 
     def discover_available(
-        self, pending: list[ExampleSpatialSourceFileCoord]
-    ) -> list[tuple[ExampleSpatialSourceFileCoord, int]]:
+        self, pending: list[ExampleVirtualSourceFileCoord]
+    ) -> list[tuple[ExampleVirtualSourceFileCoord, int]]:
         """Of the not-yet-ingested files, the subset fetchable now, each with its size.
 
         The write loop calls this each tick (once for a backfill, repeatedly while an
@@ -132,7 +132,7 @@ class ExampleSpatialRegionJob(
         )
 
     def file_refs(
-        self, coord: ExampleSpatialSourceFileCoord, file_size: int
+        self, coord: ExampleVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         """Every virtual ref a single source file contributes (or [] to skip it).
 
@@ -177,7 +177,7 @@ class ExampleSpatialRegionJob(
     # variable the file carries. Override only if that variable's chunk isn't a reliable
     # proxy for "the whole file was ingested":
     #
-    # def representative_var(self, coord: ExampleSpatialSourceFileCoord) -> ExampleDataVar:
+    # def representative_var(self, coord: ExampleVirtualSourceFileCoord) -> ExampleDataVar:
     #     return next(v for v in self.data_vars if v.name == "temperature_2m")
 
     # The recent append-dim window each operational update fire re-sweeps. The base

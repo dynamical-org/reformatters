@@ -9,15 +9,13 @@ from reformatters.common.kubernetes import (  # noqa: F401
     ValidationCronJob,
 )
 
-from .region_job import ExampleTemporalRegionJob, ExampleTemporalSourceFileCoord
-from .template_config import ExampleDataVar, ExampleTemporalTemplateConfig
+from .region_job import ExampleRegionJob, ExampleSourceFileCoord
+from .template_config import ExampleDataVar, ExampleTemplateConfig
 
 
-class ExampleTemporalDynamicalDataset(
-    DynamicalDataset[ExampleDataVar, ExampleTemporalSourceFileCoord]
-):
-    template_config: ExampleTemporalTemplateConfig = ExampleTemporalTemplateConfig()
-    region_job_class: type[ExampleTemporalRegionJob] = ExampleTemporalRegionJob
+class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
+    template_config: ExampleTemplateConfig = ExampleTemplateConfig()
+    region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""

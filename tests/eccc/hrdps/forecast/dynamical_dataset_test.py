@@ -8,7 +8,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
 from reformatters.eccc.hrdps.forecast.dynamical_dataset import (
-    EcccHrdpsForecastDynamicalDataset,
+    EcccHrdpsForecastDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
@@ -33,12 +33,12 @@ NO_LEAD_TIME_0_VARIABLE_NAMES = [
 
 
 @pytest.fixture
-def dataset() -> EcccHrdpsForecastDynamicalDataset:
+def dataset() -> EcccHrdpsForecastDataset:
     return _make_dataset()
 
 
-def _make_dataset() -> EcccHrdpsForecastDynamicalDataset:
-    return EcccHrdpsForecastDynamicalDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
+def _make_dataset() -> EcccHrdpsForecastDataset:
+    return EcccHrdpsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
 
 
 def _point_values(ds: xr.Dataset, init_time: str) -> xr.Dataset:
@@ -178,7 +178,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_operational_kubernetes_resources(
-    dataset: EcccHrdpsForecastDynamicalDataset,
+    dataset: EcccHrdpsForecastDataset,
 ) -> None:
     archive_grib_files_job, update_cron_job, validation_cron_job = (
         dataset.operational_kubernetes_resources("test-image-tag")
@@ -205,14 +205,14 @@ def test_operational_kubernetes_resources(
         assert cron_job.schedule.endswith(" * * *")
 
 
-def test_validators(dataset: EcccHrdpsForecastDynamicalDataset) -> None:
+def test_validators(dataset: EcccHrdpsForecastDataset) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.Validator) for v in validators)
 
 
 def test_archive_grib_files_calls_copy_with_defaults(
-    dataset: EcccHrdpsForecastDynamicalDataset,
+    dataset: EcccHrdpsForecastDataset,
 ) -> None:
     mock_copy = Mock()
     with (
@@ -239,7 +239,7 @@ def test_archive_grib_files_calls_copy_with_defaults(
 
 
 def test_archive_grib_files_passes_s3_credentials(
-    dataset: EcccHrdpsForecastDynamicalDataset,
+    dataset: EcccHrdpsForecastDataset,
 ) -> None:
     mock_copy = Mock()
     secret = {"key": "test-key", "secret": "test-secret"}
@@ -262,7 +262,7 @@ def test_archive_grib_files_passes_s3_credentials(
 
 
 def test_get_cli_has_archive_command(
-    dataset: EcccHrdpsForecastDynamicalDataset,
+    dataset: EcccHrdpsForecastDataset,
 ) -> None:
     cli = dataset.get_cli()
     callback_names = [

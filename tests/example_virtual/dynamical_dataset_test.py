@@ -7,15 +7,15 @@
 
 # from reformatters.common import validation
 # from reformatters.common.storage import DatasetFormat, StorageConfig
-# from reformatters.example_virtual.dynamical_dataset import ExampleSpatialDynamicalDataset
+# from reformatters.example_virtual.dynamical_dataset import ExampleVirtualDataset
 # from tests.common.dynamical_dataset_test import assert_configured_validators
 
 
 # @pytest.fixture
-# def dataset(tmp_path: Path) -> ExampleSpatialDynamicalDataset:
+# def dataset(tmp_path: Path) -> ExampleVirtualDataset:
 #     # A virtual dataset's primary store must be ICECHUNK, and icechunk_virtual_config
-#     # (set on ExampleSpatialDynamicalDataset) registers the source buckets the refs may point into.
-#     return ExampleSpatialDynamicalDataset(
+#     # (set on ExampleVirtualDataset) registers the source buckets the refs may point into.
+#     return ExampleVirtualDataset(
 #         primary_storage_config=StorageConfig(
 #             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
 #         ),
@@ -24,7 +24,7 @@
 
 # @pytest.mark.slow
 # def test_backfill_local_and_operational_update(
-#     monkeypatch: pytest.MonkeyPatch, dataset: ExampleSpatialDynamicalDataset
+#     monkeypatch: pytest.MonkeyPatch, dataset: ExampleVirtualDataset
 # ) -> None:
 #     # Keep the test small: trim the template to a couple lead times (and ensemble
 #     # members, if any) so the backfill fetches few files. Do NOT shrink chunks - a
@@ -89,7 +89,7 @@
 #     # atomicity, per-group append-dim growth).
 
 
-# def test_operational_kubernetes_resources(dataset: ExampleSpatialDynamicalDataset) -> None:
+# def test_operational_kubernetes_resources(dataset: ExampleVirtualDataset) -> None:
 #     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 #     assert len(cron_jobs) == 2
 #     update_cron_job, validation_cron_job = cron_jobs
@@ -97,7 +97,7 @@
 #     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 
 
-# def test_validators_include_virtual_checks(dataset: ExampleSpatialDynamicalDataset) -> None:
+# def test_validators_include_virtual_checks(dataset: ExampleVirtualDataset) -> None:
 #     validators = tuple(dataset.validators())
 #     # The two virtual-specific validators need manifest/store access
 #     # (requires_virtual_dataset).

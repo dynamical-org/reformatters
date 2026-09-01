@@ -24,7 +24,7 @@ from .template_config import ExampleDataVar
 log = get_logger(__name__)
 
 
-class ExampleTemporalSourceFileCoord(SourceFileCoord):
+class ExampleSourceFileCoord(SourceFileCoord):
     """Coordinates of a single source file to process."""
 
     def get_url(self) -> str:
@@ -48,9 +48,7 @@ class ExampleTemporalSourceFileCoord(SourceFileCoord):
         return super().out_loc()
 
 
-class ExampleTemporalRegionJob(
-    MaterializedRegionJob[ExampleDataVar, ExampleTemporalSourceFileCoord]
-):
+class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
     # Optionally, limit the number of variables downloaded together.
     # If set to a value less than len(data_vars), downloading, reading/recompressing,
     # and uploading steps will be pipelined within a region job.
@@ -91,10 +89,10 @@ class ExampleTemporalRegionJob(
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[ExampleDataVar]
-    ) -> Sequence[ExampleTemporalSourceFileCoord]:
+    ) -> Sequence[ExampleSourceFileCoord]:
         """Return a sequence of coords, one for each source file required to process the data covered by processing_region_ds."""
         # return [
-        #     ExampleTemporalSourceFileCoord(
+        #     ExampleSourceFileCoord(
         #         init_time=init_time,
         #         lead_time=lead_time,
         #     )
@@ -107,7 +105,7 @@ class ExampleTemporalRegionJob(
             "Return a sequence of SourceFileCoord objects, one for each source file required to process the data covered by processing_region_ds."
         )
 
-    def download_file(self, coord: ExampleTemporalSourceFileCoord) -> Path:
+    def download_file(self, coord: ExampleSourceFileCoord) -> Path:
         """Download the file for the given coordinate and return the local path."""
         # return http_download_to_disk(coord.get_url(), self.dataset_id)
         raise NotImplementedError(
@@ -116,7 +114,7 @@ class ExampleTemporalRegionJob(
 
     def read_data(
         self,
-        coord: ExampleTemporalSourceFileCoord,
+        coord: ExampleSourceFileCoord,
         data_var: ExampleDataVar,
     ) -> ArrayFloat32:
         """Read and return an array of data for the given variable and source file coordinate."""
@@ -224,7 +222,7 @@ class ExampleTemporalRegionJob(
         all_data_vars: Sequence[ExampleDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[ExampleDataVar, ExampleTemporalSourceFileCoord]], xr.DataTree
+        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.DataTree
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -260,7 +258,7 @@ class ExampleTemporalRegionJob(
 
         Returns
         -------
-        Sequence[RegionJob[ExampleDataVar, ExampleTemporalSourceFileCoord]]
+        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
             RegionJob instances that need processing for operational updates.
         xr.Dataset
             The template_ds for the operational update.

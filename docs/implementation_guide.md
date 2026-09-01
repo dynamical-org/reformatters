@@ -46,7 +46,9 @@ uv run main initialize-new-integration <provider> <model> <variant> --kind <mate
 
 Provider, model and variant can contain letters, numbers and dashes (e.g. ICON-EU or analysis-hourly). Capitalization will be normalized for you. `--kind` selects the teaching template that is scaffolded.
 
-This adds a number of files within `src/reformatters/<provider>/<model>/<variant>` and `tests/<provider>/<model>/<variant>`.
+Materialized integrations use the variant unchanged in module and class names. Virtual integrations append `_virtual` to the module and `Virtual` to the classes; pass the base variant to the command and let `--kind virtual` add the suffix. For example, `initialize-new-integration noaa gfs forecast --kind virtual` creates `src/reformatters/noaa/gfs/forecast_virtual/` with classes such as `NoaaGfsForecastVirtualTemplateConfig` and `NoaaGfsForecastVirtualDataset`.
+
+The command adds files within `src/reformatters/<provider>/<model>/<module-variant>` and `tests/<provider>/<model>/<module-variant>`.
 
 These files contain placeholder implementations of the subclasses referenced above, commented with guidance specific to the kind you chose. Follow the rest of this doc to complete the implementations and integrate your new dataset.
 

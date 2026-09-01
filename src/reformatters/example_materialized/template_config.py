@@ -42,7 +42,7 @@ class ExampleDataVar(DataVar[ExampleInternalAttrs]):
     pass
 
 
-class ExampleTemporalTemplateConfig(TemplateConfig[ExampleDataVar]):
+class ExampleTemplateConfig(TemplateConfig[ExampleDataVar]):
     # Single-level dataset: all vars live at the root. To add a vertical group, add an
     # entry whose key is the group/dimension name and whose dims are the root dims plus
     # that dimension, then set group=... on the group's DataVars (their zarr path becomes
