@@ -26,8 +26,9 @@ _LATITUDE, _LONGITUDE = 343, 397
 _FILTER_VARS = [
     "temperature_2m",  # pgrb2 root, instantaneous, K -> C filter
     "total_precipitation_surface",  # pgrb2 root, 6 hour accumulation bucket
-    "temperature_305m_amsl",  # pgrb2b root, instantaneous
-    "temperature",  # pressure_level, fed by both products
+    # A bare name selects that variable in every group, so this covers both the
+    # pressure_level and height_above_mean_sea_level copies of temperature.
+    "temperature",
 ]
 
 
@@ -71,7 +72,9 @@ def test_backfill_local_and_operational_update(
         [
             at_18["temperature_2m"].item(),
             at_18["total_precipitation_surface"].item(),
-            at_18["temperature_305m_amsl"].item(),
+            at_18["height_above_mean_sea_level/temperature"]
+            .sel(height_above_mean_sea_level=305)
+            .item(),
             at_18["pressure_level/temperature"].sel(pressure_level=500).item(),
             # 875 hPa is one of the 16 levels only pgrb2b carries.
             at_18["pressure_level/temperature"].sel(pressure_level=875).item(),
@@ -157,7 +160,9 @@ def test_backfill_local_and_operational_update(
         [
             update_cell["temperature_2m"].item(),
             update_cell["total_precipitation_surface"].item(),
-            update_cell["temperature_305m_amsl"].item(),
+            update_cell["height_above_mean_sea_level/temperature"]
+            .sel(height_above_mean_sea_level=305)
+            .item(),
             update_cell["pressure_level/temperature"].sel(pressure_level=500).item(),
             update_cell["pressure_level/temperature"].sel(pressure_level=875).item(),
         ],

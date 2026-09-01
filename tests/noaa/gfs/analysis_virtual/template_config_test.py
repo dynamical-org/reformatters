@@ -40,7 +40,7 @@ def test_serves_the_shared_catalog_without_its_running_totals() -> None:
     """The running totals duplicate the 6 hour buckets at every lead an analysis reads."""
     shared = {v.path for v in NoaaGfsVirtualTemplateConfig._catalog_data_vars(CONFIG)}
     served = {v.path for v in CONFIG.data_vars}
-    assert len(served) == 293
+    assert len(served) == 272
     assert shared - served == {
         "total_precipitation_run_total_surface",
         "convective_precipitation_run_total_surface",
@@ -48,7 +48,7 @@ def test_serves_the_shared_catalog_without_its_running_totals() -> None:
 
 
 def test_one_chunk_holds_one_grib_message() -> None:
-    assert len(CONFIG.data_vars) == 293
+    assert len(CONFIG.data_vars) == 272
     assert get_var("temperature_2m").encoding.chunks == (1, 721, 1440)
     assert get_var("pressure_level/temperature").encoding.chunks == (1, 721, 1440, 1)
     for var in CONFIG.data_vars:
@@ -155,7 +155,7 @@ def test_every_variable_declares_nan_missing() -> None:
     fill value turned roughly 130,000 legitimate ocean cells per field into NaN for a
     CF-aware reader.
     """
-    assert len(CONFIG.data_vars) == 293
+    assert len(CONFIG.data_vars) == 272
     for var in CONFIG.data_vars:
         assert np.isnan(var.encoding.fill_value), var.path
         assert var.internal_attrs.source_fill_value is None, var.path

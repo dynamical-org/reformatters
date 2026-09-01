@@ -93,6 +93,23 @@ PRESSURE_LEVELS = [
     0.01,
 ]
 
+# The eight "N m above mean sea level" heights, in metres, ascending. GRIB2 level type
+# 102, specified altitude above mean sea level. pgrb2 publishes 1829/2743/3658 and
+# pgrb2b the other five, so the family is dense only across both products; note 4572 m
+# is the topmost yet comes from pgrb2b, so the split is not a high/low cut.
+HEIGHT_LEVEL_INDEX_FORMAT = "{level:g} m above mean sea level"
+
+HEIGHT_ABOVE_MEAN_SEA_LEVELS = [
+    305.0,
+    457.0,
+    610.0,
+    914.0,
+    1829.0,
+    2743.0,
+    3658.0,
+    4572.0,
+]
+
 # GribberishCodec decodes the raw kelvin message; this array->array filter subtracts
 # 273.15 on read. GDAL relabels ten GFS elements kelvin -> Celsius but converts only six,
 # so this set is derived from measured values, not from the GRIB unit label: it drops
@@ -131,10 +148,17 @@ class NoaaGfsVirtualTemplateConfig(NoaaGfsCommonTemplateConfig):
     """
 
     def _vertical_dimension_coordinates(self) -> dict[str, Any]:
-        return {"pressure_level": np.array(PRESSURE_LEVELS, dtype=np.float64)}
+        return {
+            "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.float64),
+            "height_above_mean_sea_level": np.array(
+                HEIGHT_ABOVE_MEAN_SEA_LEVELS, dtype=np.float64
+            ),
+        }
 
     def _vertical_coords(self) -> list[Coordinate]:
-        pressure_levels = self._vertical_dimension_coordinates()["pressure_level"]
+        vertical = self._vertical_dimension_coordinates()
+        pressure_levels = vertical["pressure_level"]
+        heights = vertical["height_above_mean_sea_level"]
         return [
             Coordinate(
                 name="pressure_level",
@@ -156,7 +180,29 @@ class NoaaGfsVirtualTemplateConfig(NoaaGfsCommonTemplateConfig):
                         max=float(pressure_levels.max()),
                     ),
                 ),
-            )
+            ),
+            Coordinate(
+                name="height_above_mean_sea_level",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=len(heights),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    # CF distinguishes this from `altitude`, which is height above the
+                    # geoid; GRIB2 level type 102 is height above mean sea level.
+                    long_name="Height above mean sea level",
+                    standard_name="height_above_mean_sea_level",
+                    units="m",
+                    axis="Z",
+                    positive="up",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(heights.min()), max=float(heights.max())
+                    ),
+                ),
+            ),
         ]
 
     @computed_field
@@ -175,6 +221,7 @@ class NoaaGfsVirtualTemplateConfig(NoaaGfsCommonTemplateConfig):
         catalog: dict[Group, Callable[[tuple[int, ...]], list[NoaaDataVar]]] = {
             ROOT: _root_data_vars,
             "pressure_level": _pressure_data_vars,
+            "height_above_mean_sea_level": _height_data_vars,
         }
         return [
             var
@@ -342,6 +389,66 @@ def _pressure_var(
         comment=comment,
         hour_0=None,
     )
+
+
+def _height_var(
+    name: str,
+    *,
+    chunks: tuple[int, ...],
+    element: str,
+    short_name: str,
+    long_name: str,
+    units: str,
+    standard_name: str | None = None,
+    comment: str | None = None,
+) -> NoaaDataVar:
+    return _data_var(
+        name,
+        chunks=chunks,
+        element=element,
+        grib_index_level=HEIGHT_LEVEL_INDEX_FORMAT,
+        group="height_above_mean_sea_level",
+        window="instant",
+        short_name=short_name,
+        long_name=long_name,
+        units=units,
+        standard_name=standard_name,
+        comment=comment,
+        hour_0=None,
+    )
+
+
+def _height_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
+    height_var = functools.partial(_height_var, chunks=chunks)
+    return [
+        height_var(
+            "temperature",
+            element="TMP",
+            short_name="t",
+            long_name="Temperature",
+            units="degree_Celsius",
+            standard_name="air_temperature",
+            comment="NaN where the terrain is above this level.",
+        ),
+        height_var(
+            "wind_u",
+            element="UGRD",
+            short_name="u",
+            long_name="U component of wind",
+            units="m s-1",
+            standard_name="eastward_wind",
+            comment="NaN where the terrain is above this level.",
+        ),
+        height_var(
+            "wind_v",
+            element="VGRD",
+            short_name="v",
+            long_name="V component of wind",
+            units="m s-1",
+            standard_name="northward_wind",
+            comment="NaN where the terrain is above this level.",
+        ),
+    ]
 
 
 def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
@@ -1835,96 +1942,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
         ),
         root_var(
-            "temperature_1829m_amsl",
-            element="TMP",
-            level="1829 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_1829m_amsl",
-            element="UGRD",
-            level="1829 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_1829m_amsl",
-            element="VGRD",
-            level="1829 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_2743m_amsl",
-            element="TMP",
-            level="2743 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_2743m_amsl",
-            element="UGRD",
-            level="2743 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_2743m_amsl",
-            element="VGRD",
-            level="2743 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_3658m_amsl",
-            element="TMP",
-            level="3658 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_3658m_amsl",
-            element="UGRD",
-            level="3658 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_3658m_amsl",
-            element="VGRD",
-            level="3658 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
             "geopotential_height_0c_isotherm",
             element="HGT",
             level="0C isotherm",
@@ -2421,156 +2438,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Downward solar flux in the UV-B band (280-315 nm) at the surface "
                 "computed with clouds removed."
             ),
-        ),
-        root_var(
-            "temperature_305m_amsl",
-            element="TMP",
-            level="305 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_305m_amsl",
-            element="UGRD",
-            level="305 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_305m_amsl",
-            element="VGRD",
-            level="305 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_457m_amsl",
-            element="TMP",
-            level="457 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_457m_amsl",
-            element="UGRD",
-            level="457 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_457m_amsl",
-            element="VGRD",
-            level="457 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_610m_amsl",
-            element="TMP",
-            level="610 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_610m_amsl",
-            element="UGRD",
-            level="610 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_610m_amsl",
-            element="VGRD",
-            level="610 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_914m_amsl",
-            element="TMP",
-            level="914 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_914m_amsl",
-            element="UGRD",
-            level="914 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_914m_amsl",
-            element="VGRD",
-            level="914 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "temperature_4572m_amsl",
-            element="TMP",
-            level="4572 m above mean sea level",
-            short_name="t",
-            long_name="Temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_u_4572m_amsl",
-            element="UGRD",
-            level="4572 m above mean sea level",
-            short_name="u",
-            long_name="U component of wind",
-            units="m s-1",
-            standard_name="eastward_wind",
-            comment="NaN where the terrain is above this level.",
-        ),
-        root_var(
-            "wind_v_4572m_amsl",
-            element="VGRD",
-            level="4572 m above mean sea level",
-            short_name="v",
-            long_name="V component of wind",
-            units="m s-1",
-            standard_name="northward_wind",
-            comment="NaN where the terrain is above this level.",
         ),
         root_var(
             "temperature_60_30mb",

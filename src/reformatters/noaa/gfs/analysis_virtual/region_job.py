@@ -11,20 +11,11 @@ from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.noaa.gfs.analysis.region_job import NOAA_GFS_INIT_FREQUENCY
 from reformatters.noaa.gfs.virtual_region_job import (
     GFS_FILE_TYPES,
-    NoaaGfsFileType,
     NoaaGfsVirtualRegionJob,
     NoaaGfsVirtualSourceFileCoord,
     carried_by,
 )
 from reformatters.noaa.models import NoaaDataVar
-
-# The variables a source file's ingestion is probed by, in preference order. Each is
-# published in every era of the archive and carried only by its own product. A coord
-# holding only the variables without hour 0 values falls through to the second entry.
-_REPRESENTATIVE_VARS: dict[NoaaGfsFileType, tuple[str, ...]] = {
-    "pgrb2": ("temperature_2m", "total_precipitation_surface"),
-    "pgrb2b": ("temperature_305m_amsl", "uv_b_downward_solar_flux_surface"),
-}
 
 
 class NoaaGfsAnalysisVirtualSourceFileCoord(NoaaGfsVirtualSourceFileCoord):
@@ -86,29 +77,6 @@ class NoaaGfsAnalysisVirtualRegionJob(
                         )
                     )
         return coords
-
-    def representative_var(
-        self, coord: NoaaGfsAnalysisVirtualSourceFileCoord
-    ) -> NoaaDataVar:
-        by_name = {var.name: var for var in coord.data_vars}
-        preferred = next(
-            (
-                by_name[name]
-                for name in _REPRESENTATIVE_VARS[coord.file_type]
-                if name in by_name
-            ),
-            None,
-        )
-        if preferred is not None:
-            return preferred
-        # A variable-filtered job may carry neither preferred name. generate_source_file_coords
-        # has already dropped the variables this product does not publish, so any of the
-        # rest is a chunk the file fills; prefer an instantaneous one, which has a value
-        # at every lead the analysis reads.
-        return next(
-            (var for var in coord.data_vars if var.attrs.step_type == "instant"),
-            coord.data_vars[0],
-        )
 
     def discover_available(
         self, pending: list[NoaaGfsAnalysisVirtualSourceFileCoord]

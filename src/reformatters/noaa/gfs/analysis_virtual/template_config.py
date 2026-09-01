@@ -48,6 +48,12 @@ class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
     dims: Dims = {
         ROOT: ("time", "latitude", "longitude"),
         "pressure_level": ("time", "latitude", "longitude", "pressure_level"),
+        "height_above_mean_sea_level": (
+            "time",
+            "latitude",
+            "longitude",
+            "height_above_mean_sea_level",
+        ),
     }
     append_dim: AppendDim = "time"
     # One hour past the 0.25 degree archive's first cycle (2021-03-22T12Z). A windowed

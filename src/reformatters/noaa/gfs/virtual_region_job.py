@@ -1,8 +1,11 @@
-from typing import ClassVar, Generic, TypeVar
+from collections.abc import Mapping
+from typing import Any, ClassVar, Generic, TypeVar
 
 import icechunk
 
-from reformatters.common.config_models import ROOT
+from reformatters.common.config_models import ROOT, DataVar
+from reformatters.common.region_job import CoordinateValue
+from reformatters.common.types import Dim
 from reformatters.noaa.gfs.region_job import (
     DownloadSource,
     NoaaGfsFileType,
@@ -57,7 +60,6 @@ _PGRB2B_ONLY_ROOT_LEVELS: frozenset[str] = frozenset(
             f"{top}-{bottom} mb above ground"
             for top, bottom in ((60, 30), (90, 60), (120, 90), (150, 120), (180, 150))
         ),
-        *(f"{height} m above mean sea level" for height in (305, 457, 610, 914, 4572)),
     ]
 )
 _PGRB2B_ONLY_SURFACE_ELEMENTS: frozenset[str] = frozenset({"DUVB", "CDUVB"})
@@ -71,6 +73,9 @@ def carried_by(var: NoaaDataVar, file_type: NoaaGfsFileType) -> bool:
     it ingested has to be one of them, so a job filtered to a subset of the catalog needs
     this rather than offering every variable to both products.
     """
+    if var.group == "height_above_mean_sea_level":
+        # Both products publish this family, at disjoint heights.
+        return True
     if var.group is not ROOT:
         return (
             file_type == "pgrb2"
@@ -105,6 +110,25 @@ class NoaaGfsVirtualSourceFileCoord(
         return S3_LOCATION_PREFIX + url.removeprefix(_S3_HTTPS_PREFIX)
 
 
+# The variables a source file's ingestion is probed by, in preference order. Each is
+# published in every era of the archive and carried only by its own product. A coord
+# holding only the variables without hour 0 values falls through to the second entry.
+_REPRESENTATIVE_VARS: dict[NoaaGfsFileType, tuple[str, ...]] = {
+    "pgrb2": ("temperature_2m", "total_precipitation_surface"),
+    "pgrb2b": ("geopotential_height_0p5pvu", "uv_b_downward_solar_flux_surface"),
+}
+
+# A vertical level each product publishes for every variable of the group it carries.
+# The products split every vertical coordinate, so a group's first level is a chunk the
+# other product never fills and probing it would re-ingest that file forever. One
+# constant per (group, product) holds because each product's level inventory is uniform
+# across the group's elements.
+_PROBE_VERTICAL_LEVEL: dict[Dim, dict[NoaaGfsFileType, float]] = {
+    "pressure_level": {"pgrb2": 1000.0, "pgrb2b": 875.0},
+    "height_above_mean_sea_level": {"pgrb2": 1829.0, "pgrb2b": 305.0},
+}
+
+
 GFS_VIRTUAL_COORD = TypeVar("GFS_VIRTUAL_COORD", bound=NoaaGfsVirtualSourceFileCoord)
 
 
@@ -124,3 +148,25 @@ class NoaaGfsVirtualRegionJob(
         if coord.file_type == "pgrb2":
             return True
         return (element, level) not in PGRB2_PREFERRED_MESSAGES
+
+    def representative_var(self, coord: GFS_VIRTUAL_COORD) -> NoaaDataVar:
+        """A variable this file fills, preferring one whose chunk needs no level pick."""
+        by_name = {var.name: var for var in coord.data_vars}
+        candidates = [
+            *(
+                by_name[name]
+                for name in _REPRESENTATIVE_VARS[coord.file_type]
+                if name in by_name
+            ),
+            *(var for var in coord.data_vars if var.group is ROOT),
+        ]
+        return next(iter(candidates), super().representative_var(coord))
+
+    def representative_probe_loc(
+        self, coord: GFS_VIRTUAL_COORD, var: DataVar[Any]
+    ) -> Mapping[Dim, CoordinateValue]:
+        loc = dict(super().representative_probe_loc(coord, var))
+        for dim, by_product in _PROBE_VERTICAL_LEVEL.items():
+            if dim in loc:
+                loc[dim] = by_product[coord.file_type]
+        return loc

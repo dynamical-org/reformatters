@@ -309,6 +309,7 @@ DIM_EXPECTED_AXIS: dict[str, str | None] = {
     "statistic": None,
     "pressure_level": "Z",
     "model_level": "Z",
+    "height_above_mean_sea_level": "Z",
 }
 # Force a decision here whenever a new dimension is added to the Dim type.
 assert set(DIM_EXPECTED_AXIS) == set(get_args(Dim.__value__))

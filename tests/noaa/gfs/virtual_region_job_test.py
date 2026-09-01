@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.config_models import ROOT
+from reformatters.common.types import Dim
 from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualRegionJob,
@@ -16,11 +17,13 @@ from reformatters.noaa.gfs.analysis_virtual.template_config import (
     NoaaGfsAnalysisVirtualTemplateConfig,
 )
 from reformatters.noaa.gfs.virtual_region_job import (
+    _PROBE_VERTICAL_LEVEL,
     PGRB2_PREFERRED_MESSAGES,
     NoaaGfsFileType,
     carried_by,
 )
 from reformatters.noaa.gfs.virtual_template_config import (
+    HEIGHT_LEVEL_INDEX_FORMAT,
     PRESSURE_LEVEL_INDEX_FORMAT,
     PRESSURE_LEVELS,
 )
@@ -96,6 +99,54 @@ def test_pressure_level_coordinate_covers_every_isobaric_level(era: str) -> None
     assert in_source == published
 
 
+_LEVEL_FORMAT: dict[Dim, str] = {
+    "pressure_level": PRESSURE_LEVEL_INDEX_FORMAT,
+    "height_above_mean_sea_level": HEIGHT_LEVEL_INDEX_FORMAT,
+}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("era", _ERAS)
+@pytest.mark.parametrize("lead_hours", [0, 9, 384])
+@pytest.mark.parametrize("file_type", ["pgrb2", "pgrb2b"])
+@pytest.mark.parametrize("group", sorted(_PROBE_VERTICAL_LEVEL))
+def test_probe_levels_are_published_by_their_product(
+    era: str, lead_hours: int, file_type: NoaaGfsFileType, group: Dim
+) -> None:
+    """Each group's probe level must exist for every element of that group the product
+    carries.
+
+    A job filtered to vertical-group variables alone probes this level, so a level the
+    product does not publish would make the file re-ingest forever. Both products split
+    both coordinates, so neither's level works for the other, and the height family's
+    split is not a high/low cut -- 4572 m is the topmost yet comes from pgrb2b.
+    """
+    published = {
+        (element, level)
+        for _, element, level, _ in index_lines(era, file_type, lead_hours)
+        if file_type == "pgrb2" or (element, level) not in PGRB2_PREFERRED_MESSAGES
+    }
+    probe_level = _LEVEL_FORMAT[group].format(
+        level=_PROBE_VERTICAL_LEVEL[group][file_type]
+    )
+    carried = [
+        var
+        for var in TEMPLATE_CONFIG.data_vars
+        if var.group == group and carried_by(var, file_type)
+    ]
+    assert carried, (group, file_type)
+
+    for var in carried:
+        elements = (
+            var.internal_attrs.grib_element,
+            *var.internal_attrs.grib_element_alternatives,
+        )
+        assert any((element, probe_level) in published for element in elements), (
+            var.path,
+            probe_level,
+        )
+
+
 def test_pressure_level_index_format_is_lossless() -> None:
     assert PRESSURE_LEVEL_INDEX_FORMAT.format(level=1000.0) == "1000 mb"
     assert PRESSURE_LEVEL_INDEX_FORMAT.format(level=0.7) == "0.7 mb"
@@ -142,9 +193,9 @@ def test_pgrb2b_skips_the_messages_pgrb2_owns(
         monkeypatch,
         tmp_path,
         "1:0:d=2021032312:CNWAT:surface:anl:\n"
-        "2:100:d=2021032312:TMP:305 m above mean sea level:anl:\n",
+        "2:100:d=2021032312:HGT:PV=5e-07 (Km^2/kg/s) surface:anl:\n",
     )
-    paths = ["plant_canopy_surface_water_surface", "temperature_305m_amsl"]
+    paths = ["plant_canopy_surface_water_surface", "geopotential_height_0p5pvu"]
     job = _job(template_ds, paths)
     coord = NoaaGfsAnalysisVirtualSourceFileCoord(
         init_time=pd.Timestamp("2021-03-23T12:00"),
@@ -287,7 +338,7 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
     instant_vars = [
         v for v in TEMPLATE_CONFIG.data_vars if v.attrs.step_type == "instant"
     ]
-    assert len(instant_vars) == 251
+    assert len(instant_vars) == 230
     for var in instant_vars:
         levels = (
             [

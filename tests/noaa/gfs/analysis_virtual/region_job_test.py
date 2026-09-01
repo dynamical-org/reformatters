@@ -152,7 +152,7 @@ def test_representative_var_is_carried_only_by_its_own_product(
     assert picked == {
         ("pgrb2", True): "temperature_2m",
         ("pgrb2", False): "total_precipitation_surface",
-        ("pgrb2b", True): "temperature_305m_amsl",
+        ("pgrb2b", True): "geopotential_height_0p5pvu",
         ("pgrb2b", False): "uv_b_downward_solar_flux_surface",
     }
     for coord in coords:
@@ -212,7 +212,7 @@ def gate_setup(
     data_vars = [
         get_var("temperature_2m"),
         get_var("total_precipitation_surface"),
-        get_var("temperature_305m_amsl"),
+        get_var("geopotential_height_0p5pvu"),
         get_var("uv_b_downward_solar_flux_surface"),
     ]
     return (
@@ -301,7 +301,7 @@ def test_a_variable_filtered_job_reads_only_the_product_carrying_its_variables(
     """A filter spanning both products must probe each file on a variable that file
     fills, and a filter naming one product's variables must not fetch the other's file."""
     pgrb2_only = get_var("wind_gust_surface")
-    pgrb2b_only = get_var("temperature_457m_amsl")
+    pgrb2b_only = get_var("temperature_minus0p5pvu")
     time = pd.Timestamp("2021-03-24T07:00")
     job = make_job(template_ds, data_vars=[pgrb2_only, pgrb2b_only])
 
