@@ -22,16 +22,22 @@ from reformatters.noaa.gefs.gefs_config_models import (
 )
 
 
-def get_shared_template_dimension_coordinates() -> dict[str, Any]:
+def get_shared_template_dimension_coordinates(
+    resolution_degrees: float = 0.25,
+) -> dict[str, Any]:
     return {
         # latitude descends when north is up
-        "latitude": np.flip(np.arange(-90, 90.25, 0.25)),
-        "longitude": np.arange(-180, 180, 0.25),
+        "latitude": np.flip(
+            np.arange(-90, 90 + resolution_degrees, resolution_degrees)
+        ),
+        "longitude": np.arange(-180, 180, resolution_degrees),
     }
 
 
-def get_shared_coordinate_configs() -> Sequence[Coordinate]:
-    _dim_coords = get_shared_template_dimension_coordinates()
+def get_shared_coordinate_configs(
+    resolution_degrees: float = 0.25,
+) -> Sequence[Coordinate]:
+    _dim_coords = get_shared_template_dimension_coordinates(resolution_degrees)
 
     return (
         Coordinate(

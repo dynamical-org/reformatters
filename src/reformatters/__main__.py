@@ -59,6 +59,9 @@ from reformatters.google.weathernext2.forecast_operational_virtual import (
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
+from reformatters.noaa.gefs.analysis_0_25_degree_virtual.dynamical_dataset import (
+    NoaaGefsAnalysis025DegreeVirtualDataset,
+)
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -223,6 +226,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     GefsForecast35DayDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
+    ),
+    NoaaGefsAnalysis025DegreeVirtualDataset(
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
