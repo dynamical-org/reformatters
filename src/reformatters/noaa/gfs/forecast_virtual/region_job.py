@@ -26,10 +26,6 @@ class NoaaGfsForecastVirtualRegionJob(
     # The two 6h cycles before the one a run is firing for, plus its own, so a couple
     # of missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18h")
-    # A commit rewrites the active manifest of every array it touches, costing seconds
-    # however few refs it carries, so batch a cycle's lead times on a clock rather than
-    # committing each one as it lands.
-    tick_interval: ClassVar[Timedelta] = pd.Timedelta("5min")
 
     def generate_source_file_coords(
         self,
