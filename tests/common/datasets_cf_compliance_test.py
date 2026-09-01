@@ -1047,8 +1047,8 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-35-day",
     ),
-    # Unresolved pending human decision: IFS ENS 15-day is instantaneous while
-    # IFS ENS 46-day is a 24-hour mean under the same variable name.
+    # IFS ENS 15-day is instantaneous while IFS ENS 46-day is a 24-hour mean
+    # under the same variable name.
     (
         "total_cloud_cover_atmosphere",
         "step_type",
