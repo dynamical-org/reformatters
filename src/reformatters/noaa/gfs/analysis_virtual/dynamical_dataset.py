@@ -35,16 +35,17 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Chosen so each full manifest stays inside the reader budget while keeping
-            # the total manifest count low: 0.04 MiB at the root, 0.27 MiB for a
-            # pressure_level array and 0.30 MiB for a height_above_mean_sea_level one,
-            # against budgets of 3 MiB single-level and 5-8 MiB per vertical group.
+            # Chosen so each full manifest stays inside the reader budget (3 MiB
+            # single-level, 5-8 MiB per vertical group) while keeping the total manifest
+            # count low. Measured full manifests: 0.04 MiB at the root, 0.27 MiB for a
+            # pressure_level array, 0.30 MiB for a height_above_mean_sea_level one.
+            # The height group measured at both candidate values:
+            #   4096: 0.30 MiB per manifest, M contribution  36
+            #    512: 0.04 MiB per manifest, M contribution 282
             # Every group needs its own entry: the catch-all is sized for root arrays,
             # so a group that falls through silently gets a window multiplied by its
-            # level count. The height group's 4096 is the value it inherited from the
-            # catch-all, stated explicitly, pending a review of whether all four entries
-            # are finer than they need to be. Re-windowing after a change rewrites every
-            # touched array's history in one commit, so treat as frozen.
+            # level count. Re-windowing after a change rewrites every touched array's
+            # history in one commit, so treat as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 512,
