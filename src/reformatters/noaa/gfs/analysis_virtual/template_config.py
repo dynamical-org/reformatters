@@ -50,8 +50,11 @@ class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
         "pressure_level": ("time", "latitude", "longitude", "pressure_level"),
     }
     append_dim: AppendDim = "time"
-    # First cycle of the 0.25 degree archive on noaa-gfs-bdp-pds.
-    append_dim_start: Timestamp = pd.Timestamp("2021-03-22T12:00")
+    # One hour past the 0.25 degree archive's first cycle (2021-03-22T12Z). A windowed
+    # variable reads the cycle before the preceding hour, which at 12Z would be the 06Z
+    # cycle the archive does not have, so 12Z is the one hour that could never hold all
+    # of its variables.
+    append_dim_start: Timestamp = pd.Timestamp("2021-03-22T13:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 
     @computed_field

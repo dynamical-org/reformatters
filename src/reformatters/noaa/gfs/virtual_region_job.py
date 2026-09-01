@@ -25,8 +25,7 @@ GFS_FILE_TYPES: tuple[NoaaGfsFileType, ...] = ("pgrb2", "pgrb2b")
 # 41 messages that pgrb2b repeats byte for byte from pgrb2. Building refs from both
 # would write two byte ranges for one array position, so a pgrb2b index skips these and
 # the array is filled from pgrb2. All 41 are instantaneous and uniquely identified by
-# (element, idx level string) at every lead; test_pgrb2_preferred_messages pins the set
-# against real indexes.
+# (element, idx level string) at every lead.
 PGRB2_PREFERRED_MESSAGES: frozenset[tuple[str, str]] = frozenset(
     [
         *(
@@ -47,7 +46,6 @@ PGRB2_PREFERRED_MESSAGES: frozenset[tuple[str, str]] = frozenset(
 # The idx level strings, and the two surface elements, that only pgrb2b publishes. Every
 # other root variable comes from pgrb2. Isobaric variables are carried by both products
 # except SPFH and O3MR, whose pgrb2b copies are all in PGRB2_PREFERRED_MESSAGES.
-# test_product_membership_matches_the_real_indexes pins all three against real indexes.
 _PGRB2B_ONLY_ROOT_LEVELS: frozenset[str] = frozenset(
     [
         *(

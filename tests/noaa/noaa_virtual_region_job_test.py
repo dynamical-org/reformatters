@@ -29,6 +29,7 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
+from tests.noaa.grib_index_fixtures import stub_grib_index_download
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 # The archive's first init, so its position along init_time is 0.
@@ -74,12 +75,9 @@ def coord(
 
 
 def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / url.rsplit("/", 1)[-1]
-        path.write_text(content)
-        return path
-
-    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_index_download(
+        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+    )
 
 
 # --- Byte ranges and message matching ---
