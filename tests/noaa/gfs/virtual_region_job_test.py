@@ -29,23 +29,29 @@ from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_do
 TEMPLATE_CONFIG = NoaaGfsAnalysisVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-analysis-virtual-test"
 
-# Spans the whole intended archive: the first weeks, the CLWMR -> CLMR rename era, and
-# the present. The oldest is one day after the 0.25 degree archive's first cycle.
-_ERAS = ("20210323", "20230401", "20260828")
+# Spans the whole intended archive: its first cycle, a few days later, the CLWMR ->
+# CLMR rename era, and the present. The claims these tests pin are about level sets and
+# index spellings frozen into published coordinates, so the domain to sample is the
+# archive, and the archive starts at append_dim_start rather than near it. The first
+# cycle of a new model version can be ragged in ways that resolve within a day, so
+# 2021-03-25 is sampled beside it.
+_ERAS = ("20210322", "20210325", "20230401", "20260828")
 
 
-def index_url(era: str, file_type: NoaaGfsFileType, lead_hours: int) -> str:
+def index_url(
+    era: str, file_type: NoaaGfsFileType, lead_hours: int, hour: str = "12"
+) -> str:
     return (
-        f"s3://noaa-gfs-bdp-pds/gfs.{era}/12/atmos/"
-        f"gfs.t12z.{file_type}.0p25.f{lead_hours:03d}.idx"
+        f"s3://noaa-gfs-bdp-pds/gfs.{era}/{hour}/atmos/"
+        f"gfs.t{hour}z.{file_type}.0p25.f{lead_hours:03d}.idx"
     )
 
 
 def index_lines(
-    era: str, file_type: NoaaGfsFileType, lead_hours: int
+    era: str, file_type: NoaaGfsFileType, lead_hours: int, hour: str = "12"
 ) -> list[tuple[int, str, str, str]]:
     return parse_grib_index_lines(
-        cached_grib_index(index_url(era, file_type, lead_hours), _DATASET_ID)
+        cached_grib_index(index_url(era, file_type, lead_hours, hour), _DATASET_ID)
     )
 
 
@@ -303,22 +309,30 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
 
 
 @pytest.mark.slow
-def test_cloud_mixing_ratio_element_was_respelled_between_the_2021_and_2026_eras() -> (
-    None
-):
-    """grib_element_alternatives exists for this one rename; both spellings are real."""
+def test_cloud_mixing_ratio_element_was_respelled_at_a_single_cycle() -> None:
+    """The one inventory change the archive is known to contain, pinned at its exact
+    boundary rather than sampled either side of it.
+
+    This is the positive control for the era parametrization: a test suite that cannot
+    see this transition cannot see an unknown one. The announced GFS v16.x upgrades
+    (v16.1 2021-05-18, v16.2.1 2022-07-05, v16.3.0 2022-11-29, v16.3.16 2024-06-26) were
+    each diffed on the full (element, level, window) key set and are inventory-neutral,
+    so they are deliberately not sampled here.
+    """
     spellings = {
-        era: {
+        (era, hour, file_type): {
             element
-            for _, element, _, _ in index_lines(era, "pgrb2", 9)
+            for _, element, _, _ in index_lines(era, file_type, 9, hour)
             if element in ("CLMR", "CLWMR")
         }
-        for era in _ERAS
+        for era, hour in (("20230202", "18"), ("20230203", "00"))
+        for file_type in ("pgrb2", "pgrb2b")
     }
     assert spellings == {
-        "20210323": {"CLWMR"},
-        "20230401": {"CLMR"},
-        "20260828": {"CLMR"},
+        ("20230202", "18", "pgrb2"): {"CLWMR"},
+        ("20230202", "18", "pgrb2b"): {"CLWMR"},
+        ("20230203", "00", "pgrb2"): {"CLMR"},
+        ("20230203", "00", "pgrb2b"): {"CLMR"},
     }
 
 
