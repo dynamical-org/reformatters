@@ -1,3 +1,4 @@
+import itertools
 import re
 from collections.abc import Sequence
 from datetime import timedelta
@@ -12,6 +13,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.dynamical_dataset import (
     NoaaGefsForecast10Day025DegreeVirtualDataset,
@@ -47,6 +49,12 @@ _TEST_LEAD_TIMES = (
     pd.Timedelta("240h"),
 )
 _TEST_ENSEMBLE_MEMBERS = (0, 30)
+
+
+def _fire_minutes(schedule: str) -> list[int]:
+    """Minutes past midnight a `<minute> <hours> * * *` cron schedule fires at."""
+    minute, hours, *_ = schedule.split()
+    return [int(hour) * 60 + int(minute) for hour in hours.split(",")]
 
 
 def make_dataset(tmp_path: Path) -> NoaaGefsForecast10Day025DegreeVirtualDataset:
@@ -218,12 +226,38 @@ def test_operational_kubernetes_resources(
     # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
     # validator never reads the store while the update is still committing.
     assert validation_cron_job.schedule == "25 6,12,18,0 * * *"
+    margin = timedelta(minutes=10)
+    day_minutes = 24 * 60
+    assert sorted(_fire_minutes(validation_cron_job.schedule)) == sorted(
+        (
+            fire
+            + int((update_cron_job.pod_active_deadline + margin).total_seconds() // 60)
+        )
+        % day_minutes
+        for fire in _fire_minutes(update_cron_job.schedule)
+    )
     # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
     assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
 
     # Both stay suspended until the archive is backfilled.
     assert update_cron_job.suspend
     assert validation_cron_job.suspend
+
+
+def test_operational_update_window_spans_three_update_fires(
+    dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
+) -> None:
+    """Two consecutive failed or lost updates still self-heal: the span the next fire
+    re-sweeps reaches back past both. Derived from the schedule rather than pinned as
+    hours, so changing the cron cadence alone cannot silently shrink the recovery."""
+    update_cron_job, _ = dataset.operational_kubernetes_resources("test-image-tag")
+    fires = _fire_minutes(update_cron_job.schedule)
+    intervals = {b - a for a, b in itertools.pairwise(fires)}
+    assert len(intervals) == 1, fires
+    assert (
+        NoaaGefsForecast10Day025DegreeVirtualRegionJob.operational_update_window
+        == 3 * pd.Timedelta(minutes=item(intervals))
+    )
 
 
 def test_cron_job_names_fit_the_kubernetes_limit(
@@ -245,7 +279,7 @@ def test_validators(
     validators = tuple(dataset.validators())
     assert len(validators) == 3
 
-    # The newest init is 6h15m old when validation fires, so one cycle that rolled its
+    # The newest init is 6h25m old when validation fires, so one cycle that rolled its
     # files to the next fire still passes and two stalled cycles fail.
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
