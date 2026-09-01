@@ -49,11 +49,11 @@ def initialize_new_integration(
     provider = _sanitize_identifier(provider)
     model = _sanitize_identifier(model)
     variant = _sanitize_identifier(variant)
-    if variant == "virtual" or variant.endswith("_virtual"):
+    if "virtual" in variant:
         message = (
-            "variant must omit the 'virtual' suffix when --kind virtual is used"
+            "variant must omit 'virtual' when --kind virtual is used"
             if kind is DatasetKind.virtual
-            else "variant cannot use the 'virtual' suffix with --kind materialized"
+            else "variant cannot use 'virtual' with --kind materialized"
         )
         raise typer.BadParameter(
             message,

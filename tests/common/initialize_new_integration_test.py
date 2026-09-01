@@ -81,22 +81,23 @@ def test_initialize_new_integration_names_follow_dataset_id(
     [
         (
             DatasetKind.materialized,
-            "variant cannot use the 'virtual' suffix with --kind materialized",
+            "variant cannot use 'virtual' with --kind materialized",
         ),
         (
             DatasetKind.virtual,
-            "variant must omit the 'virtual' suffix when --kind virtual is used",
+            "variant must omit 'virtual' when --kind virtual is used",
         ),
     ],
 )
-def test_variant_rejects_virtual_suffix(
-    scaffold_root: Path, kind: DatasetKind, message: str
+@pytest.mark.parametrize("variant", ["forecast-virtual", "virtual, forecast"])
+def test_variant_rejects_virtual(
+    scaffold_root: Path, kind: DatasetKind, message: str, variant: str
 ) -> None:
     with pytest.raises(
         typer.BadParameter,
         match=message,
     ):
-        initialize_new_integration("noaa", "gfs", "forecast-virtual", kind)
+        initialize_new_integration("noaa", "gfs", variant, kind)
 
     assert not (scaffold_root / "src/reformatters/noaa").exists()
     assert not (scaffold_root / "tests/noaa").exists()
