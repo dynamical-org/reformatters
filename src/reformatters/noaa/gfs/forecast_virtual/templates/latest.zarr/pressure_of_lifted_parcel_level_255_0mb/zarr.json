@@ -39,6 +39,7 @@
     "short_name": "plpl",
     "standard_name": "original_air_pressure_of_lifted_parcel",
     "units": "Pa",
+    "comment": "Clipped at the highest pressure this field encodes, near 100000 Pa, where a large fraction of cells sit. Those cells have a surface pressure above that ceiling, so the parcel's true level is at or below the reported value rather than absent, and they carry most of the convective signal: masking them would discard real data.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
