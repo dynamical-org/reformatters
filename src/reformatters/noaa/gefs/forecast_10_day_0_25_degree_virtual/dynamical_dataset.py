@@ -83,9 +83,10 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # An init is ingested as it publishes, from init+3h47m; validation fires at
-            # init+6h15m. 10h covers one wholly missed cycle before alerting.
-            validation.CheckCurrentData(max_delay=timedelta(hours=10)),
+            # The newest init is 6h15m old when validation fires, so 12h adds a
+            # cycle of slack: a run that rolls its last files to the next fire still
+            # passes, while two cycles with nothing ingested fail.
+            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             # The newest init is fully published ~38 minutes before validation fires, so
             # its leading tier only absorbs a slow cycle: 0.95 is the ~2500 files of a
             # run less the last four lead times of every member, which the source lays
