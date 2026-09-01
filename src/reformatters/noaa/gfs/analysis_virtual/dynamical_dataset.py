@@ -39,8 +39,8 @@ class NoaaGfsAnalysisVirtualDataset(
             # scan plus a rewrite linear in arrays touched x active manifest bytes),
             # not against the reader budget, which these splits sit three orders of
             # magnitude inside: 61 KiB per root manifest and at most 321 KiB per
-            # pressure-level one. Commit cost stays near 2 s from now through a
-            # twenty year archive.
+            # pressure-level one. Commit cost stays near 2 s across a twenty year
+            # archive.
             manifest_split=manifest_append_dim_split(
                 split_size={r"^/pressure_level/": 512, None: 4096},
                 dim="time",

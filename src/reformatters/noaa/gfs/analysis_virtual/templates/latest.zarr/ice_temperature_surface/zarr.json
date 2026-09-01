@@ -42,7 +42,7 @@
     "long_name": "Sea ice surface temperature",
     "short_name": "sist",
     "units": "degree_Celsius",
-    "comment": "Temperature of the ice surface, covering lake ice as well as sea ice despite the source parameter name. NaN where there is no ice. The source GRIB message carries kelvin. GDAL labels this field Celsius while returning the raw kelvin values, so a GDAL-based read of the same message is offset by 273.15 from this variable.",
+    "comment": "Temperature of the ice surface, covering lake ice as well as sea ice despite the source parameter name. NaN where there is no ice.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

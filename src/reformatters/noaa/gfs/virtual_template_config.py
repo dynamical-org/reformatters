@@ -508,9 +508,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="soil_temperature",
             comment=(
                 "NaN over open water; the source reports this quantity only over land "
-                "and sea ice. The source GRIB message carries kelvin. GDAL labels this "
-                "field Celsius while returning the raw kelvin values, so a GDAL-based "
-                "read of the same message is offset by 273.15 from this variable."
+                "and sea ice."
             ),
         ),
         root_var(
@@ -545,9 +543,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="soil_temperature",
             comment=(
                 "NaN over open water; the source reports this quantity only over land "
-                "and sea ice. The source GRIB message carries kelvin. GDAL labels this "
-                "field Celsius while returning the raw kelvin values, so a GDAL-based "
-                "read of the same message is offset by 273.15 from this variable."
+                "and sea ice."
             ),
         ),
         root_var(
@@ -582,9 +578,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="soil_temperature",
             comment=(
                 "NaN over open water; the source reports this quantity only over land "
-                "and sea ice. The source GRIB message carries kelvin. GDAL labels this "
-                "field Celsius while returning the raw kelvin values, so a GDAL-based "
-                "read of the same message is offset by 273.15 from this variable."
+                "and sea ice."
             ),
         ),
         root_var(
@@ -620,9 +614,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="soil_temperature",
             comment=(
                 "NaN over open water; the source reports this quantity only over land "
-                "and sea ice. The source GRIB message carries kelvin. GDAL labels this "
-                "field Celsius while returning the raw kelvin values, so a GDAL-based "
-                "read of the same message is offset by 273.15 from this variable."
+                "and sea ice."
             ),
         ),
         root_var(
@@ -2248,10 +2240,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="degree_Celsius",
             comment=(
                 "Temperature of the ice surface, covering lake ice as well as sea ice "
-                "despite the source parameter name. NaN where there is no ice. The "
-                "source GRIB message carries kelvin. GDAL labels this field Celsius "
-                "while returning the raw kelvin values, so a GDAL-based read of the same "
-                "message is offset by 273.15 from this variable."
+                "despite the source parameter name. NaN where there is no ice."
             ),
         ),
         root_var(
