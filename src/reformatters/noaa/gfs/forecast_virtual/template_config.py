@@ -13,8 +13,8 @@ from reformatters.common.config_models import (
     DatasetAttributes,
     Encoding,
     StatisticsApproximate,
+    prepend_comment,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
@@ -25,19 +25,20 @@ from reformatters.noaa.models import NoaaDataVar
 FORECAST_LENGTH = pd.Timedelta("384h")
 
 _BUCKET_EXTENT = (
-    "the 6 hour window containing this step: the window opens at the most recent "
-    "multiple of 6 hours of forecast lead time strictly before this step and closes "
-    "at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours "
-    "rather than covering a fixed interval."
+    "the 6 hour window containing this step, which restarts every 6 hours of forecast "
+    "lead time: the window is 6 hours long at lead times divisible by 6 and shorter at "
+    "every other lead time (1 to 5 hours where lead times are hourly, 3 hours where "
+    "they are 3-hourly)."
 )
 _BUCKET_COMMENTS = {
     "accum": (
-        f"Accumulated over {_BUCKET_EXTENT} Subtracting the value at an earlier step "
-        "with the same window start gives the exact total between those two steps."
+        f"Accumulated over {_BUCKET_EXTENT} Subtracting the value at an earlier lead "
+        "time with the same window start gives the exact total between those two lead "
+        "times."
     ),
     "avg": f"Averaged over {_BUCKET_EXTENT}",
-    "max": f"Maximum over {_BUCKET_EXTENT}",
-    "min": f"Minimum over {_BUCKET_EXTENT}",
+    "max": f"Maximum value over {_BUCKET_EXTENT}",
+    "min": f"Minimum value over {_BUCKET_EXTENT}",
 }
 _RUN_TOTAL_COMMENT = (
     "Accumulated from the forecast initialization time to this step, so the window "
@@ -213,12 +214,9 @@ def _with_window_comment(var: NoaaDataVar) -> NoaaDataVar:
     reset_frequency = var.internal_attrs.window_reset_frequency
     if reset_frequency is None:
         return var
-    window_comment = (
+    return prepend_comment(
+        var,
         _RUN_TOTAL_COMMENT
         if reset_frequency == pd.Timedelta.max
-        else _BUCKET_COMMENTS[var.attrs.step_type]
+        else _BUCKET_COMMENTS[var.attrs.step_type],
     )
-    comment = (
-        f"{window_comment} {var.attrs.comment}" if var.attrs.comment else window_comment
-    )
-    return replace(var, attrs=replace(var.attrs, comment=comment))

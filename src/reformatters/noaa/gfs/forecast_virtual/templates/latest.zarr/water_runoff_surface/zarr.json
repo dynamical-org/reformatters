@@ -39,7 +39,7 @@
     "short_name": "watr",
     "standard_name": "runoff_amount",
     "units": "kg m-2",
-    "comment": "Accumulated over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time strictly before this step and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval. Subtracting the value at an earlier step with the same window start gives the exact total between those two steps. NaN over water, where this quantity does not apply.",
+    "comment": "Accumulated over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times. NaN over water, where this quantity does not apply.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

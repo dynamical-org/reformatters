@@ -35,6 +35,7 @@ _FILTER_VARS = [
     "total_precipitation_surface",  # pgrb2 root, 6 hour accumulation bucket
     "total_precipitation_run_total_surface",  # the same element, since initialization
     "temperature_305m_amsl",  # pgrb2b root, instantaneous
+    "snow_water_equivalent_surface",  # pgrb2 root, kg m-2 -> m lwe filter
     "temperature",  # pressure_level, fed by both products
 ]
 
@@ -141,6 +142,16 @@ def test_backfill_local_and_operational_update(
             18.511367187500014,
         ],
     )
+
+    # The kg m-2 -> m filter, on the ice sheet where a missing divide-by-1000 would
+    # read as hundreds of metres of snow rather than tenths.
+    greenland = ds["snow_water_equivalent_surface"].sel(
+        init_time=_INIT,
+        lead_time=pd.Timedelta("9h"),
+        latitude=72.0,
+        longitude=-40.0,
+    )
+    np.testing.assert_allclose(greenland.item(), 0.143832)
 
     # Four widely separated longitudes. This is what pins the grid: GribberishCodec
     # rolls the source's 0..360 longitudes onto our -180..180 grid, and a wrong roll
@@ -255,7 +266,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.schedule == "30 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=15)
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "45 5,11,17,23 * * *"
+    assert validation_cron_job.schedule == "55 5,11,17,23 * * *"
     assert len(update_cron_job.secret_names) > 0
     # A follow-up enables them once the archive is backfilled.
     assert update_cron_job.suspend
@@ -268,7 +279,7 @@ def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=12)
+    assert current_data.max_delay == timedelta(hours=11)
 
     completeness = next(
         v

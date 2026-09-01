@@ -38,7 +38,7 @@
     "long_name": "Cloud work function",
     "short_name": "cwork",
     "units": "J kg-1",
-    "comment": "Averaged over the 6 hour window containing this step: the window opens at the most recent multiple of 6 hours of forecast lead time strictly before this step and closes at this step, so it lengthens from 1 to 6 hours and restarts every 6 hours rather than covering a fixed interval.",
+    "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
