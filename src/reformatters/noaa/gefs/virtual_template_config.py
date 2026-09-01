@@ -1,12 +1,12 @@
 import functools
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from gribberish.zarr import GribberishCodec
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from zarr.codecs import ScaleOffset
 
 from reformatters.common.config_models import (
@@ -138,6 +138,19 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
         return tuple(sizes.get(dim, 1) for dim in dims)
 
 
+# The window lengths a forecast lead time can carry, each mapped to the lead time
+# sequence that carries it. The window_comments wording and the guard that checks every
+# lead time against it are both built from this mapping, so they cannot disagree.
+_WINDOW_LEAD_TIME_SEQUENCES: dict[pd.Timedelta, str] = {
+    pd.Timedelta("6h"): "6, 12, 18, ...",
+    pd.Timedelta("3h"): "3, 9, 15, ...",
+}
+_WINDOW_PERIODS = " or ".join(
+    f"{whole_hours(window_length)} hour period (lead times {sequence} hours)"
+    for window_length, sequence in _WINDOW_LEAD_TIME_SEQUENCES.items()
+)
+
+
 class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
     """Virtual GEFS forecast on init_time x ensemble_member x lead_time."""
 
@@ -159,15 +172,14 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
     # A lead time's window starts at the last whole multiple of WINDOW_RESET_FREQUENCY
     # below it, so it spans 3 hours at lead times 3, 9, 15, ... and 6 hours at 6, 12, ...
     window_comments: dict[str, str] = {
-        "avg": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
+        "avg": f"Average value in the last {_WINDOW_PERIODS}.",
         "accum": (
-            "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... "
-            "hours) or 3 hour period (lead times 3, 9, 15, ... hours). Subtracting the "
-            "value at an earlier lead time with the same window start gives the exact "
-            "total between those two lead times."
+            f"Total accumulated in the last {_WINDOW_PERIODS}. Subtracting the value at "
+            "an earlier lead time with the same window start gives the exact total "
+            "between those two lead times."
         ),
-        "max": "Maximum value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
-        "min": "Minimum value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
+        "max": f"Maximum value in the last {_WINDOW_PERIODS}.",
+        "min": f"Minimum value in the last {_WINDOW_PERIODS}.",
     }
 
     def lead_times(self) -> pd.TimedeltaIndex:
@@ -175,6 +187,25 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
         return pd.timedelta_range(
             "0h", self.forecast_length, freq=GEFS_S_FILE_LEAD_FREQUENCY
         )
+
+    @model_validator(mode="after")
+    def _validate_window_comments_describe_every_lead_time(self) -> Self:
+        for lead_time in self.lead_times():
+            # Lead time 0 precedes the first window, so it carries no windowed message.
+            if lead_time == pd.Timedelta(0):
+                continue
+            partial_window = lead_time % WINDOW_RESET_FREQUENCY
+            window_length = (
+                partial_window
+                if partial_window > pd.Timedelta(0)
+                else WINDOW_RESET_FREQUENCY
+            )
+            assert window_length in _WINDOW_LEAD_TIME_SEQUENCES, (
+                f"window_comments does not describe lead time {whole_hours(lead_time)} "
+                f"hours, whose window is {whole_hours(window_length)} hours: the wording "
+                f"enumerates only a {_WINDOW_PERIODS}."
+            )
+        return self
 
     def _dataset_attributes(
         self, *, dataset_id: str, dataset_version: str, name: str, description: str
