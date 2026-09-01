@@ -39,11 +39,11 @@ class NoaaGfsForecastVirtualDataset(
             # per lead time and level to a pressure-level one, so both terms of the
             # commit cost (an O(total manifests squared) scan plus a rewrite linear in
             # arrays touched x active manifest bytes) bind well before the reader budget
-            # does. These sizes minimize their sum over a fifteen year archive: 0.35 MiB
-            # per full root manifest and 2.0 MiB per pressure-level one, both inside the
-            # reader budget. See "Manifest splitting" in docs/virtual_datasets.md;
-            # re-windowing after a change is a whole-archive rewrite, so treat these as
-            # frozen.
+            # does. These sizes minimize their sum over a fifteen year archive: 0.24 MiB
+            # per full root manifest and 1.8 MiB per pressure-level one, both well
+            # inside the reader budget. See "Manifest splitting" in
+            # docs/virtual_datasets.md; re-windowing after a change is a whole-archive
+            # rewrite, so treat these as frozen.
             manifest_split=manifest_append_dim_split(
                 split_size={r"^/pressure_level/": 16, None: 128},
                 dim="init_time",

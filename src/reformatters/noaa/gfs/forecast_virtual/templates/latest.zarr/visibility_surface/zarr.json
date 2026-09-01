@@ -39,6 +39,7 @@
     "short_name": "vis",
     "standard_name": "visibility_in_air",
     "units": "m",
+    "comment": "Saturates at the model's maximum reported visibility, about 24 km. That ceiling means unlimited visibility rather than missing data.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
