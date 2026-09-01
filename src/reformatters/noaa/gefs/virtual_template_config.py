@@ -145,13 +145,49 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
         return tuple(sizes.get(dim, 1) for dim in dims)
 
 
-# The window lengths a forecast lead time can carry, each mapped to the lead time
-# sequence that carries it. The window_comments wording and the guard that checks every
-# lead time against it are both built from this mapping, so they cannot disagree.
-_WINDOW_LEAD_TIME_SEQUENCES: dict[pd.Timedelta, str] = {
-    pd.Timedelta("6h"): "6, 12, 18, ...",
-    pd.Timedelta("3h"): "3, 9, 15, ...",
-}
+def _window_length(lead_time: Timedelta) -> Timedelta:
+    """The window a lead time's windowed messages cover: the span since the last whole
+    multiple of WINDOW_RESET_FREQUENCY at or below it."""
+    partial_window = lead_time % WINDOW_RESET_FREQUENCY
+    return (
+        partial_window if partial_window > pd.Timedelta(0) else WINDOW_RESET_FREQUENCY
+    )
+
+
+# Lead times named before the ellipsis in each sequence window_comments enumerates.
+_WINDOW_SEQUENCE_LENGTH = 3
+
+
+def _window_lead_time_sequences() -> dict[Timedelta, str]:
+    """Every window length the GEFS lead time grid produces, mapped to the opening lead
+    times carrying it. Both the window_comments wording and the guard that checks every
+    lead time read this, and the sequences are read off the grid rather than written
+    out, so neither the lengths nor the lead times named against them can disagree with
+    the leads a dataset serves.
+    """
+    sequences: dict[Timedelta, list[int]] = {}
+    for lead_time in pd.timedelta_range(
+        GEFS_S_FILE_LEAD_FREQUENCY,
+        WINDOW_RESET_FREQUENCY * _WINDOW_SEQUENCE_LENGTH,
+        freq=GEFS_S_FILE_LEAD_FREQUENCY,
+    ):
+        sequences.setdefault(_window_length(lead_time), []).append(
+            whole_hours(lead_time)
+        )
+    assert all(
+        len(lead_hours) == _WINDOW_SEQUENCE_LENGTH for lead_hours in sequences.values()
+    ), (
+        f"lead times every {GEFS_S_FILE_LEAD_FREQUENCY} do not repeat their windows "
+        f"every {WINDOW_RESET_FREQUENCY}, so no sequence describes them: {sequences}"
+    )
+    # Longest window first: the whole reset period, then the partial ones.
+    return {
+        window_length: ", ".join(str(hours) for hours in lead_hours) + ", ..."
+        for window_length, lead_hours in sorted(sequences.items(), reverse=True)
+    }
+
+
+_WINDOW_LEAD_TIME_SEQUENCES = _window_lead_time_sequences()
 _WINDOW_PERIODS = " or ".join(
     f"{whole_hours(window_length)} hour period (lead times {sequence} hours)"
     for window_length, sequence in _WINDOW_LEAD_TIME_SEQUENCES.items()
@@ -176,8 +212,6 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
     append_dim_start: Timestamp = GEFS_CURRENT_ARCHIVE_START
     append_dim_frequency: Timedelta = GEFS_INIT_TIME_FREQUENCY
 
-    # A lead time's window starts at the last whole multiple of WINDOW_RESET_FREQUENCY
-    # below it, so it spans 3 hours at lead times 3, 9, 15, ... and 6 hours at 6, 12, ...
     window_comments: dict[str, str] = {
         "avg": f"Average value in the last {_WINDOW_PERIODS}.",
         "accum": (
@@ -201,12 +235,7 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
             # Lead time 0 precedes the first window, so it carries no windowed message.
             if lead_time == pd.Timedelta(0):
                 continue
-            partial_window = lead_time % WINDOW_RESET_FREQUENCY
-            window_length = (
-                partial_window
-                if partial_window > pd.Timedelta(0)
-                else WINDOW_RESET_FREQUENCY
-            )
+            window_length = _window_length(lead_time)
             assert window_length in _WINDOW_LEAD_TIME_SEQUENCES, (
                 f"window_comments does not describe lead time {whole_hours(lead_time)} "
                 f"hours, whose window is {whole_hours(window_length)} hours: the wording "

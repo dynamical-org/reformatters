@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import pytest
 from pydantic import ValidationError
@@ -6,6 +8,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSSourceFileType
 from reformatters.noaa.gefs.virtual_template_config import (
     NoaaGefsForecastVirtualTemplateConfig,
 )
+from reformatters.noaa.noaa_grib_index import _lead_time_str
 
 THREE_HOURLY_TO_240 = pd.timedelta_range("0h", "240h", freq="3h")
 
@@ -66,3 +69,27 @@ def test_forecast_length_shorter_than_the_first_window_is_described() -> None:
         source_file_types=frozenset({"s"}), forecast_length=pd.Timedelta("3h")
     )
     assert list(config.lead_times()) == [pd.Timedelta("0h"), pd.Timedelta("3h")]
+
+
+def test_window_comments_name_the_lead_times_that_carry_each_window() -> None:
+    """Every "N hour period (lead times a, b, c, ... hours)" clause the wording emits,
+    read back and checked against the window string the source's own idx line carries
+    at each named lead. A clause naming the wrong leads mislabels every windowed value
+    a reader averages or differences."""
+    config = config_with_lead_times(THREE_HOURLY_TO_240)
+    windowed = next(var for var in config.data_vars if var.attrs.step_type == "accum")
+
+    clauses = re.findall(
+        r"(\d+) hour period \(lead times ([\d, ]+), \.\.\. hours\)",
+        config.window_comments["accum"],
+    )
+    assert len(clauses) == 2, config.window_comments["accum"]
+
+    for window_hours, named_leads in clauses:
+        for lead in [int(hours) for hours in named_leads.split(", ")]:
+            source_window = _lead_time_str(windowed, lead)
+            match = re.fullmatch(r"(\d+)-(\d+) hour acc fcst", source_window)
+            assert match is not None, (lead, source_window)
+            start, end = int(match.group(1)), int(match.group(2))
+            assert end == lead, (lead, source_window)
+            assert end - start == int(window_hours), (lead, source_window)
