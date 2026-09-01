@@ -1,3 +1,4 @@
+import itertools
 import re
 from collections.abc import Sequence
 from datetime import timedelta
@@ -10,6 +11,7 @@ import pandas as pd
 import pytest
 
 from reformatters.common import validation
+from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gefs.analysis_0_25_degree_virtual.dynamical_dataset import (
     NoaaGefsAnalysis025DegreeVirtualDataset,
@@ -199,6 +201,21 @@ def test_operational_kubernetes_resources(
     # Both stay suspended until the archive is backfilled.
     assert update_cron_job.suspend
     assert validation_cron_job.suspend
+
+
+def test_operational_update_window_spans_three_update_fires(
+    dataset: NoaaGefsAnalysis025DegreeVirtualDataset,
+) -> None:
+    """Two consecutive failed or lost updates still self-heal: the span the next fire
+    re-sweeps reaches back past both. Derived from the schedule rather than pinned as
+    hours, so changing the cron cadence alone cannot silently shrink the recovery."""
+    update_cron_job, _ = dataset.operational_kubernetes_resources("test-image-tag")
+    fires = _fire_minutes(update_cron_job.schedule)
+    intervals = {b - a for a, b in itertools.pairwise(fires)}
+    assert len(intervals) == 1, fires
+    assert NoaaGefsAnalysis025DegreeVirtualRegionJob.operational_update_window == (
+        3 * pd.Timedelta(minutes=item(intervals))
+    )
 
 
 def test_validators(dataset: NoaaGefsAnalysis025DegreeVirtualDataset) -> None:

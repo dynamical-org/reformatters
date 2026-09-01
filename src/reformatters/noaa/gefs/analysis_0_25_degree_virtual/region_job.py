@@ -34,7 +34,7 @@ class NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(NoaaGefsVirtualSourceFileC
 class NoaaGefsAnalysis025DegreeVirtualRegionJob(
     NoaaGefsVirtualRegionJob[NoaaGefsAnalysis025DegreeVirtualSourceFileCoord]
 ):
-    # Three 6-hourly cycles, so two missed runs still self-heal.
+    # Three update cron fires' span, so two consecutive missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18h")
 
     def generate_source_file_coords(
