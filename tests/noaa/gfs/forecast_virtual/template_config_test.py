@@ -9,7 +9,7 @@ from reformatters.noaa.gfs.forecast_virtual.template_config import (
 )
 from reformatters.noaa.gfs.virtual_template_config import NoaaGfsVirtualTemplateConfig
 from reformatters.noaa.models import NoaaDataVar
-from reformatters.noaa.noaa_grib_index import _lead_time_str
+from reformatters.noaa.noaa_grib_index import grib_index_window_str
 
 CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 
@@ -132,7 +132,7 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
 
 def _window_hours(var: NoaaDataVar, lead_hours: int) -> tuple[int, int]:
     """The window start and end the source's own index string declares for this step."""
-    text = _lead_time_str(var, lead_hours)
+    text = grib_index_window_str(var, lead_hours)
     head, unit = text.split(" ")[0], text.split(" ")[1]
     start, _, end = head.partition("-")
     scale = 24 if unit == "day" else 1
