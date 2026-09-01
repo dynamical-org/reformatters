@@ -18,7 +18,7 @@ from .region_job import (
 from .template_config import EcccHrdpsDataVar, EcccHrdpsForecastTemplateConfig
 
 
-class EcccHrdpsForecastDynamicalDataset(
+class EcccHrdpsForecastDataset(
     DynamicalDataset[EcccHrdpsDataVar, EcccHrdpsForecastSourceFileCoord]
 ):
     template_config: EcccHrdpsForecastTemplateConfig = EcccHrdpsForecastTemplateConfig()

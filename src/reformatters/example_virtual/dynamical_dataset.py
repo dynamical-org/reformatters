@@ -22,7 +22,7 @@ from .region_job import ExampleSpatialRegionJob, ExampleSpatialSourceFileCoord
 from .template_config import ExampleDataVar, ExampleSpatialTemplateConfig
 
 
-class ExampleSpatialDynamicalDataset(
+class ExampleSpatialDataset(
     DynamicalDataset[ExampleDataVar, ExampleSpatialSourceFileCoord]
 ):
     template_config: ExampleSpatialTemplateConfig = ExampleSpatialTemplateConfig()

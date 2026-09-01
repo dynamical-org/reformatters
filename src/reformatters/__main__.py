@@ -31,7 +31,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
-from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDynamicalDataset
+from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
 )
@@ -260,7 +260,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # ECCC
-    EcccHrdpsForecastDynamicalDataset(
+    EcccHrdpsForecastDataset(
         primary_storage_config=EcccHrdpsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # Google

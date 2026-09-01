@@ -1,3 +1,1 @@
-from .dynamical_dataset import (
-    ExampleTemporalDynamicalDataset as ExampleTemporalDynamicalDataset,
-)
+from .dynamical_dataset import ExampleTemporalDataset as ExampleTemporalDataset

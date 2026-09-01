@@ -13,7 +13,7 @@ from .region_job import ExampleTemporalRegionJob, ExampleTemporalSourceFileCoord
 from .template_config import ExampleDataVar, ExampleTemporalTemplateConfig
 
 
-class ExampleTemporalDynamicalDataset(
+class ExampleTemporalDataset(
     DynamicalDataset[ExampleDataVar, ExampleTemporalSourceFileCoord]
 ):
     template_config: ExampleTemporalTemplateConfig = ExampleTemporalTemplateConfig()

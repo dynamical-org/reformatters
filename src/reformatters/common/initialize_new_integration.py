@@ -100,7 +100,7 @@ def initialize_new_integration(
     class_prefix = f"{provider_pascal}{model_pascal}{module_variant_pascal}"
     dataset_class_name = f"{class_prefix}Dataset"
     example_to_actual_mappings = {
-        f"Example{example_class_prefix}DynamicalDataset": dataset_class_name,
+        f"Example{example_class_prefix}Dataset": dataset_class_name,
         f"Example{example_class_prefix}TemplateConfig": f"{class_prefix}TemplateConfig",
         f"Example{example_class_prefix}RegionJob": f"{class_prefix}RegionJob",
         f"Example{example_class_prefix}SourceFileCoord": f"{class_prefix}SourceFileCoord",
