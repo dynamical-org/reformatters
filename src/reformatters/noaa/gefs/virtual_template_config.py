@@ -53,7 +53,7 @@ _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN"})
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 
 # MSLET entered the s file at this cycle; CPOFP, HGT@cloud ceiling and VIS entered at
-# GEFS_B22_TRANSITION_DATE. Bisected against the published idx files.
+# GEFS_B22_TRANSITION_DATE.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
 
 
@@ -212,8 +212,7 @@ def _s_file_data_vars(
     """Every message the pgrb2s.0p25 file publishes, except HGT at the surface.
 
     The s file carries surface geopotential height only at lead 0, unlike every other
-    message in it. The 0.5 degree pgrb2b file publishes the same quantity at ordinary
-    leads, so it is served there rather than given a lead-0-only shape here.
+    message in it, so it is omitted rather than given a lead-0-only shape.
     """
     var = functools.partial(
         _data_var,
