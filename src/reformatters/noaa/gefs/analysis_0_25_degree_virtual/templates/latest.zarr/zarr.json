@@ -54,7 +54,6 @@
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
           "units": "1",
-          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -111,7 +110,6 @@
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
           "units": "1",
-          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -168,7 +166,6 @@
           "long_name": "Categorical rain",
           "short_name": "crain",
           "units": "1",
-          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -225,7 +222,6 @@
           "long_name": "Categorical snow",
           "short_name": "csnow",
           "units": "1",
-          "comment": "0=no; 1=yes",
           "step_type": "avg",
           "flag_values": [
             0,

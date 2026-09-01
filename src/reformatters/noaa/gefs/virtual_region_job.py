@@ -103,9 +103,9 @@ class NoaaGefsVirtualRegionJob(
         out_loc = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
-        ref_paths: set[str] = set()
+        matched_paths: set[str] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
-            matches = lookup.pop((element, level, window), None)
+            matches = lookup.get((element, level, window))
             if not matches:
                 continue
             # Byte ranges past the data file mean a stale/mismatched index; skip it.
@@ -116,13 +116,13 @@ class NoaaGefsVirtualRegionJob(
                 )
                 return []
             for var in matches:
-                # grib_element_alternatives give a variable one lookup key per
-                # spelling, so a file carrying two of them writes one chunk twice.
-                assert var.path not in ref_paths, (
+                # A variable is keyed under every spelling it accepts, so matching one
+                # completes it; a second match would write the same chunk twice.
+                assert var.path not in matched_paths, (
                     f"{location} has two messages for {var.path} at {out_loc}; "
                     "the catalog matches more than one message per chunk"
                 )
-                ref_paths.add(var.path)
+                matched_paths.add(var.path)
                 refs.append(
                     VirtualRef(
                         data_var=var,
@@ -136,8 +136,11 @@ class NoaaGefsVirtualRegionJob(
         # A variable with no matching message would otherwise be committed as a silent
         # NaN column: the file counts as ingested through its representative variable,
         # so nothing ever retries it.
-        assert not lookup, (
-            f"{location} has no message for {sorted({v.name for m in lookup.values() for v in m})}; "
+        unmatched = sorted(
+            var.name for var in coord.data_vars if var.path not in matched_paths
+        )
+        assert not unmatched, (
+            f"{location} has no message for {unmatched}; "
             "the source era is not modelled by this catalog"
         )
         return refs

@@ -301,6 +301,51 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
         job.file_refs(coord, file_size=1200)
 
 
+@pytest.mark.parametrize("present_element", ["TMP", "TMPK"])
+def test_file_refs_matches_a_file_carrying_one_element_spelling(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    present_element: str,
+) -> None:
+    """A variable is keyed under every spelling it accepts, but a file carries just one,
+    either the primary element or an alternative. Matching that one must complete the
+    variable; the spellings it did not use are not messages the file failed to deliver.
+    """
+
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+        path = tmp_path / "index.idx"
+        path.write_text(
+            f"1:0:d=2024060106:{present_element}:2 m above ground:"
+            "3 hour fcst:ENS=low-res ctl\n"
+        )
+        return path
+
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+
+    temperature = get_var("temperature_2m")
+    assert temperature.internal_attrs.grib_element == "TMP"
+    two_spellings = replace(
+        temperature,
+        internal_attrs=replace(
+            temperature.internal_attrs, grib_element_alternatives=("TMPK",)
+        ),
+    )
+    coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2024-06-01T06:00"),
+        lead_time=pd.Timedelta("3h"),
+        data_vars=[two_spellings],
+    )
+    job = make_job(template_ds, data_vars=[two_spellings])
+
+    refs = job.file_refs(coord, file_size=1200)
+
+    assert [(r.data_var.name, r.offset, r.length) for r in refs] == [
+        ("temperature_2m", 0, 1200)
+    ]
+    assert dict(refs[0].out_loc) == {"time": pd.Timestamp("2024-06-01T09:00")}
+
+
 def test_file_refs_refuses_two_element_spellings_for_one_chunk(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
