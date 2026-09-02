@@ -412,21 +412,29 @@ class VirtualRegionJob(
     def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
     ) -> None:
-        """A file's refs must cover the chunk filter_already_present probes
-        (representative_var at the file's representative_probe_loc)."""
+        """Check the file's refs cover the chunk filter_already_present probes.
+
+        A file that contributed nothing is a hard error: something is wrong with the
+        source or the index. A file that contributed refs but not the probed chunk is
+        only wasteful -- the refs it did build are written, and the filter will offer
+        the file again next run -- so it warns rather than killing the job. That case
+        is a poor representative_var, not bad data: a variable the source did not
+        carry this early is a normal thing for a long archive to contain.
+        """
         assert file_refs, f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
         probe_loc = self.representative_probe_loc(coord, rep)
         probe = self.chunk_key(probe_loc, rep)
-        assert any(
+        if not any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
-        ), (
-            f"refs for {coord} do not cover representative chunk "
-            f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
-            "this file forever. Override representative_var or "
-            "representative_probe_loc to name a cell the file actually contains."
-        )
+        ):
+            log.warning(
+                f"{coord.get_url()} built {len(file_refs)} refs but none cover the "
+                f"probed chunk ({rep.name}, {dict(probe_loc)}), so this file will be "
+                "offered again on every run. Override representative_var or "
+                "representative_probe_loc to name a cell the file actually contains."
+            )
 
     def _emit_refs(
         self, stores: Sequence[IcechunkStore], refs: Sequence[VirtualRef]
