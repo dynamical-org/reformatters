@@ -7,7 +7,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
-from reformatters.noaa.gefs import virtual_region_job as region_job_module
+from reformatters.noaa import noaa_virtual_region_job as noaa_virtual_job_module
 from reformatters.noaa.gefs.analysis_0_25_degree_virtual.region_job import (
     NoaaGefsAnalysis025DegreeVirtualRegionJob,
     NoaaGefsAnalysis025DegreeVirtualSourceFileCoord,
@@ -247,7 +247,7 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
         path.write_text(index)
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = [
         get_var("temperature_2m"),
@@ -287,7 +287,7 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
         )
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = [get_var("total_precipitation_surface")]
     coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
@@ -299,6 +299,45 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
 
     with pytest.raises(AssertionError, match="has no message for"):
         job.file_refs(coord, file_size=1200)
+
+
+def test_file_refs_takes_the_first_of_two_element_spellings_for_one_chunk(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """grib_element_alternatives give a variable one lookup key per spelling. A file
+    carrying two of them offers the same chunk twice; the earlier message wins, so the
+    variable gets exactly one ref and which bytes it points at is deterministic."""
+
+    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+        path = tmp_path / "index.idx"
+        path.write_text(
+            "1:0:d=2024060106:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
+            "2:500:d=2024060106:TMPK:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
+        )
+        return path
+
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+
+    temperature = get_var("temperature_2m")
+    assert temperature.internal_attrs.grib_element == "TMP"
+    two_spellings = replace(
+        temperature,
+        internal_attrs=replace(
+            temperature.internal_attrs, grib_element_alternatives=("TMPK",)
+        ),
+    )
+    coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2024-06-01T06:00"),
+        lead_time=pd.Timedelta("3h"),
+        data_vars=[two_spellings],
+    )
+    job = make_job(template_ds, data_vars=[two_spellings])
+
+    refs = job.file_refs(coord, file_size=1200)
+
+    assert len(refs) == 1
+    assert refs[0].offset == 0
+    assert refs[0].length == 500
 
 
 @pytest.mark.parametrize("present_element", ["TMP", "TMPK"])
@@ -321,7 +360,7 @@ def test_file_refs_matches_a_file_carrying_one_element_spelling(
         )
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     temperature = get_var("temperature_2m")
     assert temperature.internal_attrs.grib_element == "TMP"
@@ -344,44 +383,6 @@ def test_file_refs_matches_a_file_carrying_one_element_spelling(
         ("temperature_2m", 0, 1200)
     ]
     assert dict(refs[0].out_loc) == {"time": pd.Timestamp("2024-06-01T09:00")}
-
-
-def test_file_refs_refuses_two_element_spellings_for_one_chunk(
-    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """grib_element_alternatives give a variable one lookup key per spelling. A file
-    carrying two of them would hand the variable two refs for one chunk, writing the
-    same bytes twice with no way to tell which won."""
-
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(
-            "1:0:d=2024060106:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
-            "2:500:d=2024060106:TMPK:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
-        )
-        return path
-
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
-
-    temperature = get_var("temperature_2m")
-    assert temperature.internal_attrs.grib_element == "TMP"
-    two_spellings = replace(
-        temperature,
-        internal_attrs=replace(
-            temperature.internal_attrs, grib_element_alternatives=("TMPK",)
-        ),
-    )
-    coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2024-06-01T06:00"),
-        lead_time=pd.Timedelta("3h"),
-        data_vars=[two_spellings],
-    )
-    job = make_job(template_ds, data_vars=[two_spellings])
-
-    with pytest.raises(
-        AssertionError, match=r"has two messages for temperature_2m at .*09:00"
-    ):
-        job.file_refs(coord, file_size=1200)
 
 
 def test_operational_update_jobs_single_polling_job(
@@ -536,7 +537,7 @@ def test_every_requested_variable_maps_to_a_real_message(
         copy.write_text(index_text)
         return copy
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = TEMPLATE_CONFIG.data_vars
     coords = coords_at(template_ds, [init_time + lead_time], data_vars)
