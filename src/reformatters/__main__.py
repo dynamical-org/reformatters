@@ -82,6 +82,12 @@ from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
+from reformatters.ucsb_chc.chirps.analysis_final import (
+    UcsbChcChirpsAnalysisFinalDataset,
+)
+from reformatters.ucsb_chc.chirps.analysis_preliminary import (
+    UcsbChcChirpsAnalysisPreliminaryDataset,
+)
 
 faulthandler.enable()
 
@@ -154,6 +160,14 @@ class NasaImergIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """NASA IMERG on AWS Open Data."""
 
     base_path: str = "s3://dynamical-nasa-imerg"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class UcsbChcChirpsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    """UCSB CHC CHIRPS in Icechunk on AWS Open Data."""
+
+    base_path: str = "s3://dynamical-ucsb-chc-chirps"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -276,6 +290,13 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     NasaImergAnalysisLateDataset(
         primary_storage_config=NasaImergIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    # UCSB CHC
+    UcsbChcChirpsAnalysisFinalDataset(
+        primary_storage_config=UcsbChcChirpsIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    UcsbChcChirpsAnalysisPreliminaryDataset(
+        primary_storage_config=UcsbChcChirpsIcechunkAwsOpenDataDatasetStorageConfig()
     ),
     # Contrib
     UarizonaSwannAnalysisDataset(

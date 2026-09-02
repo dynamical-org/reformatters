@@ -33,6 +33,8 @@ name: 'Manual: Backfill'
         - noaa-mrms-conus-analysis-hourly
         - noaa-ndvi-cdr-analysis
         - u-arizona-swann-analysis
+        - ucsb-chc-chirps-analysis-final
+        - ucsb-chc-chirps-analysis-preliminary
       operation:
         description: create-new-store fails if the store exists; overwrite-* require it to exist. Backfilling a newly added variable = overwrite-chunks-and-metadata + filter_variable_names.
         required: true
