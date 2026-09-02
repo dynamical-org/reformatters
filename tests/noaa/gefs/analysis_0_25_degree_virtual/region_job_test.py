@@ -551,12 +551,11 @@ def test_every_requested_variable_maps_to_a_real_message(
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(coord, file_size=last_start + 1_000_000)
 
-    # file_refs asserts nothing was requested but absent; this pins the other direction,
-    # that every requested variable got exactly one ref.
+    # _check_refs_complete asserts nothing was requested but absent; this pins the
+    # other direction, that no variable the file does not carry was matched anyway.
     assert sorted(r.data_var.name for r in refs) == sorted(
         v.name for v in coord.data_vars
     )
-    assert len({r.data_var.name for r in refs}) == len(refs)
 
 
 @pytest.mark.parametrize("hour", [0, 3, 6, 9, 12, 15, 18, 21])
