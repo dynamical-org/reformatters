@@ -359,7 +359,7 @@ class ExampleTemporalTemplateConfig(TemplateConfig[ExampleDataVar]):
         #             grib_comment='0[-] SFC="Ground or water surface"',
         #             grib_index_level="surface",
         #             index_position=560,
-        #             keep_mantissa_bits=10,
+        #             keep_mantissa_bits=11,
         #         ),
         #     ),
         #     ExampleDataVar(

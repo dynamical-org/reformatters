@@ -40,9 +40,10 @@ _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVEL
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
 _PUBLICATION_LAG = pd.Timedelta("48h")
 # The two layouts pack chunks differently, so one init spans 13,440 refs in the
-# historical product and 330,240 in the operational one. Splits are sized per product
-# and per array group to keep each manifest inside the reader budgets in
-# docs/virtual_datasets.md while limiting the archive's total manifest count.
+# historical product and 330,240 in the operational one. Splits are sized per product,
+# and per array group where the groups' ref densities differ, to keep each manifest
+# inside the reader budgets in docs/virtual_datasets.md while limiting the archive's
+# total manifest count.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
 OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
 OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
