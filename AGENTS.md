@@ -94,7 +94,7 @@ For floating-point data variables Zarr `fill_value` equals CF `_FillValue`. When
 
 Whether a variable's missing values can be normalized is a test on real source messages: read them through the library materialized `read_data` uses (e.g. rasterio) and through the virtual codec (gribberish), and check whether each decoder represents the complete missing-cell set with one stable output — NaN or one exact value — across all supported source eras. The two may return different values — rasterio a sentinel where gribberish already returns NaN — but both must call the same cells missing.
 
-Before applying either branch below, check that the marker is not also a valid value of the quantity elsewhere in the field, using a physical test such as a land/sea mask or a co-varying variable rather than the value distribution. If it is, neither `fill_value` nor a mask range applies and the `comment` states what the value means.
+A candidate marker must also be shown, by a physical test such as a land/sea mask or a co-varying variable rather than the value distribution, not to be a valid value of the quantity anywhere in the field. A marker that is also a valid value gets neither `fill_value` nor a mask range; the `comment` states what the value means.
 
 When one value covers every missing cell in both reads:
 
