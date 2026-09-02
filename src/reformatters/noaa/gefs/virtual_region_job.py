@@ -2,7 +2,6 @@ from typing import ClassVar, Generic, TypeVar
 
 import icechunk
 
-from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
@@ -15,8 +14,6 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
-
-log = get_logger(__name__)
 
 S3_LOCATION_PREFIX = "s3://noaa-gefs-pds/"
 S3_BUCKET_REGION = "us-east-1"
@@ -62,7 +59,7 @@ class NoaaGefsVirtualRegionJob(
     NoaaVirtualRegionJob[NoaaGefsVirtualDataVar, GEFS_VIRTUAL_COORD],
     Generic[GEFS_VIRTUAL_COORD],
 ):
-    """Ref building for the GEFS virtual datasets. A subclass adds
+    """The GEFS source bucket and the checks specific to its archive. A subclass adds
     generate_source_file_coords and operational_update_window."""
 
     source_location_prefix: ClassVar[str] = S3_LOCATION_PREFIX
