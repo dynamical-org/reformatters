@@ -100,7 +100,11 @@ class DwdIconEuForecast5DayDataset(
         return (
             # The update ingests each init at init+3h52m; validation fires at init+4h02m.
             validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=2)),
-            validation.CheckRecentNans(),
+            # DWD's transfer can still be trickling in the newest init's lead times when
+            # validation runs 10 minutes after the update; the next update cycle
+            # reprocesses and completes that init, so a partial newest position is
+            # expected, not a data quality problem. Older inits must be complete.
+            validation.CheckRecentNans(max_nan_fraction=(0.5, 0.0)),
         )
 
     def archive_grib_files(

@@ -1,5 +1,7 @@
 from collections.abc import Callable, Sequence
+from datetime import timedelta
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import urlparse
 
 import numpy as np
@@ -46,6 +48,9 @@ class NasaSmapLevel336KmV9SourceFileCoord(SourceFileCoord):
 class NasaSmapLevel336KmV9RegionJob(
     MaterializedRegionJob[NasaSmapDataVar, NasaSmapLevel336KmV9SourceFileCoord]
 ):
+    # Matches the CheckCurrentData(max_delay=...) validator in dynamical_dataset.py.
+    expected_source_delay: ClassVar[timedelta] = timedelta(days=6)
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
