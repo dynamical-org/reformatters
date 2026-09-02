@@ -11,6 +11,7 @@ from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
+    DataVar,
     DataVarAttrs,
     Encoding,
     StatisticsApproximate,
@@ -21,10 +22,7 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ucsb_chc.chirps.chirps_config_models import (
-    ChirpsProduct,
-    UcsbChcChirpsDataVar,
-)
+from reformatters.ucsb_chc.chirps.chirps_config_models import ChirpsProduct
 
 # CHIRPS v3.0 quasi-global 0.05 degree grid; pixel centers, rows north -> south.
 GRID_LAT_SIZE = 2400
@@ -37,27 +35,29 @@ _LON_EAST = 179.975
 # mm/day -> kg m-2 s-1 (= mm/s): 1 mm/day of water is 1 kg m-2 per 86400 s.
 MM_PER_DAY_TO_KG_M2_S = 1.0 / 86400.0
 
-# Marks ocean and inland water, where CHIRPS makes no estimate. The source files set
-# no GDAL nodata tag, so it arrives as a plain value.
+# Marks the ocean and marginal seas, where CHIRPS makes no estimate. The source files
+# set no GDAL nodata tag, so it arrives as a plain value.
 SOURCE_FILL_VALUE = -9999.0
 
 _DESCRIPTIONS: dict[ChirpsProduct, str] = {
     "final": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
         "with Stations (CHIRPS) version 3.0 final product, which incorporates station "
-        "observations."
+        "observations and splits each pentad total into days using ERA5."
     ),
     "preliminary": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
         "with Stations (CHIRPS) version 3.0 preliminary product, a lower latency "
-        "satellite-only estimate which the final product supersedes."
+        "satellite estimate which splits each pentad total into days using IMERG "
+        "rather than ERA5, so it differs from the final product in its daily "
+        "distribution as well as its inputs."
     ),
 }
 
 _SPATIAL_REF_WKT = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]'
 
 
-class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[UcsbChcChirpsDataVar]):
+class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAttrs]]):
     """Shared structure for the UCSB CHC CHIRPS daily analysis datasets.
 
     Concrete subclasses set `product` (final/preliminary) and `append_dim_start`;
@@ -196,12 +196,13 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[UcsbChcChirpsDataVar]):
 
     @computed_field
     @property
-    def data_vars(self) -> Sequence[UcsbChcChirpsDataVar]:
+    def data_vars(self) -> Sequence[DataVar[BaseInternalAttrs]]:
         # Time-optimized: a year of days per chunk with a small 2.5 x 2.5 degree
         # spatial chunk, so a time series read pulls little wasted spatial data.
-        # ~3.5 MB uncompressed per chunk, ~1 MB compressed over land where the
-        # measured compression is ~3.3:1, and far less over the structurally empty
-        # ocean.
+        # ~3.5 MB uncompressed, ~1 MB compressed over land at the measured 3.3:1 and
+        # far less over the structurally empty ocean. Deliberately under the chunk
+        # layout tool's 2.5 MB compressed target, which assumes data that compresses
+        # less well.
         var_chunks: dict[Dim, int] = {
             "time": 365,
             "latitude": 50,  # 48 chunks over 2400
@@ -213,7 +214,7 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[UcsbChcChirpsDataVar]):
             "longitude": var_chunks["longitude"] * 36,  # 4 shards over 7200
         }
         return [
-            UcsbChcChirpsDataVar(
+            DataVar(
                 name="precipitation_surface",
                 encoding=Encoding(
                     dtype="float32",
@@ -230,8 +231,9 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[UcsbChcChirpsDataVar]):
                     step_type="avg",
                     comment=(
                         "Average precipitation rate over the 24 hours starting at "
-                        "the time coordinate. Units equivalent to mm/s. NaN over "
-                        "ocean and inland water, where CHIRPS provides no estimate."
+                        "the time coordinate. Units equivalent to mm/s. NaN where "
+                        "CHIRPS makes no estimate, which is the ocean and marginal "
+                        "seas; large lakes carry values."
                     ),
                 ),
                 internal_attrs=BaseInternalAttrs(

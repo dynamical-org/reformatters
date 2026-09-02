@@ -7,13 +7,19 @@ import rasterio
 import xarray as xr
 from zarr.abc.store import Store
 
-from reformatters.common.config_models import mask_source_fill_value_inplace
+from reformatters.common.config_models import (
+    BaseInternalAttrs,
+    DataVar,
+    mask_source_fill_value_inplace,
+)
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
     SourceFileCoord,
+    SourceFileResult,
+    SourceFileStatus,
 )
 from reformatters.common.types import (
     AppendDim,
@@ -22,10 +28,7 @@ from reformatters.common.types import (
     Dim,
     Timestamp,
 )
-from reformatters.ucsb_chc.chirps.chirps_config_models import (
-    ChirpsProduct,
-    UcsbChcChirpsDataVar,
-)
+from reformatters.ucsb_chc.chirps.chirps_config_models import ChirpsProduct
 from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LAT_SIZE,
     GRID_LON_SIZE,
@@ -59,7 +62,9 @@ class UcsbChcChirpsAnalysisSourceFileCoord(SourceFileCoord):
 
 
 class UcsbChcChirpsAnalysisMaterializedRegionJob(
-    MaterializedRegionJob[UcsbChcChirpsDataVar, UcsbChcChirpsAnalysisSourceFileCoord]
+    MaterializedRegionJob[
+        DataVar[BaseInternalAttrs], UcsbChcChirpsAnalysisSourceFileCoord
+    ]
 ):
     product: ChirpsProduct
 
@@ -68,7 +73,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[UcsbChcChirpsDataVar],  # noqa: ARG002
+        data_var_group: Sequence[DataVar[BaseInternalAttrs]],  # noqa: ARG002
     ) -> Sequence[UcsbChcChirpsAnalysisSourceFileCoord]:
         return [
             UcsbChcChirpsAnalysisSourceFileCoord(
@@ -83,7 +88,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     def read_data(
         self,
         coord: UcsbChcChirpsAnalysisSourceFileCoord,
-        data_var: UcsbChcChirpsDataVar,
+        data_var: DataVar[BaseInternalAttrs],
     ) -> ArrayFloat32:
         assert coord.downloaded_path is not None, "File must be downloaded first"
         with rasterio.open(coord.downloaded_path) as reader:
@@ -96,6 +101,32 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         data *= np.float32(MM_PER_DAY_TO_KG_M2_S)
         return data
 
+    def update_template_with_results(
+        self, process_results: Mapping[str, Sequence[SourceFileResult]]
+    ) -> xr.DataTree:
+        """Trim to the day before the first one the update did not read.
+
+        The base implementation keeps everything through the newest day read, which
+        would publish an unread day in between as NaN; later updates start from the
+        store's newest day and would never fill it in.
+        """
+        # A day whose download failed is absent from the results, so a Succeeded
+        # status is the only evidence a day was read.
+        read_times = {
+            result.out_loc[self.append_dim]
+            for results in process_results.values()
+            for result in results
+            if result.status == SourceFileStatus.Succeeded
+        }
+        # This runs once for the whole update, on the job with the earliest region.
+        times = self.template_ds.coords[self.append_dim].values
+        stop = self.region.start
+        for i in range(self.region.start, len(times)):
+            if pd.Timestamp(times[i]) not in read_times:
+                break
+            stop = i + 1
+        return self.template_ds.isel({self.append_dim: slice(None, stop)})
+
     @classmethod
     def operational_update_jobs(
         cls,
@@ -103,10 +134,12 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
-        all_data_vars: Sequence[UcsbChcChirpsDataVar],
+        all_data_vars: Sequence[DataVar[BaseInternalAttrs]],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[UcsbChcChirpsDataVar, UcsbChcChirpsAnalysisSourceFileCoord]],
+        Sequence[
+            RegionJob[DataVar[BaseInternalAttrs], UcsbChcChirpsAnalysisSourceFileCoord]
+        ],
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)

@@ -3,9 +3,9 @@ from datetime import timedelta
 from typing import ClassVar
 
 from reformatters.common import validation
+from reformatters.common.config_models import BaseInternalAttrs, DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.ucsb_chc.chirps.chirps_config_models import UcsbChcChirpsDataVar
 from reformatters.ucsb_chc.chirps.region_job import (
     UcsbChcChirpsAnalysisMaterializedRegionJob,
     UcsbChcChirpsAnalysisSourceFileCoord,
@@ -13,7 +13,7 @@ from reformatters.ucsb_chc.chirps.region_job import (
 
 
 class UcsbChcChirpsAnalysisMaterializedDataset(
-    DynamicalDataset[UcsbChcChirpsDataVar, UcsbChcChirpsAnalysisSourceFileCoord]
+    DynamicalDataset[DataVar[BaseInternalAttrs], UcsbChcChirpsAnalysisSourceFileCoord]
 ):
     """Shared base for the final and preliminary materialized CHIRPS analysis datasets.
 
@@ -25,8 +25,8 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
 
     update_schedule: ClassVar[str]
     validate_schedule: ClassVar[str]
-    update_deadline: ClassVar[timedelta]
     max_expected_delay: ClassVar[timedelta]
+    update_deadline: ClassVar[timedelta] = timedelta(minutes=60)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
@@ -59,13 +59,12 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
         return (
             validation.CheckCurrentData(max_delay=self.max_expected_delay),
             validation.CheckRecentNans(
-                # CHIRPS estimates land only: 71.9% of the grid is NaN, and the worst
-                # quarter (southern hemisphere west of the prime meridian) is 87.5%.
-                # The land/water mask is identical on every day, so 0.89 leaves room
-                # for the sampled quarter and still fails a day a source file is
-                # missing from.
-                max_nan_fraction=0.89,
-                spatial_sampling="quarter",
+                # Random point sampling drops the 71.9% of the grid that is ocean,
+                # NaN on every day, leaving land, where a day is either wholly read
+                # or missing. 40 points makes an all-ocean sample, which fails the
+                # check for want of signal, vanishingly unlikely.
+                max_nan_fraction=0.05,
+                sampled_points=40,
                 append_dim_window=3,
             ),
         )

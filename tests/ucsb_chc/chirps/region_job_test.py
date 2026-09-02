@@ -16,7 +16,6 @@ from reformatters.ucsb_chc.chirps.analysis_final.template_config import (
 from reformatters.ucsb_chc.chirps.analysis_preliminary.region_job import (
     UcsbChcChirpsAnalysisPreliminaryRegionJob,
 )
-from reformatters.ucsb_chc.chirps.chirps_config_models import ChirpsProduct
 from reformatters.ucsb_chc.chirps.region_job import (
     UcsbChcChirpsAnalysisMaterializedRegionJob,
     UcsbChcChirpsAnalysisSourceFileCoord,
@@ -26,6 +25,7 @@ from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LON_SIZE,
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
+    ChirpsProduct,
 )
 
 
@@ -79,15 +79,17 @@ def test_preliminary_url() -> None:
     )
 
 
-def test_download_file_requests_only_its_own_products_file(
+def test_download_file_never_falls_back_to_the_other_product(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A preliminary day that also exists as a final file must still be read from the
-    # preliminary archive: the two datasets never fall back to each other's source.
+    # For a day both products publish, the preliminary dataset must fail rather than
+    # read the final file, even though that file would download successfully.
     requested: list[str] = []
 
     def fake_download(url: str, dataset_id: str) -> Path:
         requested.append(url)
+        if "/prelim/sat/" in url:
+            raise FileNotFoundError(url)
         return Path(url)
 
     monkeypatch.setattr(
@@ -97,11 +99,11 @@ def test_download_file_requests_only_its_own_products_file(
         product="preliminary", time=pd.Timestamp("2025-06-15")
     )
 
-    _job("preliminary").download_file(coord)
+    with pytest.raises(FileNotFoundError):
+        _job("preliminary").download_file(coord)
 
     assert requested == [coord.get_url()]
     assert "/prelim/sat/" in requested[0]
-    assert "final" not in requested[0]
 
 
 def test_download_file_propagates_missing_file(

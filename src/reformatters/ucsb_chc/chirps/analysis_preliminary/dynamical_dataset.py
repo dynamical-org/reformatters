@@ -22,7 +22,6 @@ class UcsbChcChirpsAnalysisPreliminaryDataset(UcsbChcChirpsAnalysisMaterializedD
 
     update_schedule: ClassVar[str] = "0 17 * * *"
     validate_schedule: ClassVar[str] = "0 18 * * *"
-    update_deadline: ClassVar[timedelta] = timedelta(minutes=60)
     # The preliminary product publishes one pentad at a time, two days after the
-    # pentad ends, so the first day of a pentad is the last one to arrive.
+    # pentad ends.
     max_expected_delay: ClassVar[timedelta] = timedelta(days=10)

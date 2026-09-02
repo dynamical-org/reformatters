@@ -3,7 +3,7 @@
     "dataset_id": "ucsb-chc-chirps-analysis-final",
     "dataset_version": "0.1.0",
     "name": "UCSB CHC CHIRPS analysis final",
-    "description": "Daily precipitation from the Climate Hazards Center Infrared Precipitation with Stations (CHIRPS) version 3.0 final product, which incorporates station observations.",
+    "description": "Daily precipitation from the Climate Hazards Center Infrared Precipitation with Stations (CHIRPS) version 3.0 final product, which incorporates station observations and splits each pentad total into days using ERA5.",
     "attribution": "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by dynamical.org from the Climate Hazards Center data archive. Cite Funk, C., Peterson, P., Harrison, L. et al. The Climate Hazards Center Infrared Precipitation with Stations, Version 3. Sci Data 13, 718 (2026), data https://doi.org/10.15780/G2JQ0P.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global land, 60 degrees north to 60 degrees south",
@@ -199,7 +199,7 @@
           "short_name": "prate",
           "standard_name": "precipitation_flux",
           "units": "kg m-2 s-1",
-          "comment": "Average precipitation rate over the 24 hours starting at the time coordinate. Units equivalent to mm/s. NaN over ocean and inland water, where CHIRPS provides no estimate.",
+          "comment": "Average precipitation rate over the 24 hours starting at the time coordinate. Units equivalent to mm/s. NaN where CHIRPS makes no estimate, which is the ocean and marginal seas; large lakes carry values.",
           "step_type": "avg",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
