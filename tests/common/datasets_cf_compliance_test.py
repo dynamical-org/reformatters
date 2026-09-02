@@ -1054,7 +1054,9 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # HRRR's ice cover is binary and carries flags, while GFS's is an area
     # fraction taking any value between 0 and 1.
     ("ice_cover_surface", "flag_values", "noaa-gfs-analysis-virtual"),
+    ("ice_cover_surface", "flag_values", "noaa-gfs-forecast-virtual"),
     ("ice_cover_surface", "flag_meanings", "noaa-gfs-analysis-virtual"),
+    ("ice_cover_surface", "flag_meanings", "noaa-gfs-forecast-virtual"),
     # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
@@ -1067,6 +1069,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("categorical_snow_surface", "step_type", "noaa-gefs-analysis"),
     ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("categorical_snow_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gefs-analysis"),
@@ -1076,6 +1079,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-35-day",
     ),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gefs-analysis"),
@@ -1085,11 +1089,13 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-35-day",
     ),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-analysis"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-forecast-virtual"),
     # GFS and GEFS publish window-average total cloud cover.
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis"),
@@ -1100,6 +1106,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-35-day",
     ),
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis-virtual"),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast-virtual"),
     # IFS ENS 15-day is instantaneous while IFS ENS 46-day is a 24-hour mean
     # under the same variable name.
     (
@@ -1162,12 +1169,20 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # GFS publishes interval-average upward radiation and heat fluxes while
     # HRRR publishes them at the valid time.
     ("latent_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("latent_heat_flux_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("sensible_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("sensible_heat_flux_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("ground_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("ground_heat_flux_surface", "step_type", "noaa-gfs-forecast-virtual"),
     (
         "upward_short_wave_radiation_flux_surface",
         "step_type",
         "noaa-gfs-analysis-virtual",
+    ),
+    (
+        "upward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gfs-forecast-virtual",
     ),
     (
         "upward_long_wave_radiation_flux_surface",
@@ -1175,14 +1190,29 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gfs-analysis-virtual",
     ),
     (
+        "upward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gfs-forecast-virtual",
+    ),
+    (
         "upward_short_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gfs-analysis-virtual",
+    ),
+    (
+        "upward_short_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gfs-forecast-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_top_of_atmosphere",
         "step_type",
         "noaa-gfs-analysis-virtual",
     ),
     (
         "upward_long_wave_radiation_flux_top_of_atmosphere",
         "step_type",
-        "noaa-gfs-analysis-virtual",
+        "noaa-gfs-forecast-virtual",
     ),
     # IFS ENS 46-day publishes 24-hour means for these state variables.
     (
