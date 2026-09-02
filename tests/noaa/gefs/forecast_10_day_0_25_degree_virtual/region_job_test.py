@@ -9,7 +9,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
-from reformatters.noaa.gefs import virtual_region_job as region_job_module
+from reformatters.noaa import noaa_virtual_region_job as noaa_virtual_job_module
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.region_job import (
     NoaaGefsForecast10Day025DegreeVirtualRegionJob,
 )
@@ -213,7 +213,7 @@ def test_forecast_discovery_releases_a_partly_published_init(
     # The source has published the two shortest leads of every member and nothing else.
     published = [c for c in coords if c.lead_time != pd.Timedelta("240h")]
     monkeypatch.setattr(
-        region_job_module,
+        noaa_virtual_job_module,
         "discover_available_by_obstore_listing",
         lambda pending, **kwargs: [(c, 100) for c in pending if c in published],
     )
@@ -265,7 +265,7 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
         path.write_text(index)
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = [
         get_var("temperature_2m"),
@@ -313,7 +313,7 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
         )
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = [get_var("total_precipitation_surface")]
     coord = NoaaGefsForecastVirtualSourceFileCoord(
@@ -369,7 +369,7 @@ def test_every_requested_variable_maps_to_a_real_message(
         copy.write_text(index_text)
         return copy
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
 
     data_vars = TEMPLATE_CONFIG.data_vars
     (coord,) = coords_for(
