@@ -8,7 +8,7 @@ from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.template_config 
     NoaaGefsForecast10Day025DegreeVirtualTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import NoaaGefsVirtualDataVar
-from reformatters.noaa.noaa_grib_index import _lead_time_str
+from reformatters.noaa.noaa_grib_index import grib_index_window_str
 
 CONFIG = NoaaGefsForecast10Day025DegreeVirtualTemplateConfig()
 
@@ -102,7 +102,7 @@ def test_every_lead_time_carries_the_window_its_comment_promises() -> None:
         for lead in lead_hours:
             if lead == 0 and not var.has_hour_0_values():
                 continue
-            window = _lead_time_str(var, lead)
+            window = grib_index_window_str(var, lead)
             match = re.fullmatch(r"(\d+)-(\d+) hour \w+ fcst", window)
             assert match is not None, (var.name, lead, window)
             start, end = int(match.group(1)), int(match.group(2))
@@ -116,7 +116,7 @@ def test_differencing_only_holds_within_a_window_start() -> None:
     an unqualified subtraction would be wrong far more often than right."""
     accumulated = get_var("total_precipitation_surface")
     lead_hours = [int(t.total_seconds() // 3600) for t in CONFIG.lead_times() if t > pd.Timedelta(0)]  # fmt: skip
-    starts = {lead: int(_lead_time_str(accumulated, lead).split("-")[0]) for lead in lead_hours}  # fmt: skip
+    starts = {lead: int(grib_index_window_str(accumulated, lead).split("-")[0]) for lead in lead_hours}  # fmt: skip
 
     assert starts[6] == 0, starts
     assert starts[9] == 6, starts

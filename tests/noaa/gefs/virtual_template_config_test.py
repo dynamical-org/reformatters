@@ -8,7 +8,7 @@ from reformatters.noaa.gefs.gefs_config_models import GEFSSourceFileType
 from reformatters.noaa.gefs.virtual_template_config import (
     NoaaGefsForecastVirtualTemplateConfig,
 )
-from reformatters.noaa.noaa_grib_index import _lead_time_str
+from reformatters.noaa.noaa_grib_index import grib_index_window_str
 
 THREE_HOURLY_TO_240 = pd.timedelta_range("0h", "240h", freq="3h")
 
@@ -87,7 +87,7 @@ def test_window_comments_name_the_lead_times_that_carry_each_window() -> None:
 
     for window_hours, named_leads in clauses:
         for lead in [int(hours) for hours in named_leads.split(", ")]:
-            source_window = _lead_time_str(windowed, lead)
+            source_window = grib_index_window_str(windowed, lead)
             match = re.fullmatch(r"(\d+)-(\d+) hour acc fcst", source_window)
             assert match is not None, (lead, source_window)
             start, end = int(match.group(1)), int(match.group(2))
