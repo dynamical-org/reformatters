@@ -18,8 +18,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -27,8 +27,6 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
-    Timedelta,
-    Timestamp,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
@@ -46,11 +44,9 @@ log = get_logger(__name__)
 type DownloadSource = Literal["s3", "nomads"]
 
 
-class NoaaHrrrSourceFileCoord(SourceFileCoord):
+class NoaaHrrrSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coordinate for HRRR forecast data."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     domain: NoaaHrrrDomain
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]

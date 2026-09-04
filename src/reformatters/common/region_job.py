@@ -39,6 +39,7 @@ from reformatters.common.types import (
     AppendDim,
     DatetimeLike,
     Dim,
+    Timedelta,
     Timestamp,
 )
 
@@ -105,6 +106,14 @@ class SourceFileCoord(FrozenBaseModel):
             if coord := out_loc.get(d):
                 return coord
         return pd.Timestamp.min
+
+
+class InitLeadSourceFileCoord(SourceFileCoord):
+    """A source file holding one forecast step: the run it came from and how far ahead
+    it is valid. Analysis datasets use it too, reading a chosen lead of each run."""
+
+    init_time: Timestamp
+    lead_time: Timedelta
 
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])

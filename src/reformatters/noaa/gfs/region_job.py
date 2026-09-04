@@ -21,8 +21,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -30,8 +30,6 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
-    Timedelta,
-    Timestamp,
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
@@ -45,11 +43,9 @@ log = get_logger(__name__)
 type DownloadSource = Literal["s3", "nomads"]
 
 
-class NoaaGfsSourceFileCoord(SourceFileCoord):
+class NoaaGfsSourceFileCoord(InitLeadSourceFileCoord):
     """Coordinates of a single source file to process."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     data_vars: Sequence[NoaaDataVar]
 
     def get_url(self, source: DownloadSource = "s3") -> str:

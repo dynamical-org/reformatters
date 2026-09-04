@@ -4,9 +4,9 @@ from typing import Any, ClassVar, Generic, TypeVar
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import CoordinateValue, SourceFileCoord
+from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Dim, Timedelta
+from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
@@ -23,14 +23,13 @@ log = get_logger(__name__)
 NOAA_DATA_VAR = TypeVar("NOAA_DATA_VAR", bound=DataVar[NoaaInternalAttrs])
 
 
-class NoaaVirtualSourceFileCoord(SourceFileCoord, Generic[NOAA_DATA_VAR]):
-    """One NOAA GRIB file: the lead time and the variables it packs.
+class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]):
+    """One NOAA GRIB file: the forecast step it holds and the variables it packs.
 
     `get_url()` must return the `s3://` location refs point at, matching the dataset's
     virtual chunk container prefix.
     """
 
-    lead_time: Timedelta
     data_vars: Sequence[NOAA_DATA_VAR]
 
     def get_index_url(self) -> str:
