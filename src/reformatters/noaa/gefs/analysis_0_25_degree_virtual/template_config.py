@@ -14,11 +14,11 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
-from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_CURRENT_ARCHIVE_START,
-    GEFSSourceFileType,
+from reformatters.noaa.gefs.gefs_config_models import GEFSSourceFileType
+from reformatters.noaa.gefs.virtual_template_config import (
+    GEFS_VIRTUAL_ARCHIVE_START,
+    NoaaGefsVirtualTemplateConfig,
 )
-from reformatters.noaa.gefs.virtual_template_config import NoaaGefsVirtualTemplateConfig
 
 
 class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
@@ -41,7 +41,7 @@ class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConf
     }
     dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
-    append_dim_start: Timestamp = GEFS_CURRENT_ARCHIVE_START
+    append_dim_start: Timestamp = GEFS_VIRTUAL_ARCHIVE_START
     append_dim_frequency: Timedelta = pd.Timedelta("3h")
 
     @computed_field

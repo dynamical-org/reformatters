@@ -17,6 +17,8 @@ from reformatters.noaa.gefs.analysis_0_25_degree_virtual.template_config import 
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_B22_TRANSITION_DATE,
+    GEFS_CURRENT_ARCHIVE_START,
+    GEFS_INIT_TIME_FREQUENCY,
     NoaaGefsVirtualDataVar,
 )
 from reformatters.noaa.gefs.virtual_region_job import NoaaGefsVirtualRegionJob
@@ -140,16 +142,19 @@ def test_a_variable_is_not_sourced_before_its_available_from(
         assert {v.name for v in coords[0].data_vars} == expected, time
 
 
-def test_no_coord_reaches_back_before_the_archive_start(
+def test_the_first_time_sources_a_windowed_variable_from_the_prior_cycle(
     template_ds: xr.DataTree,
 ) -> None:
-    """A windowed variable at the first time would shift to a cycle that does not exist."""
+    """A windowed variable at the first time shifts back one cycle. The archive extends
+    before append_dim_start, so that cycle exists and the first time is not short of it;
+    starting at the archive edge instead would leave it empty."""
     windowed = get_var("total_precipitation_surface")
     start = TEMPLATE_CONFIG.append_dim_start
+    prior_cycle = start - GEFS_INIT_TIME_FREQUENCY
 
-    assert coords_at(template_ds, [start], [windowed]) == []
-    later = coords_at(template_ds, [start + pd.Timedelta("6h")], [windowed])
-    assert [c.init_time for c in later] == [start]
+    assert prior_cycle >= GEFS_CURRENT_ARCHIVE_START
+    first = coords_at(template_ds, [start], [windowed])
+    assert [c.init_time for c in first] == [prior_cycle]
 
 
 @pytest.mark.parametrize(

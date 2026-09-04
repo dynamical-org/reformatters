@@ -34,6 +34,10 @@ from reformatters.noaa.gefs.gefs_config_models import (
     NoaaGefsVirtualInternalAttrs,
 )
 
+# Matches materialized noaa-gefs-forecast-35-day so the two archives align and
+# neither starts inside the ragged inits that precede it.
+GEFS_VIRTUAL_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
+
 # The catalog's spelling of each grid FILE_RESOLUTIONS resolves to.
 _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {0.25: "0.25 degrees (~20km)"}
 
