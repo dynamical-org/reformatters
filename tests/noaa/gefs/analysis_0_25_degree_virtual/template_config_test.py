@@ -25,7 +25,7 @@ def test_three_hourly_time_structure() -> None:
     assert CONFIG.append_dim == "time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("3h")
     assert CONFIG.dims == {ROOT: ("time", "latitude", "longitude")}
-    assert CONFIG.append_dim_start == pd.Timestamp("2020-09-23T12:00")
+    assert CONFIG.append_dim_start == pd.Timestamp("2020-10-01T00:00")
 
 
 def test_grid_follows_from_the_source_file_type() -> None:
@@ -188,11 +188,13 @@ def test_dataset_attributes() -> None:
     assert "materialized noaa-gefs-analysis" in attrs.description
 
 
-def test_template_starts_at_the_v12_archive_start() -> None:
-    template = CONFIG.get_template(pd.Timestamp("2020-09-23T21:00"))
+def test_template_starts_where_the_materialized_forecast_archive_does() -> None:
+    """Aligned with noaa-gefs-forecast-35-day rather than the v12 archive start, which
+    falls inside the ragged inits that precede it."""
+    template = CONFIG.get_template(pd.Timestamp("2020-10-01T09:00"))
     times = template.to_dataset().get_index("time")
     assert list(times) == [
-        pd.Timestamp("2020-09-23T12:00"),
-        pd.Timestamp("2020-09-23T15:00"),
-        pd.Timestamp("2020-09-23T18:00"),
+        pd.Timestamp("2020-10-01T00:00"),
+        pd.Timestamp("2020-10-01T03:00"),
+        pd.Timestamp("2020-10-01T06:00"),
     ]
