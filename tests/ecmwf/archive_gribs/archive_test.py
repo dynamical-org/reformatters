@@ -11,6 +11,7 @@ from reformatters.ecmwf.archive_gribs.archive import (
     check_available,
     format_init_time,
 )
+from reformatters.ecmwf.archive_gribs.ecds_client import EcdsJobFailedError
 from reformatters.ecmwf.archive_gribs.grib_inventory import INDEX_SUFFIX
 from reformatters.ecmwf.archive_gribs.request_shards import (
     EcdsSelection,
@@ -253,6 +254,21 @@ def test_an_incomplete_blob_is_not_uploaded_and_its_work_is_kept(
     assert (
         tmp_path / "2026-08-10" / SELECTIONS[0].file_name / SELECTIONS[0].file_name
     ).exists()
+
+
+def test_a_selection_whose_jobs_keep_failing_is_not_retrieved_again(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock]
+) -> None:
+    """`EcdsRequest.retrieve` owns the resubmission budget, so the outer retry must not multiply it."""
+    archive_bucket["request"].return_value.retrieve.side_effect = EcdsJobFailedError(
+        "ended with status failed"
+    )
+
+    with pytest.raises(EcdsJobFailedError, match="ended with status failed"):
+        archive(tmp_path, SELECTIONS[:1])
+
+    archive_bucket["request"].return_value.retrieve.assert_called_once()
+    archive_bucket["copy_local_file"].assert_not_called()
 
 
 def test_check_available_queries_constraints_without_the_keys_it_checks() -> None:

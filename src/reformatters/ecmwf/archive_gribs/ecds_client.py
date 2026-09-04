@@ -32,6 +32,12 @@ TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60
 DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
 MAXIMUM_POLL_BACKOFF_EXPONENT: Final[int] = 6
+RESUBMIT_WAIT_SECONDS: Final[float] = 60
+RESUBMIT_BUDGET_SECONDS: Final[float] = 3600
+
+
+class EcdsJobFailedError(Exception):
+    """ECDS ran the job and ended it in a terminal failure status."""
 
 
 @dataclass
@@ -145,12 +151,18 @@ class EcdsRequest:
         target: Path,
         poll_seconds: float = 30,
         maximum_polls: int = 240,
+        resubmit_wait_seconds: float = RESUBMIT_WAIT_SECONDS,
+        resubmit_budget_seconds: float = RESUBMIT_BUDGET_SECONDS,
     ) -> Path:
         """Submit `payload` if it is not already in flight, then download to `target`.
 
         A blob already downloaded for `payload` is kept rather than fetched again: an
         ECDS result expires without a published SLA, so a second download of the same
         result may be impossible.
+
+        A job ECDS fails is submitted again after `resubmit_wait_seconds`, doubling each
+        time. No job is submitted once `resubmit_budget_seconds` have passed since this
+        call began; the failure is raised as `EcdsJobFailedError` instead.
         """
         state = self.state_store.read_if_exists()
         if state is None or state.payload != dict(payload):
@@ -160,7 +172,19 @@ class EcdsRequest:
             return target
         elif state.status in TERMINAL_FAILURE_STATUSES:
             self.submit(payload)
-        _, result_url = self.poll_until_complete(poll_seconds, maximum_polls)
+        deadline = time.monotonic() + resubmit_budget_seconds
+        wait_seconds = resubmit_wait_seconds
+        while True:
+            try:
+                _, result_url = self.poll_until_complete(poll_seconds, maximum_polls)
+                break
+            except EcdsJobFailedError as e:
+                if time.monotonic() + wait_seconds >= deadline:
+                    raise
+                log.warning("%s; submitting it again in %.0f s", e, wait_seconds)
+                time.sleep(wait_seconds)
+                self.submit(payload)
+                wait_seconds *= 2
         self.download(target, result_url)
         return target
 
@@ -251,7 +275,7 @@ class EcdsRequest:
                 _sleep_bounded(backoff_seconds, deadline)
                 continue
             if state.status in TERMINAL_FAILURE_STATUSES:
-                raise RuntimeError(
+                raise EcdsJobFailedError(
                     f"ECDS job {state.request_id} ended with status {state.status}: "
                     f"{state.errors[-1] if state.errors else ''}"
                 )

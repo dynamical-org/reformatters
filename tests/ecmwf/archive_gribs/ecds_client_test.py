@@ -8,6 +8,7 @@ import requests
 
 from reformatters.ecmwf.archive_gribs import ecds_client
 from reformatters.ecmwf.archive_gribs.ecds_client import (
+    EcdsJobFailedError,
     EcdsRequest,
     RequestState,
     StateStore,
@@ -171,7 +172,7 @@ def test_polling_raises_on_a_terminal_failure(tmp_path: Path) -> None:
     session = session_mock()
     session.get.return_value = response({"status": "dismissed"})
 
-    with pytest.raises(RuntimeError, match="ended with status dismissed"):
+    with pytest.raises(EcdsJobFailedError, match="ended with status dismissed"):
         EcdsRequest(state_store, session=session).poll_until_complete(0, 3)
 
 
@@ -444,6 +445,58 @@ def test_retrieve_resubmits_after_a_terminal_failure(tmp_path: Path) -> None:
 
     session.post.assert_called_once()
     assert state_store.read().request_id == "job-2"
+
+
+def test_retrieve_submits_a_failed_job_again_after_a_wait(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    session = session_mock()
+    session.post.side_effect = [
+        response({"jobID": "job-1"}),
+        response({"jobID": "job-2"}),
+    ]
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    session.get.side_effect = [
+        response({"status": "failed"}),
+        response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
+        download_response,
+    ]
+
+    EcdsRequest(state_store, session=session).retrieve(
+        payload, tmp_path / "blob.grib2", poll_seconds=0, resubmit_wait_seconds=60
+    )
+
+    assert clock.sleeps == [60]
+    assert session.post.call_count == 2
+    assert state_store.read().request_id == "job-2"
+    assert (tmp_path / "blob.grib2").exists()
+
+
+def test_retrieve_waits_longer_after_each_failed_job_until_the_budget_is_spent(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    session = session_mock()
+    session.post.side_effect = [response({"jobID": f"job-{n}"}) for n in range(1, 10)]
+    session.get.return_value = response({"status": "failed"})
+
+    with pytest.raises(EcdsJobFailedError, match="job-4 ended with status failed"):
+        EcdsRequest(state_store, session=session).retrieve(
+            payload,
+            tmp_path / "blob.grib2",
+            poll_seconds=0,
+            resubmit_wait_seconds=10,
+            resubmit_budget_seconds=100,
+        )
+
+    assert clock.sleeps == [10, 20, 40]
+    assert session.post.call_count == 4
+    assert state_store.read().status == "failed"
+    assert not (tmp_path / "blob.grib2").exists()
 
 
 def test_constraints_retries_a_transient_server_error() -> None:
