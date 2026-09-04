@@ -8,7 +8,7 @@
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
-    "time_domain": "Forecasts initialized 2021-03-22 12:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2021-05-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-384 hours (0-16 days) ahead",
     "forecast_resolution": "Forecast step 0-120 hours: hourly, 123-384 hours: 3 hourly"

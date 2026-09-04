@@ -68,8 +68,8 @@ class NoaaGfsForecastVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
         ),
     }
     append_dim: AppendDim = "init_time"
-    # First cycle of the 0.25 degree archive on noaa-gfs-bdp-pds.
-    append_dim_start: Timestamp = pd.Timestamp("2021-03-22T12:00")
+    # Matches noaa-gfs-forecast so the two GFS forecasts cover the same period.
+    append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field

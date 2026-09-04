@@ -21,9 +21,9 @@ def get_var(path: str) -> NoaaDataVar:
 def test_forecast_time_structure() -> None:
     assert CONFIG.append_dim == "init_time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("6h")
-    # The first cycle of the 0.25 degree archive. Prepending to an append dim later is a
-    # breaking change, so the inclusive start is the only one that stays available.
-    assert CONFIG.append_dim_start == pd.Timestamp("2021-03-22T12:00")
+    # Matches noaa-gfs-forecast. Prepending to an append dim later is a breaking
+    # change, so an earlier start is not something to reach for casually.
+    assert CONFIG.append_dim_start == pd.Timestamp("2021-05-01T00:00")
     assert CONFIG.dims[ROOT] == ("init_time", "lead_time", "latitude", "longitude")
     assert CONFIG.dims["pressure_level"] == (
         "init_time",
@@ -76,7 +76,7 @@ def test_one_chunk_holds_one_grib_message() -> None:
 
 
 def test_expected_forecast_length_is_the_whole_lead_set() -> None:
-    template = CONFIG.get_template(pd.Timestamp("2021-03-23T00:00")).to_dataset()
+    template = CONFIG.get_template(pd.Timestamp("2021-05-02T00:00")).to_dataset()
     assert (
         template["expected_forecast_length"].values == np.timedelta64(384, "h")
     ).all()
