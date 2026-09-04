@@ -25,7 +25,7 @@ def get_var(path: str) -> NoaaDataVar:
 
 @pytest.fixture(scope="module")
 def template_ds() -> xr.DataTree:
-    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-03-24T12:00"))
+    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-05-03T12:00"))
 
 
 def make_job(
@@ -63,7 +63,7 @@ def test_every_hour_of_a_day_takes_the_shortest_published_lead(
     """
     instant = get_var("temperature_2m")
     windowed = get_var("total_precipitation_surface")
-    day = list(pd.date_range("2021-03-24T00:00", periods=24, freq="1h"))
+    day = list(pd.date_range("2021-05-03T00:00", periods=24, freq="1h"))
     assert len(day) == 24
 
     coords = coords_for_times(template_ds, [instant, windowed], day)
@@ -92,8 +92,8 @@ def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None
     data_vars = TEMPLATE_CONFIG.data_vars
 
     for time, expected in (
-        (pd.Timestamp("2021-03-24T07:00"), 2),
-        (pd.Timestamp("2021-03-24T12:00"), 4),
+        (pd.Timestamp("2021-05-03T07:00"), 2),
+        (pd.Timestamp("2021-05-03T12:00"), 4),
     ):
         coords = coords_for_times(template_ds, data_vars, [time])
         assert len(coords) == expected, time
@@ -139,7 +139,7 @@ def test_representative_var_is_carried_only_by_its_own_product(
     """A probe on a variable the file does not fill would never be marked ingested."""
     data_vars = TEMPLATE_CONFIG.data_vars
     coords = coords_for_times(
-        template_ds, data_vars, [pd.Timestamp("2021-03-24T12:00")]
+        template_ds, data_vars, [pd.Timestamp("2021-05-03T12:00")]
     )
     job = make_job(template_ds, data_vars=list(data_vars))
 
@@ -166,7 +166,7 @@ def test_representative_var_is_carried_only_by_its_own_product(
 def test_operational_update_jobs_single_polling_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    now = pd.Timestamp("2021-03-24T12:00")
+    now = pd.Timestamp("2021-05-03T12:00")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
     jobs, template_ds = NoaaGfsAnalysisVirtualRegionJob.operational_update_jobs(
@@ -247,7 +247,7 @@ def test_a_synoptic_hour_waits_for_the_cycle_that_starts_at_it(
 ) -> None:
     """At 12 UTC the windowed files come from the 06 UTC cycle and publish about six
     hours before the 12 UTC cycle's own files."""
-    time = pd.Timestamp("2021-03-24T12:00")
+    time = pd.Timestamp("2021-05-03T12:00")
     job, coords = gate_setup(template_ds, [time])
     job = job.model_copy(update={"ingested_through": time - pd.Timedelta("1h")})
     from_previous_cycle = [c for c in coords if c.init_time < time]
@@ -260,7 +260,7 @@ def test_a_synoptic_hour_waits_for_the_cycle_that_starts_at_it(
 def test_only_the_time_holding_every_file_extends_the_append_dim(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    times = [pd.Timestamp("2021-03-24T11:00"), pd.Timestamp("2021-03-24T12:00")]
+    times = [pd.Timestamp("2021-05-03T11:00"), pd.Timestamp("2021-05-03T12:00")]
     job, coords = gate_setup(template_ds, times)
     job = job.model_copy(update={"ingested_through": times[0] - pd.Timedelta("1h")})
     published = [
@@ -274,7 +274,7 @@ def test_a_time_the_store_already_covers_is_never_withheld(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file the archive never published must not block the files beside it forever."""
-    time = pd.Timestamp("2021-03-24T12:00")
+    time = pd.Timestamp("2021-05-03T12:00")
     job, coords = gate_setup(template_ds, [time])
     job = job.model_copy(update={"ingested_through": time})
     from_previous_cycle = [c for c in coords if c.init_time < time]
@@ -285,7 +285,7 @@ def test_a_time_the_store_already_covers_is_never_withheld(
 def test_an_empty_store_waits_for_a_whole_time(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    time = pd.Timestamp("2021-03-24T12:00")
+    time = pd.Timestamp("2021-05-03T12:00")
     job, coords = gate_setup(template_ds, [time])
     assert job.ingested_through is None
 
@@ -302,7 +302,7 @@ def test_a_variable_filtered_job_reads_only_the_product_carrying_its_variables(
     fills, and a filter naming one product's variables must not fetch the other's file."""
     pgrb2_only = get_var("wind_gust_surface")
     pgrb2b_only = get_var("temperature_minus0p5pvu")
-    time = pd.Timestamp("2021-03-24T07:00")
+    time = pd.Timestamp("2021-05-03T07:00")
     job = make_job(template_ds, data_vars=[pgrb2_only, pgrb2b_only])
 
     both = coords_for_times(template_ds, [pgrb2_only, pgrb2b_only], [time])
@@ -328,6 +328,6 @@ def test_specific_humidity_and_ozone_are_read_from_pgrb2_alone(
         get_var("pressure_level/ozone_mixing_ratio"),
     ]
     coords = coords_for_times(
-        template_ds, data_vars, [pd.Timestamp("2021-03-24T07:00")]
+        template_ds, data_vars, [pd.Timestamp("2021-05-03T07:00")]
     )
     assert [c.file_type for c in coords] == ["pgrb2"]

@@ -35,13 +35,11 @@ from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_do
 TEMPLATE_CONFIG = NoaaGfsAnalysisVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-analysis-virtual-test"
 
-# Spans the whole intended archive: its first cycle, a few days later, the CLWMR ->
-# CLMR rename era, and the present. The claims these tests pin are about level sets and
-# index spellings frozen into published coordinates, so the domain to sample is the
-# archive, and the archive starts at append_dim_start rather than near it. The first
-# cycle of a new model version can be ragged in ways that resolve within a day, so
-# 2021-03-25 is sampled beside it.
-_ERAS = ("20210322", "20210325", "20230401", "20260828")
+# Spans the whole intended archive: its first day, the CLWMR -> CLMR rename era, and
+# the present. The claims these tests pin are about level sets and index spellings
+# frozen into published coordinates, so the domain to sample is the archive, and the
+# archive starts at append_dim_start rather than near it.
+_ERAS = ("20210501", "20230401", "20260828")
 
 
 def index_url(
@@ -215,7 +213,7 @@ def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -
 
 @pytest.fixture(scope="module")
 def template_ds() -> xr.DataTree:
-    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-03-23T00:00"))
+    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-05-02T00:00"))
 
 
 def _job(template_ds: xr.DataTree, paths: list[str]) -> NoaaGfsAnalysisVirtualRegionJob:
@@ -252,7 +250,7 @@ def test_pgrb2b_skips_the_messages_pgrb2_owns(
     paths = ["plant_canopy_surface_water_surface", "geopotential_height_0p5pvu"]
     job = _job(template_ds, paths)
     coord = NoaaGfsAnalysisVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2021-03-23T12:00"),
+        init_time=pd.Timestamp("2021-05-02T12:00"),
         lead_time=pd.Timedelta(0),
         file_type=file_type,
         data_vars=job.data_vars,
@@ -273,7 +271,7 @@ def test_a_pressure_level_message_lands_in_its_own_level(
     )
     job = _job(template_ds, ["pressure_level/temperature"])
     coord = NoaaGfsAnalysisVirtualSourceFileCoord(
-        init_time=pd.Timestamp("2021-03-23T12:00"),
+        init_time=pd.Timestamp("2021-05-02T12:00"),
         lead_time=pd.Timedelta(0),
         file_type="pgrb2",
         data_vars=job.data_vars,
@@ -295,7 +293,7 @@ def test_cloud_mixing_ratio_matches_both_element_spellings(
         _fake_index(monkeypatch, tmp_path, f"1:0:d=2021032312:{element}:850 mb:anl:\n")
         job = _job(template_ds, ["pressure_level/cloud_mixing_ratio"])
         coord = NoaaGfsAnalysisVirtualSourceFileCoord(
-            init_time=pd.Timestamp("2021-03-23T12:00"),
+            init_time=pd.Timestamp("2021-05-02T12:00"),
             lead_time=pd.Timedelta(0),
             file_type="pgrb2",
             data_vars=job.data_vars,

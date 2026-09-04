@@ -23,10 +23,9 @@ def get_var(path: str) -> NoaaDataVar:
 def test_hourly_time_structure() -> None:
     assert CONFIG.append_dim == "time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("1h")
-    # One hour past the archive's first cycle: 12Z's windowed variables would need the
-    # 06Z cycle, which does not exist. Prepending to an append dim later is a breaking
-    # change, so this is the earliest hour that can ever hold all of its variables.
-    assert CONFIG.append_dim_start == pd.Timestamp("2021-03-22T13:00")
+    # Matches noaa-gfs-analysis. Prepending to an append dim later is a breaking
+    # change, so an earlier start is not something to reach for casually.
+    assert CONFIG.append_dim_start == pd.Timestamp("2021-05-01T00:00")
     assert CONFIG.dims[ROOT] == ("time", "latitude", "longitude")
     assert CONFIG.dims["pressure_level"] == (
         "time",
