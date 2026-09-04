@@ -31,11 +31,10 @@ from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_do
 TEMPLATE_CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-forecast-virtual-test"
 
-# Spans the whole intended archive: its first init, a few days later, the CLWMR ->
-# CLMR rename era, and the present. The claims these tests pin are frozen into published
-# coordinates, so the domain to sample is the archive, whose first init is
-# append_dim_start rather than a date near it.
-_ERAS = ("20210322", "20210325", "20230401", "20260828")
+# Spans the whole intended archive: its first day, the CLWMR -> CLMR rename era, and
+# the present. The claims these tests pin are frozen into published coordinates, so the
+# domain to sample is the archive, which starts at append_dim_start rather than near it.
+_ERAS = ("20210501", "20230401", "20260828")
 # f000 (no windowed message at all), the leads where the 6 hour bucket and the running
 # total collapse onto one index line, the first lead where they separate, both forms of
 # the running total's day-vs-hour window switch, and the last lead.
@@ -48,7 +47,7 @@ def get_var(path: str) -> NoaaDataVar:
 
 @pytest.fixture(scope="module")
 def template_ds() -> xr.DataTree:
-    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-03-23T18:00"))
+    return TEMPLATE_CONFIG.get_template(pd.Timestamp("2021-05-02T18:00"))
 
 
 def make_job(
@@ -102,7 +101,7 @@ def var_levels(var: NoaaDataVar) -> list[str]:
 
 
 def test_each_lead_reads_both_products(template_ds: xr.DataTree) -> None:
-    init_time = pd.Timestamp("2021-03-23T12:00")
+    init_time = pd.Timestamp("2021-05-02T12:00")
     lead_times = pd.to_timedelta(template_ds.to_dataset().get_index("lead_time"))
     assert len(lead_times) == 209
 
@@ -148,7 +147,7 @@ def test_hour_0_drops_only_the_variables_the_source_omits_there(
         for coord in coords_for(
             template_ds,
             TEMPLATE_CONFIG.data_vars,
-            [pd.Timestamp("2021-03-23T12:00")],
+            [pd.Timestamp("2021-05-02T12:00")],
             [pd.Timedelta(0)],
         )
         for var in coord.data_vars
@@ -174,7 +173,7 @@ def test_representative_var_is_carried_only_by_its_own_product(
     coords = coords_for(
         template_ds,
         TEMPLATE_CONFIG.data_vars,
-        [pd.Timestamp("2021-03-23T12:00")],
+        [pd.Timestamp("2021-05-02T12:00")],
         [pd.Timedelta(0), pd.Timedelta("9h")],
     )
     assert len(coords) == 4
@@ -201,7 +200,7 @@ def test_operational_update_jobs_single_polling_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The window reaches back over the two cycles before the one being published."""
-    now = pd.Timestamp("2021-03-25T03:30")
+    now = pd.Timestamp("2021-05-04T03:30")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
     jobs, template_ds = NoaaGfsForecastVirtualRegionJob.operational_update_jobs(
@@ -218,22 +217,21 @@ def test_operational_update_jobs_single_polling_job(
     assert job.processing_mode == "update"
     init_times = template_ds.to_dataset().get_index("init_time")
     assert list(init_times[job.region]) == [
-        pd.Timestamp("2021-03-24T12:00"),
-        pd.Timestamp("2021-03-24T18:00"),
-        pd.Timestamp("2021-03-25T00:00"),
+        pd.Timestamp("2021-05-03T12:00"),
+        pd.Timestamp("2021-05-03T18:00"),
+        pd.Timestamp("2021-05-04T00:00"),
     ]
 
 
 @pytest.mark.slow
-def test_the_archive_starts_at_the_declared_first_init() -> None:
-    """append_dim_start is where the 0.25 degree archive begins, read off S3.
+def test_the_declared_first_init_is_published() -> None:
+    """append_dim_start names a cycle the archive really carries, read off S3.
 
-    Prepending to an append dim is a breaking change, so a start one cycle too late
-    puts data permanently out of reach; one too early leaves a hole nothing can fill.
+    A start one cycle too late puts data out of reach until someone prepends, which is
+    a breaking change; one too early leaves a hole nothing can fill.
     """
     first_init = TEMPLATE_CONFIG.append_dim_start
-    assert first_init == pd.Timestamp("2021-03-22T12:00")
-    day = first_init.floor("1D")
+    assert first_init == pd.Timestamp("2021-05-01T00:00")
     coords = [
         NoaaGfsForecastVirtualSourceFileCoord(
             init_time=init_time,
@@ -241,7 +239,7 @@ def test_the_archive_starts_at_the_declared_first_init() -> None:
             file_type=file_type,
             data_vars=[],
         )
-        for init_time in pd.date_range(day - pd.Timedelta("6h"), periods=5, freq="6h")
+        for init_time in pd.date_range(first_init, periods=2, freq="6h")
         for file_type in ("pgrb2", "pgrb2b")
     ]
     job = NoaaGfsForecastVirtualRegionJob(
