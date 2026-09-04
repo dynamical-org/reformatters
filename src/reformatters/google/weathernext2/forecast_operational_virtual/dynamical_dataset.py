@@ -52,7 +52,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
         update = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="55 0,6,12,18 * * *",
+            schedule="5 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -62,7 +62,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         )
         validate = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            schedule="55 1,7,13,19 * * *",
+            schedule="5 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -74,7 +74,9 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=60)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckVirtualManifestCompleteness(),
-            validation.CheckVirtualDecodeHealth(),
+            # The newest initialization carries only its first step; the oldest in the
+            # window carries every lead time, so sampling both keeps long leads covered.
+            validation.CheckVirtualDecodeHealth(positions="all", max_positions=2),
         )
