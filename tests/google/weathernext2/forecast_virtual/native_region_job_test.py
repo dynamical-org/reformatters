@@ -302,7 +302,8 @@ def test_backfill_jobs_apply_the_holdback_to_the_current_clock(
 ) -> None:
     init_time = pd.Timestamp("2025-01-01T00:00")
     now = init_time + pd.Timedelta("18h") + PUBLICATION_HOLDBACK
-    monkeypatch.setattr(region_job_module, "_utc_now", lambda: now)
+    clock = Mock(side_effect=[now, now + pd.Timedelta("1h")])
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
     template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
 
     [job] = GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
@@ -313,6 +314,8 @@ def test_backfill_jobs_apply_the_holdback_to_the_current_clock(
         reformat_job_name="test",
     )
 
+    # One clock read: every worker's jobs share one cutoff for the whole run.
+    assert clock.call_count == 1
     assert job.publication_cutoff == init_time + pd.Timedelta("18h")
     region = template.to_dataset().isel(init_time=job.region)
     coords = job.generate_source_file_coords(
@@ -346,9 +349,15 @@ def test_historical_validation_job_uses_final_fixed_window() -> None:
     )
     source_coords = job.source_file_coords()
     assert source_coords
-    assert max(coord.init_time for coord in source_coords) == pd.Timestamp(
-        "2024-12-31T18:00"
-    )
+    last_init = pd.Timestamp("2024-12-31T18:00")
+    assert max(coord.init_time for coord in source_coords) == last_init
+    # A fixed archive has no publication cutoff: its final init keeps every step.
+    var = HISTORICAL.data_vars[0]
+    assert [
+        coord.lead_time
+        for coord in source_coords
+        if coord.init_time == last_init and coord.data_vars == (var,)
+    ] == list(HISTORICAL.dimension_coordinates()["lead_time"])
 
 
 def test_operational_update_publishes_every_step_an_hour_past_its_valid_time() -> None:

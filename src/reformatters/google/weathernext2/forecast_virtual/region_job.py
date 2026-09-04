@@ -40,8 +40,7 @@ OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-# A forecast step is CC BY once its valid time is at least this old; before that it is
-# "Real-Time Experimental Data" under Google's terms of use and may not be published.
+# A forecast step is publishable once its valid time is at least this old.
 PUBLICATION_HOLDBACK = pd.Timedelta("1h")
 # The two layouts pack chunks differently, so one init spans 13,440 refs in the
 # historical product and 330,240 in the operational one. Splits are sized per product
@@ -165,6 +164,8 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
+        if cls.source_layout == "historical":
+            return jobs
         cutoff = _utc_now() - PUBLICATION_HOLDBACK
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
