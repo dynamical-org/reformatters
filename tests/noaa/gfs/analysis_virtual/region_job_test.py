@@ -223,13 +223,11 @@ def gate_setup(
 
 @pytest.mark.slow
 def test_the_first_time_holds_every_file_it_needs(template_ds: xr.DataTree) -> None:
-    """append_dim_start must be an hour whose windowed source cycle exists.
+    """append_dim_start must be an hour whose every source cycle exists.
 
     The gate releases every available file at or before the newest individually
-    complete time, so one hour that can never complete is written partially rather
-    than withheld. At the archive's first cycle that is permanent: 12Z's windowed
-    variables read the 06Z cycle, which predates the archive, while 13Z is complete
-    from 12Z f001 and so authorizes 12Z's instantaneous-only files.
+    complete time, so an hour that can never complete is written partially rather
+    than withheld, and at the first hour that would be permanent.
     """
     first_time = TEMPLATE_CONFIG.append_dim_start
     data_vars = TEMPLATE_CONFIG.data_vars
@@ -238,7 +236,9 @@ def test_the_first_time_holds_every_file_it_needs(template_ds: xr.DataTree) -> N
 
     available = job.discover_available(list(coords))
 
-    assert len(coords) == 2  # both offsets land on one cycle, one file per product
+    # A synoptic hour takes its instantaneous files from its own cycle and its windowed
+    # files from the cycle six hours earlier, one file per product from each.
+    assert len(coords) == 4
     assert len(available) == len(coords)
 
 
