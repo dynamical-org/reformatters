@@ -51,9 +51,11 @@ class EcccHrdpsForecastDataset(
             secret_names=["source-coop-storage-options-key"],
         )
 
-        # The Datamart has each complete run about 4 hours after its init time. We allow
-        # another 30 minutes for publication before reading it directly rather than
-        # waiting for the archive job above to mirror the run.
+        # Datamart timestamps for the final 48h temperature file across 29 runs from
+        # 2026-08-28 through 2026-09-04 range from init+3h33m to init+5h28m. This
+        # init+4h30m schedule covers 28 of 29, including the +4h26m run on 2026-09-04,
+        # but not the +5h28m outlier on 2026-09-02. We read the Datamart directly rather
+        # than waiting for the archive job above to mirror the run.
         # An update covers the newest init time and the previous one it reprocesses,
         # which shard into one job each.
         workers = 2
