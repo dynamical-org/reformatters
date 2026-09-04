@@ -18,3 +18,8 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
         "Google WeatherNext 2 operational forecast, virtual"
     )
     time_domain_end: ClassVar[str] = "Present"
+    dataset_description: ClassVar[str] = (
+        "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble "
+        "model. Forecast values are published once their valid time is at least one "
+        "hour in the past, so recent initialization times are intentionally partial."
+    )

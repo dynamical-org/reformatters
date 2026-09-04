@@ -26,6 +26,8 @@ from reformatters.common.types import (
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
 from .template_config import (
+    INIT_TIME_FREQUENCY,
+    LEAD_TIMES,
     PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
@@ -38,7 +40,9 @@ OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-_PUBLICATION_LAG = pd.Timedelta("48h")
+# A forecast step is CC BY once its valid time is at least this old; before that it is
+# "Real-Time Experimental Data" under Google's terms of use and may not be published.
+PUBLICATION_HOLDBACK = pd.Timedelta("1h")
 # The two layouts pack chunks differently, so one init spans 13,440 refs in the
 # historical product and 330,240 in the operational one. Splits are sized per product
 # and per array group to keep each manifest inside the reader budgets in
@@ -134,6 +138,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 ):
     source_layout: ClassVar[SourceLayout]
     manifest_init_split: ClassVar[int]
+    # Steps with a valid time at or before this are publishable.
     publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
@@ -160,9 +165,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        if cls.source_layout == "historical":
-            return jobs
-        cutoff = _current_publication_cutoff()
+        cutoff = _utc_now() - PUBLICATION_HOLDBACK
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -194,8 +197,12 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        fire_time = job_fire_time or _utc_now()
-        publication_cutoff = fire_time - _PUBLICATION_LAG
+        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
+        latest_publishable_valid_time = (
+            publication_cutoff
+            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+        )
+        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -203,7 +210,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=publication_cutoff,
+            job_fire_time=newest_publishable_init + INIT_TIME_FREQUENCY,
         )
         (job,) = jobs
         assert isinstance(job, cls)
@@ -223,13 +230,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 self.source_layout == "operational"
             ):
                 continue
-            if (
-                self.source_layout == "operational"
-                and init_time >= self.publication_cutoff
-            ):
-                continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
+                if init_time + lead_time > self.publication_cutoff:
+                    continue
                 coords.extend(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
                         source_layout=self.source_layout,
@@ -406,7 +410,9 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     source_layout: ClassVar[SourceLayout] = "operational"
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    # Every initialization within the longest lead time gains a newly publishable step
+    # each fire; the extra two days re-sweep missed fires.
+    operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")
 
 
 def _store_key(url: str) -> str:
@@ -415,10 +421,6 @@ def _store_key(url: str) -> str:
 
 def _utc_now() -> Timestamp:
     return pd.Timestamp.now(tz="UTC").tz_localize(None)
-
-
-def _current_publication_cutoff() -> Timestamp:
-    return _utc_now() - _PUBLICATION_LAG
 
 
 def _list_objects(
