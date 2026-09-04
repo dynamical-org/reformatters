@@ -20,7 +20,7 @@ def get_var(name: str) -> NoaaGefsVirtualDataVar:
 def test_forecast_time_structure() -> None:
     assert CONFIG.append_dim == "init_time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("6h")
-    assert CONFIG.append_dim_start == pd.Timestamp("2020-09-23T12:00")
+    assert CONFIG.append_dim_start == pd.Timestamp("2020-10-01T00:00")
     assert CONFIG.dims == {
         ROOT: ("init_time", "ensemble_member", "lead_time", "latitude", "longitude")
     }
@@ -148,21 +148,21 @@ def test_dataset_attributes() -> None:
     assert attrs.name == "NOAA GEFS forecast, 10 day, 0.25 degree, virtual"
     assert attrs.dataset_version == "0.1.0"
     assert attrs.spatial_resolution == "0.25 degrees (~20km)"
-    assert attrs.time_domain == "Forecasts initialized 2020-09-23 12:00:00 UTC to Present"  # fmt: skip
+    assert attrs.time_domain == "Forecasts initialized 2020-10-01 00:00:00 UTC to Present"  # fmt: skip
     assert attrs.time_resolution == "Forecasts initialized every 6 hours"
     assert attrs.forecast_domain == "Forecast lead time 0-240 hours ahead"
     assert attrs.forecast_resolution == "Forecast step 3 hourly"
 
 
 def test_template_carries_the_forecast_coordinates() -> None:
-    template = CONFIG.get_template(pd.Timestamp("2020-09-24T00:00")).to_dataset()
+    template = CONFIG.get_template(pd.Timestamp("2020-10-01T12:00")).to_dataset()
     assert list(template.get_index("init_time")) == [
-        pd.Timestamp("2020-09-23T12:00"),
-        pd.Timestamp("2020-09-23T18:00"),
+        pd.Timestamp("2020-10-01T00:00"),
+        pd.Timestamp("2020-10-01T06:00"),
     ]
     assert template["valid_time"].dims == ("init_time", "lead_time")
     assert template["valid_time"].isel(init_time=0, lead_time=-1) == pd.Timestamp(
-        "2020-10-03T12:00"
+        "2020-10-11T00:00"
     )
     expected_length = template["expected_forecast_length"]
     assert expected_length.dims == ("init_time",)
