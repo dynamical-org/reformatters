@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -193,11 +194,13 @@ def test_operational_kubernetes_resources(
     assert archive_grib_files_job.suspend is False
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    assert update_cron_job.schedule == "30 4,10,16,22 * * *"
     # One worker for the newest init time and one for the previous, which the update
     # reprocesses. Each is a whole shard, so neither splits further.
     assert update_cron_job.workers_total == 2
     assert update_cron_job.parallelism == 2
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
+    assert validation_cron_job.schedule == "0 5,11,17,23 * * *"
     assert update_cron_job.suspend is False
     assert validation_cron_job.suspend is False
 
@@ -207,8 +210,10 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: EcccHrdpsForecastDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 2
-    assert all(isinstance(v, validation.Validator) for v in validators)
+    assert validators == (
+        validation.CheckCurrentData(max_delay=timedelta(hours=5)),
+        validation.CheckRecentNans(append_dim_window=4),
+    )
 
 
 def test_archive_grib_files_calls_copy_with_defaults(
