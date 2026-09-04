@@ -41,7 +41,6 @@ from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
     GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_B22_TRANSITION_DATE,
-    GEFS_CURRENT_ARCHIVE_START,
     GEFS_ENSEMBLE_MEMBERS,
     GEFS_INIT_TIME_FREQUENCY,
     GEFS_S_FILE_LEAD_FREQUENCY,
@@ -213,7 +212,7 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
         )
     }
     append_dim: AppendDim = "init_time"
-    append_dim_start: Timestamp = GEFS_CURRENT_ARCHIVE_START
+    append_dim_start: Timestamp = GEFS_VIRTUAL_ARCHIVE_START
     append_dim_frequency: Timedelta = GEFS_INIT_TIME_FREQUENCY
 
     window_comments: dict[str, str] = {
