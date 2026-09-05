@@ -35,16 +35,7 @@ class NoaaGfsForecastVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Sized so refs per commit (arrays touched x refs per split) sits in
-            # line with the operationally tuned HRRR virtual datasets: 9.9M here
-            # against 10.2-10.7M across the three HRRR ones, whose end-to-end publish
-            # to reader-visible latency is measured in production at p50 2.8s. Coarser
-            # is also protective: fewer manifests means a smaller manifest scan, which
-            # is superlinear in the deployed icechunk version. Every vertical group
-            # needs its own entry -- the catch-all is sized for root arrays, so a group
-            # that falls through silently gets a window multiplied by its level count.
-            # Re-windowing after a change rewrites every touched array's history in one
-            # commit, so treat as frozen.
+            # Sized per array group, see docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 16,
