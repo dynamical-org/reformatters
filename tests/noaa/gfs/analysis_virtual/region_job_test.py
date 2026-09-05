@@ -56,8 +56,8 @@ def coords_for_times(
 def test_every_hour_of_a_day_takes_the_shortest_published_lead(
     template_ds: xr.DataTree,
 ) -> None:
-    """A windowed variable's window must open at the synoptic hour STRICTLY before its
-    time, so at 00, 06, 12 and 18 UTC it reads lead 6 of the previous cycle, not lead 0
+    """A windowed variable's window must open at the 00, 06, 12 or 18 hour STRICTLY
+    before its time, so at those hours it reads lead 6 of the previous cycle, not lead 0
     of its own. Enumerated over a whole day because that is the only place the
     off-by-one shows.
     """
@@ -87,8 +87,8 @@ def test_every_hour_of_a_day_takes_the_shortest_published_lead(
 
 
 def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None:
-    """Away from a synoptic hour the two variable sets share a file, so a time costs two
-    coords; at a synoptic hour they come from different cycles and it costs four."""
+    """Away from a 00, 06, 12 or 18 hour the two variable sets share a file, so a time
+    costs two coords; at one they come from different cycles and it costs four."""
     data_vars = TEMPLATE_CONFIG.data_vars
 
     for time, expected in (
@@ -207,8 +207,8 @@ def gate_setup(
 ) -> tuple[
     NoaaGfsAnalysisVirtualRegionJob, list[NoaaGfsAnalysisVirtualSourceFileCoord]
 ]:
-    # One variable of each (product, hour-0) combination, so a synoptic hour needs all
-    # four files and an hour away from one needs two.
+    # One variable of each (product, hour-0) combination, so a 00, 06, 12 or 18 hour
+    # needs all four files and an hour away from one needs two.
     data_vars = [
         get_var("temperature_2m"),
         get_var("total_precipitation_surface"),
@@ -236,13 +236,13 @@ def test_the_first_time_holds_every_file_it_needs(template_ds: xr.DataTree) -> N
 
     available = job.discover_available(list(coords))
 
-    # A synoptic hour takes its instantaneous files from its own cycle and its windowed
-    # files from the cycle six hours earlier, one file per product from each.
+    # A 00, 06, 12 or 18 hour takes its instantaneous files from its own cycle and its
+    # windowed files from the cycle six hours earlier, one file per product from each.
     assert len(coords) == 4
     assert len(available) == len(coords)
 
 
-def test_a_synoptic_hour_waits_for_the_cycle_that_starts_at_it(
+def test_an_init_hour_waits_for_the_cycle_that_starts_at_it(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """At 12 UTC the windowed files come from the 06 UTC cycle and publish about six

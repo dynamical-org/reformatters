@@ -40,7 +40,7 @@ class NoaaGfsAnalysisVirtualRegionJob(
         materialized noaa-gfs-analysis: a variable with hour 0 values comes from the
         cycle its time falls in (leads 0-5) and any other from the cycle before the
         preceding hour (leads 1-6), so a windowed variable's window opens at the most
-        recent synoptic hour strictly before its time.
+        recent 00, 06, 12 or 18 hour strictly before its time.
         """
         times = pd.to_datetime(processing_region_ds["time"].values)
         init_frequency = f"{whole_hours(NOAA_GFS_INIT_FREQUENCY)}h"
@@ -53,8 +53,8 @@ class NoaaGfsAnalysisVirtualRegionJob(
 
         coords = []
         for time in times:
-            # Away from a synoptic hour both offsets land on one cycle, so the two
-            # variable sets share a file and are ingested by one coord.
+            # Away from a 00, 06, 12 or 18 hour both offsets land on one cycle, so
+            # the two variable sets share a file and are ingested by one coord.
             vars_by_init: dict[Timestamp, list[NoaaDataVar]] = {}
             for offset, offset_vars in lead_offsets.items():
                 if not offset_vars:
@@ -83,7 +83,7 @@ class NoaaGfsAnalysisVirtualRegionJob(
     ) -> list[tuple[NoaaGfsAnalysisVirtualSourceFileCoord, int]]:
         """Extend `time` only as far as the newest time holding all of its files.
 
-        At a synoptic hour the windowed variables come from the previous cycle and
+        At a 00, 06, 12 or 18 hour the windowed variables come from the previous cycle
         publish about six hours before that hour's own instantaneous files, so ungated
         discovery would extend `time` to an hour carrying only some of its variables.
         Files past the limit stay pending and are offered again next tick.

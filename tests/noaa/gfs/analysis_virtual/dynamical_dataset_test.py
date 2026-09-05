@@ -65,8 +65,8 @@ def test_backfill_local_and_operational_update(
         4.25,
         -80.75,
     )
-    # 18:00 is a synoptic hour, so the instantaneous fields come from f000 of the 18Z
-    # cycle while the accumulation comes from f006 of the 12Z cycle.
+    # 18:00 is a 00, 06, 12 or 18 hour, so the instantaneous fields come from f000 of
+    # the 18Z cycle while the accumulation comes from f006 of the 12Z cycle.
     at_18 = cell.sel(time="2026-08-28T18:00")
     np.testing.assert_allclose(
         [
@@ -195,7 +195,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "50 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=45)
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert validation_cron_job.schedule == "35 4,10,16,22 * * *"
@@ -210,7 +210,7 @@ def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=11)
+    assert current_data.max_delay == timedelta(hours=5, minutes=30)
 
     # The gate holds the frontier to a complete hour but can still release an earlier
     # incomplete one, so a whole 1.0 over every variable is what catches that.

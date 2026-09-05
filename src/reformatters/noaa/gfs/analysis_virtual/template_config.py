@@ -23,8 +23,8 @@ from reformatters.noaa.gfs.virtual_template_config import NoaaGfsVirtualTemplate
 from reformatters.noaa.models import NoaaDataVar
 
 # Windowed variables are read at leads 1-6 of the 6-hourly cycles, so a value's window
-# opens at the most recent synoptic hour strictly before its time. This store has no
-# lead_time dimension, so the window is described in the UTC times a reader can see.
+# opens at the most recent 00, 06, 12 or 18 hour strictly before its time. This store
+# has no lead_time dimension, so the window is described in the UTC times a reader sees.
 _WINDOW_EXTENT = (
     "the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time."
 )

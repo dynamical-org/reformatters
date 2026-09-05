@@ -35,25 +35,7 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # A repartitioning of the same references, not an efficiency gain: the
-            # store holds the same refs either way and total stored manifest bytes are
-            # essentially unchanged, so what the split picks is where on that
-            # partitioning we sit. Before, ~4,050 manifests of ~4,096 refs (0.04 MiB) --
-            # too small to be worth being objects. After, ~800 manifests of 30,000 /
-            # 171,000 / 160,000 refs, i.e. 0.27 / 1.59 / 1.48 MiB, all inside the reader
-            # budgets. Bytes rewritten per commit do rise, about 6.8x, which is what
-            # taking refs per commit from 1.6M to 10.8M means; that is deliberate, to
-            # meet the operational reference below.
-            #
-            # The reference is one measured configuration, not a family:
-            # noaa-hrrr-forecast-48-hour-virtual, 12.1M refs per commit, p50 2.8s end to
-            # end from source publish to reader-visible, 12,936 samples over 88 inits.
-            # HRRR's 18 hour forecast and analysis carry comparable refs per commit but
-            # have never been latency tested; they corroborate rather than measure. The
-            # group splits are HRRR analysis's group manifest sizes divided by our level
-            # counts and the catch-all is the value it runs -- a config match, not a
-            # measurement. Re-windowing after a change rewrites every touched array's
-            # history in one commit, so treat as frozen.
+            # Sized per array group, see docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 3_000,
@@ -66,12 +48,11 @@ class NoaaGfsAnalysisVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # A cycle's f000 and f006 both publish ~init+3h50m, and the six hours the cycle
-        # completes are not visible until the last of them lands; the run polls from its
-        # fire until they do.
+        # This analysis uses leads 0-6, which all publish ~init+3h32m to ~init+3h53m.
+        # Fire a few minutes before the earliest and poll until the last one lands.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="50 3,9,15,21 * * *",
+            schedule="29 3,9,15,21 * * *",
             pod_active_deadline=timedelta(minutes=45),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -82,7 +63,7 @@ class NoaaGfsAnalysisVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
+            # After the update's fire plus its pod_active_deadline, so the run being
             # validated has always stopped writing.
             schedule="35 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
@@ -98,10 +79,10 @@ class NoaaGfsAnalysisVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A cycle publishes six hours of analysis ~3h50m after its initialization,
-            # the newest of them stamped 5 hours after it, so just before the next cycle
-            # lands the newest time is ~5h old. 11 hours also covers one missed cycle.
-            validation.CheckCurrentData(max_delay=timedelta(hours=11)),
+            # A 00, 06, 12 or 18 hour waits on its own cycle, so a position lands
+            # ~4h15m after its timestamp at the latest. Keep this under the 6h cycle
+            # spacing or a wholly missed cycle is not yet due at the next validation run.
+            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=30)),
             # discover_available holds the frontier back to a whole hour, but releases
             # an earlier incomplete hour once a later one is complete, so an interior
             # gap is reachable and this is what finds it.
