@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.noaa.hrrr import virtual_region_job as region_job_module
+from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.hrrr.analysis_virtual.region_job import (
     NoaaHrrrAnalysisVirtualRegionJob,
     NoaaHrrrAnalysisVirtualSourceFileCoord,
@@ -50,7 +50,7 @@ def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) ->
         path.write_text(content)
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", fake_download)
 
 
 def test_source_file_coord_url_and_out_loc() -> None:
@@ -103,7 +103,7 @@ def test_truncated_source_files_are_never_available(
         for hour in (9, 10, 12)
     ]
     monkeypatch.setattr(
-        region_job_module,
+        shared_region_job_module,
         "discover_available_by_obstore_listing",
         lambda pending, **kwargs: [(coord, 100) for coord in pending],
     )

@@ -6,14 +6,10 @@ import pandas as pd
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import (
     CoordinateValue,
-    SourceFileCoord,
+    InitLeadSourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import (
-    Dim,
-    Timedelta,
-    Timestamp,
-)
+from reformatters.common.types import Dim
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
     _resolve_grib_index_param,
@@ -34,11 +30,9 @@ DYNAMICAL_MARS_GRIB_BASE_URL = (
 )
 
 
-class OpenDataSourceFileCoord(SourceFileCoord):
+class OpenDataSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coord for ECMWF open data (one GRIB per init_time x lead_time)."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
 
@@ -124,11 +118,9 @@ def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
     )
 
 
-class MarsSourceFileCoord(SourceFileCoord):
+class MarsSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coord for MARS archive data on source.coop."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
     request_type: str

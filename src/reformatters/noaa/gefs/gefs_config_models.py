@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
-from reformatters.common.region_job import CoordinateValue, SourceFileCoord
-from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
+from reformatters.common.types import Dim, Timestamp
 from reformatters.noaa.models import NoaaInternalAttrs
 
 # We pull data from 3 types of source files: `a`, `b` and `s`.
@@ -101,11 +101,9 @@ def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
         return grib_element
 
 
-class GefsSourceFileCoord(SourceFileCoord):
+class GefsSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coordinate for GEFS forecast data."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     data_vars: Sequence[GEFSDataVar]
 
     primary_base_url: str = "noaa-gefs-pds.s3.amazonaws.com"

@@ -14,7 +14,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
 from reformatters.noaa.noaa_grib_index import (
-    _lead_time_str,
+    grib_index_window_str,
     grib_message_byte_ranges_from_index,
 )
 
@@ -376,34 +376,44 @@ class TestLeadTimeStr:
         self.accum_var = vars_by_name["precipitation_surface"]
 
     def test_analysis_hour(self) -> None:
-        assert _lead_time_str(self.instant_var, lead_hours=0) == "anl"
+        assert grib_index_window_str(self.instant_var, lead_hours=0) == "anl"
 
     def test_instant_forecast(self) -> None:
-        assert _lead_time_str(self.instant_var, lead_hours=8) == "8 hour fcst"
+        assert grib_index_window_str(self.instant_var, lead_hours=8) == "8 hour fcst"
 
     def test_accum_hour_0(self) -> None:
-        assert _lead_time_str(self.accum_var, lead_hours=0) == "0-0 day acc fcst"
+        assert grib_index_window_str(self.accum_var, lead_hours=0) == "0-0 day acc fcst"
 
     def test_accum_forecast(self) -> None:
-        assert _lead_time_str(self.accum_var, lead_hours=8) == "7-8 hour acc fcst"
+        assert (
+            grib_index_window_str(self.accum_var, lead_hours=8) == "7-8 hour acc fcst"
+        )
 
     def test_accum_at_reset_boundary(self) -> None:
         # At reset boundary (1h reset freq), reset_hour = lead_hours - reset_hours
-        assert _lead_time_str(self.accum_var, lead_hours=1) == "0-1 hour acc fcst"
+        assert (
+            grib_index_window_str(self.accum_var, lead_hours=1) == "0-1 hour acc fcst"
+        )
 
     def test_running_total_uses_hours(self) -> None:
         cfg = NoaaHrrrForecast48HourTemplateConfig()
         running_total_var = next(
             v for v in cfg.data_vars if v.name == "snowfall_surface"
         )
-        assert _lead_time_str(running_total_var, lead_hours=8) == "0-8 hour acc fcst"
+        assert (
+            grib_index_window_str(running_total_var, lead_hours=8)
+            == "0-8 hour acc fcst"
+        )
 
     def test_running_total_uses_days_at_24h_boundary(self) -> None:
         cfg = NoaaHrrrForecast48HourTemplateConfig()
         running_total_var = next(
             v for v in cfg.data_vars if v.name == "snowfall_surface"
         )
-        assert _lead_time_str(running_total_var, lead_hours=24) == "0-1 day acc fcst"
+        assert (
+            grib_index_window_str(running_total_var, lead_hours=24)
+            == "0-1 day acc fcst"
+        )
 
     def test_unhandled_step_type_raises(self) -> None:
         var_with_avg = replace(
@@ -411,4 +421,4 @@ class TestLeadTimeStr:
             attrs=replace(self.instant_var.attrs, step_type="avg"),
         )
         with pytest.raises(ValueError, match="Unhandled grib lead/accumulation hours"):
-            _lead_time_str(var_with_avg, lead_hours=5)
+            grib_index_window_str(var_with_avg, lead_hours=5)

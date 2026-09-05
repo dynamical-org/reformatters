@@ -16,8 +16,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -25,8 +25,6 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
-    Timedelta,
-    Timestamp,
 )
 
 from .template_config import DwdIconEuDataVar
@@ -34,14 +32,12 @@ from .template_config import DwdIconEuDataVar
 log = get_logger(__name__)
 
 
-class DwdIconEuForecast5DaySourceFileCoord(SourceFileCoord):
+class DwdIconEuForecast5DaySourceFileCoord(InitLeadSourceFileCoord):
     """Coordinates of a single source file to process.
 
     ICON-EU is published as one Bzip2-compressed GRIB2 file per variable.
     """
 
-    init_time: Timestamp
-    lead_time: Timedelta
     data_var: DwdIconEuDataVar
 
     def get_url(self) -> str:

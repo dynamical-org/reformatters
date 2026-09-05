@@ -43,9 +43,9 @@ class ExampleVirtualSourceFileCoord(SourceFileCoord):
     will resolve byte ranges for.
     """
 
-    # init_time: Timestamp
-    # lead_time: Timedelta
     # data_vars: Sequence[ExampleDataVar]
+    # A file holding one forecast step subclasses InitLeadSourceFileCoord instead,
+    # which declares init_time and lead_time.
 
     def get_url(self) -> str:
         """The source file's location. Refs point here, so it must start with the
