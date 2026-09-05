@@ -26,19 +26,16 @@ from reformatters.noaa.models import NoaaDataVar
 # opens at the most recent synoptic hour strictly before its time. This store has no
 # lead_time dimension, so the window is described in the UTC times a reader can see.
 _WINDOW_EXTENT = (
-    "since the most recent 00, 06, 12 or 18 UTC strictly before this time, so the "
-    "{noun} is 1 hour at 01, 07, 13 and 19 UTC and lengthens to 6 hours at 00, 06, "
-    "12 and 18 UTC."
+    "the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time."
 )
 _WINDOW_COMMENTS = {
     "accum": (
-        f"Accumulated {_WINDOW_EXTENT.format(noun='window')} Subtracting the value at "
-        "an earlier time with the same window start gives the exact total between "
-        "those two times."
+        f"Accumulated over {_WINDOW_EXTENT} Subtracting the value at an earlier time "
+        "with the same window start gives the exact total between those two times."
     ),
-    "avg": f"Averaged over the period {_WINDOW_EXTENT.format(noun='period')}",
-    "max": f"Maximum value over the period {_WINDOW_EXTENT.format(noun='period')}",
-    "min": f"Minimum value over the period {_WINDOW_EXTENT.format(noun='period')}",
+    "avg": f"Averaged over {_WINDOW_EXTENT}",
+    "max": f"Maximum value over {_WINDOW_EXTENT}",
+    "min": f"Minimum value over {_WINDOW_EXTENT}",
 }
 
 

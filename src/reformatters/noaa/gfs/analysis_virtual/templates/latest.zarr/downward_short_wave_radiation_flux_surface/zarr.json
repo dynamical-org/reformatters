@@ -37,7 +37,7 @@
     "short_name": "sdswrf",
     "standard_name": "surface_downwelling_shortwave_flux_in_air",
     "units": "W m-2",
-    "comment": "Averaged over the period since the most recent 00, 06, 12 or 18 UTC strictly before this time, so the period is 1 hour at 01, 07, 13 and 19 UTC and lengthens to 6 hours at 00, 06, 12 and 18 UTC.",
+    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time.",
     "step_type": "avg",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -1251,10 +1251,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="s",
             standard_name="duration_of_sunshine",
             comment=(
-                "Sunshine accumulated within the 6 hour window containing this step, "
-                "not an instantaneous value: the total restarts every 6 hours of "
-                "forecast lead time and so reaches at most 21600 s. The source index "
-                "labels it instantaneous, which is why it carries no window step type."
+                "Sunshine accumulated over the preceding 1-6 hours, not an "
+                "instantaneous value: the total restarts every 6 hours and so reaches "
+                "at most 21600 s. The source index labels it instantaneous, which is "
+                "why it carries no window step type."
             ),
         ),
         root_var(

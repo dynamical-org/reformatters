@@ -74,18 +74,17 @@ def test_every_windowed_variable_describes_its_window_in_utc_times() -> None:
         assert comment is not None, var.name
         assert comment.startswith(
             (
-                "Accumulated since",
+                "Accumulated over",
                 "Averaged over",
                 "Maximum value over",
                 "Minimum value over",
             )
         ), var.name
-        assert "00, 06, 12 or 18 UTC strictly before this time" in comment, var.name
+        assert "00, 06, 12 or 18 UTC hour before this time" in comment, var.name
     assert get_var("total_precipitation_surface").attrs.comment == (
-        "Accumulated since the most recent 00, 06, 12 or 18 UTC strictly before this "
-        "time, so the window is 1 hour at 01, 07, 13 and 19 UTC and lengthens to 6 "
-        "hours at 00, 06, 12 and 18 UTC. Subtracting the value at an earlier time with "
-        "the same window start gives the exact total between those two times."
+        "Accumulated over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour "
+        "before this time. Subtracting the value at an earlier time with the same "
+        "window start gives the exact total between those two times."
     )
     # Only accumulations get the differencing sentence; an average of a lengthening
     # window cannot be differenced.
@@ -208,7 +207,7 @@ def test_sunshine_duration_is_a_six_hour_bucket_despite_its_instant_label() -> N
     assert var.attrs.step_type == "instant"
     assert var.internal_attrs.window_reset_frequency is None
     comment = str(var.attrs.comment)
-    assert "accumulated within the 6 hour window" in comment
+    assert "accumulated over the preceding 1-6 hours" in comment
     assert "at most 21600 s" in comment
 
 

@@ -36,7 +36,7 @@
     "long_name": "Categorical ice pellets",
     "short_name": "cicep",
     "units": "1",
-    "comment": "Averaged over the period since the most recent 00, 06, 12 or 18 UTC strictly before this time, so the period is 1 hour at 01, 07, 13 and 19 UTC and lengthens to 6 hours at 00, 06, 12 and 18 UTC. 0=no; 1=yes.",
+    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. 0=no; 1=yes.",
     "step_type": "avg",
     "flag_values": [
       0,
