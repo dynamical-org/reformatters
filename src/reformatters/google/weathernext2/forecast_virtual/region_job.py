@@ -14,7 +14,11 @@ from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import CoordinateValue, RegionJob, SourceFileCoord
+from reformatters.common.region_job import (
+    CoordinateValue,
+    InitLeadSourceFileCoord,
+    RegionJob,
+)
 from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
@@ -63,12 +67,10 @@ def weathernext2_virtual_chunk_containers() -> tuple[
     )
 
 
-class GoogleWeathernext2ForecastVirtualSourceFileCoord(SourceFileCoord):
+class GoogleWeathernext2ForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
     """One forecast lead from one native annual or per-init source Zarr store."""
 
     source_layout: SourceLayout
-    init_time: Timestamp
-    lead_time: Timedelta
     data_vars: Sequence[GoogleWeathernext2DataVar]
     chunk_metadata: dict[str, NativeObjectMetadata] = Field(
         default_factory=dict, frozen=False

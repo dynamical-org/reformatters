@@ -8,9 +8,12 @@ import xarray as xr
 from reformatters.common.config_models import ROOT
 from reformatters.common.download import s3_download_to_disk, s3_store
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import CoordinateValue, SourceFileCoord
+from reformatters.common.region_job import (
+    CoordinateValue,
+    InitLeadSourceFileCoord,
+)
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
@@ -42,11 +45,9 @@ def aifs_single_virtual_chunk_containers() -> tuple[
     )
 
 
-class EcmwfAifsSingleForecastVirtualSourceFileCoord(SourceFileCoord):
+class EcmwfAifsSingleForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
     """One AIFS Single forecast file (init_time, lead_time) and the vars it packs."""
 
-    init_time: Timestamp
-    lead_time: Timedelta
     data_vars: Sequence[EcmwfAifsSingleVirtualDataVar]
 
     def _get_base_url(self) -> str:

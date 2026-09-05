@@ -14,8 +14,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -23,8 +23,6 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
-    Timedelta,
-    Timestamp,
 )
 
 from .template_config import EcccHrdpsDataVar
@@ -36,15 +34,13 @@ log = get_logger(__name__)
 DATAMART_PREFERRED_AGE = pd.Timedelta("2D")
 
 
-class EcccHrdpsForecastSourceFileCoord(SourceFileCoord):
+class EcccHrdpsForecastSourceFileCoord(InitLeadSourceFileCoord):
     """Coordinates of a single source file to process.
 
     HRDPS is published as one single-message GRIB2 file per init time, lead time,
     field and level.
     """
 
-    init_time: Timestamp
-    lead_time: Timedelta
     data_var: EcccHrdpsDataVar
 
     def get_url(self) -> str:

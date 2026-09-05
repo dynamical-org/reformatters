@@ -16,8 +16,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -25,8 +25,6 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
-    Timedelta,
-    Timestamp,
 )
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, vars_available
 from reformatters.ecmwf.ecmwf_grib_index import grib_message_byte_ranges_from_index
@@ -54,9 +52,7 @@ _PRECIP_ALT_GRIB_METADATA: dict[str, tuple[str, str]] = {
 }
 
 
-class EcmwfAifsEnsForecastSourceFileCoord(SourceFileCoord):
-    init_time: Timestamp
-    lead_time: Timedelta
+class EcmwfAifsEnsForecastSourceFileCoord(InitLeadSourceFileCoord):
     ensemble_member: int
     data_var_group: Sequence[EcmwfDataVar]
 

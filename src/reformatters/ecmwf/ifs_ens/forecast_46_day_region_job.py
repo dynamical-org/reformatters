@@ -29,8 +29,8 @@ from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    InitLeadSourceFileCoord,
     RegionJob,
-    SourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
@@ -39,7 +39,6 @@ from reformatters.common.types import (
     DatetimeLike,
     Dim,
     Timedelta,
-    Timestamp,
 )
 from reformatters.ecmwf.archive_gribs.archive import format_init_time
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
@@ -85,7 +84,7 @@ def selections_by_variable() -> Mapping[tuple[str, str], EcdsSelection]:
     }
 
 
-class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
+class EcmwfIfsEns46DaySourceFileCoord(InitLeadSourceFileCoord):
     """The messages of one archived blob that fill one (init, lead, member) slot.
 
     `levels` is the variable's ECDS level values in output order, `None` where the
@@ -96,8 +95,6 @@ class EcmwfIfsEns46DaySourceFileCoord(SourceFileCoord):
     lead time, in which case it names them and their values are reduced on read.
     """
 
-    init_time: Timestamp
-    lead_time: Timedelta
     ensemble_member: int
     ecds_variable: str
     levels: tuple[str | None, ...]
