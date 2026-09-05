@@ -1,0 +1,60 @@
+{
+  "shape": [
+    1,
+    209,
+    721,
+    1440
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "CRAIN",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Categorical rain",
+    "short_name": "crain",
+    "units": "1",
+    "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). 0=no; 1=yes.",
+    "step_type": "avg",
+    "flag_values": [
+      0,
+      1
+    ],
+    "flag_meanings": "no yes",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

@@ -46,6 +46,8 @@ name: 'Manual: Create Job from CronJob'
         - noaa-gfs-analysis-virtual-validate
         - noaa-gfs-forecast-update
         - noaa-gfs-forecast-validate
+        - noaa-gfs-forecast-virtual-update
+        - noaa-gfs-forecast-virtual-validate
         - noaa-hrrr-analysis-update
         - noaa-hrrr-analysis-validate
         - noaa-hrrr-analysis-virtual-update

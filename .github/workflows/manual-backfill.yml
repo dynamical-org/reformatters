@@ -26,6 +26,7 @@ name: 'Manual: Backfill'
         - noaa-gfs-analysis
         - noaa-gfs-analysis-virtual
         - noaa-gfs-forecast
+        - noaa-gfs-forecast-virtual
         - noaa-hrrr-analysis
         - noaa-hrrr-analysis-virtual
         - noaa-hrrr-forecast-18-hour-virtual

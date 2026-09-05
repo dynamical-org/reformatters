@@ -1,0 +1,62 @@
+{
+  "shape": [
+    1,
+    209,
+    721,
+    1440
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        721,
+        1440
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "offset": -273.15
+      }
+    },
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "TMP",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Temperature",
+    "short_name": "t",
+    "standard_name": "air_temperature_at_cloud_top",
+    "units": "degree_Celsius",
+    "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+    "step_type": "avg",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

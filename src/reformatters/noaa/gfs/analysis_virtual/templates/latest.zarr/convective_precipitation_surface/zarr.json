@@ -33,8 +33,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Convective precipitation (water)",
-    "short_name": "acpcp",
+    "long_name": "Convective precipitation",
+    "short_name": "cp",
     "standard_name": "convective_precipitation_amount",
     "units": "kg m-2",
     "comment": "Accumulated since the most recent 00, 06, 12 or 18 UTC strictly before this time, so the window is 1 hour at 01, 07, 13 and 19 UTC and lengthens to 6 hours at 00, 06, 12 and 18 UTC. Subtracting the value at an earlier time with the same window start gives the exact total between those two times.",
