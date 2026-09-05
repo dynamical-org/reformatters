@@ -3,7 +3,6 @@ from typing import ClassVar, Generic, TypeVar
 import icechunk
 
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
@@ -34,7 +33,6 @@ class NoaaGefsVirtualSourceFileCoord(
 ):
     """One GEFS product file (init_time, lead_time, member, file type) and its vars."""
 
-    init_time: Timestamp
     ensemble_member: int
     source_file_type: GEFSSourceFileType
 
