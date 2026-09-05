@@ -23,6 +23,7 @@ name: 'Manual: Backfill'
         - nasa-smap-level3-36km-v9
         - noaa-gefs-analysis
         - noaa-gefs-analysis-0-25-degree-virtual
+        - noaa-gefs-forecast-10-day-0-25-degree-virtual
         - noaa-gefs-forecast-35-day
         - noaa-gfs-analysis
         - noaa-gfs-forecast

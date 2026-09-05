@@ -1,0 +1,35 @@
+1:0:d=2022101806:GUST:surface:120 hour fcst:ENS=+1
+2:532844:d=2022101806:MSLET:mean sea level:120 hour fcst:ENS=+1
+3:1433105:d=2022101806:PRES:surface:120 hour fcst:ENS=+1
+4:2174778:d=2022101806:TSOIL:0-0.1 m below ground:120 hour fcst:ENS=+1
+5:2529489:d=2022101806:SOILW:0-0.1 m below ground:120 hour fcst:ENS=+1
+6:2885501:d=2022101806:WEASD:surface:120 hour fcst:ENS=+1
+7:3162301:d=2022101806:SNOD:surface:120 hour fcst:ENS=+1
+8:3415041:d=2022101806:ICETK:surface:120 hour fcst:ENS=+1
+9:3496859:d=2022101806:TMP:2 m above ground:120 hour fcst:ENS=+1
+10:4245367:d=2022101806:DPT:2 m above ground:120 hour fcst:ENS=+1
+11:4687903:d=2022101806:RH:2 m above ground:120 hour fcst:ENS=+1
+12:5353462:d=2022101806:TMAX:2 m above ground:114-120 hour max fcst:ENS=+1
+13:6080566:d=2022101806:TMIN:2 m above ground:114-120 hour min fcst:ENS=+1
+14:6819139:d=2022101806:UGRD:10 m above ground:120 hour fcst:ENS=+1
+15:7650486:d=2022101806:VGRD:10 m above ground:120 hour fcst:ENS=+1
+16:8469847:d=2022101806:APCP:surface:114-120 hour acc fcst:ENS=+1
+17:8736335:d=2022101806:CSNOW:surface:114-120 hour ave fcst:ENS=+1
+18:8762384:d=2022101806:CICEP:surface:114-120 hour ave fcst:ENS=+1
+19:8762590:d=2022101806:CFRZR:surface:114-120 hour ave fcst:ENS=+1
+20:8763484:d=2022101806:CRAIN:surface:114-120 hour ave fcst:ENS=+1
+21:8840414:d=2022101806:LHTFL:surface:114-120 hour ave fcst:ENS=+1
+22:9301542:d=2022101806:SHTFL:surface:114-120 hour ave fcst:ENS=+1
+23:10044158:d=2022101806:CAPE:surface:120 hour fcst:ENS=+1
+24:10496236:d=2022101806:CIN:surface:120 hour fcst:ENS=+1
+25:11002976:d=2022101806:PWAT:entire atmosphere (considered as a single layer):120 hour fcst:ENS=+1
+26:11456366:d=2022101806:TCDC:entire atmosphere:114-120 hour ave fcst:ENS=+1
+27:12003777:d=2022101806:DSWRF:surface:114-120 hour ave fcst:ENS=+1
+28:12420375:d=2022101806:DLWRF:surface:114-120 hour ave fcst:ENS=+1
+29:12905432:d=2022101806:USWRF:surface:114-120 hour ave fcst:ENS=+1
+30:13193555:d=2022101806:ULWRF:surface:114-120 hour ave fcst:ENS=+1
+31:13555268:d=2022101806:ULWRF:top of atmosphere:114-120 hour ave fcst:ENS=+1
+32:13990298:d=2022101806:HLCY:3000-0 m above ground:120 hour fcst:ENS=+1
+33:14581994:d=2022101806:CAPE:180-0 mb above ground:120 hour fcst:ENS=+1
+34:15028297:d=2022101806:CIN:180-0 mb above ground:120 hour fcst:ENS=+1
+35:15514976:d=2022101806:PRMSL:mean sea level:120 hour fcst:ENS=+1
