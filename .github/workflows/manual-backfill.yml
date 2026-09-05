@@ -24,6 +24,7 @@ name: 'Manual: Backfill'
         - noaa-gefs-analysis
         - noaa-gefs-forecast-35-day
         - noaa-gfs-analysis
+        - noaa-gfs-analysis-virtual
         - noaa-gfs-forecast
         - noaa-hrrr-analysis
         - noaa-hrrr-analysis-virtual

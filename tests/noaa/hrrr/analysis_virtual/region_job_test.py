@@ -16,6 +16,7 @@ from reformatters.noaa.hrrr.analysis_virtual.template_config import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.virtual_region_job import NoaaHrrrVirtualRegionJob
+from tests.noaa.grib_index_fixtures import stub_grib_index_download
 
 TEMPLATE_CONFIG = NoaaHrrrAnalysisVirtualTemplateConfig()
 
@@ -45,12 +46,9 @@ def make_job(
 
 
 def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / url.rsplit("/", 1)[-1]
-        path.write_text(content)
-        return path
-
-    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_index_download(
+        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+    )
 
 
 def test_source_file_coord_url_and_out_loc() -> None:

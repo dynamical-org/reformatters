@@ -68,6 +68,20 @@ class NoaaVirtualRegionJob(
             require_index=True,
         )
 
+    def owns_index_message(
+        self,
+        coord: NOAA_VIRTUAL_COORD,  # noqa: ARG002 - overrides key the decision on it
+        element: str,  # noqa: ARG002
+        level: str,  # noqa: ARG002
+    ) -> bool:
+        """Whether `coord`'s file is the one that supplies this index message.
+
+        Default: every message it carries. Override where a model publishes a message
+        in more than one of its products and exactly one must supply the chunk, so a
+        chunk's reference names a stable (file, offset).
+        """
+        return True
+
     def file_refs(self, coord: NOAA_VIRTUAL_COORD, file_size: int) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
             coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
@@ -100,6 +114,8 @@ class NoaaVirtualRegionJob(
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
                 return []
+            if not self.owns_index_message(coord, element, level):
+                continue
             matches = lookup.get((element, level, window))
             if not matches:
                 continue
