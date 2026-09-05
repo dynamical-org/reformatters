@@ -102,11 +102,9 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
         ), var.name
 
     assert get_var("total_precipitation_surface").attrs.comment == (
-        "Accumulated over the 6 hour window containing this step, which restarts every "
-        "6 hours of forecast lead time: the window is 6 hours long at lead times "
-        "divisible by 6 and shorter at every other lead time (1 to 5 hours where lead "
-        "times are hourly, 3 hours where they are 3-hourly). Subtracting the value at "
-        "an earlier lead time with the same window start gives the exact total between "
+        "Accumulated over the preceding 1-6 hours of forecast lead time, since the "
+        "last lead time divisible by 6 before this step. Subtracting the value at an "
+        "earlier lead time with the same window start gives the exact total between "
         "those two lead times."
     )
     assert get_var("total_precipitation_run_total_surface").attrs.comment == (
@@ -115,16 +113,14 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
         "earlier step gives the exact total between those two steps."
     )
     assert get_var("albedo_surface").attrs.comment == (
-        "Averaged over the 6 hour window containing this step, which restarts every 6 "
-        "hours of forecast lead time: the window is 6 hours long at lead times "
-        "divisible by 6 and shorter at every other lead time (1 to 5 hours where lead "
-        "times are hourly, 3 hours where they are 3-hourly)."
+        "Averaged over the preceding 1-6 hours of forecast lead time, since the last "
+        "lead time divisible by 6 before this step."
     )
     assert str(get_var("maximum_temperature_2m").attrs.comment).startswith(
-        "Maximum value over the 6 hour window"
+        "Maximum value over the preceding 1-6 hours"
     )
     assert str(get_var("minimum_temperature_2m").attrs.comment).startswith(
-        "Minimum value over the 6 hour window"
+        "Minimum value over the preceding 1-6 hours"
     )
     # Only accumulations can be differenced; an average over a lengthening window cannot.
     assert "Subtracting" not in str(get_var("albedo_surface").attrs.comment)
@@ -149,10 +145,10 @@ def _published_lead_hours() -> list[int]:
 
 
 def test_the_bucket_comment_describes_every_window_length_the_source_produces() -> None:
-    """The comment enumerates the window lengths rather than restating the reset rule.
+    """The comment claims 1-6 hours; these are the lengths the source really produces.
 
-    "1 to 5 hours where lead times are hourly" is false for the 3-hourly tail, which
-    only ever produces 3 and 6 hour windows, so the two regimes are named separately.
+    The hourly leads produce every length from 1 to 6 and the 3-hourly tail only 3 and
+    6, so the range the comment gives is exact rather than an upper bound.
     """
     bucket = get_var("total_precipitation_surface")
     lead_hours = _published_lead_hours()
@@ -207,7 +203,7 @@ def test_the_differencing_sentences_are_true_for_the_pairs_they_claim() -> None:
 
 def test_a_windowed_variables_own_comment_survives_the_window_sentence() -> None:
     comment = str(get_var("water_runoff_surface").attrs.comment)
-    assert comment.startswith("Accumulated over the 6 hour window")
+    assert comment.startswith("Accumulated over the preceding 1-6 hours")
     assert comment.endswith("NaN over water, where this quantity does not apply.")
 
 

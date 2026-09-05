@@ -59,7 +59,7 @@
           "short_name": "fal",
           "standard_name": "surface_albedo",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -175,7 +175,7 @@
           "short_name": "hcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -231,7 +231,7 @@
           "short_name": "lcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -287,7 +287,7 @@
           "short_name": "mcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -343,7 +343,7 @@
           "short_name": "prate",
           "standard_name": "precipitation_flux",
           "units": "kg m-2 s-1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -399,7 +399,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -455,7 +455,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -511,7 +511,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -567,7 +567,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -623,7 +623,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -679,7 +679,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -741,7 +741,7 @@
           "short_name": "t",
           "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no high cloud in the column. Every cell where average_high_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -803,7 +803,7 @@
           "short_name": "t",
           "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no low cloud in the column. Every cell where average_low_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -865,7 +865,7 @@
           "short_name": "t",
           "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN where the source reports no middle cloud in the column. Every cell where average_medium_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -921,7 +921,7 @@
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction_in_atmosphere_layer",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1032,7 +1032,7 @@
           "long_name": "Categorical freezing rain",
           "short_name": "cfrzr",
           "units": "1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). 0=no; 1=yes.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. 0=no; 1=yes.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -1092,7 +1092,7 @@
           "long_name": "Categorical ice pellets",
           "short_name": "cicep",
           "units": "1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). 0=no; 1=yes.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. 0=no; 1=yes.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -1152,7 +1152,7 @@
           "long_name": "Categorical rain",
           "short_name": "crain",
           "units": "1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). 0=no; 1=yes.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. 0=no; 1=yes.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -1212,7 +1212,7 @@
           "long_name": "Categorical snow",
           "short_name": "csnow",
           "units": "1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). 0=no; 1=yes.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. 0=no; 1=yes.",
           "step_type": "avg",
           "flag_values": [
             0,
@@ -1272,7 +1272,7 @@
           "long_name": "Clear sky UV-B downward solar flux",
           "short_name": "cduvb",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Downward solar flux in the UV-B band (280-315 nm) at the surface computed with clouds removed.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Downward solar flux in the UV-B band (280-315 nm) at the surface computed with clouds removed.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1438,7 +1438,7 @@
           "long_name": "Cloud work function",
           "short_name": "cwork",
           "units": "J kg-1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2101,7 +2101,7 @@
           "short_name": "cp",
           "standard_name": "convective_precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2442,7 +2442,7 @@
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2498,7 +2498,7 @@
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2554,7 +2554,7 @@
           "short_name": "lgws",
           "standard_name": "atmosphere_eastward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3612,7 +3612,7 @@
           "short_name": "gflux",
           "standard_name": "upward_heat_flux_at_ground_level_in_soil",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). NaN over open water; the source reports this quantity only over land and sea ice.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN over open water; the source reports this quantity only over land and sea ice.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5284,7 +5284,7 @@
           "short_name": "lhf",
           "standard_name": "surface_upward_latent_heat_flux",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5789,7 +5789,7 @@
           "short_name": "tmax",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Maximum value over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Maximum value over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5906,7 +5906,7 @@
           "short_name": "tmin",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Minimum value over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Minimum value over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "min",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5961,7 +5961,7 @@
           "long_name": "Momentum flux, u-component",
           "short_name": "uflx",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Positive values are an upward flux of eastward momentum, from the surface into the atmosphere: the opposite sign convention to CF's surface_downward_eastward_stress.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Positive values are an upward flux of eastward momentum, from the surface into the atmosphere: the opposite sign convention to CF's surface_downward_eastward_stress.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6016,7 +6016,7 @@
           "long_name": "Momentum flux, v-component",
           "short_name": "vflx",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Positive values are an upward flux of northward momentum, from the surface into the atmosphere: the opposite sign convention to CF's surface_downward_northward_stress.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Positive values are an upward flux of northward momentum, from the surface into the atmosphere: the opposite sign convention to CF's surface_downward_northward_stress.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6072,7 +6072,7 @@
           "short_name": "mgws",
           "standard_name": "atmosphere_northward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6460,7 +6460,7 @@
           "short_name": "cpr",
           "standard_name": "convective_precipitation_flux",
           "units": "kg m-2 s-1",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9802,7 +9802,7 @@
           "short_name": "shf",
           "standard_name": "surface_upward_sensible_heat_flux",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12334,7 +12334,7 @@
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12501,7 +12501,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12611,7 +12611,7 @@
           "short_name": "sulwrf",
           "standard_name": "surface_upwelling_longwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12667,7 +12667,7 @@
           "short_name": "ulwrf",
           "standard_name": "toa_outgoing_longwave_flux",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12723,7 +12723,7 @@
           "short_name": "suswrf",
           "standard_name": "surface_upwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12779,7 +12779,7 @@
           "short_name": "uswrf",
           "standard_name": "toa_outgoing_shortwave_flux",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly).",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12834,7 +12834,7 @@
           "long_name": "UV-B downward solar flux",
           "short_name": "duvb",
           "units": "W m-2",
-          "comment": "Averaged over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Downward solar flux in the UV-B band (280-315 nm) at the surface.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13950,7 +13950,7 @@
           "short_name": "watr",
           "standard_name": "runoff_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the 6 hour window containing this step, which restarts every 6 hours of forecast lead time: the window is 6 hours long at lead times divisible by 6 and shorter at every other lead time (1 to 5 hours where lead times are hourly, 3 hours where they are 3-hourly). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times. NaN over water, where this quantity does not apply.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times. NaN over water, where this quantity does not apply.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

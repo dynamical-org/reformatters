@@ -25,10 +25,8 @@ from reformatters.noaa.models import NoaaDataVar
 FORECAST_LENGTH = pd.Timedelta("384h")
 
 _BUCKET_EXTENT = (
-    "the 6 hour window containing this step, which restarts every 6 hours of forecast "
-    "lead time: the window is 6 hours long at lead times divisible by 6 and shorter at "
-    "every other lead time (1 to 5 hours where lead times are hourly, 3 hours where "
-    "they are 3-hourly)."
+    "the preceding 1-6 hours of forecast lead time, since the last lead time divisible "
+    "by 6 before this step."
 )
 _BUCKET_COMMENTS = {
     "accum": (
