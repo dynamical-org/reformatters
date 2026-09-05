@@ -4,14 +4,14 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 
 from .region_job import GefsForecast35DayRegionJob, GefsForecast35DaySourceFileCoord
 from .template_config import GefsForecast35DayTemplateConfig
 
 
 class GefsForecast35DayDataset(
-    DynamicalDataset[GEFSDataVar, GefsForecast35DaySourceFileCoord]
+    DynamicalDataset[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]
 ):
     """GEFS 35-day forecast dataset implementation."""
 

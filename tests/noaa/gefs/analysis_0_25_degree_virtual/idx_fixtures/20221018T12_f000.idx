@@ -1,0 +1,26 @@
+1:0:d=2022101812:VIS:surface:anl:ENS=low-res ctl
+2:339794:d=2022101812:GUST:surface:anl:ENS=low-res ctl
+3:861644:d=2022101812:MSLET:mean sea level:anl:ENS=low-res ctl
+4:1732125:d=2022101812:PRES:surface:anl:ENS=low-res ctl
+5:2480397:d=2022101812:HGT:surface:anl:ENS=low-res ctl
+6:2932972:d=2022101812:TSOIL:0-0.1 m below ground:anl:ENS=low-res ctl
+7:3297862:d=2022101812:SOILW:0-0.1 m below ground:anl:ENS=low-res ctl
+8:3655282:d=2022101812:WEASD:surface:anl:ENS=low-res ctl
+9:3923495:d=2022101812:SNOD:surface:anl:ENS=low-res ctl
+10:4172292:d=2022101812:ICETK:surface:anl:ENS=low-res ctl
+11:4254488:d=2022101812:TMP:2 m above ground:anl:ENS=low-res ctl
+12:5029690:d=2022101812:DPT:2 m above ground:anl:ENS=low-res ctl
+13:5834982:d=2022101812:RH:2 m above ground:anl:ENS=low-res ctl
+14:6528613:d=2022101812:TMAX:2 m above ground:0-0 day max fcst:ENS=low-res ctl
+15:7303867:d=2022101812:TMIN:2 m above ground:0-0 day min fcst:ENS=low-res ctl
+16:8079121:d=2022101812:UGRD:10 m above ground:anl:ENS=low-res ctl
+17:8919969:d=2022101812:VGRD:10 m above ground:anl:ENS=low-res ctl
+18:9715601:d=2022101812:CPOFP:surface:anl:ENS=low-res ctl
+19:10296390:d=2022101812:CAPE:surface:anl:ENS=low-res ctl
+20:10765493:d=2022101812:CIN:surface:anl:ENS=low-res ctl
+21:11322071:d=2022101812:PWAT:entire atmosphere (considered as a single layer):anl:ENS=low-res ctl
+22:11788629:d=2022101812:HGT:cloud ceiling:anl:ENS=low-res ctl
+23:12560310:d=2022101812:HLCY:3000-0 m above ground:anl:ENS=low-res ctl
+24:12890232:d=2022101812:CAPE:180-0 mb above ground:anl:ENS=low-res ctl
+25:13356688:d=2022101812:CIN:180-0 mb above ground:anl:ENS=low-res ctl
+26:13879490:d=2022101812:PRMSL:mean sea level:anl:ENS=low-res ctl

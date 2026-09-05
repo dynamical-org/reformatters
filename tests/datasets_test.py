@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 import pytest
@@ -318,4 +319,55 @@ def test_no_zarr3_primary_with_icechunk_replica(
         f"{dataset.dataset_id}: zarr v3 primary with icechunk replica(s) "
         f"{icechunk_replicas}; make the icechunk store the primary and the zarr v3 "
         "store its replica"
+    )
+
+
+# google-weathernext2-forecast-historical-virtual applies one split to every array,
+# including its pressure_level group, and its region job batches writes on that same
+# constant (manifest_init_split), so the two must move together. Whether that shared
+# value meets the group's reader budget has not been audited; exempted until it is.
+_UNSTATED_GROUP_SPLIT_EXEMPTIONS = {"google-weathernext2-forecast-historical-virtual"}
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    DYNAMICAL_DATASETS,
+    ids=DATASET_IDS,
+)
+def test_virtual_group_manifest_splits_are_explicit(
+    dataset: DynamicalDataset[Any, Any],
+) -> None:
+    """Every vertical group must have its own manifest split entry.
+
+    A group's arrays carry their vertical dimension's length times the refs of a root
+    array, so a split sized for root arrays leaves a group's manifests that factor
+    oversized. Neither a missing map key nor a scalar `split_size` is an error at
+    construction, so an unstated group split is inherited silently; the split each
+    group gets must be written down and justified against the reader budget.
+    """
+    if dataset.dataset_id in _UNSTATED_GROUP_SPLIT_EXEMPTIONS:
+        return
+    virtual_config = dataset.icechunk_virtual_config
+    if virtual_config is None:
+        return
+
+    patterns = [
+        match.group(1)
+        for condition, _ in virtual_config.manifest_split.split_sizes
+        if (match := re.search(r'path_matches\("(.*?)"\)', repr(condition)))
+    ]
+
+    template = dataset.template_config.get_template(
+        dataset.template_config.append_dim_start
+    )
+    groups = [path.lstrip("/") for path in template.groups if path.strip("/")]
+    unmatched = [
+        group
+        for group in groups
+        if not any(re.search(pattern, f"/{group}/") for pattern in patterns)
+    ]
+    assert not unmatched, (
+        f"{dataset.dataset_id}: vertical group(s) {unmatched} have no entry in the "
+        f"manifest split map {patterns}; they silently fall through to the catch-all, "
+        "which is sized for root arrays"
     )

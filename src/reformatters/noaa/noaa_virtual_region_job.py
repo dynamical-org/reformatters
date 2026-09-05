@@ -121,7 +121,16 @@ class NoaaVirtualRegionJob(
                         length=end - start,
                     )
                 )
+        self._check_refs_complete(coord, refs)
         return refs
+
+    def _check_refs_complete(
+        self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
+    ) -> None:
+        """Hook for a subclass to reject a file whose index matched only some of the
+        coord's variables. Reached only once the index parsed and every byte range
+        checked out, so an empty `refs` here means nothing matched, not a skipped file.
+        """
 
     def _message_lookup(
         self, data_vars: Sequence[NOAA_DATA_VAR], lead_hours: int
