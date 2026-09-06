@@ -464,6 +464,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "large plume-dominated fire growth. NaN on about 60% of the grid, "
                 "chiefly over ocean."
             ),
+            flag_values=(2, 3, 4, 5, 6),
+            flag_meanings=(
+                "very_low_potential very_low_potential low_potential "
+                "moderate_potential high_potential"
+            ),
         ),
         root_var(
             "pressure_reduced_to_mean_sea_level_eta_model",
