@@ -118,7 +118,7 @@ def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None
         assert {c.file_type for c in coords} == {"pgrb2", "pgrb2b"}, time
 
 
-def test_the_five_instant_variables_absent_at_hour_0_are_read_at_a_longer_lead() -> (
+def test_hour_0_values_matches_which_instant_variables_the_source_publishes_at_f000() -> (
     None
 ):
     """GFS publishes no windowed message at f000, and also drops five instantaneous
