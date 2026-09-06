@@ -154,11 +154,7 @@ _WINDOW_SEQUENCE_LENGTH = 3
 
 def _window_lead_time_sequences() -> dict[Timedelta, str]:
     """Every window length the GEFS lead time grid produces, mapped to the opening lead
-    times carrying it. Both the window_comments wording and the guard that checks every
-    lead time read this, and the sequences are read off the grid rather than written
-    out, so neither the lengths nor the lead times named against them can disagree with
-    the leads a dataset serves.
-    """
+    times carrying it."""
     sequences: dict[Timedelta, list[int]] = {}
     for lead_time in pd.timedelta_range(
         GEFS_S_FILE_LEAD_FREQUENCY,

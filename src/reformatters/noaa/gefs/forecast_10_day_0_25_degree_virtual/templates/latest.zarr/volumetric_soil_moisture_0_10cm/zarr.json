@@ -41,7 +41,7 @@
     "short_name": "vsw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
-    "comment": "NaN over water, where there is no soil.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
