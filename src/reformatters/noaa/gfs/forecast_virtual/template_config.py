@@ -29,20 +29,12 @@ _BUCKET_EXTENT = (
     "by 6 before this step."
 )
 _BUCKET_COMMENTS = {
-    "accum": (
-        f"Accumulated over {_BUCKET_EXTENT} Subtracting the value at an earlier lead "
-        "time with the same window start gives the exact total between those two lead "
-        "times."
-    ),
+    "accum": f"Accumulated over {_BUCKET_EXTENT}",
     "avg": f"Averaged over {_BUCKET_EXTENT}",
     "max": f"Maximum value over {_BUCKET_EXTENT}",
     "min": f"Minimum value over {_BUCKET_EXTENT}",
 }
-_RUN_TOTAL_COMMENT = (
-    "Accumulated from the forecast initialization time to this step, so the window "
-    "lengthens with lead time and never resets. Subtracting the value at an earlier "
-    "step gives the exact total between those two steps."
-)
+_RUN_TOTAL_COMMENT = "Accumulated from the forecast initialization time to this step."
 
 
 class NoaaGfsForecastVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):

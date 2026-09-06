@@ -29,10 +29,7 @@ _WINDOW_EXTENT = (
     "the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time."
 )
 _WINDOW_COMMENTS = {
-    "accum": (
-        f"Accumulated over {_WINDOW_EXTENT} Subtracting the value at an earlier time "
-        "with the same window start gives the exact total between those two times."
-    ),
+    "accum": f"Accumulated over {_WINDOW_EXTENT}",
     "avg": f"Averaged over {_WINDOW_EXTENT}",
     "max": f"Maximum value over {_WINDOW_EXTENT}",
     "min": f"Minimum value over {_WINDOW_EXTENT}",
