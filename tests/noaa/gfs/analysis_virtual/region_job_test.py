@@ -86,6 +86,23 @@ def test_every_hour_of_a_day_takes_the_shortest_published_lead(
         assert pd.Timedelta("1h") <= time - previous_cycle <= pd.Timedelta("6h"), time
 
 
+def test_sunshine_duration_reads_a_windowed_lead_at_a_synoptic_hour(
+    template_ds: xr.DataTree,
+) -> None:
+    """SUNSD is published at f000, but that record accumulates over 3 hours rather than
+    the 1-6 hour window the variable documents, so the analysis takes it at leads 1-6
+    like every other windowed variable."""
+    var = get_var("sunshine_duration_surface")
+    assert var.has_hour_0_values()
+
+    time = pd.Timestamp("2021-05-03T12:00")
+    (coord,) = coords_for_times(template_ds, [var], [time])
+    assert (coord.init_time, coord.lead_time) == (
+        pd.Timestamp("2021-05-03T06:00"),
+        pd.Timedelta("6h"),
+    )
+
+
 def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None:
     """Away from a 00, 06, 12 or 18 hour the two variable sets share a file, so a time
     costs two coords; at one they come from different cycles and it costs four."""
