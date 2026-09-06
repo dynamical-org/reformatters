@@ -496,10 +496,13 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "standard_deviation_of_sub_gridscale_orography_surface",
     "slope_of_sub_gridscale_orography_surface",
     # GFS virtual single-level / surface fields with no CF standard name. UFLX and VFLX
-    # are momentum fluxes whose sign is opposite CF's surface_downward_*_stress.
+    # are momentum fluxes whose sign is opposite CF's surface_downward_*_stress, and
+    # U-GWD and V-GWD gravity wave stresses whose sign is opposite CF's
+    # atmosphere_*ward_stress_due_to_gravity_wave_drag.
     "apparent_temperature_2m",
     "clear_sky_uv_b_downward_solar_flux_surface",
     "cloud_work_function_atmosphere",
+    "eastward_gravity_wave_surface_stress",
     "graupel_model_level_1",
     "haines_index_surface",
     "icao_standard_atmosphere_reference_height_max_wind",
@@ -516,6 +519,7 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "liquid_volumetric_soil_moisture_100_200cm",
     "momentum_flux_u_component_surface",
     "momentum_flux_v_component_surface",
+    "northward_gravity_wave_surface_stress",
     "potential_evaporation_rate_surface",
     "rain_mixing_ratio_model_level_1",
     "snow_mixing_ratio_model_level_1",

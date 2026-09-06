@@ -2362,9 +2362,8 @@
         "attributes": {
           "long_name": "Eastward gravity wave surface stress",
           "short_name": "lgws",
-          "standard_name": "atmosphere_eastward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time.",
+          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. Positive values are a westward gravity wave drag force on the atmosphere: the opposite sign convention to CF's atmosphere_eastward_stress_due_to_gravity_wave_drag.",
           "step_type": "avg",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -5405,9 +5404,8 @@
         "attributes": {
           "long_name": "Northward gravity wave surface stress",
           "short_name": "mgws",
-          "standard_name": "atmosphere_northward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time.",
+          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. Positive values are a southward gravity wave drag force on the atmosphere: the opposite sign convention to CF's atmosphere_northward_stress_due_to_gravity_wave_drag.",
           "step_type": "avg",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

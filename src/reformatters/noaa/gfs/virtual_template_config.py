@@ -1111,7 +1111,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="lgws",
             long_name="Eastward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_eastward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a westward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_eastward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         root_var(
             "northward_gravity_wave_surface_stress",
@@ -1121,7 +1125,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="mgws",
             long_name="Northward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_northward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a southward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_northward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         root_var(
             "vegetation_surface",
