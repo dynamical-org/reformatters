@@ -55,7 +55,7 @@
           "short_name": "fal",
           "standard_name": "surface_albedo",
           "units": "percent",
-          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time.",
+          "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. Exactly 0 wherever the averaging window received no sunlight; exclude those zeros from a time mean albedo.",
           "step_type": "avg",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

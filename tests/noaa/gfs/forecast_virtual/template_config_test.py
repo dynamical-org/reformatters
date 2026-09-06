@@ -105,7 +105,8 @@ def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> Non
     )
     assert get_var("albedo_surface").attrs.comment == (
         "Averaged over the preceding 1-6 hours of forecast lead time, since the last "
-        "lead time divisible by 6 before this step."
+        "lead time divisible by 6 before this step. Exactly 0 wherever the averaging "
+        "window received no sunlight; exclude those zeros from a time mean albedo."
     )
     assert str(get_var("maximum_temperature_2m").attrs.comment).startswith(
         "Maximum value over the preceding 1-6 hours"
