@@ -10283,7 +10283,6 @@
         "attributes": {
           "long_name": "Soil type",
           "short_name": "slt",
-          "standard_name": "soil_type",
           "units": "1",
           "comment": "Soil texture class from the 16 category STATSGO classification used by the GFS Noah land surface model, and 0 over water. Interpolation to this grid leaves values between the integer class codes, so a value is not exactly a class number.",
           "step_type": "instant",

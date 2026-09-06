@@ -1110,7 +1110,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="slt",
             long_name="Soil type",
             units="1",
-            standard_name="soil_type",
             comment=(
                 "Soil texture class from the 16 category STATSGO classification used by "
                 "the GFS Noah land surface model, and 0 over water. Interpolation to "

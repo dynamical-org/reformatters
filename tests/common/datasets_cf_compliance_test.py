@@ -517,6 +517,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "potential_evaporation_rate_surface",
     "rain_mixing_ratio_model_level_1",
     "snow_mixing_ratio_model_level_1",
+    # CF's soil_type is a flag variable; GFS interpolates the STATSGO class numbers, so
+    # the values are neither integer codes nor translatable through flag_values.
+    "soil_type_surface",
     "total_ozone_atmosphere",
     "u_component_storm_motion_6000_0m",
     "uv_b_downward_solar_flux_surface",
@@ -548,8 +551,6 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("mass_fraction_of_ozone_in_air", "kg kg-1"),
     # GFS albedo carries GRIB's percent; CF canonical is a 0-1 fraction.
     ("surface_albedo", "percent"),
-    # CF declares soil_type dimensionless with no canonical unit string.
-    ("soil_type", "1"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.
