@@ -21,8 +21,6 @@ def get_var(path: str) -> NoaaDataVar:
 def test_forecast_time_structure() -> None:
     assert CONFIG.append_dim == "init_time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("6h")
-    # Matches noaa-gfs-forecast. Prepending to an append dim later is a breaking
-    # change, so an earlier start is not something to reach for casually.
     assert CONFIG.append_dim_start == pd.Timestamp("2021-05-01T00:00")
     assert CONFIG.dims[ROOT] == ("init_time", "lead_time", "latitude", "longitude")
     assert CONFIG.dims["pressure_level"] == (

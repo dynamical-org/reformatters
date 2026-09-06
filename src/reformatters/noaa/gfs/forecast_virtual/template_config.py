@@ -66,7 +66,6 @@ class NoaaGfsForecastVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
         ),
     }
     append_dim: AppendDim = "init_time"
-    # Matches noaa-gfs-forecast so the two GFS forecasts cover the same period.
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 

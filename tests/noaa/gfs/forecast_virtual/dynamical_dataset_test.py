@@ -268,10 +268,10 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "30 3,9,15,21 * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=15)
+    assert update_cron_job.schedule == "29 3,9,15,21 * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=30)
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "55 5,11,17,23 * * *"
+    assert validation_cron_job.schedule == "59 5,11,17,23 * * *"
     assert len(update_cron_job.secret_names) > 0
     assert update_cron_job.suspend
     assert validation_cron_job.suspend
@@ -283,7 +283,7 @@ def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=11)
+    assert current_data.max_delay == timedelta(hours=6, minutes=30)
 
     completeness = next(
         v
