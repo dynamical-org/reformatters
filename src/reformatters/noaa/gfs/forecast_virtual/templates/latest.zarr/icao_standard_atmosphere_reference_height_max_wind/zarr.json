@@ -38,7 +38,7 @@
     "long_name": "ICAO Standard Atmosphere reference height",
     "short_name": "icaht",
     "units": "m",
-    "comment": "Pressure altitude: the height at which the ICAO Standard Atmosphere reaches the pressure found here, not a geometric height.",
+    "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

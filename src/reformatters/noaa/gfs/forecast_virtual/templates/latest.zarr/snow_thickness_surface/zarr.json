@@ -39,7 +39,7 @@
     "short_name": "sde",
     "standard_name": "surface_snow_thickness",
     "units": "m",
-    "comment": "NaN over open water; the source reports this quantity only over land and sea ice.",
+    "comment": "NaN over open water, available over land and sea ice.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

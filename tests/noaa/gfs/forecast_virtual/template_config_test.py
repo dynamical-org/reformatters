@@ -202,7 +202,7 @@ def test_the_differencing_sentences_are_true_for_the_pairs_they_claim() -> None:
 def test_a_windowed_variables_own_comment_survives_the_window_sentence() -> None:
     comment = str(get_var("water_runoff_surface").attrs.comment)
     assert comment.startswith("Accumulated over the preceding 1-6 hours")
-    assert comment.endswith("NaN over water, where this quantity does not apply.")
+    assert comment.endswith("NaN over water.")
 
 
 def test_instantaneous_variables_take_no_window_comment() -> None:

@@ -39,7 +39,7 @@
     "short_name": "pres",
     "standard_name": "air_pressure_at_convective_cloud_base",
     "units": "Pa",
-    "comment": "NaN where the source reports no convective cloud in the column. Every cell where convective_cloud_cover is zero is NaN, as are some cells at the edge of a cloud field where it is small.",
+    "comment": "NaN where the source reports no convective cloud in the column, and at some cloud-field edges where convective_cloud_cover is near zero.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

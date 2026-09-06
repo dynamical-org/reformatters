@@ -39,7 +39,7 @@
     "short_name": "icec",
     "standard_name": "floating_ice_area_fraction",
     "units": "1",
-    "comment": "The fraction of the cell covered by floating ice, taking any value between 0 and 1 rather than only those two. Covers lake ice as well as sea ice.",
+    "comment": "The fraction of the cell covered by floating ice, taking any value between 0 and 1. Covers lake ice as well as sea ice.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

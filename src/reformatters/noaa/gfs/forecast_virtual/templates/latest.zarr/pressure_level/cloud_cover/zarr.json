@@ -41,7 +41,7 @@
     "short_name": "cc",
     "standard_name": "cloud_area_fraction_in_atmosphere_layer",
     "units": "percent",
-    "comment": "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, 20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and 0.01 hPa) are NaN at every step.",
+    "comment": "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are NaN at every step.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -39,7 +39,7 @@
     "short_name": "cnwat",
     "standard_name": "canopy_water_amount",
     "units": "kg m-2",
-    "comment": "NaN over water, where this quantity does not apply.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
