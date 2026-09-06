@@ -1,0 +1,53 @@
+STEP 3 — noaa-gfs-forecast-virtual test backfill (gated on #995 merged + deployed)
+
+Invocation:
+  gh workflow run manual-backfill.yml --ref main \
+    -f dataset_id=noaa-gfs-forecast-virtual \
+    -f operation=create-new-store \
+    -f filter_start=<append_dim_start> \
+    -f filter_end=<append_dim_start + 1 year> \
+    -f jobs_per_pod=20 \
+    -f max_parallelism=10
+  (no append_dim_end, per Alden's earlier ruling)
+
+Sizing (Alden, current): jobs_per_pod=20, max_parallelism=10
+  218,803 refs per job (one init x 209 leads), derived from the analysis's
+  measured 1,047 refs per hourly position.
+  20 jobs/pod -> 4,376,050 refs/commit = 8.4x the largest commit ever measured
+  est 10.6 min/pod linear-scaled; likely faster, analysis scaled sublinearly (40% of linear)
+  1,460 inits -> 73 pods, 8 waves at parallelism 10
+
+Wave-1 stop rule (approved): if wave 1 shows any exit 137, OOMKilled or eviction,
+SUSPEND the job (do not delete), capture evidence, report before anything else.
+Otherwise let all 8 waves run. Watcher delivers a one-line status at end of wave 1.
+BLOCKER: the low-permissions kubeconfig CANNOT suspend — see note below.
+
+Pre-flight: store absent, both cronjobs suspended, deploy for main tip complete,
+no other job writing the store.
+
+Watcher brief must include:
+  - live log capture while pods are ALIVE, persisted to disk
+  - the ABSOLUTE capture directory path in its final message
+  - per-pod wall time (all pods), commit count and latency
+  - memory: kubectl top and cgroup are BOTH unavailable on this cluster
+    (no metrics-server; pods/exec denied). Record instead each pod's memory
+    REQUEST from the spec and every pod's terminated exitCode + reason;
+    flag OOMKilled, exit 137, eviction. This is a binary survival signal,
+    not the margin Alden asked for.
+  - note: request is 7G with NO limit set, so overrun means node pressure/eviction
+  - carry measured per-pod time and commit latency into step 5 sizing
+
+PERMISSIONS BLOCKER (verified 2026-09-06 on the real cluster):
+  KUBECONFIG=~/.kube/low-permissions.kubeconfig
+    kubectl auth can-i patch jobs        -> no
+    kubectl auth can-i update jobs       -> no
+    kubectl auth can-i delete jobs       -> no
+    kubectl auth can-i patch jobs/scale  -> no
+    kubectl auth can-i delete pods       -> no
+    kubectl auth can-i get jobs          -> yes
+  So the wave-1 stop rule is NOT executable from this session. Suspending the job
+  requires ~/.kube/config (full creds, 1Password-gated) or Alden doing it.
+  RESOLVED as detect-and-report: on any wave-1 exit 137 / OOMKilled / eviction,
+  report to the coordinator IMMEDIATELY -- do not wait for the wave to finish --
+  with the evidence and this exact command for Alden, who holds the credentials:
+    kubectl patch job <job-name> -p '{"spec":{"suspend":true}}'
