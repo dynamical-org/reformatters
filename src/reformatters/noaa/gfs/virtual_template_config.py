@@ -441,6 +441,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="VRATE",
             long_name="Ventilation Rate",
             units="m2 s-1",
+            comment=(
+                "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a "
+                "small value rounded down rather than missing data."
+            ),
         ),
         root_var(
             "wind_gust_surface",

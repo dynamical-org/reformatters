@@ -11828,6 +11828,7 @@
           "long_name": "Ventilation Rate",
           "short_name": "VRATE",
           "units": "m2 s-1",
+          "comment": "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a small value rounded down rather than missing data.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
