@@ -47,7 +47,7 @@ class NoaaGfsForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # This forecast uses leads 0-384, which publish ~init+3h32m to ~init+5h34m.
+        # A full forecast publishes ~init+3h32m to ~init+5h34m.
         # Fire a few minutes before the earliest and poll until the last one lands. The
         # deadline bounds waiting on a file that never publishes.
         operational_update_cron_job = ReformatCronJob(
