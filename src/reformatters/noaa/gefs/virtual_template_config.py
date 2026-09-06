@@ -34,23 +34,20 @@ from reformatters.noaa.gefs.gefs_config_models import (
     NoaaGefsVirtualInternalAttrs,
 )
 
-# Matches materialized noaa-gefs-forecast-35-day so the two archives align and
-# neither starts inside the ragged inits that precede it.
+# The inits between the v12 configuration change and this date are ragged.
 GEFS_VIRTUAL_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
 
 # The catalog's spelling of each grid FILE_RESOLUTIONS resolves to.
 _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {0.25: "0.25 degrees (~20km)"}
 
 # GribberishCodec decodes the raw Kelvin message and this array->array filter subtracts
-# 273.15 on read, matching the materialized GEFS datasets' degree_Celsius temperatures.
-# ScaleOffset decodes as value / scale + offset.
+# 273.15 on read. ScaleOffset decodes as value / scale + offset.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
-# TSOIL is absent here deliberately; it carries the same filter explicitly at its
-# variable definition, where the reason it cannot be inferred from GDAL is recorded.
+# TSOIL carries this filter at its own definition instead.
 _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN"})
 
-# WEASD decodes as kg m-2 of water; 1 kg m-2 = 0.001 m lwe, so scale=1000 yields metres,
-# matching snow_water_equivalent_surface across the catalog.
+# WEASD decodes as kg m-2 of water; 1 kg m-2 = 0.001 m lwe, so scale=1000 yields the
+# metres CF gives lwe_thickness_of_surface_snow_amount.
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 
 # MSLET entered the s file at this cycle; CPOFP, HGT@cloud ceiling and VIS entered at
@@ -67,8 +64,8 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     """
 
     source_file_types: frozenset[GEFSSourceFileType]
-    # The window a value covers depends on the dataset's time structure, so the wording
-    # cannot be shared: keyed by step_type, applied to every windowed variable.
+    # Keyed by step_type, applied to every windowed variable. The window a value covers
+    # depends on the dataset's time structure.
     window_comments: dict[str, str]
 
     @property
@@ -172,8 +169,8 @@ def _data_var(
         if filters is not None
         else ([_KELVIN_TO_CELSIUS] if element in _CELSIUS_ELEMENTS else ())
     )
-    # A flag variable's values are codes, not an average, so the window wording would
-    # contradict flag_values; its codes carry the meaning instead.
+    # A flag variable's values are codes, not an average, so window wording would
+    # contradict its flag_values.
     window_comment = None if flag_values else window_comments.get(step_type)
     if window_comment is not None:
         comment = f"{window_comment} {comment}" if comment else window_comment
@@ -213,7 +210,7 @@ def _s_file_data_vars(
     """Every message the pgrb2s.0p25 file publishes, except HGT at the surface.
 
     The s file carries surface geopotential height only at lead 0, unlike every other
-    message in it, so it is omitted rather than given a lead-0-only shape.
+    message in it.
     """
     var = functools.partial(
         _data_var,
