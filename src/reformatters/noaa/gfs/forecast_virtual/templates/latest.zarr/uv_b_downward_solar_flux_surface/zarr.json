@@ -38,7 +38,7 @@
     "long_name": "UV-B downward solar flux",
     "short_name": "duvb",
     "units": "W m-2",
-    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. The UV-B portion of the downward shortwave flux at the surface.",
+    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

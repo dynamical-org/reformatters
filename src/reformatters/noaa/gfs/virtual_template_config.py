@@ -2344,7 +2344,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="duvb",
             long_name="UV-B downward solar flux",
             units="W m-2",
-            comment="The UV-B portion of the downward shortwave flux at the surface.",
+            comment=(
+                "The UV-B portion of the downward shortwave flux at the surface, "
+                "covering 263-345 nm."
+            ),
         ),
         root_var(
             "clear_sky_uv_b_downward_solar_flux_surface",
@@ -2356,7 +2359,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="W m-2",
             comment=(
                 "The UV-B portion of the downward shortwave flux at the surface, "
-                "computed with clouds removed."
+                "covering 263-345 nm, computed with clouds removed."
             ),
         ),
         root_var(
