@@ -38,6 +38,7 @@ We use
 * Tests: 
    * Run tests in parallel on all available cores: `uv run pytest`
    * Run tests serially: `uv run pytest -n 0`
+   * Warnings are errors. Assert an expected warning with `pytest.warns`; add a narrow `ignore::` entry to `filterwarnings` in `pyproject.toml` only for a warning from a dependency we can't fix.
 
 ## Deploying to the cloud
 
