@@ -98,8 +98,7 @@ class NoaaGefsAnalysis025DegreeVirtualRegionJob(
         only the windowed half. Files past the limit stay pending and are offered again
         next tick, so a time is first visible complete.
 
-        A time the store already covers is never withheld: nothing extends there, and a
-        cycle the archive never published must not block the file beside it forever.
+        A time the store already covers is never withheld.
         """
         available = super().discover_available(pending)
         pending_own_cycle = Counter(

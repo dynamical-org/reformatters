@@ -37,12 +37,8 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four years of 3-hourly steps. Every array holds one ref per step, so a
-            # full manifest is 11680 refs, which measures ~224 KiB (19.7 bytes/ref) on
-            # this dataset's own manifests: well inside the 3 MiB reader budget and far
-            # above the 1000 refs zstd location compression needs. Across 38 arrays
-            # that is 0.44M refs per commit, against the 12.1M that operational HRRR
-            # forecast 48h sustains at a p50 of 2.8s.
+            # Four years of 3-hourly steps. Refs per commit = arrays x refs per active
+            # split, order 10^7; see "Manifest splitting" in docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size=4 * 365 * 8, dim="time"
             ),
@@ -66,10 +62,8 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, plus 10 minutes: the
-            # update stops polling 30 seconds before its deadline, so a validator
-            # firing at exactly the deadline could read the store while the update is
-            # still committing its last batch.
+            # The update's fire plus its pod_active_deadline, so the run being
+            # validated has always stopped writing.
             schedule="31 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -84,12 +78,10 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A time is ingested when its own shortest-lead file publishes, so just
-            # before a fire the newest step is ~7h old. 13h leaves room for one cycle
-            # to roll to the next fire.
+            # A time is ingested when its own shortest-lead file publishes, hours
+            # after the cycle that covers it starts.
             validation.CheckCurrentData(max_delay=timedelta(hours=13)),
-            # discover_available extends time only to a step holding every file it
-            # needs, so every ingested position is whole.
+            # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

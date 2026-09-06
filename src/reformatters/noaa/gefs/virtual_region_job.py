@@ -80,15 +80,10 @@ class NoaaGefsVirtualRegionJob(
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
         """Probe file presence through a variable the archive published in every era,
-        preferring an instant one so the probe lands where data exists at every step.
-
-        Probing a variable the source added partway through would leave every older file
-        permanently un-ingestable. A run filtered to only such variables has no other
-        choice, and those files do carry them, so it falls back rather than refusing.
-        """
+        preferring an instant one so the probe lands where data exists at every step."""
         candidates = [
             var for var in coord.data_vars if var.internal_attrs.available_from is None
-        ] or list(coord.data_vars)
+        ] or list(coord.data_vars)  # a run of only later-era vars must probe one
         return next(
             (var for var in candidates if var.attrs.step_type == "instant"),
             candidates[0],

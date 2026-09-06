@@ -324,8 +324,7 @@ def test_no_zarr3_primary_with_icechunk_replica(
 
 # google-weathernext2-forecast-historical-virtual applies one split to every array,
 # including its pressure_level group, and its region job batches writes on that same
-# constant (manifest_init_split), so the two must move together. Whether that shared
-# value meets the group's reader budget has not been audited; exempted until it is.
+# constant (manifest_init_split), so the two must move together.
 _UNSTATED_GROUP_SPLIT_EXEMPTIONS = {"google-weathernext2-forecast-historical-virtual"}
 
 
