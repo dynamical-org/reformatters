@@ -106,10 +106,7 @@ class NoaaVirtualRegionJob(
         ends = [*starts[1:], file_size]
 
         location = coord.get_url()
-        # An index is a sidecar that can go stale against a re-uploaded object while
-        # still naming in-bounds byte ranges, so check it against the object itself
-        # before trusting any of it: the data file's own GRIB header gives the true
-        # length of the first message.
+        # A stale index can name in-bounds ranges, so bounds alone do not prove a match.
         first_message_length = self.first_grib_message_length(coord)
         if first_message_length != ends[0] - starts[0]:
             log.error(

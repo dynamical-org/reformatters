@@ -17,9 +17,8 @@ from reformatters.noaa.gfs.virtual_region_job import (
 )
 from reformatters.noaa.models import NoaaDataVar
 
-# Variables the analysis reads at leads 1-6 although the source does publish a lead 0
-# record for them. SUNSD's lead 0 record accumulates over 3 hours, not the 1-6 hour
-# window the variable documents, so taking it would break the series every sixth hour.
+# Variables the analysis reads at leads 1-6 although the source publishes a lead 0
+# record: SUNSD's lead 0 record accumulates over 3 hours, not the documented 1-6 hours.
 WINDOWED_DESPITE_HOUR_0_RECORD = frozenset({"sunshine_duration_surface"})
 
 
