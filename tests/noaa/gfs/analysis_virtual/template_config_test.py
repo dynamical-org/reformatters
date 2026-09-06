@@ -81,12 +81,8 @@ def test_every_windowed_variable_describes_its_window_in_utc_times() -> None:
         assert "00, 06, 12 or 18 UTC hour before this time" in comment, var.name
     assert get_var("total_precipitation_surface").attrs.comment == (
         "Accumulated over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour "
-        "before this time. Subtracting the value at an earlier time with the same "
-        "window start gives the exact total between those two times."
+        "before this time."
     )
-    # Only accumulations get the differencing sentence; an average of a lengthening
-    # window cannot be differenced.
-    assert "Subtracting" not in str(get_var("albedo_surface").attrs.comment)
 
 
 def test_absolute_temperatures_are_celsius_and_differences_are_kelvin() -> None:

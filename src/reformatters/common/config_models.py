@@ -1,12 +1,12 @@
 from collections.abc import Sequence
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 import numcodecs
 import numcodecs.abc
 import numpy as np
 import pydantic
 
-from reformatters.common.pydantic import FrozenBaseModel
+from reformatters.common.pydantic import FrozenBaseModel, replace
 from reformatters.common.types import (
     ROOT,
     ArrayFloat32,
@@ -261,6 +261,12 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
         provides a lead-0 accumulation: differencing has no prior step there.
         """
         return self.has_hour_0_values() and not self.internal_attrs.deaccumulate_to_rate
+
+
+def prepend_comment[V: DataVar[Any]](var: V, sentence: str) -> V:
+    """`var` with `sentence` in front of whatever comment it already carries."""
+    comment = f"{sentence} {var.attrs.comment}" if var.attrs.comment else sentence
+    return replace(var, attrs=replace(var.attrs, comment=comment))
 
 
 def source_fill_value_var_names(

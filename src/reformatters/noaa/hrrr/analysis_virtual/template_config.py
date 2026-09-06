@@ -13,8 +13,8 @@ from reformatters.common.config_models import (
     DatasetAttributes,
     Encoding,
     StatisticsApproximate,
+    prepend_comment,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
@@ -124,7 +124,4 @@ def _with_run_total_comment(var: NoaaHrrrDataVar, names: set[str]) -> NoaaHrrrDa
         if hourly_name in names
         else "Accumulated over the one hour ending at this time."
     )
-    comment = (
-        f"{window_comment} {var.attrs.comment}" if var.attrs.comment else window_comment
-    )
-    return replace(var, attrs=replace(var.attrs, comment=comment))
+    return prepend_comment(var, window_comment)

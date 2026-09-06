@@ -13,8 +13,8 @@ from reformatters.common.config_models import (
     DatasetAttributes,
     Encoding,
     StatisticsApproximate,
+    prepend_comment,
 )
-from reformatters.common.pydantic import replace
 from reformatters.common.template_config import SPATIAL_REF_COORDS
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
@@ -29,10 +29,7 @@ _WINDOW_EXTENT = (
     "the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time."
 )
 _WINDOW_COMMENTS = {
-    "accum": (
-        f"Accumulated over {_WINDOW_EXTENT} Subtracting the value at an earlier time "
-        "with the same window start gives the exact total between those two times."
-    ),
+    "accum": f"Accumulated over {_WINDOW_EXTENT}",
     "avg": f"Averaged over {_WINDOW_EXTENT}",
     "max": f"Maximum value over {_WINDOW_EXTENT}",
     "min": f"Minimum value over {_WINDOW_EXTENT}",
@@ -131,7 +128,4 @@ def _with_window_comment(var: NoaaDataVar) -> NoaaDataVar:
     window_comment = _WINDOW_COMMENTS.get(var.attrs.step_type)
     if window_comment is None:
         return var
-    comment = (
-        f"{window_comment} {var.attrs.comment}" if var.attrs.comment else window_comment
-    )
-    return replace(var, attrs=replace(var.attrs, comment=comment))
+    return prepend_comment(var, window_comment)
