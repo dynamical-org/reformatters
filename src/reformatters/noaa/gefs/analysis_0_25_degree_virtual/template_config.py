@@ -26,9 +26,6 @@ class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConf
     3-hourly valid time."""
 
     source_file_types: frozenset[GEFSSourceFileType] = frozenset({"s"})
-    # Each valid time takes the shortest lead carrying it, so a windowed value covers
-    # the 6 hours since the previous synoptic cycle at 00/06/12/18 UTC and the 3 hours
-    # since it at 03/09/15/21 UTC.
     window_comments: dict[str, str] = {
         "avg": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
         "accum": (

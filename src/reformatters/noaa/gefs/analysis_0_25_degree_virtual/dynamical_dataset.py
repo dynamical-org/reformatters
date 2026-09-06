@@ -37,11 +37,12 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four years of 3-hourly steps. Every array holds one ref per step, so at
-            # the 19.7 bytes/ref measured on this dataset a full manifest is ~224 KiB:
-            # well inside the 3 MiB reader budget, well above the 1000 refs zstd
-            # location compression needs, and small enough that re-writing all 38
-            # arrays' active splits costs under a second of commit CPU.
+            # Four years of 3-hourly steps. Every array holds one ref per step, so a
+            # full manifest is 11680 refs, which measures ~224 KiB (19.7 bytes/ref) on
+            # this dataset's own manifests: well inside the 3 MiB reader budget and far
+            # above the 1000 refs zstd location compression needs. Across 38 arrays
+            # that is 0.44M refs per commit, against the 12.1M that operational HRRR
+            # forecast 48h sustains at a p50 of 2.8s.
             manifest_split=manifest_append_dim_split(
                 split_size=4 * 365 * 8, dim="time"
             ),
@@ -90,7 +91,5 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
             # discover_available extends time only to a step holding every file it
             # needs, so every ingested position is whole.
             validation.CheckVirtualManifestCompleteness(),
-            # Every variable carries real values somewhere on the globe at every step,
-            # so none may decode entirely NaN.
             validation.CheckVirtualDecodeHealth(),
         )

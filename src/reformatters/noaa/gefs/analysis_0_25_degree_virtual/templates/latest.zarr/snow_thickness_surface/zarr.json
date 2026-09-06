@@ -37,7 +37,7 @@
     "short_name": "sde",
     "standard_name": "surface_snow_thickness",
     "units": "m",
-    "comment": "NaN over open water, where snow does not accumulate.",
+    "comment": "NaN over open water.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

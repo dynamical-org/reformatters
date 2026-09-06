@@ -40,18 +40,15 @@ GEFS_VIRTUAL_ARCHIVE_START = pd.Timestamp("2020-10-01T00:00")
 # The catalog's spelling of each grid FILE_RESOLUTIONS resolves to.
 _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {0.25: "0.25 degrees (~20km)"}
 
-# GribberishCodec decodes the raw Kelvin message and this array->array filter subtracts
-# 273.15 on read. ScaleOffset decodes as value / scale + offset.
+# ScaleOffset decodes as encoded / scale + offset.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
-# TSOIL carries this filter at its own definition instead.
 _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN"})
 
 # WEASD decodes as kg m-2 of water; 1 kg m-2 = 0.001 m lwe, so scale=1000 yields the
 # metres CF gives lwe_thickness_of_surface_snow_amount.
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 
-# MSLET entered the s file at this cycle; CPOFP, HGT@cloud ceiling and VIS entered at
-# GEFS_B22_TRANSITION_DATE.
+# MSLET entered the s file at this cycle.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
 
 
@@ -64,8 +61,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     """
 
     source_file_types: frozenset[GEFSSourceFileType]
-    # Keyed by step_type, applied to every windowed variable. The window a value covers
-    # depends on the dataset's time structure.
+    # Window wording for each non-instant step_type a variable declares.
     window_comments: dict[str, str]
 
     @property
@@ -129,8 +125,6 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
 def _virtual_encoding(
     element: str, chunks: tuple[int, ...], filters: Sequence[CodecConfig]
 ) -> Encoding:
-    """No shards, no compressors; GribberishCodec decodes the raw message and any
-    array->array filters (K->C, unit scaling) are chained on read."""
     return Encoding(
         # GribberishCodec decodes to float64 natively; declaring float64 avoids a cast.
         dtype="float64",
@@ -171,7 +165,9 @@ def _data_var(
     )
     # A flag variable's values are codes, not an average, so window wording would
     # contradict its flag_values.
-    window_comment = None if flag_values else window_comments.get(step_type)
+    window_comment = (
+        None if flag_values or step_type == "instant" else window_comments[step_type]
+    )
     if window_comment is not None:
         comment = f"{window_comment} {comment}" if comment else window_comment
     return NoaaGefsVirtualDataVar(
@@ -266,7 +262,7 @@ def _s_file_data_vars(
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over water, where there is no soil.",
+            comment="NaN over water.",
             # The source is Kelvin despite GDAL labelling this element [C].
             filters=[_KELVIN_TO_CELSIUS],
         ),
@@ -278,7 +274,7 @@ def _s_file_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water, where there is no soil.",
+            comment="NaN over water.",
         ),
         var(
             "snow_water_equivalent_surface",
@@ -288,7 +284,7 @@ def _s_file_data_vars(
             long_name="Snow depth water equivalent",
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
-            comment="NaN over open water, where snow does not accumulate.",
+            comment="NaN over open water.",
             filters=[_WATER_KG_M2_TO_M_LWE],
         ),
         var(
@@ -299,7 +295,7 @@ def _s_file_data_vars(
             long_name="Snow depth",
             units="m",
             standard_name="surface_snow_thickness",
-            comment="NaN over open water, where snow does not accumulate.",
+            comment="NaN over open water.",
         ),
         var(
             "ice_thickness_surface",
