@@ -226,6 +226,11 @@ def test_dataset_attributes() -> None:
     assert attrs.time_domain == "Forecasts initialized 2020-10-01 00:00:00 UTC to Present"  # fmt: skip
     assert attrs.time_resolution == "Forecasts initialized every 6 hours"
     assert attrs.forecast_domain == "Forecast lead time 0-384 hours ahead"
+    # The axis coarsens at 240 hours, so naming only the finer step would be false
+    # about the 246-384 hour leads.
+    assert attrs.forecast_resolution == (
+        "Forecast step 0-240 hours: 3 hourly, 246-384 hours: 6 hourly"
+    )
 
 
 def test_template_carries_the_forecast_coordinates_in_every_group() -> None:

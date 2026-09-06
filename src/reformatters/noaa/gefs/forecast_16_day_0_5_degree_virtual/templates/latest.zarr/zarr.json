@@ -11,7 +11,7 @@
     "time_domain": "Forecasts initialized 2020-10-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-384 hours ahead",
-    "forecast_resolution": "Forecast step 3 hourly"
+    "forecast_resolution": "Forecast step 0-240 hours: 3 hourly, 246-384 hours: 6 hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {
@@ -3591,7 +3591,7 @@
           "time_domain": "Forecasts initialized 2020-10-01 00:00:00 UTC to Present",
           "time_resolution": "Forecasts initialized every 6 hours",
           "forecast_domain": "Forecast lead time 0-384 hours ahead",
-          "forecast_resolution": "Forecast step 3 hourly"
+          "forecast_resolution": "Forecast step 0-240 hours: 3 hourly, 246-384 hours: 6 hourly"
         },
         "zarr_format": 3,
         "consolidated_metadata": {
@@ -5302,7 +5302,7 @@
           "time_domain": "Forecasts initialized 2020-10-01 00:00:00 UTC to Present",
           "time_resolution": "Forecasts initialized every 6 hours",
           "forecast_domain": "Forecast lead time 0-384 hours ahead",
-          "forecast_resolution": "Forecast step 3 hourly"
+          "forecast_resolution": "Forecast step 0-240 hours: 3 hourly, 246-384 hours: 6 hourly"
         },
         "zarr_format": 3,
         "consolidated_metadata": {
@@ -7711,7 +7711,7 @@
           "time_domain": "Forecasts initialized 2020-10-01 00:00:00 UTC to Present",
           "time_resolution": "Forecasts initialized every 6 hours",
           "forecast_domain": "Forecast lead time 0-384 hours ahead",
-          "forecast_resolution": "Forecast step 3 hourly"
+          "forecast_resolution": "Forecast step 0-240 hours: 3 hourly, 246-384 hours: 6 hourly"
         },
         "zarr_format": 3,
         "consolidated_metadata": {

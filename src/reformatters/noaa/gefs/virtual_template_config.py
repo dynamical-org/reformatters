@@ -1,4 +1,5 @@
 import functools
+import itertools
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Literal, Self
 
@@ -363,7 +364,7 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {whole_hours(self.append_dim_frequency)} hours",
             forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
-            forecast_resolution=f"Forecast step {whole_hours(GEFS_S_FILE_LEAD_FREQUENCY)} hourly",
+            forecast_resolution=_forecast_resolution(self.lead_times()),
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -501,6 +502,26 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
                 ),
             ),
         )
+
+
+def _forecast_resolution(lead_times: pd.TimedeltaIndex) -> str:
+    """The "Forecast step" wording for a lead time axis, naming each span of constant
+    spacing where the source coarsens partway along it."""
+    runs: list[list[Timedelta]] = []  # first lead, last lead, step
+    for start, end in itertools.pairwise(lead_times):
+        step = end - start
+        if runs and runs[-1][2] == step:
+            runs[-1][1] = end
+        else:
+            # A new spacing is named from the first lead it reaches, not the last of
+            # the previous run, so the spans do not overlap at their boundary.
+            runs.append([start if not runs else end, end, step])
+    if len(runs) == 1:
+        return f"Forecast step {whole_hours(runs[0][2])} hourly"
+    return "Forecast step " + ", ".join(
+        f"{whole_hours(first)}-{whole_hours(last)} hours: {whole_hours(step)} hourly"
+        for first, last, step in runs
+    )
 
 
 def _virtual_encoding(
