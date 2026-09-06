@@ -1,0 +1,505 @@
+1:0:d=2020100100:PRES:mean sea level:384 hour fcst:ENS=low-res ctl
+2:272913:d=2020100100:PRES:1 hybrid level:384 hour fcst:ENS=low-res ctl
+3:525455:d=2020100100:HGT:1 hybrid level:384 hour fcst:ENS=low-res ctl
+4:691823:d=2020100100:TMP:1 hybrid level:384 hour fcst:ENS=low-res ctl
+5:831471:d=2020100100:RH:1 hybrid level:384 hour fcst:ENS=low-res ctl
+6:1155116:d=2020100100:UGRD:1 hybrid level:384 hour fcst:ENS=low-res ctl
+7:1417541:d=2020100100:VGRD:1 hybrid level:384 hour fcst:ENS=low-res ctl
+8:1678491:d=2020100100:PRES:2 hybrid level:384 hour fcst:ENS=low-res ctl
+9:1928242:d=2020100100:HGT:2 hybrid level:384 hour fcst:ENS=low-res ctl
+10:2092605:d=2020100100:TMP:2 hybrid level:384 hour fcst:ENS=low-res ctl
+11:2327408:d=2020100100:RH:2 hybrid level:384 hour fcst:ENS=low-res ctl
+12:2650587:d=2020100100:UGRD:2 hybrid level:384 hour fcst:ENS=low-res ctl
+13:2915273:d=2020100100:VGRD:2 hybrid level:384 hour fcst:ENS=low-res ctl
+14:3180171:d=2020100100:PRES:3 hybrid level:384 hour fcst:ENS=low-res ctl
+15:3428514:d=2020100100:HGT:3 hybrid level:384 hour fcst:ENS=low-res ctl
+16:3590090:d=2020100100:TMP:3 hybrid level:384 hour fcst:ENS=low-res ctl
+17:3825055:d=2020100100:RH:3 hybrid level:384 hour fcst:ENS=low-res ctl
+18:4147324:d=2020100100:UGRD:3 hybrid level:384 hour fcst:ENS=low-res ctl
+19:4412717:d=2020100100:VGRD:3 hybrid level:384 hour fcst:ENS=low-res ctl
+20:4679283:d=2020100100:PRES:4 hybrid level:384 hour fcst:ENS=low-res ctl
+21:4926777:d=2020100100:HGT:4 hybrid level:384 hour fcst:ENS=low-res ctl
+22:5088804:d=2020100100:TMP:4 hybrid level:384 hour fcst:ENS=low-res ctl
+23:5322262:d=2020100100:RH:4 hybrid level:384 hour fcst:ENS=low-res ctl
+24:5644453:d=2020100100:UGRD:4 hybrid level:384 hour fcst:ENS=low-res ctl
+25:5909416:d=2020100100:VGRD:4 hybrid level:384 hour fcst:ENS=low-res ctl
+26:6176683:d=2020100100:VIS:surface:384 hour fcst:ENS=low-res ctl
+27:6291742:d=2020100100:UGRD:planetary boundary layer:384 hour fcst:ENS=low-res ctl
+28:6461713:d=2020100100:VGRD:planetary boundary layer:384 hour fcst:ENS=low-res ctl
+29:6634273:d=2020100100:VRATE:planetary boundary layer:384 hour fcst:ENS=low-res ctl
+30:6720871:d=2020100100:GUST:surface:384 hour fcst:ENS=low-res ctl
+31:6894375:d=2020100100:HGT:1 mb:384 hour fcst:ENS=low-res ctl
+32:7094901:d=2020100100:TMP:1 mb:384 hour fcst:ENS=low-res ctl
+33:7191587:d=2020100100:SPFH:1 mb:384 hour fcst:ENS=low-res ctl
+34:7373585:d=2020100100:VVEL:1 mb:384 hour fcst:ENS=low-res ctl
+35:7698089:d=2020100100:UGRD:1 mb:384 hour fcst:ENS=low-res ctl
+36:7806203:d=2020100100:VGRD:1 mb:384 hour fcst:ENS=low-res ctl
+37:7901716:d=2020100100:O3MR:1 mb:384 hour fcst:ENS=low-res ctl
+38:8157802:d=2020100100:HGT:2 mb:384 hour fcst:ENS=low-res ctl
+39:8349299:d=2020100100:TMP:2 mb:384 hour fcst:ENS=low-res ctl
+40:8446540:d=2020100100:SPFH:2 mb:384 hour fcst:ENS=low-res ctl
+41:8561952:d=2020100100:VVEL:2 mb:384 hour fcst:ENS=low-res ctl
+42:8908056:d=2020100100:UGRD:2 mb:384 hour fcst:ENS=low-res ctl
+43:9119819:d=2020100100:VGRD:2 mb:384 hour fcst:ENS=low-res ctl
+44:9298413:d=2020100100:O3MR:2 mb:384 hour fcst:ENS=low-res ctl
+45:9557323:d=2020100100:HGT:3 mb:384 hour fcst:ENS=low-res ctl
+46:9750848:d=2020100100:TMP:3 mb:384 hour fcst:ENS=low-res ctl
+47:9850866:d=2020100100:SPFH:3 mb:384 hour fcst:ENS=low-res ctl
+48:9977136:d=2020100100:VVEL:3 mb:384 hour fcst:ENS=low-res ctl
+49:10338921:d=2020100100:UGRD:3 mb:384 hour fcst:ENS=low-res ctl
+50:10557739:d=2020100100:VGRD:3 mb:384 hour fcst:ENS=low-res ctl
+51:10744301:d=2020100100:O3MR:3 mb:384 hour fcst:ENS=low-res ctl
+52:10997201:d=2020100100:HGT:5 mb:384 hour fcst:ENS=low-res ctl
+53:11184375:d=2020100100:TMP:5 mb:384 hour fcst:ENS=low-res ctl
+54:11294285:d=2020100100:SPFH:5 mb:384 hour fcst:ENS=low-res ctl
+55:11436314:d=2020100100:VVEL:5 mb:384 hour fcst:ENS=low-res ctl
+56:11794373:d=2020100100:UGRD:5 mb:384 hour fcst:ENS=low-res ctl
+57:12023168:d=2020100100:VGRD:5 mb:384 hour fcst:ENS=low-res ctl
+58:12223772:d=2020100100:O3MR:5 mb:384 hour fcst:ENS=low-res ctl
+59:12463675:d=2020100100:HGT:7 mb:384 hour fcst:ENS=low-res ctl
+60:12649159:d=2020100100:TMP:7 mb:384 hour fcst:ENS=low-res ctl
+61:12751786:d=2020100100:SPFH:7 mb:384 hour fcst:ENS=low-res ctl
+62:12895704:d=2020100100:VVEL:7 mb:384 hour fcst:ENS=low-res ctl
+63:13187396:d=2020100100:UGRD:7 mb:384 hour fcst:ENS=low-res ctl
+64:13409811:d=2020100100:VGRD:7 mb:384 hour fcst:ENS=low-res ctl
+65:13601650:d=2020100100:O3MR:7 mb:384 hour fcst:ENS=low-res ctl
+66:13774450:d=2020100100:SPFH:10 mb:384 hour fcst:ENS=low-res ctl
+67:13930290:d=2020100100:VVEL:10 mb:384 hour fcst:ENS=low-res ctl
+68:14238346:d=2020100100:ABSV:10 mb:384 hour fcst:ENS=low-res ctl
+69:14381189:d=2020100100:CLWMR:10 mb:384 hour fcst:ENS=low-res ctl
+70:14381371:d=2020100100:O3MR:10 mb:384 hour fcst:ENS=low-res ctl
+71:14572445:d=2020100100:HGT:20 mb:384 hour fcst:ENS=low-res ctl
+72:14748438:d=2020100100:TMP:20 mb:384 hour fcst:ENS=low-res ctl
+73:14855351:d=2020100100:RH:20 mb:384 hour fcst:ENS=low-res ctl
+74:14949108:d=2020100100:SPFH:20 mb:384 hour fcst:ENS=low-res ctl
+75:15110880:d=2020100100:VVEL:20 mb:384 hour fcst:ENS=low-res ctl
+76:15448678:d=2020100100:UGRD:20 mb:384 hour fcst:ENS=low-res ctl
+77:15679004:d=2020100100:VGRD:20 mb:384 hour fcst:ENS=low-res ctl
+78:15883108:d=2020100100:ABSV:20 mb:384 hour fcst:ENS=low-res ctl
+79:16033836:d=2020100100:CLWMR:20 mb:384 hour fcst:ENS=low-res ctl
+80:16034018:d=2020100100:O3MR:20 mb:384 hour fcst:ENS=low-res ctl
+81:16320120:d=2020100100:HGT:30 mb:384 hour fcst:ENS=low-res ctl
+82:16492770:d=2020100100:TMP:30 mb:384 hour fcst:ENS=low-res ctl
+83:16597647:d=2020100100:RH:30 mb:384 hour fcst:ENS=low-res ctl
+84:16661829:d=2020100100:SPFH:30 mb:384 hour fcst:ENS=low-res ctl
+85:16842095:d=2020100100:VVEL:30 mb:384 hour fcst:ENS=low-res ctl
+86:17195605:d=2020100100:UGRD:30 mb:384 hour fcst:ENS=low-res ctl
+87:17424303:d=2020100100:VGRD:30 mb:384 hour fcst:ENS=low-res ctl
+88:17629457:d=2020100100:ABSV:30 mb:384 hour fcst:ENS=low-res ctl
+89:17888565:d=2020100100:CLWMR:30 mb:384 hour fcst:ENS=low-res ctl
+90:17888747:d=2020100100:O3MR:30 mb:384 hour fcst:ENS=low-res ctl
+91:18179464:d=2020100100:SPFH:50 mb:384 hour fcst:ENS=low-res ctl
+92:18372552:d=2020100100:VVEL:50 mb:384 hour fcst:ENS=low-res ctl
+93:18746655:d=2020100100:ABSV:50 mb:384 hour fcst:ENS=low-res ctl
+94:19017439:d=2020100100:CLWMR:50 mb:384 hour fcst:ENS=low-res ctl
+95:19017621:d=2020100100:O3MR:50 mb:384 hour fcst:ENS=low-res ctl
+96:19332445:d=2020100100:HGT:70 mb:384 hour fcst:ENS=low-res ctl
+97:19527556:d=2020100100:TMP:70 mb:384 hour fcst:ENS=low-res ctl
+98:19634797:d=2020100100:RH:70 mb:384 hour fcst:ENS=low-res ctl
+99:19752034:d=2020100100:SPFH:70 mb:384 hour fcst:ENS=low-res ctl
+100:19945035:d=2020100100:VVEL:70 mb:384 hour fcst:ENS=low-res ctl
+101:20302455:d=2020100100:UGRD:70 mb:384 hour fcst:ENS=low-res ctl
+102:20525537:d=2020100100:VGRD:70 mb:384 hour fcst:ENS=low-res ctl
+103:20740842:d=2020100100:ABSV:70 mb:384 hour fcst:ENS=low-res ctl
+104:21017899:d=2020100100:CLWMR:70 mb:384 hour fcst:ENS=low-res ctl
+105:21018081:d=2020100100:O3MR:70 mb:384 hour fcst:ENS=low-res ctl
+106:21321753:d=2020100100:SPFH:100 mb:384 hour fcst:ENS=low-res ctl
+107:21527262:d=2020100100:VVEL:100 mb:384 hour fcst:ENS=low-res ctl
+108:21828831:d=2020100100:ABSV:100 mb:384 hour fcst:ENS=low-res ctl
+109:22110137:d=2020100100:CLWMR:100 mb:384 hour fcst:ENS=low-res ctl
+110:22110446:d=2020100100:O3MR:100 mb:384 hour fcst:ENS=low-res ctl
+111:22388931:d=2020100100:O3MR:125 mb:384 hour fcst:ENS=low-res ctl
+112:22651598:d=2020100100:HGT:150 mb:384 hour fcst:ENS=low-res ctl
+113:22852041:d=2020100100:TMP:150 mb:384 hour fcst:ENS=low-res ctl
+114:22956821:d=2020100100:RH:150 mb:384 hour fcst:ENS=low-res ctl
+115:23129567:d=2020100100:SPFH:150 mb:384 hour fcst:ENS=low-res ctl
+116:23321788:d=2020100100:VVEL:150 mb:384 hour fcst:ENS=low-res ctl
+117:23655304:d=2020100100:UGRD:150 mb:384 hour fcst:ENS=low-res ctl
+118:23903360:d=2020100100:VGRD:150 mb:384 hour fcst:ENS=low-res ctl
+119:24137345:d=2020100100:ABSV:150 mb:384 hour fcst:ENS=low-res ctl
+120:24330933:d=2020100100:CLWMR:150 mb:384 hour fcst:ENS=low-res ctl
+121:24337618:d=2020100100:O3MR:150 mb:384 hour fcst:ENS=low-res ctl
+122:24582349:d=2020100100:SPFH:200 mb:384 hour fcst:ENS=low-res ctl
+123:24755017:d=2020100100:VVEL:200 mb:384 hour fcst:ENS=low-res ctl
+124:25002791:d=2020100100:ABSV:200 mb:384 hour fcst:ENS=low-res ctl
+125:25211860:d=2020100100:CLWMR:200 mb:384 hour fcst:ENS=low-res ctl
+126:25229179:d=2020100100:O3MR:200 mb:384 hour fcst:ENS=low-res ctl
+127:25534115:d=2020100100:SPFH:250 mb:384 hour fcst:ENS=low-res ctl
+128:25756353:d=2020100100:VVEL:250 mb:384 hour fcst:ENS=low-res ctl
+129:26018392:d=2020100100:ABSV:250 mb:384 hour fcst:ENS=low-res ctl
+130:26243082:d=2020100100:CLWMR:250 mb:384 hour fcst:ENS=low-res ctl
+131:26243407:d=2020100100:O3MR:250 mb:384 hour fcst:ENS=low-res ctl
+132:26569342:d=2020100100:TMP:300 mb:384 hour fcst:ENS=low-res ctl
+133:26679229:d=2020100100:RH:300 mb:384 hour fcst:ENS=low-res ctl
+134:26912441:d=2020100100:SPFH:300 mb:384 hour fcst:ENS=low-res ctl
+135:27085266:d=2020100100:VVEL:300 mb:384 hour fcst:ENS=low-res ctl
+136:27362080:d=2020100100:ABSV:300 mb:384 hour fcst:ENS=low-res ctl
+137:27598340:d=2020100100:CLWMR:300 mb:384 hour fcst:ENS=low-res ctl
+138:27598768:d=2020100100:ICIP:300 mb:384 hour fcst:ENS=low-res ctl
+139:27599919:d=2020100100:ICSEV:300 mb:384 hour fcst:ENS=low-res ctl
+140:27600453:d=2020100100:O3MR:300 mb:384 hour fcst:ENS=low-res ctl
+141:27913884:d=2020100100:HGT:350 mb:384 hour fcst:ENS=low-res ctl
+142:28118025:d=2020100100:TMP:350 mb:384 hour fcst:ENS=low-res ctl
+143:28223681:d=2020100100:RH:350 mb:384 hour fcst:ENS=low-res ctl
+144:28452204:d=2020100100:SPFH:350 mb:384 hour fcst:ENS=low-res ctl
+145:28647399:d=2020100100:VVEL:350 mb:384 hour fcst:ENS=low-res ctl
+146:28928156:d=2020100100:UGRD:350 mb:384 hour fcst:ENS=low-res ctl
+147:29086212:d=2020100100:VGRD:350 mb:384 hour fcst:ENS=low-res ctl
+148:29250882:d=2020100100:ABSV:350 mb:384 hour fcst:ENS=low-res ctl
+149:29482434:d=2020100100:CLWMR:350 mb:384 hour fcst:ENS=low-res ctl
+150:29482873:d=2020100100:O3MR:350 mb:384 hour fcst:ENS=low-res ctl
+151:29779960:d=2020100100:HGT:400 mb:384 hour fcst:ENS=low-res ctl
+152:29982025:d=2020100100:TMP:400 mb:384 hour fcst:ENS=low-res ctl
+153:30092249:d=2020100100:RH:400 mb:384 hour fcst:ENS=low-res ctl
+154:30320749:d=2020100100:SPFH:400 mb:384 hour fcst:ENS=low-res ctl
+155:30539407:d=2020100100:VVEL:400 mb:384 hour fcst:ENS=low-res ctl
+156:30824364:d=2020100100:ABSV:400 mb:384 hour fcst:ENS=low-res ctl
+157:31057741:d=2020100100:CLWMR:400 mb:384 hour fcst:ENS=low-res ctl
+158:31059093:d=2020100100:ICIP:400 mb:384 hour fcst:ENS=low-res ctl
+159:31107325:d=2020100100:ICSEV:400 mb:384 hour fcst:ENS=low-res ctl
+160:31148669:d=2020100100:O3MR:400 mb:384 hour fcst:ENS=low-res ctl
+161:31440895:d=2020100100:HGT:450 mb:384 hour fcst:ENS=low-res ctl
+162:31641943:d=2020100100:TMP:450 mb:384 hour fcst:ENS=low-res ctl
+163:31750523:d=2020100100:RH:450 mb:384 hour fcst:ENS=low-res ctl
+164:31974076:d=2020100100:SPFH:450 mb:384 hour fcst:ENS=low-res ctl
+165:32206933:d=2020100100:VVEL:450 mb:384 hour fcst:ENS=low-res ctl
+166:32491850:d=2020100100:UGRD:450 mb:384 hour fcst:ENS=low-res ctl
+167:32753026:d=2020100100:VGRD:450 mb:384 hour fcst:ENS=low-res ctl
+168:33015196:d=2020100100:ABSV:450 mb:384 hour fcst:ENS=low-res ctl
+169:33243598:d=2020100100:CLWMR:450 mb:384 hour fcst:ENS=low-res ctl
+170:33248685:d=2020100100:TCDC:475 mb:384 hour fcst:ENS=low-res ctl
+171:33329729:d=2020100100:SPFH:500 mb:384 hour fcst:ENS=low-res ctl
+172:33582128:d=2020100100:VVEL:500 mb:384 hour fcst:ENS=low-res ctl
+173:33868574:d=2020100100:ABSV:500 mb:384 hour fcst:ENS=low-res ctl
+174:34097961:d=2020100100:CLWMR:500 mb:384 hour fcst:ENS=low-res ctl
+175:34110987:d=2020100100:ICIP:500 mb:384 hour fcst:ENS=low-res ctl
+176:34165338:d=2020100100:ICSEV:500 mb:384 hour fcst:ENS=low-res ctl
+177:34233366:d=2020100100:HGT:550 mb:384 hour fcst:ENS=low-res ctl
+178:34464538:d=2020100100:TMP:550 mb:384 hour fcst:ENS=low-res ctl
+179:34578089:d=2020100100:RH:550 mb:384 hour fcst:ENS=low-res ctl
+180:34805490:d=2020100100:SPFH:550 mb:384 hour fcst:ENS=low-res ctl
+181:35069502:d=2020100100:VVEL:550 mb:384 hour fcst:ENS=low-res ctl
+182:35356140:d=2020100100:UGRD:550 mb:384 hour fcst:ENS=low-res ctl
+183:35611052:d=2020100100:VGRD:550 mb:384 hour fcst:ENS=low-res ctl
+184:35871990:d=2020100100:ABSV:550 mb:384 hour fcst:ENS=low-res ctl
+185:36098842:d=2020100100:CLWMR:550 mb:384 hour fcst:ENS=low-res ctl
+186:36128020:d=2020100100:HGT:600 mb:384 hour fcst:ENS=low-res ctl
+187:36359255:d=2020100100:TMP:600 mb:384 hour fcst:ENS=low-res ctl
+188:36476986:d=2020100100:RH:600 mb:384 hour fcst:ENS=low-res ctl
+189:36706669:d=2020100100:SPFH:600 mb:384 hour fcst:ENS=low-res ctl
+190:36983367:d=2020100100:VVEL:600 mb:384 hour fcst:ENS=low-res ctl
+191:37273291:d=2020100100:UGRD:600 mb:384 hour fcst:ENS=low-res ctl
+192:37529042:d=2020100100:VGRD:600 mb:384 hour fcst:ENS=low-res ctl
+193:37789886:d=2020100100:ABSV:600 mb:384 hour fcst:ENS=low-res ctl
+194:38016412:d=2020100100:CLWMR:600 mb:384 hour fcst:ENS=low-res ctl
+195:38063279:d=2020100100:ICIP:600 mb:384 hour fcst:ENS=low-res ctl
+196:38153892:d=2020100100:ICSEV:600 mb:384 hour fcst:ENS=low-res ctl
+197:38265141:d=2020100100:HGT:650 mb:384 hour fcst:ENS=low-res ctl
+198:38506564:d=2020100100:TMP:650 mb:384 hour fcst:ENS=low-res ctl
+199:38626939:d=2020100100:RH:650 mb:384 hour fcst:ENS=low-res ctl
+200:38859007:d=2020100100:SPFH:650 mb:384 hour fcst:ENS=low-res ctl
+201:39048776:d=2020100100:VVEL:650 mb:384 hour fcst:ENS=low-res ctl
+202:39341562:d=2020100100:UGRD:650 mb:384 hour fcst:ENS=low-res ctl
+203:39599508:d=2020100100:VGRD:650 mb:384 hour fcst:ENS=low-res ctl
+204:39862152:d=2020100100:ABSV:650 mb:384 hour fcst:ENS=low-res ctl
+205:40091583:d=2020100100:CLWMR:650 mb:384 hour fcst:ENS=low-res ctl
+206:40126142:d=2020100100:SPFH:700 mb:384 hour fcst:ENS=low-res ctl
+207:40321483:d=2020100100:VVEL:700 mb:384 hour fcst:ENS=low-res ctl
+208:40617109:d=2020100100:ABSV:700 mb:384 hour fcst:ENS=low-res ctl
+209:40846837:d=2020100100:CLWMR:700 mb:384 hour fcst:ENS=low-res ctl
+210:40884633:d=2020100100:ICIP:700 mb:384 hour fcst:ENS=low-res ctl
+211:40971430:d=2020100100:ICSEV:700 mb:384 hour fcst:ENS=low-res ctl
+212:41075450:d=2020100100:HGT:750 mb:384 hour fcst:ENS=low-res ctl
+213:41320821:d=2020100100:TMP:750 mb:384 hour fcst:ENS=low-res ctl
+214:41446062:d=2020100100:RH:750 mb:384 hour fcst:ENS=low-res ctl
+215:41681504:d=2020100100:SPFH:750 mb:384 hour fcst:ENS=low-res ctl
+216:41883812:d=2020100100:VVEL:750 mb:384 hour fcst:ENS=low-res ctl
+217:42182986:d=2020100100:UGRD:750 mb:384 hour fcst:ENS=low-res ctl
+218:42443148:d=2020100100:VGRD:750 mb:384 hour fcst:ENS=low-res ctl
+219:42707837:d=2020100100:ABSV:750 mb:384 hour fcst:ENS=low-res ctl
+220:42938658:d=2020100100:CLWMR:750 mb:384 hour fcst:ENS=low-res ctl
+221:43000154:d=2020100100:HGT:800 mb:384 hour fcst:ENS=low-res ctl
+222:43247099:d=2020100100:TMP:800 mb:384 hour fcst:ENS=low-res ctl
+223:43378391:d=2020100100:RH:800 mb:384 hour fcst:ENS=low-res ctl
+224:43619062:d=2020100100:SPFH:800 mb:384 hour fcst:ENS=low-res ctl
+225:43828386:d=2020100100:VVEL:800 mb:384 hour fcst:ENS=low-res ctl
+226:44130915:d=2020100100:UGRD:800 mb:384 hour fcst:ENS=low-res ctl
+227:44393257:d=2020100100:VGRD:800 mb:384 hour fcst:ENS=low-res ctl
+228:44660805:d=2020100100:ABSV:800 mb:384 hour fcst:ENS=low-res ctl
+229:44895259:d=2020100100:CLWMR:800 mb:384 hour fcst:ENS=low-res ctl
+230:44972614:d=2020100100:ICIP:800 mb:384 hour fcst:ENS=low-res ctl
+231:45059756:d=2020100100:ICSEV:800 mb:384 hour fcst:ENS=low-res ctl
+232:45156038:d=2020100100:SPFH:850 mb:384 hour fcst:ENS=low-res ctl
+233:45370423:d=2020100100:ABSV:850 mb:384 hour fcst:ENS=low-res ctl
+234:45608102:d=2020100100:CLWMR:850 mb:384 hour fcst:ENS=low-res ctl
+235:45717839:d=2020100100:HGT:900 mb:384 hour fcst:ENS=low-res ctl
+236:45974346:d=2020100100:TMP:900 mb:384 hour fcst:ENS=low-res ctl
+237:46113307:d=2020100100:RH:900 mb:384 hour fcst:ENS=low-res ctl
+238:46352214:d=2020100100:SPFH:900 mb:384 hour fcst:ENS=low-res ctl
+239:46563813:d=2020100100:VVEL:900 mb:384 hour fcst:ENS=low-res ctl
+240:46867089:d=2020100100:UGRD:900 mb:384 hour fcst:ENS=low-res ctl
+241:47131379:d=2020100100:VGRD:900 mb:384 hour fcst:ENS=low-res ctl
+242:47401425:d=2020100100:ABSV:900 mb:384 hour fcst:ENS=low-res ctl
+243:47640397:d=2020100100:CLWMR:900 mb:384 hour fcst:ENS=low-res ctl
+244:47769549:d=2020100100:SPFH:925 mb:384 hour fcst:ENS=low-res ctl
+245:47978171:d=2020100100:VVEL:925 mb:384 hour fcst:ENS=low-res ctl
+246:48277700:d=2020100100:ABSV:925 mb:384 hour fcst:ENS=low-res ctl
+247:48514575:d=2020100100:CLWMR:925 mb:384 hour fcst:ENS=low-res ctl
+248:48621770:d=2020100100:HGT:950 mb:384 hour fcst:ENS=low-res ctl
+249:48884268:d=2020100100:TMP:950 mb:384 hour fcst:ENS=low-res ctl
+250:49019970:d=2020100100:RH:950 mb:384 hour fcst:ENS=low-res ctl
+251:49246877:d=2020100100:SPFH:950 mb:384 hour fcst:ENS=low-res ctl
+252:49452206:d=2020100100:VVEL:950 mb:384 hour fcst:ENS=low-res ctl
+253:49818162:d=2020100100:UGRD:950 mb:384 hour fcst:ENS=low-res ctl
+254:50080771:d=2020100100:VGRD:950 mb:384 hour fcst:ENS=low-res ctl
+255:50347235:d=2020100100:ABSV:950 mb:384 hour fcst:ENS=low-res ctl
+256:50581220:d=2020100100:CLWMR:950 mb:384 hour fcst:ENS=low-res ctl
+257:50650231:d=2020100100:HINDEX:surface:384 hour fcst:ENS=low-res ctl
+258:50705670:d=2020100100:HGT:975 mb:384 hour fcst:ENS=low-res ctl
+259:50972474:d=2020100100:TMP:975 mb:384 hour fcst:ENS=low-res ctl
+260:51107850:d=2020100100:RH:975 mb:384 hour fcst:ENS=low-res ctl
+261:51330305:d=2020100100:SPFH:975 mb:384 hour fcst:ENS=low-res ctl
+262:51533235:d=2020100100:VVEL:975 mb:384 hour fcst:ENS=low-res ctl
+263:51881385:d=2020100100:UGRD:975 mb:384 hour fcst:ENS=low-res ctl
+264:52144436:d=2020100100:VGRD:975 mb:384 hour fcst:ENS=low-res ctl
+265:52409571:d=2020100100:ABSV:975 mb:384 hour fcst:ENS=low-res ctl
+266:52640650:d=2020100100:CLWMR:975 mb:384 hour fcst:ENS=low-res ctl
+267:52678352:d=2020100100:SPFH:1000 mb:384 hour fcst:ENS=low-res ctl
+268:52880580:d=2020100100:VVEL:1000 mb:384 hour fcst:ENS=low-res ctl
+269:53199249:d=2020100100:ABSV:1000 mb:384 hour fcst:ENS=low-res ctl
+270:53426251:d=2020100100:CLWMR:1000 mb:384 hour fcst:ENS=low-res ctl
+271:53437660:d=2020100100:MSLET:mean sea level:384 hour fcst:ENS=low-res ctl
+272:53702641:d=2020100100:HGT:surface:384 hour fcst:ENS=low-res ctl
+273:53847174:d=2020100100:TMP:surface:384 hour fcst:ENS=low-res ctl
+274:54003792:d=2020100100:SOILL:0-0.1 m below ground:384 hour fcst:ENS=low-res ctl
+275:54096159:d=2020100100:TSOIL:0.1-0.4 m below ground:384 hour fcst:ENS=low-res ctl
+276:54229111:d=2020100100:SOILW:0.1-0.4 m below ground:384 hour fcst:ENS=low-res ctl
+277:54323265:d=2020100100:SOILL:0.1-0.4 m below ground:384 hour fcst:ENS=low-res ctl
+278:54417505:d=2020100100:TSOIL:0.4-1 m below ground:384 hour fcst:ENS=low-res ctl
+279:54550840:d=2020100100:SOILW:0.4-1 m below ground:384 hour fcst:ENS=low-res ctl
+280:54646363:d=2020100100:SOILL:0.4-1 m below ground:384 hour fcst:ENS=low-res ctl
+281:54741736:d=2020100100:TSOIL:1-2 m below ground:384 hour fcst:ENS=low-res ctl
+282:54875939:d=2020100100:SOILW:1-2 m below ground:384 hour fcst:ENS=low-res ctl
+283:54970313:d=2020100100:SOILL:1-2 m below ground:384 hour fcst:ENS=low-res ctl
+284:55065008:d=2020100100:CNWAT:surface:384 hour fcst:ENS=low-res ctl
+285:55114016:d=2020100100:SNOWC:surface:378-384 hour ave fcst:ENS=low-res ctl
+286:55165921:d=2020100100:PEVPR:surface:384 hour fcst:ENS=low-res ctl
+287:55311035:d=2020100100:SPFH:2 m above ground:384 hour fcst:ENS=low-res ctl
+288:55508309:d=2020100100:DPT:2 m above ground:384 hour fcst:ENS=low-res ctl
+289:55653760:d=2020100100:APTMP:2 m above ground:384 hour fcst:ENS=low-res ctl
+290:55807621:d=2020100100:CPOFP:surface:384 hour fcst:ENS=low-res ctl
+291:55998568:d=2020100100:CPRAT:surface:378-384 hour ave fcst:ENS=low-res ctl
+292:56107551:d=2020100100:PRATE:surface:378-384 hour ave fcst:ENS=low-res ctl
+293:56247845:d=2020100100:ACPCP:surface:378-384 hour acc fcst:ENS=low-res ctl
+294:56377795:d=2020100100:NCPCP:surface:378-384 hour acc fcst:ENS=low-res ctl
+295:56424922:d=2020100100:WATR:surface:378-384 hour acc fcst:ENS=low-res ctl
+296:56527617:d=2020100100:GFLUX:surface:378-384 hour ave fcst:ENS=low-res ctl
+297:56662974:d=2020100100:SNOHF:surface:378-384 hour ave fcst:ENS=low-res ctl
+298:56707150:d=2020100100:UFLX:surface:378-384 hour ave fcst:ENS=low-res ctl
+299:56894591:d=2020100100:VFLX:surface:378-384 hour ave fcst:ENS=low-res ctl
+300:57076293:d=2020100100:SFCR:surface:384 hour fcst:ENS=low-res ctl
+301:57160172:d=2020100100:FRICV:surface:384 hour fcst:ENS=low-res ctl
+302:57417281:d=2020100100:U-GWD:surface:378-384 hour ave fcst:ENS=low-res ctl
+303:57531017:d=2020100100:V-GWD:surface:378-384 hour ave fcst:ENS=low-res ctl
+304:57638158:d=2020100100:WILT:surface:384 hour fcst:ENS=low-res ctl
+305:57738566:d=2020100100:FLDCP:surface:384 hour fcst:ENS=low-res ctl
+306:57841676:d=2020100100:SUNSD:surface:384 hour fcst:ENS=low-res ctl
+307:58025083:d=2020100100:LFTX:surface:384 hour fcst:ENS=low-res ctl
+308:58174090:d=2020100100:CAPE:surface:384 hour fcst:ENS=low-res ctl
+309:58321649:d=2020100100:CIN:surface:384 hour fcst:ENS=low-res ctl
+310:58483293:d=2020100100:CWAT:entire atmosphere (considered as a single layer):384 hour fcst:ENS=low-res ctl
+311:58601244:d=2020100100:RH:entire atmosphere (considered as a single layer):384 hour fcst:ENS=low-res ctl
+312:58694641:d=2020100100:TOZNE:entire atmosphere (considered as a single layer):384 hour fcst:ENS=low-res ctl
+313:58843711:d=2020100100:TCDC:low cloud layer:378-384 hour ave fcst:ENS=low-res ctl
+314:59008505:d=2020100100:TCDC:middle cloud layer:378-384 hour ave fcst:ENS=low-res ctl
+315:59127581:d=2020100100:TCDC:high cloud layer:378-384 hour ave fcst:ENS=low-res ctl
+316:59266490:d=2020100100:HGT:cloud ceiling:384 hour fcst:ENS=low-res ctl
+317:59573799:d=2020100100:PRES:convective cloud bottom level:384 hour fcst:ENS=low-res ctl
+318:59724633:d=2020100100:PRES:low cloud bottom level:378-384 hour ave fcst:ENS=low-res ctl
+319:60072303:d=2020100100:PRES:middle cloud bottom level:378-384 hour ave fcst:ENS=low-res ctl
+320:60323145:d=2020100100:PRES:high cloud bottom level:378-384 hour ave fcst:ENS=low-res ctl
+321:60631321:d=2020100100:BRTMP:top of atmosphere:384 hour fcst:ENS=low-res ctl
+322:60781313:d=2020100100:PRES:convective cloud top level:384 hour fcst:ENS=low-res ctl
+323:60945814:d=2020100100:PRES:low cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+324:61293619:d=2020100100:PRES:middle cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+325:61540905:d=2020100100:PRES:high cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+326:61847265:d=2020100100:TMP:low cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+327:62021353:d=2020100100:TMP:middle cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+328:62162954:d=2020100100:TMP:high cloud top level:378-384 hour ave fcst:ENS=low-res ctl
+329:62347483:d=2020100100:TCDC:convective cloud layer:384 hour fcst:ENS=low-res ctl
+330:62459205:d=2020100100:TCDC:boundary layer cloud layer:378-384 hour ave fcst:ENS=low-res ctl
+331:62608079:d=2020100100:CWORK:entire atmosphere (considered as a single layer):378-384 hour ave fcst:ENS=low-res ctl
+332:62668679:d=2020100100:DUVB:surface:378-384 hour ave fcst:ENS=low-res ctl
+333:62751885:d=2020100100:CDUVB:surface:378-384 hour ave fcst:ENS=low-res ctl
+334:62799145:d=2020100100:USWRF:top of atmosphere:378-384 hour ave fcst:ENS=low-res ctl
+335:62932839:d=2020100100:HLCY:3000-0 m above ground:384 hour fcst:ENS=low-res ctl
+336:63127428:d=2020100100:USTM:6000-0 m above ground:384 hour fcst:ENS=low-res ctl
+337:63402767:d=2020100100:VSTM:6000-0 m above ground:384 hour fcst:ENS=low-res ctl
+338:63673688:d=2020100100:PRES:tropopause:384 hour fcst:ENS=low-res ctl
+339:64019163:d=2020100100:ICAHT:tropopause:384 hour fcst:ENS=low-res ctl
+340:64382531:d=2020100100:HGT:tropopause:384 hour fcst:ENS=low-res ctl
+341:64743830:d=2020100100:TMP:tropopause:384 hour fcst:ENS=low-res ctl
+342:64882422:d=2020100100:UGRD:tropopause:384 hour fcst:ENS=low-res ctl
+343:65053038:d=2020100100:VGRD:tropopause:384 hour fcst:ENS=low-res ctl
+344:65218004:d=2020100100:VWSH:tropopause:384 hour fcst:ENS=low-res ctl
+345:65426189:d=2020100100:PRES:max wind:384 hour fcst:ENS=low-res ctl
+346:65832492:d=2020100100:ICAHT:max wind:384 hour fcst:ENS=low-res ctl
+347:66247730:d=2020100100:HGT:max wind:384 hour fcst:ENS=low-res ctl
+348:66666372:d=2020100100:UGRD:max wind:384 hour fcst:ENS=low-res ctl
+349:66849485:d=2020100100:VGRD:max wind:384 hour fcst:ENS=low-res ctl
+350:67041498:d=2020100100:TMP:max wind:384 hour fcst:ENS=low-res ctl
+351:67257763:d=2020100100:TMP:80 m above ground:384 hour fcst:ENS=low-res ctl
+352:67396162:d=2020100100:SPFH:80 m above ground:384 hour fcst:ENS=low-res ctl
+353:67592190:d=2020100100:PRES:80 m above ground:384 hour fcst:ENS=low-res ctl
+354:67828437:d=2020100100:UGRD:80 m above ground:384 hour fcst:ENS=low-res ctl
+355:68093178:d=2020100100:VGRD:80 m above ground:384 hour fcst:ENS=low-res ctl
+356:68358293:d=2020100100:TMP:100 m above ground:384 hour fcst:ENS=low-res ctl
+357:68496405:d=2020100100:UGRD:100 m above ground:384 hour fcst:ENS=low-res ctl
+358:68761343:d=2020100100:VGRD:100 m above ground:384 hour fcst:ENS=low-res ctl
+359:69027035:d=2020100100:TMP:305 m above mean sea level:384 hour fcst:ENS=low-res ctl
+360:69162859:d=2020100100:UGRD:305 m above mean sea level:384 hour fcst:ENS=low-res ctl
+361:69403349:d=2020100100:VGRD:305 m above mean sea level:384 hour fcst:ENS=low-res ctl
+362:69647057:d=2020100100:TMP:457 m above mean sea level:384 hour fcst:ENS=low-res ctl
+363:69789844:d=2020100100:UGRD:457 m above mean sea level:384 hour fcst:ENS=low-res ctl
+364:70040953:d=2020100100:VGRD:457 m above mean sea level:384 hour fcst:ENS=low-res ctl
+365:70296323:d=2020100100:TMP:610 m above mean sea level:384 hour fcst:ENS=low-res ctl
+366:70443926:d=2020100100:UGRD:610 m above mean sea level:384 hour fcst:ENS=low-res ctl
+367:70702407:d=2020100100:VGRD:610 m above mean sea level:384 hour fcst:ENS=low-res ctl
+368:70965452:d=2020100100:TMP:914 m above mean sea level:384 hour fcst:ENS=low-res ctl
+369:71120243:d=2020100100:UGRD:914 m above mean sea level:384 hour fcst:ENS=low-res ctl
+370:71387892:d=2020100100:VGRD:914 m above mean sea level:384 hour fcst:ENS=low-res ctl
+371:71661244:d=2020100100:TMP:1829 m above mean sea level:384 hour fcst:ENS=low-res ctl
+372:71818076:d=2020100100:UGRD:1829 m above mean sea level:384 hour fcst:ENS=low-res ctl
+373:72097668:d=2020100100:VGRD:1829 m above mean sea level:384 hour fcst:ENS=low-res ctl
+374:72384091:d=2020100100:TMP:2743 m above mean sea level:384 hour fcst:ENS=low-res ctl
+375:72535049:d=2020100100:UGRD:2743 m above mean sea level:384 hour fcst:ENS=low-res ctl
+376:72819186:d=2020100100:VGRD:2743 m above mean sea level:384 hour fcst:ENS=low-res ctl
+377:73108167:d=2020100100:TMP:3658 m above mean sea level:384 hour fcst:ENS=low-res ctl
+378:73257839:d=2020100100:UGRD:3658 m above mean sea level:384 hour fcst:ENS=low-res ctl
+379:73544117:d=2020100100:VGRD:3658 m above mean sea level:384 hour fcst:ENS=low-res ctl
+380:73835903:d=2020100100:TMP:4572 m above mean sea level:384 hour fcst:ENS=low-res ctl
+381:73983635:d=2020100100:UGRD:4572 m above mean sea level:384 hour fcst:ENS=low-res ctl
+382:74271336:d=2020100100:VGRD:4572 m above mean sea level:384 hour fcst:ENS=low-res ctl
+383:74564812:d=2020100100:HGT:0C isotherm:384 hour fcst:ENS=low-res ctl
+384:74824021:d=2020100100:RH:0C isotherm:384 hour fcst:ENS=low-res ctl
+385:74963760:d=2020100100:HGT:highest tropospheric freezing level:384 hour fcst:ENS=low-res ctl
+386:75222928:d=2020100100:RH:highest tropospheric freezing level:384 hour fcst:ENS=low-res ctl
+387:75361299:d=2020100100:TMP:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+388:75500110:d=2020100100:RH:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+389:75622866:d=2020100100:DPT:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+390:75769261:d=2020100100:SPFH:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+391:76065442:d=2020100100:UGRD:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+392:76329950:d=2020100100:VGRD:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+393:76595834:d=2020100100:PWAT:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+394:76757627:d=2020100100:PLI:30-0 mb above ground:384 hour fcst:ENS=low-res ctl
+395:76906175:d=2020100100:TMP:60-30 mb above ground:384 hour fcst:ENS=low-res ctl
+396:77044525:d=2020100100:RH:60-30 mb above ground:384 hour fcst:ENS=low-res ctl
+397:77170521:d=2020100100:SPFH:60-30 mb above ground:384 hour fcst:ENS=low-res ctl
+398:77470630:d=2020100100:UGRD:60-30 mb above ground:384 hour fcst:ENS=low-res ctl
+399:77734548:d=2020100100:VGRD:60-30 mb above ground:384 hour fcst:ENS=low-res ctl
+400:78003066:d=2020100100:TMP:90-60 mb above ground:384 hour fcst:ENS=low-res ctl
+401:78144330:d=2020100100:RH:90-60 mb above ground:384 hour fcst:ENS=low-res ctl
+402:78276321:d=2020100100:SPFH:90-60 mb above ground:384 hour fcst:ENS=low-res ctl
+403:78581783:d=2020100100:UGRD:90-60 mb above ground:384 hour fcst:ENS=low-res ctl
+404:78843265:d=2020100100:VGRD:90-60 mb above ground:384 hour fcst:ENS=low-res ctl
+405:79111921:d=2020100100:TMP:120-90 mb above ground:384 hour fcst:ENS=low-res ctl
+406:79257196:d=2020100100:RH:120-90 mb above ground:384 hour fcst:ENS=low-res ctl
+407:79396822:d=2020100100:SPFH:120-90 mb above ground:384 hour fcst:ENS=low-res ctl
+408:79709324:d=2020100100:UGRD:120-90 mb above ground:384 hour fcst:ENS=low-res ctl
+409:79974363:d=2020100100:VGRD:120-90 mb above ground:384 hour fcst:ENS=low-res ctl
+410:80245420:d=2020100100:TMP:150-120 mb above ground:384 hour fcst:ENS=low-res ctl
+411:80390368:d=2020100100:RH:150-120 mb above ground:384 hour fcst:ENS=low-res ctl
+412:80535676:d=2020100100:SPFH:150-120 mb above ground:384 hour fcst:ENS=low-res ctl
+413:80850758:d=2020100100:UGRD:150-120 mb above ground:384 hour fcst:ENS=low-res ctl
+414:81115834:d=2020100100:VGRD:150-120 mb above ground:384 hour fcst:ENS=low-res ctl
+415:81387588:d=2020100100:TMP:180-150 mb above ground:384 hour fcst:ENS=low-res ctl
+416:81536891:d=2020100100:RH:180-150 mb above ground:384 hour fcst:ENS=low-res ctl
+417:81688246:d=2020100100:SPFH:180-150 mb above ground:384 hour fcst:ENS=low-res ctl
+418:82007129:d=2020100100:UGRD:180-150 mb above ground:384 hour fcst:ENS=low-res ctl
+419:82274830:d=2020100100:VGRD:180-150 mb above ground:384 hour fcst:ENS=low-res ctl
+420:82547959:d=2020100100:4LFTX:surface:384 hour fcst:ENS=low-res ctl
+421:82696438:d=2020100100:HPBL:surface:384 hour fcst:ENS=low-res ctl
+422:83074363:d=2020100100:RH:0.33-1 sigma layer:384 hour fcst:ENS=low-res ctl
+423:83191124:d=2020100100:RH:0.44-1 sigma layer:384 hour fcst:ENS=low-res ctl
+424:83303963:d=2020100100:RH:0.72-0.94 sigma layer:384 hour fcst:ENS=low-res ctl
+425:83428594:d=2020100100:RH:0.44-0.72 sigma layer:384 hour fcst:ENS=low-res ctl
+426:83550056:d=2020100100:TMP:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+427:83785382:d=2020100100:POT:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+428:84018667:d=2020100100:RH:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+429:84235980:d=2020100100:UGRD:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+430:84499619:d=2020100100:VGRD:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+431:84762156:d=2020100100:VVEL:0.995 sigma level:384 hour fcst:ENS=low-res ctl
+432:85064023:d=2020100100:CAPE:255-0 mb above ground:384 hour fcst:ENS=low-res ctl
+433:85199533:d=2020100100:CIN:255-0 mb above ground:384 hour fcst:ENS=low-res ctl
+434:85342052:d=2020100100:PLPL:255-0 mb above ground:384 hour fcst:ENS=low-res ctl
+435:85597749:d=2020100100:LAND:surface:384 hour fcst:ENS=low-res ctl
+436:85609219:d=2020100100:ICEC:surface:384 hour fcst:ENS=low-res ctl
+437:85612190:d=2020100100:ALBDO:surface:378-384 hour ave fcst:ENS=low-res ctl
+438:85812087:d=2020100100:PVORT:310 K isentropic level:384 hour fcst:ENS=low-res ctl
+439:86061003:d=2020100100:UGRD:320 K isentropic level:384 hour fcst:ENS=low-res ctl
+440:86246779:d=2020100100:VGRD:320 K isentropic level:384 hour fcst:ENS=low-res ctl
+441:86434430:d=2020100100:TMP:320 K isentropic level:384 hour fcst:ENS=low-res ctl
+442:86541492:d=2020100100:PVORT:320 K isentropic level:384 hour fcst:ENS=low-res ctl
+443:86801191:d=2020100100:MNTSF:320 K isentropic level:384 hour fcst:ENS=low-res ctl
+444:86925942:d=2020100100:PVORT:350 K isentropic level:384 hour fcst:ENS=low-res ctl
+445:87077077:d=2020100100:UGRD:450 K isentropic level:384 hour fcst:ENS=low-res ctl
+446:87303022:d=2020100100:VGRD:450 K isentropic level:384 hour fcst:ENS=low-res ctl
+447:87520286:d=2020100100:TMP:450 K isentropic level:384 hour fcst:ENS=low-res ctl
+448:87625741:d=2020100100:PVORT:450 K isentropic level:384 hour fcst:ENS=low-res ctl
+449:87830017:d=2020100100:UGRD:550 K isentropic level:384 hour fcst:ENS=low-res ctl
+450:88051831:d=2020100100:VGRD:550 K isentropic level:384 hour fcst:ENS=low-res ctl
+451:88262312:d=2020100100:TMP:550 K isentropic level:384 hour fcst:ENS=low-res ctl
+452:88365131:d=2020100100:PVORT:550 K isentropic level:384 hour fcst:ENS=low-res ctl
+453:88595237:d=2020100100:UGRD:650 K isentropic level:384 hour fcst:ENS=low-res ctl
+454:88825430:d=2020100100:VGRD:650 K isentropic level:384 hour fcst:ENS=low-res ctl
+455:89029574:d=2020100100:TMP:650 K isentropic level:384 hour fcst:ENS=low-res ctl
+456:89132169:d=2020100100:PVORT:650 K isentropic level:384 hour fcst:ENS=low-res ctl
+457:89279945:d=2020100100:UGRD:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+458:89444959:d=2020100100:VGRD:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+459:89608565:d=2020100100:TMP:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+460:89793973:d=2020100100:HGT:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+461:90075489:d=2020100100:PRES:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+462:90356159:d=2020100100:VWSH:PV=5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+463:90528757:d=2020100100:UGRD:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+464:90693136:d=2020100100:VGRD:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+465:90854623:d=2020100100:TMP:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+466:91019883:d=2020100100:HGT:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+467:91300582:d=2020100100:PRES:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+468:91580442:d=2020100100:VWSH:PV=-5e-07 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+469:91752978:d=2020100100:UGRD:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+470:91906589:d=2020100100:VGRD:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+471:92059201:d=2020100100:TMP:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+472:92225161:d=2020100100:HGT:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+473:92490833:d=2020100100:PRES:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+474:92753068:d=2020100100:VWSH:PV=1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+475:92921835:d=2020100100:UGRD:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+476:93074931:d=2020100100:VGRD:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+477:93224268:d=2020100100:TMP:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+478:93446759:d=2020100100:HGT:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+479:93709947:d=2020100100:PRES:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+480:93970118:d=2020100100:VWSH:PV=-1e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+481:94137342:d=2020100100:UGRD:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+482:94285313:d=2020100100:VGRD:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+483:94431833:d=2020100100:TMP:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+484:94643790:d=2020100100:HGT:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+485:94898647:d=2020100100:PRES:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+486:95148485:d=2020100100:VWSH:PV=1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+487:95313086:d=2020100100:UGRD:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+488:95460652:d=2020100100:VGRD:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+489:95604018:d=2020100100:TMP:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+490:95813665:d=2020100100:HGT:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+491:96068175:d=2020100100:PRES:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+492:96317826:d=2020100100:VWSH:PV=-1.5e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+493:96481275:d=2020100100:UGRD:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+494:96624690:d=2020100100:VGRD:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+495:96766770:d=2020100100:TMP:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+496:96968737:d=2020100100:HGT:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+497:97215773:d=2020100100:PRES:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+498:97456974:d=2020100100:VWSH:PV=2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+499:97617196:d=2020100100:UGRD:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+500:97760544:d=2020100100:VGRD:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+501:97898939:d=2020100100:TMP:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+502:98099024:d=2020100100:HGT:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+503:98345733:d=2020100100:PRES:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+504:98587045:d=2020100100:VWSH:PV=-2e-06 (Km^2/kg/s) surface:384 hour fcst:ENS=low-res ctl
+505:98746485:d=2020100100:5WAVH:500 mb:384 hour fcst:ENS=low-res ctl
