@@ -38,7 +38,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
             # Four years of 3-hourly steps. Refs per commit = arrays x refs per active
-            # split, order 10^7; see "Manifest splitting" in docs/virtual_datasets.md.
+            # split; see "Manifest splitting" in docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size=4 * 365 * 8, dim="time"
             ),
