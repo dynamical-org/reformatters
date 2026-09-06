@@ -3,7 +3,7 @@
     "dataset_id": "noaa-gefs-analysis-0-25-degree-virtual",
     "dataset_version": "0.1.0",
     "name": "NOAA GEFS analysis, 0.25 degree, virtual",
-    "description": "Weather analysis from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP, served as references to the source GRIB messages. Each time step is the control member's shortest available forecast lead. Coverage begins with the GEFS v12 0.25 degree archive; the materialized noaa-gefs-analysis reaches further back through coarser and reforecast sources, which cannot share one grid here.",
+    "description": "Weather analysis from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
@@ -1842,7 +1842,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC). Subtracting the value at an earlier time with the same window start gives the exact total between those two times.",
+          "comment": "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
           "step_type": "accum",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

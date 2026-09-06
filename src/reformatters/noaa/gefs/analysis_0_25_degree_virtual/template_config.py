@@ -30,8 +30,7 @@ class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConf
         "avg": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
         "accum": (
             "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour "
-            "period (03, 09, 15, 21 UTC). Subtracting the value at an earlier time with "
-            "the same window start gives the exact total between those two times."
+            "period (03, 09, 15, 21 UTC)."
         ),
         "max": "Maximum value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
         "min": "Minimum value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
@@ -50,11 +49,7 @@ class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConf
             name="NOAA GEFS analysis, 0.25 degree, virtual",
             description=(
                 "Weather analysis from the Global Ensemble Forecast System (GEFS) "
-                "operated by NOAA NWS NCEP, served as references to the source GRIB "
-                "messages. Each time step is the control member's shortest available "
-                "forecast lead. Coverage begins with the GEFS v12 0.25 degree archive; "
-                "the materialized noaa-gefs-analysis reaches further back through "
-                "coarser and reforecast sources, which cannot share one grid here."
+                "operated by NOAA NWS NCEP."
             ),
         )
 

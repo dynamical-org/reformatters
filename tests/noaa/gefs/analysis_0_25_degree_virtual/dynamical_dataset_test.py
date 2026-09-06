@@ -182,7 +182,7 @@ def test_operational_kubernetes_resources(
     )
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "51 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "45 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=30)
     # Virtual updates are single writer.
     assert update_cron_job.workers_total == 1
@@ -192,7 +192,7 @@ def test_operational_kubernetes_resources(
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
     # validator never reads the store while the update is still committing.
-    assert validation_cron_job.schedule == "31 4,10,16,22 * * *"
+    assert validation_cron_job.schedule == "25 4,10,16,22 * * *"
     assert _fire_minutes(validation_cron_job.schedule) == [
         minute + int(update_cron_job.pod_active_deadline.total_seconds() // 60) + 10
         for minute in _fire_minutes(update_cron_job.schedule)
@@ -225,7 +225,7 @@ def test_validators(dataset: NoaaGefsAnalysis025DegreeVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=13)
+    assert current_data.max_delay == timedelta(hours=4, minutes=20)
 
     # discover_available extends time only to a step holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no

@@ -111,8 +111,7 @@ def test_windowed_variables_declare_the_six_hour_reset_and_say_so() -> None:
     )
     assert get_var("total_precipitation_surface").attrs.comment == (
         "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour "
-        "period (03, 09, 15, 21 UTC). Subtracting the value at an earlier time with "
-        "the same window start gives the exact total between those two times."
+        "period (03, 09, 15, 21 UTC)."
     )
 
 
@@ -184,8 +183,10 @@ def test_dataset_attributes() -> None:
     assert attrs.license == "CC-BY-4.0"
     assert attrs.spatial_resolution == "0.25 degrees (~20km)"
     assert attrs.time_resolution == "3 hours"
-    # The virtual product cannot reach the materialized analysis's older eras.
-    assert "materialized noaa-gefs-analysis" in attrs.description
+    assert attrs.description == (
+        "Weather analysis from the Global Ensemble Forecast System (GEFS) "
+        "operated by NOAA NWS NCEP."
+    )
 
 
 def test_template_starts_where_the_materialized_forecast_archive_does() -> None:

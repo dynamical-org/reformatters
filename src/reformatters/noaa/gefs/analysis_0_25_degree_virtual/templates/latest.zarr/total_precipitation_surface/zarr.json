@@ -37,7 +37,7 @@
     "short_name": "tp",
     "standard_name": "precipitation_amount",
     "units": "kg m-2",
-    "comment": "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC). Subtracting the value at an earlier time with the same window start gives the exact total between those two times.",
+    "comment": "Total accumulated in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
     "step_type": "accum",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

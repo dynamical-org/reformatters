@@ -37,8 +37,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four years of 3-hourly steps. Refs per commit = arrays x refs per active
-            # split; see "Manifest splitting" in docs/virtual_datasets.md.
+            # Four years of 3-hourly steps.
             manifest_split=manifest_append_dim_split(
                 split_size=4 * 365 * 8, dim="time"
             ),
@@ -46,10 +45,11 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # f006, the longest lead an analysis step uses, publishes ~init+3h48m.
+        # This analysis uses leads 0-6, which all publish by ~init+3h48m.
+        # Fire a few minutes before that and poll until they land.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="51 3,9,15,21 * * *",
+            schedule="45 3,9,15,21 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -64,7 +64,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
             name=f"{self.dataset_id}-validate",
             # The update's fire plus its pod_active_deadline, so the run being
             # validated has always stopped writing.
-            schedule="31 4,10,16,22 * * *",
+            schedule="25 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -78,9 +78,10 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A time is ingested when its own shortest-lead file publishes, hours
-            # after the cycle that covers it starts.
-            validation.CheckCurrentData(max_delay=timedelta(hours=13)),
+            # A 00, 06, 12 or 18 hour waits on its own cycle, so a position lands
+            # ~4h15m after its timestamp at the latest. Keep this under the 6h cycle
+            # spacing or a wholly missed cycle is not yet due at the next validation run.
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=20)),
             # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
