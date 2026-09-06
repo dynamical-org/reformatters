@@ -2531,8 +2531,8 @@
           }
         ],
         "attributes": {
-          "long_name": "Volumetric soil moisture content",
-          "short_name": "soilw",
+          "long_name": "Volumetric soil moisture",
+          "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
           "comment": "NaN over water.",
