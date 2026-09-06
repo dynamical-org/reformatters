@@ -37,6 +37,7 @@
     "short_name": "cpr",
     "standard_name": "convective_precipitation_flux",
     "units": "kg m-2 s-1",
+    "comment": "At 00, 06, 12 and 18 UTC this value comes from the previous forecast cycle, because the source does not publish this variable at lead time 0.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

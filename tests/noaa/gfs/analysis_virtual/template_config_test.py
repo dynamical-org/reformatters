@@ -85,6 +85,31 @@ def test_every_windowed_variable_describes_its_window_in_utc_times() -> None:
     )
 
 
+def test_instantaneous_variables_without_hour_0_name_their_source_cycle() -> None:
+    """These five are read at lead 1 of the previous cycle at the synoptic hours.
+
+    They are the only instantaneous variables the source does not publish at lead 0,
+    so they are the only ones whose value can come from a different cycle than the
+    variables around them.
+    """
+    instant_without_hour_0 = [
+        var.name
+        for var in CONFIG.data_vars
+        if var.attrs.step_type == "instant" and not var.has_hour_0_values()
+    ]
+    assert set(instant_without_hour_0) == {
+        "instantaneous_precipitation_convective_surface",
+        "potential_evaporation_rate_surface",
+        "pressure_convective_cloud_bottom",
+        "pressure_convective_cloud_top",
+        "convective_cloud_cover",
+    }
+    for name in instant_without_hour_0:
+        assert str(get_var(name).attrs.comment).startswith(
+            "At 00, 06, 12 and 18 UTC this value comes from the previous forecast cycle"
+        ), name
+
+
 def test_absolute_temperatures_are_celsius_and_differences_are_kelvin() -> None:
     for path in (
         "temperature_2m",

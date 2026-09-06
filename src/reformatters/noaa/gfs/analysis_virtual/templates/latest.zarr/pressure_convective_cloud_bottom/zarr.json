@@ -37,7 +37,7 @@
     "short_name": "pres",
     "standard_name": "air_pressure_at_convective_cloud_base",
     "units": "Pa",
-    "comment": "NaN means the source does not provide a convective cloud base pressure at this cell; this can occur even when convective_cloud_cover is nonzero.",
+    "comment": "At 00, 06, 12 and 18 UTC this value comes from the previous forecast cycle, because the source does not publish this variable at lead time 0. NaN means the source does not provide a convective cloud base pressure at this cell; this can occur even when convective_cloud_cover is nonzero.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

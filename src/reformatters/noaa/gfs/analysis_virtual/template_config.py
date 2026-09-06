@@ -34,6 +34,10 @@ _WINDOW_COMMENTS = {
     "max": f"Maximum value over {_WINDOW_EXTENT}",
     "min": f"Minimum value over {_WINDOW_EXTENT}",
 }
+_PREVIOUS_CYCLE_COMMENT = (
+    "At 00, 06, 12 and 18 UTC this value comes from the previous forecast cycle, "
+    "because the source does not publish this variable at lead time 0."
+)
 
 
 class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
@@ -115,17 +119,19 @@ class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
 
     def _catalog_data_vars(self) -> list[NoaaDataVar]:
         """The shared catalog without its running totals, which duplicate the 6 hour
-        buckets at the leads an analysis reads, and with each windowed variable's
-        window described in UTC times."""
+        buckets at the leads an analysis reads, and with each variable's window or
+        source cycle described in UTC times."""
         return [
-            _with_window_comment(var)
+            _with_source_comment(var)
             for var in super()._catalog_data_vars()
             if var.internal_attrs.window_reset_frequency != pd.Timedelta.max
         ]
 
 
-def _with_window_comment(var: NoaaDataVar) -> NoaaDataVar:
+def _with_source_comment(var: NoaaDataVar) -> NoaaDataVar:
     window_comment = _WINDOW_COMMENTS.get(var.attrs.step_type)
-    if window_comment is None:
-        return var
-    return prepend_comment(var, window_comment)
+    if window_comment is not None:
+        return prepend_comment(var, window_comment)
+    if not var.has_hour_0_values():
+        return prepend_comment(var, _PREVIOUS_CYCLE_COMMENT)
+    return var
