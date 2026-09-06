@@ -39,11 +39,8 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             # ensemble member), so a full manifest is 16 x 81 x 31 = 40176 refs, which
             # measures 0.68 MiB (17.8 bytes/ref) on this dataset's own manifests: well
             # inside the 3 MiB reader budget and far above the 1000 refs zstd location
-            # compression needs. Splitting finer would cut per-commit flush cost but
-            # multiply the manifest count, which every commit pays in the snapshot's
-            # manifest list: 16 puts the archive near 550 splits per array, so ~21k
-            # manifests across the 38 arrays. See "Manifest splitting" in
-            # docs/virtual_datasets.md for the cost model.
+            # compression needs. Across 38 arrays that is 1.5M refs per commit, against
+            # the 12.1M that operational HRRR forecast 48h sustains at a p50 of 2.8s.
             manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
         )
     )
