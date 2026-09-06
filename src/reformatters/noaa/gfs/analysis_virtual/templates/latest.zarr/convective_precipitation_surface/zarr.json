@@ -37,7 +37,7 @@
     "short_name": "cp",
     "standard_name": "convective_precipitation_amount",
     "units": "kg m-2",
-    "comment": "Accumulated over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. Subtracting the value at an earlier time with the same window start gives the exact total between those two times.",
+    "comment": "Accumulated over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time.",
     "step_type": "accum",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

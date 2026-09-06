@@ -2044,7 +2044,7 @@
           "short_name": "cp",
           "standard_name": "convective_precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated from the forecast initialization time to this step, so the window lengthens with lead time and never resets. Subtracting the value at an earlier step gives the exact total between those two steps.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2100,7 +2100,7 @@
           "short_name": "cp",
           "standard_name": "convective_precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12442,7 +12442,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated from the forecast initialization time to this step, so the window lengthens with lead time and never resets. Subtracting the value at an earlier step gives the exact total between those two steps.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12498,7 +12498,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13947,7 +13947,7 @@
           "short_name": "watr",
           "standard_name": "runoff_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times. NaN over water.",
+          "comment": "Accumulated over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN over water.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

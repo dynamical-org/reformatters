@@ -39,7 +39,7 @@
     "short_name": "tp",
     "standard_name": "precipitation_amount",
     "units": "kg m-2",
-    "comment": "Accumulated from the forecast initialization time to this step, so the window lengthens with lead time and never resets. Subtracting the value at an earlier step gives the exact total between those two steps.",
+    "comment": "Accumulated from the forecast initialization time to this step.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
