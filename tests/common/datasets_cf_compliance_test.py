@@ -506,7 +506,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "icao_standard_atmosphere_reference_height_tropopause",
     "ice_growth_rate_10m_amsl",
     "ice_temperature_surface",
-    "ice_thickness_surface",
     "instantaneous_categorical_freezing_rain_surface",
     "instantaneous_categorical_ice_pellets_surface",
     "instantaneous_categorical_rain_surface",
