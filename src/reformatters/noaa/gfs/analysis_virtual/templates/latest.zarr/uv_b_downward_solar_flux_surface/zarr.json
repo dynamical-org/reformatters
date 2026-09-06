@@ -36,7 +36,7 @@
     "long_name": "UV-B downward solar flux",
     "short_name": "duvb",
     "units": "W m-2",
-    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm.",
     "step_type": "avg",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -59,7 +59,7 @@
           "short_name": "fal",
           "standard_name": "surface_albedo",
           "units": "percent",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Exactly 0 wherever the averaging window received no sunlight; exclude those zeros from a time mean albedo.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1271,7 +1271,7 @@
           "long_name": "Clear sky UV-B downward solar flux",
           "short_name": "cduvb",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Downward solar flux in the UV-B band (280-315 nm) at the surface computed with clouds removed.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm, computed with clouds removed.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3668,6 +3668,14 @@
           "units": "1",
           "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
           "step_type": "instant",
+          "flag_values": [
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "flag_meanings": "very_low_potential very_low_potential low_potential moderate_potential high_potential",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -5450,7 +5458,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5505,7 +5513,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5560,7 +5568,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5615,7 +5623,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6848,7 +6856,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_convective_cloud_base",
           "units": "Pa",
-          "comment": "NaN where the source reports no convective cloud in the column, and at some cloud-field edges where convective_cloud_cover is near zero.",
+          "comment": "NaN means the source does not provide a convective cloud base pressure at this cell; this can occur even when convective_cloud_cover is nonzero.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6904,7 +6912,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure_at_convective_cloud_top",
           "units": "Pa",
-          "comment": "NaN where the source reports no convective cloud in the column, and at some cloud-field edges where convective_cloud_cover is near zero.",
+          "comment": "NaN means the source does not provide a convective cloud top pressure at this cell; this can occur even when convective_cloud_cover is nonzero.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10275,7 +10283,6 @@
         "attributes": {
           "long_name": "Soil type",
           "short_name": "slt",
-          "standard_name": "soil_type",
           "units": "1",
           "comment": "Soil texture class from the 16 category STATSGO classification used by the GFS Noah land surface model, and 0 over water. Interpolation to this grid leaves values between the integer class codes, so a value is not exactly a class number.",
           "step_type": "instant",
@@ -10821,6 +10828,7 @@
           "long_name": "Storm relative helicity",
           "short_name": "hlcy",
           "units": "m2 s-2",
+          "comment": "Uses a right-moving storm motion in both hemispheres, so southern hemisphere values are positive-mean rather than mirrored.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12831,7 +12839,7 @@
           "long_name": "UV-B downward solar flux",
           "short_name": "duvb",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13054,6 +13062,7 @@
           "long_name": "Ventilation Rate",
           "short_name": "VRATE",
           "units": "m2 s-1",
+          "comment": "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a small value rounded down rather than missing data.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13723,7 +13732,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13779,7 +13788,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13835,7 +13844,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13891,7 +13900,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

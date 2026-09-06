@@ -115,8 +115,8 @@ class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
 
     def _catalog_data_vars(self) -> list[NoaaDataVar]:
         """The shared catalog without its running totals, which duplicate the 6 hour
-        buckets at the leads an analysis reads, and with each windowed variable's
-        window described in UTC times."""
+        buckets at the leads an analysis reads, and with each variable's window
+        described in UTC times."""
         return [
             _with_window_comment(var)
             for var in super()._catalog_data_vars()

@@ -441,6 +441,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="VRATE",
             long_name="Ventilation Rate",
             units="m2 s-1",
+            comment=(
+                "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a "
+                "small value rounded down rather than missing data."
+            ),
         ),
         root_var(
             "wind_gust_surface",
@@ -463,6 +467,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "ordinal value from 2 (very low potential) to 6 (high potential) for "
                 "large plume-dominated fire growth. NaN on about 60% of the grid, "
                 "chiefly over ocean."
+            ),
+            flag_values=(2, 3, 4, 5, 6),
+            flag_meanings=(
+                "very_low_potential very_low_potential low_potential "
+                "moderate_potential high_potential"
             ),
         ),
         root_var(
@@ -544,7 +553,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_0_10cm",
@@ -555,7 +568,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen "
-                "plus liquid water. NaN over water."
+                "plus liquid water. NaN over water. Values are near 1 over permanent "
+                "land ice, where they are placeholders rather than soil moisture "
+                "measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -576,7 +591,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_10_40cm",
@@ -587,7 +606,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen "
-                "plus liquid water. NaN over water."
+                "plus liquid water. NaN over water. Values are near 1 over permanent "
+                "land ice, where they are placeholders rather than soil moisture "
+                "measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -608,7 +629,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_40_100cm",
@@ -619,7 +644,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries "
-                "frozen plus liquid water. NaN over water."
+                "frozen plus liquid water. NaN over water. Values are near 1 over "
+                "permanent land ice, where they are placeholders rather than soil "
+                "moisture measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -640,7 +667,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_100_200cm",
@@ -651,7 +682,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries "
-                "frozen plus liquid water. NaN over water."
+                "frozen plus liquid water. NaN over water. Values are near 1 over "
+                "permanent land ice, where they are placeholders rather than soil "
+                "moisture measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -1105,7 +1138,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="slt",
             long_name="Soil type",
             units="1",
-            standard_name="soil_type",
             comment=(
                 "Soil texture class from the 16 category STATSGO classification used by "
                 "the GFS Noah land surface model, and 0 over water. Interpolation to "
@@ -1317,8 +1349,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_base",
-            comment="NaN where the source reports no convective cloud in the column, and "
-            "at some cloud-field edges where convective_cloud_cover is near zero.",
+            comment=(
+                "NaN means the source does not provide a convective cloud base pressure "
+                "at this cell; this can occur even when convective_cloud_cover is "
+                "nonzero."
+            ),
             hour_0=False,
         ),
         root_var(
@@ -1365,8 +1400,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_top",
-            comment="NaN where the source reports no convective cloud in the column, and "
-            "at some cloud-field edges where convective_cloud_cover is near zero.",
+            comment=(
+                "NaN means the source does not provide a convective cloud top pressure "
+                "at this cell; this can occur even when convective_cloud_cover is "
+                "nonzero."
+            ),
             hour_0=False,
         ),
         root_var(
@@ -1537,6 +1575,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="hlcy",
             long_name="Storm relative helicity",
             units="m2 s-2",
+            comment=(
+                "Uses a right-moving storm motion in both hemispheres, so southern "
+                "hemisphere values are positive-mean rather than mirrored."
+            ),
         ),
         root_var(
             "u_component_storm_motion_6000_0m",
@@ -2125,6 +2167,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Forecast albedo",
             units="percent",
             standard_name="surface_albedo",
+            comment=(
+                "Exactly 0 wherever the averaging window received no sunlight; exclude "
+                "those zeros from a time mean albedo."
+            ),
         ),
         root_var(
             "ice_temperature_surface",
@@ -2302,7 +2348,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="duvb",
             long_name="UV-B downward solar flux",
             units="W m-2",
-            comment="Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+            comment=(
+                "The UV-B portion of the downward shortwave flux at the surface, "
+                "covering 263-345 nm."
+            ),
         ),
         root_var(
             "clear_sky_uv_b_downward_solar_flux_surface",
@@ -2313,8 +2362,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Clear sky UV-B downward solar flux",
             units="W m-2",
             comment=(
-                "Downward solar flux in the UV-B band (280-315 nm) at the surface "
-                "computed with clouds removed."
+                "The UV-B portion of the downward shortwave flux at the surface, "
+                "covering 263-345 nm, computed with clouds removed."
             ),
         ),
         root_var(

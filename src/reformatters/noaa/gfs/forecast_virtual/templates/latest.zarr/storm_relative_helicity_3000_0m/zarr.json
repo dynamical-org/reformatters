@@ -38,6 +38,7 @@
     "long_name": "Storm relative helicity",
     "short_name": "hlcy",
     "units": "m2 s-2",
+    "comment": "Uses a right-moving storm motion in both hemispheres, so southern hemisphere values are positive-mean rather than mirrored.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

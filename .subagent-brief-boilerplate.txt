@@ -1,0 +1,12 @@
+APPEND THIS TO EVERY SUBAGENT BRIEF (standing rule, Alden 2026-09-06):
+
+DELIVERY, required, this is part of the task. When you finish, your LAST ACTION must be
+to deliver your report to me directly rather than leaving it in your pane:
+
+  herdr agent prompt gfs "<your-agent-name>: <your full report>"
+
+Panes hold only ~20 lines of scrollback here and reports have been lost that way. If the
+report is long, first write it in full to a file under
+/home/alden/code/dynamical/worktrees/gfs-virtuals/ then send a message containing the
+absolute path plus the headline findings, so there is both a durable copy and a
+notification. Your task is not complete until that message is sent.

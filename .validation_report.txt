@@ -1,0 +1,500 @@
+
+  Read 1 file
+
+
+
+● No undeclared sentinels — the only interior modes are packing-offset "zeros" (e.g. geopotential_height_surface reads 0.059 m over ocean, not exactly 0).
+  Checking the last two scans.
+
+  Ran 2 shell commands
+
+
+
+● Monitor(GFS: in-window availability + run-all completion)
+  ⎿  Monitor started · task bq7cxlxzr · timeout 3600s
+
+
+
+● One more determined check: that off-synoptic hours draw both variable sets from one file, and that the pgrb2b-only variables really come from pgrb2b.
+
+  Ran 1 shell command
+
+● Those differences are the longitude roll (store is −180..180, raw is 0..360). Applying the roll and re-comparing element-wise.
+
+  Ran 1 shell command
+
+● All element-wise comparisons are bit-exact against independent GRIB decodes. Let me check whether the repo's own CF-compliance test has anything to say
+  about the metadata questions I found.
+
+  Ran 2 shell commands
+
+● Let me verify diurnal phase numerically at points of known longitude — that's the core signal the temporal plots carry.
+
+  Ran 1 shell command
+
+
+● Solar flux peaks exactly one hour after local solar noon at all four longitudes — decisive for the time coordinate. The skin-temperature points were all
+  ocean (0.1–0.7 °C range), so uninformative; let me redo those over land.
+
+
+
+● Textbook diurnal cycles: skin temperature peaks ~1 h after local solar noon at all four land longitudes, 2 m air temperature 2.7–5.5 h after, solar flux
+  1 h after — the correct physical lag ordering. Checking the plots.
+
+
+  Ran 1 shell command
+
+● The in-window availability run is nearly done. Meanwhile let me confirm the pressure-level gaps are stable at the window's ends (a source-change check
+  for the vertical groups).
+
+  Ran 2 shell commands
+
+● Definitive completeness result — the exact-window manifest scan reports "Manifest complete: all 8760 positions ≥ 100%" at --min-fraction 1.0. Let me
+  confirm the pressure-level gap stability, then wait for the plots.
+
+  Ran 2 shell commands
+
+● Monitor(GFS: pressure-gap stability + run-all spatial plots and summary)
+  ⎿  Monitor started · task bw0evd4km · timeout 3600s
+
+● Let me harden the sunshine finding with a broader sample, since it's going into a published report.
+
+  Ran 2 shell commands
+
+
+
+● The value-timeseries plots are all written, but a numeric sweep over all 272 arrays is a stronger step-change test than reading 272 images. Launching
+  that.
+
+  Ran 1 shell command
+
+● Monitor(GFS: pressure gaps, exhaustive drift sweep, run-all summary)
+  ⎿  Monitor started · task bbhuethd9 · timeout 3600s
+
+● One check left that I can run now: the documented sign conventions on the momentum fluxes.
+
+  Ran 1 shell command
+
+● Sign conventions confirmed (r = −0.82, opposite to wind at 93% of cells — exactly as documented, and opposite to CF). Waiting on the last three scans.
+
+  Ran 1 shell command
+
+● I'll let the remaining scans finish rather than adding more S3 load. Waiting on the monitor.
+
+
+
+  Ran 1 shell command
+
+● Let me verify the plot filename convention, then dispatch batched plot review per docs/validation.md §3f.
+
+  Ran 1 shell command
+
+● 4 background agents launched (↓ to manage)
+   ├ Review temperature/filter plots
+   ├ Review precip/flag plots
+   ├ Review radiation/cloud plots
+   └ Review pressure/wind/soil plots
+
+● Four batch reviewers are running. Let me draft the report structure while they work.
+
+  Ran 2 shell commands
+
+● Everything is progressing. Here is where the validation stands while the last scans and the plot reviewers finish.
+
+  Confirmed so far (all pinned to 2021-05-01T00:00 → 2022-05-01T00:00, 8,760 positions):
+
+  - Completeness: clean pass. The exact-window manifest scan at --min-fraction 1.0 reports "Manifest complete: all 8760 positions ≥ 100%", no
+    unavailable_timestamps.txt. All 253 root arrays decode non-all-NaN at four sampled positions; in-window decode scan passed 5,780 references.
+  - Source fidelity: bit-exact. Eight variables (both products, both filters, a pgrb2b-only element and a pgrb2b-only level, synoptic and off-synoptic
+    hours) match independent gribberish decodes element-wise at max|diff| = 0.
+  - Two real defects found, both in metadata rather than values — sunshine_duration_surface's window comment, and the "near zero" wording on the two
+    convective-cloud pressure variables.
+
+  I'll deliver the full Part A / Part B writeup once the reviewers report.
+
+✻ Churned for 44m 18s · done 9:15 AM
+
+● Agent "Review temperature/filter plots" finished · 2m 25s
+
+● First batch: all 15 OK, no findings — but the spatial plots hadn't rendered, so the plot-based geometry checks are still pending there (I verified
+  geometry independently and exactly). Waiting on the rest.
+
+
+
+  Ran 2 shell commands
+
+● All three scans are healthy (I/O bound, 7 GB free). Letting them run.
+
+  Ran 1 shell command
+
+● I'll wait for the remaining reviewers and scans to report rather than adding more load.
+
+✻ Baked for 27s · done 9:16 AM
+
+● Agent "Review pressure/wind/soil plots" finished · 2m 49s
+
+● Second batch: no findings, plus two useful extra checks (SOILW vs SOILL confirmed distinct; censored parcel-level tracks each point's own surface
+  pressure). Spatial plots still pending.
+
+  Ran 1 shell command
+
+
+● Waiting on the remaining reviewers and scans.
+
+  Ran 1 shell command
+
+● I'll hold here until the remaining two plot reviewers and the three scans report.
+
+✻ Worked for 21s · done 9:17 AM
+
+● Agent "Review precip/flag plots" finished · 4m 3s
+
+● Third batch corroborates the sunshine defect independently from the plots. One of its observations is wrong, though — it claims the categorical_*
+  variables lack flag_values. Let me re-confirm from the store, and run its suggested convective≤total check.
+
+  Ran 1 shell command
+
+● Both confirmed: all 9 flag variables do publish flag_values/flag_meanings (the subagent's claim was wrong), and convective ≤ total precipitation holds at
+  all 24.9M cells compared.
+
+
+  Ran 1 shell command
+
+● I'll hold for the last reviewer and the three scans.
+
+✻ Cooked for 35s · done 9:18 AM
+
+● Agent "Review radiation/cloud plots" finished · 4m 18s
+
+● Fourth batch: no findings. It flags one genuine metadata suggestion — albedo_surface being exactly 0 at night. Let me verify that precisely.
+
+  Ran 1 shell command
+
+● Confirmed exactly: albedo_surface is 0 precisely where the window had no sunlight (100% of the 32% zero cells have zero downward shortwave). Checking the
+  last scans.
+
+  Ran 1 shell command
+
+● I'll wait for the three remaining scans to complete.
+
+
+
+✻ Cogitated for 47m 57s · done 9:19 AM
+
+❯ Status check. You went idle at 09:19 saying you were waiting on three remaining scans, with shells and monitors still running.
+
+  Do this now, in order:
+  1. Check whether those scans are ACTUALLY progressing — look at the shells/monitors and see if output is still advancing or if they are stuck. Say
+  which.
+  2. If they are progressing and will finish soon, finish them, then deliver Part A and Part B.
+  3. If they are hung, stalled, or you cannot tell within a couple of minutes, STOP them and deliver Part A and Part B with what you already have — and
+  say plainly in Part A which checks did not complete and what they would have covered. An incomplete report delivered now is worth more than a complete
+  one that never arrives.
+
+  Do not start any new scans. Deliver both parts in one message.
+
+  Reminder of the two parts: Part A is full evidence for me — every finding with value, position, and the command that produced it, plus the list of
+  checks that did not complete. Part B is the user-facing set in exactly three categories (patterns of unavailable data summarised; variables the user
+  must explicitly mask; source data changes over time), one bullet per finding grouped across variables, state not story, no method, no defence of source
+
+  oddities, no passes.
+
+  One input for you, from the full-store backfill that just finished — it is a real availability finding for Part B category 1, and it is OUTSIDE your
+  window so you will not have seen it, but include it since it belongs in the same report: 7 hourly positions are missing one or both source products, all
+  clustered on 2022-11-29 and 2022-11-30 (20:00 and 22:00 on the 29th; 02:00, 05:00, 09:00, 10:00, 11:00 on the 30th). The store's full extent is 46,901
+  hourly positions and 46,899 carry at least one product. Your own window, 2021-05-01 to 2022-05-01, is complete at 8,760/8,760.
+
+
+
+
+
+  - pl_ends.py — 23 of 24 probes done. Seconds away.
+  - drift_all.py — 121→221 of 272 (813s). ~3 min left.
+  - run-all — temporal 158→201 of 272, newest PNG written 4 s ago. Advancing, but the 272 spatial plots haven't started; that phase alone is 30–60+ min.
+    This will not finish soon.
+
+  Letting the two fast ones land, then stopping run-all.
+
+
+  Ran 1 shell command
+
+● Background command "Wait for pressure-level gap stability result" completed (exit code 0)
+
+● Monitor event: "GFS: pressure gaps, exhaustive drift sweep, run-all summary"
+
+● Monitor event: "GFS: pressure-gap stability + run-all spatial plots and summary"
+
+● pl_ends is complete — all 8 gap variables have identical all-NaN level sets at the window's start, middle and end. drift_all is at 261/272; giving it one
+  short bounded wait.
+
+  Ran 1 shell command
+
+● Monitor event: "GFS validation scans: pressure profile, decode scan, run-all summary"
+
+● drift_all hasn't printed past 261/272 in 2.5 min (its next print is only at completion, so it may be silently finishing — but I can't confirm progress).
+  Stopping everything and delivering.
+
+
+  Ran 4 shell commands
+
+● Monitor "GFS: pressure gaps, exhaustive drift sweep, run-all summary" script failed (exit 144)
+
+● The pgrep is matching my own command line. Checking properly.
+
+  Ran 1 shell command
+
+● drift_all and pl_ends are stopped; only run-all remains. Killing it by PID.
+
+  Ran 2 shell commands
+
+● Monitor "GFS: in-window availability + run-all completion" script failed (exit 144)
+
+● Monitor "GFS: pressure profile, in-window availability, run-all summary" script failed (exit 144)
+
+● Monitor "GFS: pressure-gap stability + run-all spatial plots and summary" script failed (exit 144)
+
+● Background command "Wait for run-all to finish" failed with exit code 144
+
+● All scans stopped; the store was never written to. Here are both parts.
+
+  ---
+
+  PART A — Full evidence
+
+  Scope actually validated
+
+  Window 2021-05-01T00:00 → 2022-05-01T00:00 exclusive, 8,760 hourly positions, store s3://dynamical-noaa-gfs/noaa-gfs-analysis-virtual/v0.1.0.icechunk,
+  272 arrays (253 root, 16 pressure_level, 3 height_above_mean_sea_level). Read-only throughout.
+
+  Sampling plan used: 4 positions decoded across every root array — 2021-05-01T00:00 (window start, synoptic), 2021-11-01T12:00 (middle, synoptic),
+  2021-11-01T17:00 (middle, off-synoptic), 2022-04-30T23:00 (window end, off-synoptic); an 8-hour consecutive run across a window boundary
+  (2021-11-01T07:00→14:00); a 24-hour run for diurnal phase; 13 monthly positions for drift; all 57 pressure levels and all 8 heights; 24 randomly-drawn
+  synoptic + 24 randomly-drawn hour-5 positions for the sunshine finding.
+
+
+  (a) Real defects
+
+
+
+  A1 — sunshine_duration_surface: the comment misdescribes the data at 1 in 6 positions, and the stated ceiling is never reached — HIGH
+
+  Comment says: "Sunshine accumulated over the preceding 1-6 hours… the total restarts every 6 hours and so reaches at most 21600 s."
+
+  Observed daily cycle (field max, 2021-11-01):
+
+  ┌──────────┬──────┬──────┬───────┬───────┬───────┬───────┬──────┬──────┬───────┬───────┬───────┬───────┐
+  │ UTC hour │  01  │  02  │  03   │  04   │  05   │  06   │  07  │  08  │  09   │  10   │  11   │  12   │
+  ├──────────┼──────┼──────┼───────┼───────┼───────┼───────┼──────┼──────┼───────┼───────┼───────┼───────┤
+  │ max (s)  │ 3600 │ 7200 │ 10800 │ 14400 │ 18000 │ 10800 │ 3600 │ 7200 │ 10800 │ 14400 │ 18000 │ 10800 │
+  └──────────┴──────┴──────┴───────┴───────┴───────┴───────┴──────┴──────┴───────┴───────┴───────┴───────┘
+
+  At 00/06/12/18 UTC the value is a 3-hour total, not the 6-hour total. Verified as source-faithful but mis-assigned: the store's field at 12:00 is
+  bit-identical to gfs.20211101/12/atmos/gfs.t12z.pgrb2.0p25.f000 SUNSD:surface:anl (max 10800.0, mean 5132.2); the 6-hour total the comment implies lives
+  in gfs.t06z…f006 SUNSD:surface:6 hour fcst (max 21600.0, mean 10301.6) and is not what the store holds.
+
+  Sampled 24 random synoptic positions and 24 random hour-5 positions across the window:
+
+  24 random 00/06/12/18 UTC positions: all exactly 10800 s?  True
+  24 random hour-5-past-cycle positions: all exactly 18000 s? True
+  any sampled position at or above the documented 21600 s ceiling? False
+  largest value across all 48 sampled positions: 18000.0 s
+
+  Root cause. window="instant" → step_type="instant", no hour_0_values_override, so DataVar.has_hour_0_values() returns True
+  (src/reformatters/common/config_models.py:255) and generate_source_file_coords assigns lead 0 at the synoptic hour
+  (src/reformatters/noaa/gfs/analysis_virtual/region_job.py:48-52). Every other windowed variable has step_type accum/avg/max/min → hour-0 False → lead 6.
+  Definition at src/reformatters/noaa/gfs/virtual_template_config.py:1139-1152.
+
+  User-visible consequence. Differencing consecutive hours crosses a spurious drop at the four synoptic hours (11:00 = 18000 s → 12:00 = 10800 s).
+
+  Two fixes, your call. (1) Set hour_0=False on this variable so it reads leads 1-6 like every other windowed variable — makes the comment true and the
+  series self-consistent, but changes stored values at 1/6 of positions, which is a value-interpretation change under the compatibility policy. (2) Rewrite
+  the comment to describe the actual behaviour. I'd pick (1): it leaves one rule for windowed variables instead of two.
+
+  Independently corroborated from the plots by a batch reviewer, which found peaks capping at 18000 s across the whole year at both run points.
+
+
+
+  A2 — pressure_convective_cloud_bottom / pressure_convective_cloud_top: "near zero" understates the NaN extent — LOW
+
+  Shared wording across 10 cloud variables: "NaN where the source reports no convective cloud in the column, and at some cloud-field edges where
+  convective_cloud_cover is near zero."
+
+  The "cover == 0 ⇒ NaN" half holds exactly — 0 cells valid where cover == 0, at each of 3 times, out of 1,038,240. But cover at the NaN cells
+  (2021-11-01T17:00):
+
+  ┌──────────────┬────────────────────────┬───────────┬──────┬───────┬───────┬───────┬────────┬───────┐
+  │   variable   │ NaN cells with cover>0 │ % of grid │ p50  │  p90  │  p99  │  max  │  >5%   │ >20%  │
+  ├──────────────┼────────────────────────┼───────────┼──────┼───────┼───────┼───────┼────────┼───────┤
+  │ high cloud   │ 14,673                 │ 1.41      │ 0.30 │ 0.80  │ 6.2   │ 39.5  │ 213    │ 7     │
+  ├──────────────┼────────────────────────┼───────────┼──────┼───────┼───────┼───────┼────────┼───────┤
+  │ low cloud    │ 34,786                 │ 3.35      │ 0.50 │ 2.70  │ 12.8  │ 47.2  │ 1,646  │ 128   │
+  ├──────────────┼────────────────────────┼───────────┼──────┼───────┼───────┼───────┼────────┼───────┤
+  │ medium cloud │ 19,305                 │ 1.86      │ 0.30 │ 1.10  │ 8.2   │ 43.7  │ 457    │ 21    │
+  ├──────────────┼────────────────────────┼───────────┼──────┼───────┼───────┼───────┼────────┼───────┤
+
+  │ convective   │ 58,271                 │ 5.61      │ 1.70 │ 11.37 │ 25.74 │ 38.99 │ 14,980 │ 1,743 │
+  └──────────────┴────────────────────────┴───────────┴──────┴───────┴───────┴───────┴────────┴───────┘
+
+  "Near zero" is accurate for the 8 high/medium/low variables and wrong for the convective pair, where p90 cover is 11.4% and 1,743 cells exceed 20% cover.
+  Suggest wording specific to that pair.
+
+  (b) Odd but explained by design — not defects
+
+  - Everything after 2022-05-01 is empty. Expected (no append_dim_end). run-all's wider scan [2021-05-01 .. 2022-05-02] flagged exactly the 24 positions
+    2022-05-01T00:00–23:00, all outside the window; its decode scan's 1/20 FAIL was that same trailing empty region. The in-window decode scan passed:
+    "Decode health passed across 20 sampled jobs", 5,780 references.
+  - Median cloud cover 90–97%. The layer fields are bimodal (25–42% of cells exactly 0, 20–29% ≥99). Means are 67.0% instantaneous / 70.7% averaged,
+    matching the observed global mean. Total cloud cover is the random-overlap combination of the layer covers: r = 0.9967, mean|difference| 1.4 pp, and
+    total ≥ max(high,medium,low) at 100% of cells. I initially flagged this as an inconsistency; it was a median artifact.
+  - Packing "zeros" are not exactly zero. geopotential_height_surface = 0.059 m over ocean (63.7% of cells), eastward_gravity_wave_surface_stress =
+    −0.00129 Pa, northward_gravity_wave_surface_stress = −3.71e-05 Pa. A user testing == 0 for ocean gets nothing.
+  - field_capacity_surface / wilting_point_surface vary at the 4th decimal across the 13 monthly samples (0.28724→0.28728) — the GFS vegetation cycle.
+    land_sea_mask_surface, soil_type_surface, geopotential_height_surface are bit-identical at all 13.
+
+  - Two APCP:surface:0-6 hour acc fcst records per pgrb2 f006 file. Byte-identical to each other (max|diff| = 0), so the index ambiguity is harmless.
+  - convective_inhibition_* max is slightly positive (0.026–0.39 J/kg) — that value is the modal "no inhibition" packing zero.
+  - visibility_surface mass at the ceiling looked to swing 0.1%↔78%. That was my exact-max test; the ceiling float differs slightly per file. With a 2 m
+    tolerance it is a consistent 71–78% at all 7 sampled times.
+  - soil_temperature_100_200cm carries a ~0.2 °C ripple on the annual curve (6-hourly analysis-cycle stitching). PV-surface pairs are noisy hour-to-hour
+    near the equator where PV → 0. Both flagged by reviewers as non-defects; I agree.
+  - potential_temperature_0p995_sigma is in K while 35 other temperatures are °C. Matches the published HRRR virtual convention
+    (noaa/hrrr/analysis_virtual/templates/latest.zarr/potential_temperature_2m/zarr.json: units: K), so it is consistent, not an outlier.
+
+  (c) Open questions for you
+
+  1. sunshine_duration_surface's synoptic-hour window period is undetermined. Correlation against the backward 3 h (06-09Z) and forward 3 h (12-15Z)
+     candidates is symmetric — r = +0.684 / +0.684, mean|diff| 2208 / 2210 s at 12:00; +0.686 / +0.683 at 2022-04-30T18:00. It is not the tail of the 06Z
+     window (r = −0.50 against f006 − store(09:00)). I can't state a direction. If you take fix (2), this needs settling first.
+  2. haines_index_surface declares no flag_values/flag_meanings but is exactly {2,3,4,5,6} at all 3 sampled times — unlike the 9 categorical variables,
+     which all do declare them. Ordinal rather than a flag, so arguably fine; the comment already gives the range.
+  3. soil_type_surface declares standard_name="soil_type", which CF defines as a flag variable requiring flag_values/flag_meanings, but the values are
+     interpolated (1,558 distinct values, 0→16 in ~0.01 steps) so class codes can't honestly be declared. Either drop the standard_name or accept the
+
+     deviation. tests/common/datasets_cf_compliance_test.py passes (201 tests), so nothing catches it today.
+  4. total_ozone_atmosphere uses units="DU" with standard_name unset. DU is non-SI; CF defines equivalent_thickness_at_stp_of_atmosphere_ozone_content for
+     this quantity.
+  5. The two gravity-wave surface stresses carry no sign-convention comment, while their sibling momentum_flux_u/v_component_surface needed one. They are
+     uncorrelated with the 10 m wind (r = +0.05, +0.06), so I could not determine their convention from data.
+  6. albedo_surface has no comment about its night behaviour. It is exactly 0 wherever the window carried no sunlight — 31.9% of cells at 2021-06-21T12:00,
+     of which 100% also have zero downward shortwave (vs 0.37% of albedo>0 cells). At two land points the zero hours match the local dark window exactly
+     (Sahara 01-04 UTC, Kansas 07-11 UTC). An intrinsic always-true quirk, so it belongs in the comment.
+  7. potential_evaporation_rate_surface reaches 4193 W m-2 (2021-11-01T17:00, 16.5°S 64.5°W, Bolivian lowlands). Geographically sensible and
+     source-faithful, but extreme.
+
+  Checks that PASSED (stated, not padded)
+
+  - Completeness — exhaustive. plots.py availability --start-date 2021-05-01 --end-date 2022-04-30 --min-fraction 1.0 → "Manifest complete: all 8760
+    positions ≥ 100%", no unavailable_timestamps.txt. All 253 root arrays decoded non-all-NaN at 4 positions, 0 errors.
+  - Source fidelity — bit-exact. Element-wise, longitude-rolled comparison against independent gribberish decodes at 2021-11-01T17:00 (lead 5 of 12Z):
+    temperature_2m, total_precipitation_surface, downward_short_wave_radiation_flux_surface, uv_b_downward_solar_flux_surface (pgrb2b-only element),
+    geopotential_height_0p5pvu (pgrb2b-only level), snow_water_equivalent_surface, visibility_surface, pressure_level/temperature@875hPa (pgrb2b-only
+
+    level) → max|diff| = 0 (snow 1.1e-16), NaN masks identical, all 8.
+  - Filters. K→C: store − raw = −273.15 exactly at all 1,038,240 cells. mm→m: store / raw = 0.001 exactly at all 490,840 finite cells. All 35
+    degree_Celsius variables have Celsius-like ranges; the 3 K variables are 2 temperature differences plus potential temperature (229–331 K).
+  - Geometry. Store value == raw value at 8 landmarks spanning all quadrants including the dateline (diff 0.00000 each). lat 90→−90 step −0.25, lon
+    −180→179.75 step +0.25. geopotential_height_surface: Himalaya 5917.8 m, Andes 3662.1 m, ocean 0.1 m. Extremes geographically correct: 69.16 °C Namib,
+    51.5 °C Death Valley, 220.1 mm/6h at 3.5°N 28°W (ITCZ), lifted index 49.8 K at 73.5°S.
+  - Diurnal phase. UV-B flux peaks exactly 1 h after local solar noon at 0°E/90°E/180°E/90°W (13/07/01/19 UTC). Skin temperature peaks ~1 h after local
+    noon at 4 land points; 2 m air temperature 2.7–5.5 h after. Correct lag ordering flux < skin < air.
+  - Windowed variables. total_precipitation_surface: 0 negative steps in 5,191,200 comparisons within each window, field mean 0.047→0.292 then reset to
+    0.048; bit-identical to 06Z f006 APCP "0-6 hour acc fcst" at the synoptic hour. convective_precipitation_surface: 0 negative steps.
+    water_runoff_surface: 0.32% negative, worst −0.0024 kg m-2 (packing). maximum_temperature_2m non-decreasing then resets. Convective ≤ total
+    precipitation at all 24,917,760 cells compared across 24 positions, worst difference exactly 0.
+  - NaN semantics. "NaN over water" (13 vars incl. all 8 soil-moisture): NaN mask == exactly ~land_sea_mask, 0 mismatching cells at each of 3 times. "Land
+    and sea ice" (8 vars): differs from ~(land | ice>0) at only 2,003–2,964 cells (0.2–0.3%), all trace-ice; NaN fraction tracks the seasonal ice edge
+    (0.534 May vs 0.527 Nov). ice_temperature_surface: 0 valid cells where ice_cover == 0. PV families: NaN masks identical across all 6 quantities on a
+
+    surface. Height group: NaN 0.2275 at 305 m falling monotonically to 0.0023 at 4572 m, identical at 3 times.
+  - Pressure-level gaps match the comments to the level, and are stable across the window. 6 hydrometeor/cloud variables all-NaN at exactly the 18 levels
+    40→0.01 hPa; specific_humidity and ozone_mixing_ratio at exactly the 16 named levels; the other 8 dense on all 57. All 8 gap variables have identical
+    all-NaN level sets at window start, middle and end.
+  - Right-censoring. visibility_surface ceiling 24134.9–24135.6 m across 7 times ("about 24 km"), 71–78% of cells at it.
+    pressure_of_lifted_parcel_level_255_0mb ceiling 99997.9–99999.7 Pa ("near 100000 Pa"), 28–31% at it.
+  - Flags. All 9 declared flag variables are exactly {0,1}, n_uniq = 2, at each of 3 times — none outside flag_values. (A batch reviewer claimed these lack
+    flag_values/flag_meanings; that is wrong — I re-read the published attrs and all 9 carry them.)
+  - No undeclared sentinels. Modal-value scan over all 253 root arrays: only 3 modes at an interior value, all packing zeros listed in (b). No
+    −999/−9999-style sentinel.
+  - No step changes. 13 monthly field means × 40 variables: max month-to-month |mean| ratio 1.39, all seasonal. The 3 sign-flip hits are quantities that
+    legitimately cross zero (global-mean 10 m u-wind, soil temperature, 2 m dew point).
+
+  - Coordinates. 8,760 in-window positions, spacing uniquely 60 min, monotonic, 0 duplicates. Group coordinates duplicated identically from root.
+    spatial_ref carries crs_wkt.
+  - No quantization problem. Only the 9 flag variables have <100 distinct values; median n_uniq across (variable, position) = 4,193. Consistent with
+    keep_mantissa_bits="no-rounding".
+
+  Checks that did NOT complete
+
+  I stopped run-all (60 min in) and two scans to deliver. Nothing was written to the store.
+
+  1. Spatial plot review — 0 of 272 spatial_*.png rendered. run-all finished all 272 value_timeseries_*.png and 260 of 272 temporal_*.png but was killed
+     before the spatial phase began. Would have covered: map orientation, vertical seam, coastline/landmark placement, spatial extent, quantization visible
+
+     as spatial staircasing, sentinel bleed as colour extremes, and validation-vs-GEFS histogram overlap. Mitigated for geometry by the bit-exact
+     element-wise source comparison and the 8-landmark check above, which are stricter than the plots. Genuinely uncovered: the GEFS histogram-overlap
+     comparison, and the "does the whole map look meteorologically right" eyeball check, for all 272 variables.
+  2. validation_summary.md never written (run-all's last artifact). No per-variable stats table or incomplete-variables table from the run. Mitigated: the
+     exact-window availability scan answered completeness directly, and my own sweep produced per-variable stats at 4 positions.
+
+  3. Exhaustive 272-array monthly drift sweep — reached 261/272, JSON never written, no result. Would have extended the step-change test from 40 variables
+     to all 272. Mitigated: the 40-variable sweep completed and covers every filtered variable, every accumulation family, the flags, all radiation and one
+     variable per vertical group; and all 272 value-timeseries plots were rendered, 63 reviewed. Uncovered: a step change confined to one of the ~209
+     variables in neither set.
+
+  4. Batch plot review covered 63 of 272 variables, and only their value-timeseries and temporal plots. Zero data defects found across those 63; the only
+     finding raised was independent corroboration of A1.
+
+
+
+  ---
+
+  PART B — User-facing findings
+
+  Unavailable data
+
+  - Seven hourly positions are missing one or both source products, all on 2022-11-29 and 2022-11-30 — 20:00 and 22:00 on the 29th, and 02:00, 05:00,
+    09:00, 10:00 and 11:00 on the 30th. Of the archive's 46,901 hourly positions, 46,899 carry at least one product.
+  - Thirteen land-surface variables are empty over all water, following the land-sea mask exactly: the four volumetric_soil_moisture_*, the four
+    liquid_volumetric_soil_moisture_*, field_capacity_surface, wilting_point_surface, vegetation_surface, plant_canopy_surface_water_surface and
+    water_runoff_surface.
+  - Eight variables are empty over open water but carry values over land and sea ice, so their coverage boundary moves through the year with the sea-ice
+    edge: snow_water_equivalent_surface, snow_thickness_surface, the four soil_temperature_*, ground_heat_flux_surface and
+    potential_evaporation_rate_surface.
+  - ice_temperature_surface is empty wherever there is no ice — about 87% of the grid.
+  - Eleven cloud base, top and cloud-top temperature variables are empty wherever the matching cloud cover is zero, and also where that cover is small: the
+    six average_pressure_{high,low,middle}_cloud_{bottom,top}, the three average_temperature_{high,low,middle}_cloud_top, and
+    pressure_convective_cloud_bottom / pressure_convective_cloud_top. Empty coverage is 18–41% of the grid for the high, medium and low families. For the
+    two convective variables it is 75–78%, and it extends to cells with up to 39% convective cloud cover — a tenth of those empty cells have more than 11%
+    cover.
+  - Forty-eight potential-vorticity-surface variables are empty where that surface does not exist in the column — 33–40% of the grid, concentrated in a
+    broad equatorial band. This covers geopotential height, pressure, temperature, u and v wind, and vertical speed shear on each of the eight ±0.5, ±1,
+    ±1.5 and ±2 PVU surfaces.
+  - In the height_above_mean_sea_level group, values are absent where the terrain rises above the level. This is 22.8% of the grid at 305 m, falling
+    through 13.8% at 914 m and 4.9% at 2743 m to 0.2% at 4572 m, for all three variables (temperature, wind_u, wind_v).
+  - Eight pressure_level variables carry no data at part of the level set, at every time step. cloud_cover, cloud_mixing_ratio, graupel,
+    ice_water_mixing_ratio, rain_mixing_ratio and snow_mixing_ratio are empty at the 18 levels from 40 down to 0.01 hPa. specific_humidity and
+    ozone_mixing_ratio are empty at 125, 175, 225, 275, 325, 375, 425, 475, 525, 575, 625, 675, 725, 775, 825 and 875 hPa.
+  - haines_index_surface is empty on about 58–60% of the grid, chiefly over ocean.
+
+  Variables to mask
+
+  - percent_frozen_precipitation_surface — mask values below −0.1. Negative values mark no precipitation and span −50 to −0.1; they cover 82–84% of the
+    grid.
+  - geopotential_height_cloud_ceiling — mask values above 19,000 m. Values there mark no cloud ceiling and span 19,000 to 20,000 m; they cover 46–52% of
+    the grid.
+  - albedo_surface — mask zeros before averaging. The value is exactly 0 wherever the averaging window received no sunlight, about 32% of the grid at any
+    time; a mean taken over all hours is not an albedo.
+
+  Source data changes over time
+
+  - sunshine_duration_surface covers a shorter period at 00, 06, 12 and 18 UTC than at other hours. At those four hours the value is a 3-hour total,
+    reaching at most 10,800 s. At the other twenty hours it is a 1- to 5-hour total since the preceding 00, 06, 12 or 18 UTC hour, reaching at most 18,000
+    s at the fifth hour. The series therefore steps down at each of those four hours instead of continuing to accumulate, and no value in the archive
+    reaches 21,600 s.
+
+✻ Baked for 10m 32s · done 9:36 AM
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

@@ -39,7 +39,7 @@
     "short_name": "fal",
     "standard_name": "surface_albedo",
     "units": "percent",
-    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
+    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Exactly 0 wherever the averaging window received no sunlight; exclude those zeros from a time mean albedo.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
