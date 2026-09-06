@@ -549,7 +549,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_0_10cm",
@@ -560,7 +564,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen "
-                "plus liquid water. NaN over water."
+                "plus liquid water. NaN over water. Values are near 1 over permanent "
+                "land ice, where they are placeholders rather than soil moisture "
+                "measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -581,7 +587,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_10_40cm",
@@ -592,7 +602,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen "
-                "plus liquid water. NaN over water."
+                "plus liquid water. NaN over water. Values are near 1 over permanent "
+                "land ice, where they are placeholders rather than soil moisture "
+                "measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -613,7 +625,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_40_100cm",
@@ -624,7 +640,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries "
-                "frozen plus liquid water. NaN over water."
+                "frozen plus liquid water. NaN over water. Values are near 1 over "
+                "permanent land ice, where they are placeholders rather than soil "
+                "moisture measurements. Mask values >= 0.9."
             ),
         ),
         root_var(
@@ -645,7 +663,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values "
+                ">= 0.9."
+            ),
         ),
         root_var(
             "liquid_volumetric_soil_moisture_100_200cm",
@@ -656,7 +678,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries "
-                "frozen plus liquid water. NaN over water."
+                "frozen plus liquid water. NaN over water. Values are near 1 over "
+                "permanent land ice, where they are placeholders rather than soil "
+                "moisture measurements. Mask values >= 0.9."
             ),
         ),
         root_var(

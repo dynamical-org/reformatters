@@ -5458,7 +5458,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5513,7 +5513,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5568,7 +5568,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5623,7 +5623,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13730,7 +13730,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13786,7 +13786,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13842,7 +13842,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13898,7 +13898,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
