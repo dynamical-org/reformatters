@@ -106,13 +106,16 @@ class NoaaVirtualRegionJob(
         ends = [*starts[1:], file_size]
 
         location = coord.get_url()
-        # A stale index can name in-bounds ranges, so bounds alone do not prove a match.
-        first_message_length = self.first_grib_message_length(coord)
-        if first_message_length != ends[0] - starts[0]:
+        # Bounds alone cannot spot a stale index; this checks its first message only.
+        declared_length = self.grib_message_length_at(coord, starts[0])
+        if declared_length != ends[0] - starts[0]:
+            found = (
+                declared_length if declared_length is not None else "no GRIB message"
+            )
             log.error(
-                f"Skipping {location}: the index gives the first message "
-                f"{ends[0] - starts[0]} bytes but the data file's GRIB header gives "
-                f"{first_message_length}; stale or mismatched index"
+                f"Skipping {location}: the index puts a {ends[0] - starts[0]} byte "
+                f"message at offset {starts[0]} but the data file has {found} there; "
+                f"stale or mismatched index"
             )
             return []
 
@@ -163,15 +166,20 @@ class NoaaVirtualRegionJob(
         checked out, so an empty `refs` here means nothing matched, not a skipped file.
         """
 
-    def first_grib_message_length(self, coord: NOAA_VIRTUAL_COORD) -> int:
-        """The first GRIB message's length in bytes, read from the data file itself."""
+    def grib_message_length_at(
+        self, coord: NOAA_VIRTUAL_COORD, offset: int
+    ) -> int | None:
+        """The message length the data file declares at `offset`, read from the object
+        itself and so independent of the index, or None if no GRIB message starts there.
+        """
         header = s3_read_bytes(
             coord.get_url(),
             region=self.source_bucket_region,
-            start=0,
-            end=GRIB_SECTION_0_BYTES,
+            start=offset,
+            end=offset + GRIB_SECTION_0_BYTES,
         )
-        assert header[:4] == b"GRIB", f"{coord.get_url()} is not a GRIB file"
+        if len(header) < GRIB_SECTION_0_BYTES or header[:4] != b"GRIB":
+            return None
         (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
         return length
 

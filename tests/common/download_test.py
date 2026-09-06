@@ -21,6 +21,7 @@ from reformatters.common.download import (
     httpx_download_to_disk,
     is_not_found,
     s3_download_to_disk,
+    s3_read_bytes,
     s3_store,
 )
 
@@ -242,6 +243,33 @@ def test_s3_download_to_disk_calls_download(tmp_path: Path) -> None:
     # Leading slash stripped: S3 keys are bucket-relative.
     assert captured[0]["path"] == "data/file.idx"
     assert result == get_local_path("my-dataset", "/data/file.idx")
+
+
+def test_s3_read_bytes_requests_the_key_and_range() -> None:
+    captured: list[dict] = []
+
+    def fake_get_range(store: object, path: str, *, start: int, end: int) -> bytes:
+        captured.append({"store": store, "path": path, "start": start, "end": end})
+        return b"GRIB" + bytes(12)
+
+    with patch.object(obstore, "get_range", fake_get_range):
+        result = s3_read_bytes(
+            "s3://test-bucket/data/file.grib2", region="us-east-1", start=0, end=16
+        )
+
+    assert len(captured) == 1
+    assert isinstance(captured[0]["store"], obstore.store.S3Store)
+    # Leading slash stripped: S3 keys are bucket-relative.
+    assert captured[0]["path"] == "data/file.grib2"
+    assert (captured[0]["start"], captured[0]["end"]) == (0, 16)
+    assert result == b"GRIB" + bytes(12)
+
+
+def test_s3_read_bytes_rejects_non_s3_url() -> None:
+    with pytest.raises(AssertionError):
+        s3_read_bytes(
+            "https://example.com/file.grib2", region="us-east-1", start=0, end=16
+        )
 
 
 def test_s3_download_to_disk_rejects_non_s3_url() -> None:

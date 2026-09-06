@@ -325,6 +325,49 @@ def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
     assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
 
 
+def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Displacing every offset by the same amount leaves each span the right length and
+    # inside the file, so neither the bounds check nor a message length read at byte 0
+    # sees anything wrong. Reading where the index says the message starts does: the
+    # offset lands mid-message, which carries no GRIB magic.
+    shifted = "".join(
+        line.replace(f":{line.split(':')[1]}:", f":{int(line.split(':')[1]) + 100}:", 1)
+        + "\n"
+        for line in _SFC_INDEX.splitlines()
+    )
+    fake_index(monkeypatch, tmp_path, shifted)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: (
+            grib_section_0(500) if start == 0 else bytes(16)
+        ),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A truncated or non-GRIB object is untrusted source state, so it discards the one
+    # file like any other stale index rather than raising and taking the worker with it.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: b"GRI",
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
 def test_file_refs_skips_empty_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -9,6 +9,7 @@ import xarray as xr
 from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualRegionJob,
     NoaaGfsAnalysisVirtualSourceFileCoord,
+    _reads_hour_0,
 )
 from reformatters.noaa.gfs.analysis_virtual.template_config import (
     NoaaGfsAnalysisVirtualTemplateConfig,
@@ -160,10 +161,10 @@ def test_representative_var_is_carried_only_by_its_own_product(
     )
     job = make_job(template_ds, data_vars=list(data_vars))
 
+    # Keyed on the predicate that actually splits the coords into lead groups:
+    # has_hour_0_values() no longer does, since SUNSD is windowed and still True.
     picked = {
-        (c.file_type, c.data_vars[0].has_hour_0_values()): job.representative_var(
-            c
-        ).name
+        (c.file_type, _reads_hour_0(c.data_vars[0])): job.representative_var(c).name
         for c in coords
     }
     assert picked == {

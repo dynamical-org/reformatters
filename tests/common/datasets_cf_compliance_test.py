@@ -526,7 +526,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # CF's soil_type is a flag variable; GFS interpolates the STATSGO class numbers, so
     # the values are neither integer codes nor translatable through flag_values.
     "soil_type_surface",
-    "total_ozone_atmosphere",
     "u_component_storm_motion_6000_0m",
     "uv_b_downward_solar_flux_surface",
     "v_component_storm_motion_6000_0m",
