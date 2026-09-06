@@ -11293,6 +11293,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 100000.0
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "TOZNE",
@@ -11304,8 +11310,9 @@
         "attributes": {
           "long_name": "Total ozone",
           "short_name": "tozne",
-          "units": "DU",
-          "comment": "Dobson units; 1 DU is a 10 um thick layer of pure ozone at standard temperature and pressure.",
+          "standard_name": "equivalent_thickness_at_stp_of_atmosphere_ozone_content",
+          "units": "m",
+          "comment": "The thickness the column's ozone would occupy as pure ozone at standard temperature and pressure; 1e-5 m is one Dobson unit.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
