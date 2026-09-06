@@ -178,7 +178,6 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * Test: `uv run pytest`
 * Fast/unit tests: `uv run pytest -m "not slow"`
 * Single test: `uv run pytest tests/path/to/module_test.py::test_function_name`
-* Warnings are errors in tests. Assert an expected warning with `pytest.warns`; add a narrow `ignore::` entry to `filterwarnings` in `pyproject.toml` only for a warning from a dependency we can't fix.
 * Important: always run all of these checks before committing, do not skip them: `uv run ruff format && uv run ruff check --fix && uv run ty check`.
 * Run the generate-manual-workflows prek step when adding or removing a dataset.
 * Use `uv run ...` to run python commands in the environment, e.g. `uv run python -c "..."`, `uv run src/scripts/foo.py`. Do not call `python3` when working in this repo.
