@@ -57,6 +57,35 @@ NOOP_STORAGE_CONFIG = StorageConfig(
 )
 
 
+def stalled_cycles_before_alerting(
+    max_delay: timedelta,
+    fire: pd.Timestamp,
+    newest_normal: pd.Timestamp,
+    frequency: pd.Timedelta,
+    monkeypatch: pytest.MonkeyPatch,
+) -> int:
+    """The number of consecutive un-ingested cycles at which CheckCurrentData first
+    fails, running the real check rather than re-deriving its due-position arithmetic.
+    One more than the number it tolerates."""
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
+
+    for stalled in range(1, 6):
+        init_times = pd.date_range(
+            newest_normal - 40 * frequency,
+            newest_normal - stalled * frequency,
+            freq=frequency,
+        )
+        context = validation.ValidationContext(
+            store=Mock(),
+            ds=xr.Dataset(coords={"init_time": init_times}),
+            append_dim="init_time",
+            append_dim_frequency=frequency,
+        )
+        if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
+            return stalled
+    raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
+
+
 def assert_configured_validators(dataset: DynamicalDataset) -> None:
     """Run a dataset's configured validators (plus the shard-presence check that
     validate_dataset adds) against the store its e2e test built.

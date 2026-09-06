@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
 
 import icechunk
 import numpy as np
@@ -29,7 +28,10 @@ from reformatters.noaa.gefs.gefs_config_models import (
 from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
 )
-from tests.common.dynamical_dataset_test import assert_configured_validators
+from tests.common.dynamical_dataset_test import (
+    assert_configured_validators,
+    stalled_cycles_before_alerting,
+)
 
 # 40N 100W, a land cell so the soil and snow bitmaps carry values there.
 _LATITUDE, _LONGITUDE = 200, 320
@@ -301,8 +303,12 @@ def test_validators(
     )
     assert current_data.max_delay == timedelta(hours=6, minutes=20)
     assert (
-        _stalled_cycles_before_alerting(
-            current_data.max_delay, validation_fire, newest_init, monkeypatch
+        stalled_cycles_before_alerting(
+            current_data.max_delay,
+            validation_fire,
+            newest_init,
+            GEFS_INIT_TIME_FREQUENCY,
+            monkeypatch,
         )
         == 1
     )
@@ -324,33 +330,6 @@ def test_validators(
     )
     assert decode_health.positions == 1
     assert decode_health.allow_all_nan_vars == ()
-
-
-def _stalled_cycles_before_alerting(
-    max_delay: timedelta,
-    fire: pd.Timestamp,
-    newest_normal: pd.Timestamp,
-    monkeypatch: pytest.MonkeyPatch,
-) -> int:
-    """The number of consecutive un-ingested cycles at which CheckCurrentData first
-    fails, running the real check rather than re-deriving its due-position arithmetic.
-    One more than the number it tolerates."""
-    frequency = GEFS_INIT_TIME_FREQUENCY
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
-
-    for stalled in range(1, 6):
-        init_times = pd.date_range(
-            "2026-08-01T00:00", newest_normal - stalled * frequency, freq=frequency
-        )
-        context = validation.ValidationContext(
-            store=Mock(),
-            ds=xr.Dataset(coords={"init_time": init_times}),
-            append_dim="init_time",
-            append_dim_frequency=frequency,
-        )
-        if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
-            return stalled
-    raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
 
 
 def _resolved_split_size(

@@ -26,6 +26,7 @@ name: 'Manual: Backfill'
         - noaa-gefs-forecast-10-day-0-25-degree-virtual
         - noaa-gefs-forecast-16-day-0-5-degree-virtual
         - noaa-gefs-forecast-35-day
+        - noaa-gefs-forecast-35-day-0-5-degree-virtual
         - noaa-gfs-analysis
         - noaa-gfs-analysis-virtual
         - noaa-gfs-forecast
