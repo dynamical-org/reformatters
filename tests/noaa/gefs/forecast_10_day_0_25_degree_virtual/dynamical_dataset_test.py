@@ -329,7 +329,6 @@ def test_validators(
     # Absorbing that tail costs more than one member's worth of files, so a member
     # missing entirely passes while its init is newest. It is caught one fire later,
     # when the 18 hour update window still covers that init under the 1.0 tier.
-    # Asserted so the comment beside the validator cannot claim otherwise.
     assert 81 < allowed_missing
 
     decode_health = next(

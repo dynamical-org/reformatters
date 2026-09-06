@@ -35,12 +35,8 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four days of 6 hourly inits. Every array holds one ref per (lead time,
-            # ensemble member), so a full manifest is 16 x 81 x 31 = 40176 refs, which
-            # measures 0.68 MiB (17.8 bytes/ref) on this dataset's own manifests: well
-            # inside the 3 MiB reader budget and far above the 1000 refs zstd location
-            # compression needs. Across 38 arrays that is 1.5M refs per commit, against
-            # the 12.1M that operational HRRR forecast 48h sustains at a p50 of 2.8s.
+            # Four days of 6 hourly inits. Refs per commit = arrays x refs per active
+            # split, order 10^7; see "Manifest splitting" in docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
         )
     )
@@ -68,10 +64,8 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline, plus 10 minutes: the
-            # update stops polling 30 seconds before its deadline, so a validator
-            # firing at exactly the deadline could read the store while the update is
-            # still committing its last batch.
+            # The update's fire plus its pod_active_deadline, so the run being
+            # validated has always stopped writing.
             schedule="25 6,12,18,0 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -86,18 +80,12 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The newest init is 6h25m old when validation fires, so 12h adds a cycle
-            # of slack: a run that rolls its last files to the next fire still passes,
-            # while two cycles with nothing ingested fail. A cycle that published
-            # nothing is caught here rather than by the completeness check below, which
-            # skips append dim positions the store does not reach.
+            # A cycle that published nothing is caught here rather than by the
+            # completeness check below, which skips append dim positions the store
+            # does not reach.
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             # The leading tier covers the newest init, which the source may still be
-            # finishing: 0.95 of its 81 x 31 files leaves room for the last four lead
-            # times of every member, the tail the source lays down in its final ~20
-            # minutes. That is looser than one whole member (81 files, 3.2%), so a
-            # member missing entirely passes while its init is newest and fails at the
-            # next fire, where the 18 hour window still covers it under the 1.0 tier.
+            # finishing; every older init must be whole.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.95, 1.0)
             ),
