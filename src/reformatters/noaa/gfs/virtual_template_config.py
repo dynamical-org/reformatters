@@ -1575,6 +1575,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="hlcy",
             long_name="Storm relative helicity",
             units="m2 s-2",
+            comment=(
+                "Uses a right-moving storm motion in both hemispheres, so southern "
+                "hemisphere values are positive-mean rather than mirrored."
+            ),
         ),
         root_var(
             "u_component_storm_motion_6000_0m",
