@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
+from datetime import timedelta
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
@@ -48,6 +49,12 @@ class MaterializedRegionJob(
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
     # will be pipelined within a region job.
     max_vars_per_download_group: ClassVar[int | None] = None
+
+    # How long after its own timestamp a source file may still be unpublished
+    # without a download failure being logged as an error. Set this to match
+    # the dataset's CheckCurrentData(max_delay=...) validator so routine
+    # publication latency doesn't page.
+    expected_source_delay: ClassVar[timedelta] = timedelta(hours=48)
 
     # Subclasses can override this to control download parallelism
     # This particularly useful of the data source cannot handle a large number of concurrent requests
@@ -308,11 +315,11 @@ class MaterializedRegionJob(
                 # For recent files, we expect some files to not exist yet, just log the path
                 # else, log exception so it is caught by error reporting but doesn't stop processing
                 append_dim_coord = coord.append_dim_coord
-                two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
+                delay_cutoff = pd.Timestamp.now() - self.expected_source_delay
                 if (
                     is_not_found(e)
                     and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-                    and append_dim_coord > two_days_ago
+                    and append_dim_coord > delay_cutoff
                 ):
                     log.info(" ".join(str(e).split("\n")[:2]))
                 else:
