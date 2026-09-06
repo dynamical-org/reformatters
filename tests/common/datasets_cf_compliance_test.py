@@ -1368,6 +1368,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     (
         "upward_short_wave_radiation_flux_top_of_atmosphere",
         "step_type",
+        "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "upward_short_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
         "noaa-gfs-forecast-virtual",
     ),
     (
