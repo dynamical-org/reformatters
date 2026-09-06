@@ -91,12 +91,9 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
     for entry in xml.findall(".//entry"):
         standard_name = entry.get("id")
         canonical_units_elem = entry.find("canonical_units")
-        if (
-            standard_name is not None
-            and canonical_units_elem is not None
-            and canonical_units_elem.text is not None
-        ):
-            result[standard_name] = canonical_units_elem.text
+        if standard_name is not None and canonical_units_elem is not None:
+            # A dimensionless entry (e.g. soil_type) carries an empty element.
+            result[standard_name] = canonical_units_elem.text or ""
     return result
 
 
@@ -312,6 +309,7 @@ DIM_EXPECTED_AXIS: dict[str, str | None] = {
     "statistic": None,
     "pressure_level": "Z",
     "model_level": "Z",
+    "height_above_mean_sea_level": "Z",
 }
 # Force a decision here whenever a new dimension is added to the Dim type.
 assert set(DIM_EXPECTED_AXIS) == set(get_args(Dim.__value__))
@@ -494,9 +492,40 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # ECMWF sub-gridscale orography statics with no CF standard name.
     "standard_deviation_of_sub_gridscale_orography_surface",
     "slope_of_sub_gridscale_orography_surface",
+    # GFS virtual single-level / surface fields with no CF standard name. UFLX and VFLX
+    # are momentum fluxes whose sign is opposite CF's surface_downward_*_stress.
+    "apparent_temperature_2m",
+    "clear_sky_uv_b_downward_solar_flux_surface",
+    "cloud_work_function_atmosphere",
+    "graupel_model_level_1",
+    "haines_index_surface",
+    "icao_standard_atmosphere_reference_height_max_wind",
+    "icao_standard_atmosphere_reference_height_tropopause",
+    "ice_growth_rate_10m_amsl",
+    "ice_temperature_surface",
+    "ice_thickness_surface",
+    "instantaneous_categorical_freezing_rain_surface",
+    "instantaneous_categorical_ice_pellets_surface",
+    "instantaneous_categorical_rain_surface",
+    "instantaneous_categorical_snow_surface",
+    "liquid_volumetric_soil_moisture_0_10cm",
+    "liquid_volumetric_soil_moisture_10_40cm",
+    "liquid_volumetric_soil_moisture_40_100cm",
+    "liquid_volumetric_soil_moisture_100_200cm",
+    "momentum_flux_u_component_surface",
+    "momentum_flux_v_component_surface",
+    "potential_evaporation_rate_surface",
+    "rain_mixing_ratio_model_level_1",
+    "snow_mixing_ratio_model_level_1",
+    "total_ozone_atmosphere",
+    "u_component_storm_motion_6000_0m",
+    "uv_b_downward_solar_flux_surface",
+    "v_component_storm_motion_6000_0m",
+    "ventilation_rate_planetary_boundary_layer",
 }
 
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
+
 CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("air_temperature", "degree_Celsius"),
     ("dew_point_temperature", "degree_Celsius"),
@@ -513,6 +542,14 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("cloud_ice_mixing_ratio", "kg kg-1"),
     ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
     ("sea_surface_temperature", "degree_Celsius"),
+    # GFS reports cloud top temperature in the Celsius its other temperatures use.
+    ("air_temperature_at_cloud_top", "degree_Celsius"),
+    # GFS ozone carries GRIB's kg kg-1; CF canonical for a mass fraction is "1".
+    ("mass_fraction_of_ozone_in_air", "kg kg-1"),
+    # GFS albedo carries GRIB's percent; CF canonical is a 0-1 fraction.
+    ("surface_albedo", "percent"),
+    # CF declares soil_type dimensionless with no canonical unit string.
+    ("soil_type", "1"),
 }
 
 # (standard_name, units, dataset_id) for dataset-specific unit variances.
@@ -865,6 +902,11 @@ def test_ecmwf_parameter_compliance(
 # Format: (variable_or_coord_name, attribute_name, dataset_id)
 # These are intentional exceptions where source data conventions differ.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # GRIB's TCDC, and so ECMWF's tcc, names both the column total and the fraction
+    # within a single layer. GFS publishes both, at "entire atmosphere" and at
+    # "boundary layer cloud layer", so one dataset carries the two meanings.
+    ("tcc", "long_name", "noaa-gfs-analysis-virtual"),
+    ("tcc", "standard_name", "noaa-gfs-analysis-virtual"),
     # HRRR is on a Lambert-conformal grid whose GRIB messages set the grid-relative
     # wind flag, so its components follow the grid axes (x_wind/y_wind) rather than
     # east and north. The lat-lon datasets carry genuinely earth-relative winds.
@@ -1007,6 +1049,10 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
     ("land_sea_mask_surface", "flag_values", "ecmwf-aifs-single-forecast-virtual"),
     ("land_sea_mask_surface", "flag_meanings", "ecmwf-aifs-single-forecast-virtual"),
+    # HRRR's ice cover is binary and carries flags, while GFS's is an area
+    # fraction taking any value between 0 and 1.
+    ("ice_cover_surface", "flag_values", "noaa-gfs-analysis-virtual"),
+    ("ice_cover_surface", "flag_meanings", "noaa-gfs-analysis-virtual"),
     # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
@@ -1018,6 +1064,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("categorical_snow_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_snow_surface", "step_type", "noaa-gefs-analysis"),
     ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    ("categorical_snow_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gefs-analysis"),
@@ -1026,6 +1073,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-35-day",
     ),
+    ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gefs-analysis"),
@@ -1034,10 +1082,12 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-35-day",
     ),
+    ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-analysis"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
+    ("categorical_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
     # GFS and GEFS publish window-average total cloud cover.
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis"),
@@ -1047,6 +1097,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-35-day",
     ),
+    ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis-virtual"),
     # IFS ENS 15-day is instantaneous while IFS ENS 46-day is a 24-hour mean
     # under the same variable name.
     (
@@ -1105,6 +1156,31 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "downward_long_wave_radiation_flux_surface",
         "step_type",
         "noaa-hrrr-forecast-18-hour-virtual",
+    ),
+    # GFS publishes interval-average upward radiation and heat fluxes while
+    # HRRR publishes them at the valid time.
+    ("latent_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("sensible_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    ("ground_heat_flux_surface", "step_type", "noaa-gfs-analysis-virtual"),
+    (
+        "upward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gfs-analysis-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gfs-analysis-virtual",
+    ),
+    (
+        "upward_short_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gfs-analysis-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gfs-analysis-virtual",
     ),
     # IFS ENS 46-day publishes 24-hour means for these state variables.
     (
