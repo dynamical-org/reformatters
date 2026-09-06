@@ -1317,8 +1317,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_base",
-            comment="NaN where the source reports no convective cloud in the column, and "
-            "at some cloud-field edges where convective_cloud_cover is near zero.",
+            comment=(
+                "NaN means the source does not provide a convective cloud base pressure "
+                "at this cell; this can occur even when convective_cloud_cover is "
+                "nonzero."
+            ),
             hour_0=False,
         ),
         root_var(
@@ -1365,8 +1368,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_top",
-            comment="NaN where the source reports no convective cloud in the column, and "
-            "at some cloud-field edges where convective_cloud_cover is near zero.",
+            comment=(
+                "NaN means the source does not provide a convective cloud top pressure "
+                "at this cell; this can occur even when convective_cloud_cover is "
+                "nonzero."
+            ),
             hour_0=False,
         ),
         root_var(
