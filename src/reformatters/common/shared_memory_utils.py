@@ -1,4 +1,3 @@
-import warnings
 from collections.abc import Generator
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import closing, contextmanager
@@ -182,10 +181,7 @@ def write_shard_to_zarr(
 
     assert_fill_values_set(processing_region_da_template)
 
-    with (
-        warnings.catch_warnings(),
-        closing(SharedMemory(name=shared_buffer_name)) as shared_memory,
-    ):
+    with closing(SharedMemory(name=shared_buffer_name)) as shared_memory:
         shared_array: ArrayFloat32 = np.ndarray(
             processing_region_da_template.shape,
             dtype=processing_region_da_template.dtype,
@@ -203,11 +199,6 @@ def write_shard_to_zarr(
         append_dim_slice = slice(append_dim_coords.min(), append_dim_coords.max())
         data_array = data_array.sel({append_dim: append_dim_slice})
 
-        warnings.filterwarnings(
-            "ignore",
-            message="In a future version of xarray decode_timedelta will default to False rather than None.",
-            category=FutureWarning,
-        )
         group, name = split_var_path(str(processing_region_da_template.name))
         data_array[shard_indexer].rename(name).to_zarr(
             store, group=group, region="auto", write_empty_chunks=True

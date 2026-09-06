@@ -175,7 +175,7 @@ class EcmwfIfsEns46DayRegionJob(
                 processing_region_ds["lead_time"].values,
                 processing_region_ds["ensemble_member"].values,
             )
-            if data_var.has_hour_0_values() or lead_time != np.timedelta64(0)
+            if data_var.has_hour_0_values() or lead_time != pd.Timedelta(0)
         ]
 
     def download_file(self, coord: EcmwfIfsEns46DaySourceFileCoord) -> Path:

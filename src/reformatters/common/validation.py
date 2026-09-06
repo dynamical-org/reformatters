@@ -709,6 +709,10 @@ def _var_nan_fractions(
     da = ds[var_path]
     if "lead_time" in da.dims and var_path in skip_lead_time_0_vars:
         da = da.isel(lead_time=slice(1, None))
+    # An empty selection measures nothing; its mean is NaN, which is not > any
+    # threshold, so measuring it would report a pass.
+    if da.size == 0:
+        return None
     # Deep copy after slicing to force eager load of just the needed region
     # (helps avoid memory leaks observed iterating null checks across vars).
     da = da.copy(deep=True)
@@ -728,10 +732,6 @@ def _var_nan_fractions(
         fractions = null.mean(dim=reduce_dims)
 
     values = [float(value) for value in np.atleast_1d(fractions.compute().values)]
-    # An empty selection measures nothing; its mean is NaN, which is not > any
-    # threshold, so without this it would report a pass.
-    if not all(np.isfinite(value) for value in values):
-        return None
     # values run oldest-first along the append dim; recency 0 is the newest.
     return dict(enumerate(reversed(values)))
 

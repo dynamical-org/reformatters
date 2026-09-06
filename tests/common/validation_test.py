@@ -1,5 +1,4 @@
 import logging
-import warnings
 from datetime import timedelta
 
 import icechunk
@@ -19,6 +18,7 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
+from reformatters.common.template_utils import ignore_consolidated_metadata_spec_warning
 
 
 class NanTestDataVar(DataVar[BaseInternalAttrs]):
@@ -1026,14 +1026,8 @@ def _write_test_store(rng: np.random.Generator) -> zarr.storage.MemoryStore:
     )
     store = zarr.storage.MemoryStore()
     # Match production stores, which carry consolidated metadata (see template_utils.write_metadata),
-    # so validate_dataset opens them without the consolidated-fallback warning. Writing it emits a
-    # spec-compatibility UserWarning that production suppresses too.
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
-            category=UserWarning,
-        )
+    # so validate_dataset opens them without the consolidated-fallback warning.
+    with ignore_consolidated_metadata_spec_warning():
         ds.to_zarr(store, mode="w")
     return store
 

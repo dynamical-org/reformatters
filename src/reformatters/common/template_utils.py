@@ -1,6 +1,7 @@
+import contextlib
 import json
 import warnings
-from collections.abc import Callable, Sized
+from collections.abc import Callable, Iterator, Sized
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,6 +24,22 @@ from reformatters.common.storage import StoreFactory, commit_if_icechunk
 from reformatters.common.zarr import assert_fill_values_set, copy_zarr_metadata
 
 log = get_logger(__name__)
+
+
+@contextlib.contextmanager
+def ignore_consolidated_metadata_spec_warning() -> Iterator[None]:
+    """Silence zarr's warning that consolidated metadata is not in the Zarr v3 spec.
+
+    Unconsolidated metadata is also written so adding consolidated metadata is
+    unlikely to impact interoperability.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
+            category=UserWarning,
+        )
+        yield
 
 
 def _to_zarr_metadata(
@@ -76,15 +93,7 @@ def write_metadata(
             "Use copy_zarr_metadata to update metadata on existing stores."
         )
 
-    with warnings.catch_warnings():
-        # Unconsolidated metadata is also written so adding
-        # consolidated metadata is unlikely to impact interoperability.
-        warnings.filterwarnings(
-            "ignore",
-            message="Consolidated metadata is currently not part in the Zarr format 3 specification",
-            category=UserWarning,
-        )
-
+    with ignore_consolidated_metadata_spec_warning():
         for replica_store in replica_stores:
             log.info(f"Writing metadata to replica {replica_store} with mode {mode}")
             _to_zarr_metadata(template_ds, replica_store, mode, consolidated)

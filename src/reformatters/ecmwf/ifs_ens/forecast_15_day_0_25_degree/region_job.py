@@ -82,7 +82,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["lead_time"].values,
             processing_region_ds["ensemble_member"].values,
         ):
-            if not group_has_hour_0_values and lead_time == np.timedelta64(0):
+            if not group_has_hour_0_values and lead_time == pd.Timedelta(0):
                 continue
 
             member = int(ensemble_member)
