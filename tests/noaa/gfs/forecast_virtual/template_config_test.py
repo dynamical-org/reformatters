@@ -82,8 +82,7 @@ def test_expected_forecast_length_is_the_whole_lead_set() -> None:
 
 
 def test_windowed_variables_describe_their_window_in_forecast_lead_time() -> None:
-    """The analysis sibling phrases the same windows in UTC times because it has no
-    lead_time dim; here the window is a property of the step."""
+    """The window is a property of the forecast step, so it is phrased in lead time."""
     windowed = [v for v in CONFIG.data_vars if v.attrs.step_type != "instant"]
     assert len(windowed) == 44
     for var in windowed:

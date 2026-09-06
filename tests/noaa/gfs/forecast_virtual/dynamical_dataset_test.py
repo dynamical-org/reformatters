@@ -315,8 +315,8 @@ def test_manifest_split_sizes_stay_inside_the_reader_budget(
     dataset: NoaaGfsForecastVirtualDataset,
 ) -> None:
     """An init contributes 209 refs to a root array and 209 x 57 to a pressure-level
-    one, so a split copied from the analysis sibling (4096 / 512) would be three orders
-    of magnitude over the budget a reader downloads to resolve one chunk."""
+    one, so the split has to stay inside the budget a reader downloads to resolve one
+    chunk."""
     split = dataset.icechunk_virtual_config.manifest_split
     root_split = _resolved_split_size(split, "/temperature_2m")
     group_split = _resolved_split_size(split, "/pressure_level/temperature")
