@@ -62,9 +62,9 @@ class NoaaGfsAnalysisVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
-            # After the update's fire plus its pod_active_deadline, so the run being
+            # The update's fire plus its pod_active_deadline, so the run being
             # validated has always stopped writing.
-            schedule="35 4,10,16,22 * * *",
+            schedule="14 4,10,16,22 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,

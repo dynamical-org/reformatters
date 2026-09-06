@@ -198,7 +198,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=45)
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "35 4,10,16,22 * * *"
+    assert validation_cron_job.schedule == "14 4,10,16,22 * * *"
     assert len(update_cron_job.secret_names) > 0
     assert update_cron_job.suspend
     assert validation_cron_job.suspend

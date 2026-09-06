@@ -37,7 +37,7 @@
     "short_name": "plpl",
     "standard_name": "original_air_pressure_of_lifted_parcel",
     "units": "Pa",
-    "comment": "Clipped at the highest pressure this field encodes, near 100000 Pa, where a large fraction of cells sit. Those cells have a surface pressure above that ceiling, so the parcel's true level is at or below the reported value rather than absent, and they carry most of the convective signal: masking them would discard real data.",
+    "comment": "Clipped at the highest pressure this field encodes, near 100000 Pa, where a large fraction of cells sit. Their true pressure is at or above that ceiling, not absent.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

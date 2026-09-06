@@ -37,7 +37,6 @@
     "short_name": "pt",
     "standard_name": "air_potential_temperature",
     "units": "K",
-    "comment": "Potential temperature is conventionally reported in kelvin, so this variable is not converted to Celsius as the absolute temperatures are.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

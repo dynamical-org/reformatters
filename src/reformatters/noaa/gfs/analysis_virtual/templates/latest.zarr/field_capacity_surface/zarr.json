@@ -37,7 +37,7 @@
     "short_name": "fldcp",
     "standard_name": "volume_fraction_of_condensed_water_in_soil_at_field_capacity",
     "units": "1",
-    "comment": "NaN over water, where this quantity does not apply.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

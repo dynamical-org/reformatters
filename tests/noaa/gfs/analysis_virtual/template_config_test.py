@@ -23,8 +23,6 @@ def get_var(path: str) -> NoaaDataVar:
 def test_hourly_time_structure() -> None:
     assert CONFIG.append_dim == "time"
     assert CONFIG.append_dim_frequency == pd.Timedelta("1h")
-    # Matches noaa-gfs-analysis. Prepending to an append dim later is a breaking
-    # change, so an earlier start is not something to reach for casually.
     assert CONFIG.append_dim_start == pd.Timestamp("2021-05-01T00:00")
     assert CONFIG.dims[ROOT] == ("time", "latitude", "longitude")
     assert CONFIG.dims["pressure_level"] == (
@@ -194,7 +192,7 @@ def test_right_censored_variables_say_the_ceiling_is_data() -> None:
     ):
         comment = str(get_var(path).attrs.comment)
         assert comment.startswith("Clipped at the"), path
-        assert "rather than absent" in comment, path
+        assert "not absent" in comment, path
         # No mask range and no fill value: masking would discard real data.
         assert "Mask" not in comment, path
         assert np.isnan(get_var(path).encoding.fill_value), path
@@ -221,6 +219,4 @@ def test_reflectivity_arrays_name_the_no_echo_floor() -> None:
     ]
     assert len(floored) == 5
     for var in floored:
-        assert "-20 dBZ is the source's no-echo floor" in str(var.attrs.comment), (
-            var.path
-        )
+        assert "-20 dBZ means no echo was detected" in str(var.attrs.comment), var.path

@@ -37,7 +37,6 @@
     "short_name": "4lftx",
     "standard_name": "temperature_difference_between_ambient_air_and_air_lifted_adiabatically",
     "units": "K",
-    "comment": "A temperature difference, so kelvin rather than the degree_Celsius the absolute temperature variables carry.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

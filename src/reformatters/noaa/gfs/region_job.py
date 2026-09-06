@@ -42,8 +42,13 @@ log = get_logger(__name__)
 
 type DownloadSource = Literal["s3", "nomads"]
 
+NODD_BUCKET = "noaa-gfs-bdp-pds"
+NODD_BUCKET_REGION = "us-east-1"
+# The region specific endpoint; the global one adds a redirect to every request.
+NODD_HTTPS_PREFIX = f"https://{NODD_BUCKET}.s3.{NODD_BUCKET_REGION}.amazonaws.com/"
+
 # GFS publishes each cycle as two GRIB files: pgrb2 carries the widely used fields and
-# pgrb2b the remainder, on a partly finer set of isobaric levels.
+# pgrb2b the remainder, on isobaric levels interleaved with pgrb2's from 125 to 875 hPa.
 type NoaaGfsFileType = Literal["pgrb2", "pgrb2b"]
 
 
@@ -60,13 +65,13 @@ class NoaaGfsSourceFileCoord(InitLeadSourceFileCoord):
         path = f"gfs.{init_date_str}/{init_hour_str}/atmos/gfs.t{init_hour_str}z.{self.file_type}.0p25.f{lead_hours:03d}"
         match source:
             case "nomads":
-                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod"
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/"
             case "s3":
-                base = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
+                base = NODD_HTTPS_PREFIX
             case _ as unreachable:
                 assert_never(unreachable)
 
-        return f"{base}/{path}"
+        return f"{base}{path}"
 
     def get_idx_url(self, source: DownloadSource = "s3") -> str:
         return f"{self.get_url(source=source)}.idx"

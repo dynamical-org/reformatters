@@ -37,7 +37,7 @@
     "short_name": "gflux",
     "standard_name": "upward_heat_flux_at_ground_level_in_soil",
     "units": "W m-2",
-    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN over open water; the source reports this quantity only over land and sea ice.",
+    "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN over open water, available over land and sea ice.",
     "step_type": "avg",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

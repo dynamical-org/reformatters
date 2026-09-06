@@ -37,7 +37,7 @@
     "short_name": "veg",
     "standard_name": "vegetation_area_fraction",
     "units": "percent",
-    "comment": "NaN over water, where this quantity does not apply.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

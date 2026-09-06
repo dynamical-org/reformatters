@@ -53,7 +53,6 @@ class NoaaGfsAnalysisVirtualTemplateConfig(NoaaGfsVirtualTemplateConfig):
         ),
     }
     append_dim: AppendDim = "time"
-    # Matches noaa-gfs-analysis so the two GFS analyses cover the same period.
     append_dim_start: Timestamp = pd.Timestamp("2021-05-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("1h")
 

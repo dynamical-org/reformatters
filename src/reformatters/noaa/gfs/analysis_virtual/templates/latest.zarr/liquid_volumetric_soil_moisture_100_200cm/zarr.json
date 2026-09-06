@@ -36,7 +36,7 @@
     "long_name": "Liquid volumetric soil moisture (non-frozen)",
     "short_name": "soill",
     "units": "1",
-    "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water, where this quantity does not apply.",
+    "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

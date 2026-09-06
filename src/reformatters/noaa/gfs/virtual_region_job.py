@@ -7,6 +7,9 @@ from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim
 from reformatters.noaa.gfs.region_job import (
+    NODD_BUCKET,
+    NODD_BUCKET_REGION,
+    NODD_HTTPS_PREFIX,
     DownloadSource,
     NoaaGfsFileType,
     NoaaGfsSourceFileCoord,
@@ -16,10 +19,6 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
-
-S3_LOCATION_PREFIX = "s3://noaa-gfs-bdp-pds/"
-S3_BUCKET_REGION = "us-east-1"
-_S3_HTTPS_PREFIX = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/"
 
 # Both products are curated in full, so a step's variables span both files.
 GFS_FILE_TYPES: tuple[NoaaGfsFileType, ...] = ("pgrb2", "pgrb2b")
@@ -66,12 +65,7 @@ _PGRB2_ONLY_ISOBARIC_ELEMENTS: frozenset[str] = frozenset({"SPFH", "O3MR"})
 
 
 def carried_by(var: NoaaDataVar, file_type: NoaaGfsFileType) -> bool:
-    """Whether `file_type` publishes any message this variable is built from.
-
-    A file is read only for the variables it carries, and the chunk whose presence marks
-    it ingested has to be one of them, so a job filtered to a subset of the catalog needs
-    this rather than offering every variable to both products.
-    """
+    """Whether `file_type` publishes any message this variable is built from."""
     if var.group == "height_above_mean_sea_level":
         # Both products publish this family, at disjoint heights.
         return True
@@ -92,7 +86,7 @@ def gfs_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]
     pydantic defaults."""
     return (
         icechunk.VirtualChunkContainer(
-            S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_BUCKET_REGION)
+            f"s3://{NODD_BUCKET}/", icechunk.s3_store(region=NODD_BUCKET_REGION)
         ),
     )
 
@@ -105,8 +99,8 @@ class NoaaGfsVirtualSourceFileCoord(
     def get_url(self, source: DownloadSource = "s3") -> str:
         """The s3:// source location refs point at, matching the virtual chunk container."""
         url = super().get_url(source=source)
-        assert url.startswith(_S3_HTTPS_PREFIX), url
-        return S3_LOCATION_PREFIX + url.removeprefix(_S3_HTTPS_PREFIX)
+        assert url.startswith(NODD_HTTPS_PREFIX), url
+        return f"s3://{NODD_BUCKET}/" + url.removeprefix(NODD_HTTPS_PREFIX)
 
 
 # The variables a source file's ingestion is probed by, in preference order. Each is
@@ -138,8 +132,8 @@ class NoaaGfsVirtualRegionJob(
     """The GFS NODD bucket, where pgrb2b repeats 41 messages pgrb2 owns. A subclass
     adds generate_source_file_coords and operational_update_window."""
 
-    source_location_prefix: ClassVar[str] = S3_LOCATION_PREFIX
-    source_bucket_region: ClassVar[str] = S3_BUCKET_REGION
+    source_location_prefix: ClassVar[str] = f"s3://{NODD_BUCKET}/"
+    source_bucket_region: ClassVar[str] = NODD_BUCKET_REGION
 
     def owns_index_message(
         self, coord: GFS_VIRTUAL_COORD, element: str, level: str

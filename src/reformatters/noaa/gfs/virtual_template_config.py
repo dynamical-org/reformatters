@@ -33,65 +33,7 @@ _GRID_NLON = 1440
 # coordinate reproduces every one of the 57 level strings exactly ("1000", "0.01").
 PRESSURE_LEVEL_INDEX_FORMAT = "{level:g} mb"
 
-PRESSURE_LEVELS = [
-    1000.0,
-    975.0,
-    950.0,
-    925.0,
-    900.0,
-    875.0,
-    850.0,
-    825.0,
-    800.0,
-    775.0,
-    750.0,
-    725.0,
-    700.0,
-    675.0,
-    650.0,
-    625.0,
-    600.0,
-    575.0,
-    550.0,
-    525.0,
-    500.0,
-    475.0,
-    450.0,
-    425.0,
-    400.0,
-    375.0,
-    350.0,
-    325.0,
-    300.0,
-    275.0,
-    250.0,
-    225.0,
-    200.0,
-    175.0,
-    150.0,
-    125.0,
-    100.0,
-    70.0,
-    50.0,
-    40.0,
-    30.0,
-    20.0,
-    15.0,
-    10.0,
-    7.0,
-    5.0,
-    3.0,
-    2.0,
-    1.0,
-    0.7,
-    0.4,
-    0.2,
-    0.1,
-    0.07,
-    0.04,
-    0.02,
-    0.01,
-]
+PRESSURE_LEVELS = [1000.0, 975.0, 950.0, 925.0, 900.0, 875.0, 850.0, 825.0, 800.0, 775.0, 750.0, 725.0, 700.0, 675.0, 650.0, 625.0, 600.0, 575.0, 550.0, 525.0, 500.0, 475.0, 450.0, 425.0, 400.0, 375.0, 350.0, 325.0, 300.0, 275.0, 250.0, 225.0, 200.0, 175.0, 150.0, 125.0, 100.0, 70.0, 50.0, 40.0, 30.0, 20.0, 15.0, 10.0, 7.0, 5.0, 3.0, 2.0, 1.0, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02, 0.01]  # fmt: skip
 
 # The eight "N m above mean sea level" heights, in metres, ascending. GRIB2 level type
 # 102, specified altitude above mean sea level. pgrb2 publishes 1829/2743/3658 and
@@ -99,30 +41,17 @@ PRESSURE_LEVELS = [
 # is the topmost yet comes from pgrb2b, so the split is not a high/low cut.
 HEIGHT_LEVEL_INDEX_FORMAT = "{level:g} m above mean sea level"
 
-HEIGHT_ABOVE_MEAN_SEA_LEVELS = [
-    305.0,
-    457.0,
-    610.0,
-    914.0,
-    1829.0,
-    2743.0,
-    3658.0,
-    4572.0,
-]
+HEIGHT_ABOVE_MEAN_SEA_LEVELS = [305.0, 457.0, 610.0, 914.0, 1829.0, 2743.0, 3658.0, 4572.0]  # fmt: skip
 
 # GribberishCodec decodes the raw kelvin message; this array->array filter subtracts
-# 273.15 on read. GDAL relabels ten GFS elements kelvin -> Celsius but converts only six,
-# so this set is derived from measured values, not from the GRIB unit label: it drops
-# POT (kelvin by convention, matching the HRRR virtual potential_temperature_2m) and the
-# lifted-index temperature differences, and adds TSOIL and ICETMP, which GDAL mislabels.
+# 273.15 on read.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
 _CELSIUS_ELEMENTS = frozenset(
     {"TMP", "TMAX", "TMIN", "DPT", "APTMP", "TSOIL", "ICETMP"}
 )
 
 # ScaleOffset decodes on read as value / scale + offset (see zarr.codecs.ScaleOffset).
-# WEASD decodes as kg m-2 of water and 1 kg m-2 = 0.001 m lwe, so scale=1000 yields the
-# metres the identically-named HRRR virtual snow_water_equivalent_surface serves.
+# Scale WEASD from mm to CF lwe_thickness_of_surface_snow_amount's metres.
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 
 type WindowKind = Literal["instant", "max", "min", "avg", "acc_6h", "acc_run"]
@@ -471,10 +400,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Maximum/Composite radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
-            comment=(
-                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
-                "was detected, not a measured value."
-            ),
+            comment="-20 dBZ means no echo was detected.",
         ),
         root_var(
             "visibility_surface",
@@ -487,8 +413,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "Clipped at the maximum visibility this field encodes, about 24 km, "
                 "where a large fraction of cells sit. The true visibility there is at "
-                "least that far rather than absent, so the ceiling is data and masking "
-                "it would discard the clearest cells."
+                "least that far, not absent."
             ),
         ),
         root_var(
@@ -537,7 +462,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Fire-weather index of lower-atmosphere stability and dryness, an "
                 "ordinal value from 2 (very low potential) to 6 (high potential) for "
                 "large plume-dominated fire growth. NaN on about 60% of the grid, "
-                "chiefly over ocean, where the source does not compute the index."
+                "chiefly over ocean."
             ),
         ),
         root_var(
@@ -562,10 +487,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
-            comment=(
-                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
-                "was detected, not a measured value."
-            ),
+            comment="-20 dBZ means no echo was detected.",
         ),
         root_var(
             "derived_radar_reflectivity_1000m",
@@ -575,10 +497,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Derived radar reflectivity",
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
-            comment=(
-                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
-                "was detected, not a measured value."
-            ),
+            comment="-20 dBZ means no echo was detected.",
         ),
         root_var(
             "pressure_surface",
@@ -615,10 +534,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "volumetric_soil_moisture_0_10cm",
@@ -628,7 +544,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture content",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "liquid_volumetric_soil_moisture_0_10cm",
@@ -639,7 +555,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen "
-                "plus liquid water. NaN over water, where this quantity does not apply."
+                "plus liquid water. NaN over water."
             ),
         ),
         root_var(
@@ -650,10 +566,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "volumetric_soil_moisture_10_40cm",
@@ -663,7 +576,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture content",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "liquid_volumetric_soil_moisture_10_40cm",
@@ -674,7 +587,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen "
-                "plus liquid water. NaN over water, where this quantity does not apply."
+                "plus liquid water. NaN over water."
             ),
         ),
         root_var(
@@ -685,10 +598,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "volumetric_soil_moisture_40_100cm",
@@ -698,7 +608,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture content",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "liquid_volumetric_soil_moisture_40_100cm",
@@ -709,8 +619,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries "
-                "frozen plus liquid water. NaN over water, where this quantity does not "
-                "apply."
+                "frozen plus liquid water. NaN over water."
             ),
         ),
         root_var(
@@ -721,10 +630,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "volumetric_soil_moisture_100_200cm",
@@ -734,7 +640,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Volumetric soil moisture content",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "liquid_volumetric_soil_moisture_100_200cm",
@@ -745,8 +651,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries "
-                "frozen plus liquid water. NaN over water, where this quantity does not "
-                "apply."
+                "frozen plus liquid water. NaN over water."
             ),
         ),
         root_var(
@@ -757,7 +662,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Plant canopy surface water",
             units="kg m-2",
             standard_name="canopy_water_amount",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "snow_water_equivalent_surface",
@@ -767,10 +672,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Snow depth water equivalent",
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
             filters=[_WATER_KG_M2_TO_M_LWE],
         ),
         root_var(
@@ -781,10 +683,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Snow depth",
             units="m",
             standard_name="surface_snow_thickness",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "potential_evaporation_rate_surface",
@@ -793,10 +692,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pevr",
             long_name="Potential evaporation rate",
             units="W m-2",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
             hour_0=False,
         ),
         root_var(
@@ -1001,7 +897,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Water runoff",
             units="kg m-2",
             standard_name="runoff_amount",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "instantaneous_categorical_snow_surface",
@@ -1124,10 +1020,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Ground heat flux",
             units="W m-2",
             standard_name="upward_heat_flux_at_ground_level_in_soil",
-            comment=(
-                "NaN over open water; the source reports this quantity only over land "
-                "and sea ice."
-            ),
+            comment="NaN over open water, available over land and sea ice.",
         ),
         root_var(
             "momentum_flux_u_component_surface",
@@ -1203,7 +1096,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Vegetation fraction",
             units="percent",
             standard_name="vegetation_area_fraction",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "soil_type_surface",
@@ -1228,7 +1121,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Wilting point",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil_at_wilting_point",
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "field_capacity_surface",
@@ -1240,7 +1133,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name=(
                 "volume_fraction_of_condensed_water_in_soil_at_field_capacity"
             ),
-            comment="NaN over water, where this quantity does not apply.",
+            comment="NaN over water.",
         ),
         root_var(
             "sunshine_duration_surface",
@@ -1266,10 +1159,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="K",
             standard_name=(
                 "temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface"
-            ),
-            comment=(
-                "A temperature difference, so kelvin rather than the degree_Celsius the "
-                "absolute temperature variables carry."
             ),
         ),
         root_var(
@@ -1428,9 +1317,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_base",
-            comment="NaN where the source reports no convective cloud in the column. Every cell "
-            "where convective_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no convective cloud in the column, and "
+            "at some cloud-field edges where convective_cloud_cover is near zero.",
             hour_0=False,
         ),
         root_var(
@@ -1442,9 +1330,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_base",
-            comment="NaN where the source reports no low cloud in the column. Every cell "
-            "where average_low_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no low cloud in the column, and "
+            "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         root_var(
             "average_pressure_middle_cloud_bottom",
@@ -1455,9 +1342,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_base",
-            comment="NaN where the source reports no middle cloud in the column. Every cell "
-            "where average_medium_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no middle cloud in the column, and "
+            "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         root_var(
             "average_pressure_high_cloud_bottom",
@@ -1468,9 +1354,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_base",
-            comment="NaN where the source reports no high cloud in the column. Every cell "
-            "where average_high_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no high cloud in the column, and "
+            "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         root_var(
             "pressure_convective_cloud_top",
@@ -1480,9 +1365,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_convective_cloud_top",
-            comment="NaN where the source reports no convective cloud in the column. Every cell "
-            "where convective_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no convective cloud in the column, and "
+            "at some cloud-field edges where convective_cloud_cover is near zero.",
             hour_0=False,
         ),
         root_var(
@@ -1494,9 +1378,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_top",
-            comment="NaN where the source reports no low cloud in the column. Every cell "
-            "where average_low_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no low cloud in the column, and "
+            "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         root_var(
             "average_pressure_middle_cloud_top",
@@ -1507,9 +1390,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_top",
-            comment="NaN where the source reports no middle cloud in the column. Every cell "
-            "where average_medium_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no middle cloud in the column, and "
+            "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         root_var(
             "average_pressure_high_cloud_top",
@@ -1520,9 +1402,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure_at_cloud_top",
-            comment="NaN where the source reports no high cloud in the column. Every cell "
-            "where average_high_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no high cloud in the column, and "
+            "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         root_var(
             "average_temperature_low_cloud_top",
@@ -1533,9 +1414,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature_at_cloud_top",
-            comment="NaN where the source reports no low cloud in the column. Every cell "
-            "where average_low_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no low cloud in the column, and "
+            "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         root_var(
             "average_temperature_middle_cloud_top",
@@ -1546,9 +1426,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature_at_cloud_top",
-            comment="NaN where the source reports no middle cloud in the column. Every cell "
-            "where average_medium_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no middle cloud in the column, and "
+            "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         root_var(
             "average_temperature_high_cloud_top",
@@ -1559,9 +1438,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature_at_cloud_top",
-            comment="NaN where the source reports no high cloud in the column. Every cell "
-            "where average_high_cloud_cover is zero is NaN, as are some cells at the edge "
-            "of a cloud field where it is small.",
+            comment="NaN where the source reports no high cloud in the column, and "
+            "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         root_var(
             "convective_cloud_cover",
@@ -1693,8 +1571,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="ICAO Standard Atmosphere reference height",
             units="m",
             comment=(
-                "Pressure altitude: the height at which the ICAO Standard Atmosphere "
-                "reaches the pressure found here, not a geometric height."
+                "Pressure altitude: the ICAO Standard Atmosphere height for this "
+                "level's pressure, not its actual height, which geopotential_height_tropopause "
+                "carries."
             ),
         ),
         root_var(
@@ -1759,8 +1638,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="ICAO Standard Atmosphere reference height",
             units="m",
             comment=(
-                "Pressure altitude: the height at which the ICAO Standard Atmosphere "
-                "reaches the pressure found here, not a geometric height."
+                "Pressure altitude: the ICAO Standard Atmosphere height for this "
+                "level's pressure, not its actual height, which geopotential_height_max_wind "
+                "carries."
             ),
         ),
         root_var(
@@ -2044,10 +1924,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name=(
                 "temperature_difference_between_ambient_air_and_air_lifted_adiabatically"
             ),
-            comment=(
-                "A temperature difference, so kelvin rather than the degree_Celsius the "
-                "absolute temperature variables carry."
-            ),
         ),
         root_var(
             "convective_available_potential_energy_180_0mb",
@@ -2129,10 +2005,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Potential temperature",
             units="K",
             standard_name="air_potential_temperature",
-            comment=(
-                "Potential temperature is conventionally reported in kelvin, so this "
-                "variable is not converted to Celsius as the absolute temperatures are."
-            ),
         ),
         root_var(
             "relative_humidity_0p995_sigma",
@@ -2216,10 +2088,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="original_air_pressure_of_lifted_parcel",
             comment=(
                 "Clipped at the highest pressure this field encodes, near 100000 Pa, "
-                "where a large fraction of cells sit. Those cells have a surface "
-                "pressure above that ceiling, so the parcel's true level is at or "
-                "below the reported value rather than absent, and they carry most of "
-                "the convective signal: masking them would discard real data."
+                "where a large fraction of cells sit. Their true pressure is at or "
+                "above that ceiling, not absent."
             ),
         ),
         root_var(
@@ -2243,8 +2113,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="floating_ice_area_fraction",
             comment=(
                 "The fraction of the cell covered by floating ice, taking any value "
-                "between 0 and 1 rather than only those two. Covers lake ice as well "
-                "as sea ice."
+                "between 0 and 1. Covers lake ice as well as sea ice."
             ),
         ),
         root_var(
@@ -3213,9 +3082,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
             comment=(
-                "GFS model level 1, the lowest native hybrid sigma-pressure layer, immediately above the ground. "
-                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
-                "was detected, not a measured value."
+                "GFS model level 1, the lowest native hybrid sigma-pressure layer, "
+                "immediately above the ground. -20 dBZ means no echo was detected."
             ),
         ),
         root_var(
@@ -3227,9 +3095,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="dBZ",
             standard_name="equivalent_reflectivity_factor",
             comment=(
-                "GFS model level 2, the second native hybrid sigma-pressure layer above the ground. "
-                "-20 dBZ is the source's no-echo floor: those cells mean no echo "
-                "was detected, not a measured value."
+                "GFS model level 2, the second native hybrid sigma-pressure layer "
+                "above the ground. -20 dBZ means no echo was detected."
             ),
         ),
     ]
@@ -3336,9 +3203,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="percent",
             standard_name="cloud_area_fraction_in_atmosphere_layer",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
         pressure_var(
@@ -3350,9 +3216,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="kg kg-1",
             standard_name="cloud_liquid_water_mixing_ratio",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
         pressure_var(
@@ -3363,9 +3228,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="kg kg-1",
             standard_name="cloud_ice_mixing_ratio",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
         pressure_var(
@@ -3375,9 +3239,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Rain mixing ratio",
             units="kg kg-1",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
         pressure_var(
@@ -3387,9 +3250,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Snow mixing ratio",
             units="kg kg-1",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
         pressure_var(
@@ -3399,9 +3261,8 @@ def _pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Graupel (snow pellets)",
             units="kg kg-1",
             comment=(
-                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa (40, 30, "
-                "20, 15, 10, 7, 5, 3, 2, 1, 0.7, 0.4, 0.2, 0.1, 0.07, 0.04, 0.02 and "
-                "0.01 hPa) are NaN at every step."
+                "Published only from 1000 to 50 hPa. The 18 levels above 50 hPa are "
+                "NaN at every step."
             ),
         ),
     ]
