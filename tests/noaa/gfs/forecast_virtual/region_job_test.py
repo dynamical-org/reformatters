@@ -26,7 +26,10 @@ from reformatters.noaa.noaa_grib_index import (
     grib_index_window_str,
     parse_grib_index_lines,
 )
-from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_download
+from tests.noaa.grib_index_fixtures import (
+    cached_grib_index,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-forecast-virtual-test"
@@ -403,7 +406,7 @@ def test_every_source_message_reaches_an_array(
     message counts: every array position a file can fill is filled, and the leads where
     two index lines describe one message still yield one ref per position.
     """
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -444,7 +447,7 @@ def test_a_job_filtered_to_a_pressure_level_variable_probes_a_level_it_fills(
     """The two products split the isobaric coordinate, so the probe cell of a job
     carrying only a vertical-group variable has to be chosen per product. This is the
     single-variable backfill of docs/add_new_variable.md."""
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -490,7 +493,7 @@ def test_the_bucket_and_the_run_total_share_one_index_line_at_short_leads(
         ("ACPCP", "surface", f"0-{lead_hours} hour acc fcst"),
     ]
 
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -533,7 +536,7 @@ def test_the_bucket_and_the_run_total_separate_past_lead_6(
     era: str,
     tmp_path: Path,
 ) -> None:
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,

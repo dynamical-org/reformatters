@@ -16,7 +16,7 @@ from reformatters.noaa.hrrr.analysis_virtual.template_config import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.virtual_region_job import NoaaHrrrVirtualRegionJob
-from tests.noaa.grib_index_fixtures import stub_grib_index_download
+from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
 
 TEMPLATE_CONFIG = NoaaHrrrAnalysisVirtualTemplateConfig()
 
@@ -45,9 +45,18 @@ def make_job(
     )
 
 
-def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    stub_grib_index_download(
-        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+def fake_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    content: str,
+    data_file_size: int | None = None,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda _url: content,
+        data_file_size=data_file_size,
     )
 
 
@@ -133,6 +142,7 @@ def test_cloud_ice_index_spellings_emit_refs(
         monkeypatch,
         tmp_path,
         f"1:0:d=2024060100:{element}:{level}:anl:\n",
+        data_file_size=1000,
     )
     var = get_var(path)
     file_type = "prs" if var.group == "pressure_level" else "nat"

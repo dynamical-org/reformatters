@@ -29,7 +29,7 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
-from tests.noaa.grib_index_fixtures import stub_grib_index_download
+from tests.noaa.grib_index_fixtures import grib_section_0, stub_grib_source_file_reads
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 # The archive's first init, so its position along init_time is 0.
@@ -74,9 +74,18 @@ def coord(
     )
 
 
-def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    stub_grib_index_download(
-        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+def fake_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    content: str,
+    data_file_size: int | None = None,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda _url: content,
+        data_file_size=data_file_size,
     )
 
 
@@ -133,7 +142,10 @@ def test_file_refs_one_message_fills_two_variables_sharing_a_window(
     # render the identical idx window string, so the single matching message must
     # populate both variables rather than one silently displacing the other.
     fake_index(
-        monkeypatch, tmp_path, "1:0:d=2018071312:APCP:surface:0-1 hour acc fcst:\n"
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:APCP:surface:0-1 hour acc fcst:\n",
+        data_file_size=1000,
     )
     data_vars = [
         get_var("total_precipitation_run_total_surface"),
@@ -232,7 +244,12 @@ def test_file_refs_matches_element_alternative_spellings(
 def test_file_refs_lead_0_instant_uses_anl_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    fake_index(monkeypatch, tmp_path, "1:0:d=2018071312:TMP:2 m above ground:anl:\n")
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:anl:\n",
+        data_file_size=1000,
+    )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
     refs = job.file_refs(
@@ -265,6 +282,23 @@ def test_file_refs_skips_index_reaching_past_the_data_file(
     assert job.file_refs(coord("sfc", data_vars), file_size=1200) == []
 
 
+def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A re-uploaded object leaves its sidecar index naming byte ranges that are no
+    # longer message boundaries but are still inside the file, so the ranges alone
+    # cannot condemn it: refs built from them exist and do not decode.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, **kwargs: grib_section_0(400),  # the index implies 500
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
 def test_file_refs_skips_empty_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -285,7 +319,10 @@ def test_root_var_chunk_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(
-        monkeypatch, tmp_path, "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n",
+        data_file_size=1000,
     )
     var = get_var("temperature_2m")
     job = make_job(template_ds, [var])

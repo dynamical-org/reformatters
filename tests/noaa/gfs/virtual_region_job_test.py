@@ -30,7 +30,10 @@ from reformatters.noaa.gfs.virtual_template_config import (
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
-from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_download
+from tests.noaa.grib_index_fixtures import (
+    cached_grib_index,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaGfsAnalysisVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-analysis-virtual-test"
@@ -205,9 +208,18 @@ def test_pressure_level_index_format_is_lossless() -> None:
     assert PRESSURE_LEVEL_INDEX_FORMAT.format(level=0.01) == "0.01 mb"
 
 
-def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    stub_grib_index_download(
-        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+def _fake_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    content: str,
+    data_file_size: int | None = None,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda _url: content,
+        data_file_size=data_file_size,
     )
 
 
@@ -290,7 +302,12 @@ def test_cloud_mixing_ratio_matches_both_element_spellings(
 ) -> None:
     """CLWMR was respelled CLMR between the 2023-02-02 18Z and 2023-02-03 00Z cycles."""
     for element in ("CLMR", "CLWMR"):
-        _fake_index(monkeypatch, tmp_path, f"1:0:d=2021032312:{element}:850 mb:anl:\n")
+        _fake_index(
+            monkeypatch,
+            tmp_path,
+            f"1:0:d=2021032312:{element}:850 mb:anl:\n",
+            data_file_size=100,
+        )
         job = _job(template_ds, ["pressure_level/cloud_mixing_ratio"])
         coord = NoaaGfsAnalysisVirtualSourceFileCoord(
             init_time=pd.Timestamp("2021-05-02T12:00"),
@@ -343,7 +360,7 @@ def test_every_source_message_reaches_an_array(
     as a missing ref, and a duplicated one as an extra: every message either fills
     exactly one array position or is a pgrb2b copy of a pgrb2 message.
     """
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -434,7 +451,7 @@ def test_the_respelled_element_still_selects_the_same_grib_parameter(
     belonging to a different parameter, which is the failure mode the mechanism has.
     Cloud mixing ratio is GRIB2 discipline 0, category 1, number 22.
     """
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -547,7 +564,7 @@ def test_one_ref_per_position_at_the_leads_that_duplicate_accumulations(
         ("ACPCP", "surface", f"0-{lead_hours} hour acc fcst"),
     ]
 
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
