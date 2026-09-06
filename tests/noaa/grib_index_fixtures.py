@@ -52,7 +52,7 @@ def stub_grib_source_file_reads(
     """
 
     def download(url: str, dataset_id: str, **kwargs: object) -> Path:
-        index = make_index(url)
+        index = make_index(url + ".idx")
         path = tmp_path / f"{next(_copy_counter)}-{url.rsplit('/', 1)[-1]}"
         if isinstance(index, Path):
             path.write_bytes(index.read_bytes())
@@ -61,7 +61,8 @@ def stub_grib_source_file_reads(
         return path
 
     def read_bytes(url: str, **kwargs: object) -> bytes:
-        index = make_index(url)
+        # Called with the data file's url, while make_index is keyed on the index's.
+        index = make_index(url + ".idx")
         text = index.read_text() if isinstance(index, Path) else index
         starts = [int(line.split(":")[1]) for line in text.splitlines() if line]
         if len(starts) > 1:

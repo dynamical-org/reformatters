@@ -29,7 +29,10 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
-from tests.noaa.grib_index_fixtures import grib_section_0, stub_grib_source_file_reads
+from tests.noaa.grib_index_fixtures import (
+    grib_section_0,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 # The archive's first init, so its position along init_time is 0.
@@ -280,6 +283,29 @@ def test_file_refs_skips_index_reaching_past_the_data_file(
     data_vars = [get_var("temperature_2m")]  # index says bytes 500..1500
     job = make_job(template_ds, data_vars)
     assert job.file_refs(coord("sfc", data_vars), file_size=1200) == []
+
+
+def test_stubbed_source_file_reads_are_all_keyed_on_the_index_url(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # file_refs downloads `<data url>.idx` and reads the data url's header, so a
+    # make_index keyed on the url must see the index's for both. Handed the data url it
+    # would fetch the whole GRIB file where a test supplies a real index.
+    requested: list[str] = []
+
+    def make_index(url: str) -> str:
+        requested.append(url)
+        return _SFC_INDEX
+
+    stub_grib_source_file_reads(
+        monkeypatch, shared_region_job_module, tmp_path, make_index
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000)
+    assert requested
+    assert all(url.endswith(".idx") for url in requested), requested
 
 
 def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
