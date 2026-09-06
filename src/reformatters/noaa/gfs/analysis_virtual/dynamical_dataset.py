@@ -35,7 +35,6 @@ class NoaaGfsAnalysisVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
-            # Sized per array group, see docs/virtual_datasets.md.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 3_000,
