@@ -1,0 +1,71 @@
+1:0:d=2020100100:HGT:10 mb:anl:ENS=low-res ctl
+2:199975:d=2020100100:TMP:10 mb:anl:ENS=low-res ctl
+3:316945:d=2020100100:RH:10 mb:anl:ENS=low-res ctl
+4:387929:d=2020100100:UGRD:10 mb:anl:ENS=low-res ctl
+5:629427:d=2020100100:VGRD:10 mb:anl:ENS=low-res ctl
+6:842654:d=2020100100:HGT:50 mb:anl:ENS=low-res ctl
+7:1051463:d=2020100100:TMP:50 mb:anl:ENS=low-res ctl
+8:1164612:d=2020100100:RH:50 mb:anl:ENS=low-res ctl
+9:1265104:d=2020100100:UGRD:50 mb:anl:ENS=low-res ctl
+10:1504727:d=2020100100:VGRD:50 mb:anl:ENS=low-res ctl
+11:1723351:d=2020100100:HGT:100 mb:anl:ENS=low-res ctl
+12:1930296:d=2020100100:TMP:100 mb:anl:ENS=low-res ctl
+13:2043369:d=2020100100:RH:100 mb:anl:ENS=low-res ctl
+14:2201113:d=2020100100:UGRD:100 mb:anl:ENS=low-res ctl
+15:2435504:d=2020100100:VGRD:100 mb:anl:ENS=low-res ctl
+16:2658540:d=2020100100:HGT:200 mb:anl:ENS=low-res ctl
+17:2865257:d=2020100100:TMP:200 mb:anl:ENS=low-res ctl
+18:2973960:d=2020100100:RH:200 mb:anl:ENS=low-res ctl
+19:3183335:d=2020100100:UGRD:200 mb:anl:ENS=low-res ctl
+20:3335439:d=2020100100:VGRD:200 mb:anl:ENS=low-res ctl
+21:3485361:d=2020100100:HGT:250 mb:anl:ENS=low-res ctl
+22:3693278:d=2020100100:TMP:250 mb:anl:ENS=low-res ctl
+23:3799353:d=2020100100:RH:250 mb:anl:ENS=low-res ctl
+24:4028855:d=2020100100:UGRD:250 mb:anl:ENS=low-res ctl
+25:4183401:d=2020100100:VGRD:250 mb:anl:ENS=low-res ctl
+26:4341097:d=2020100100:HGT:300 mb:anl:ENS=low-res ctl
+27:4548228:d=2020100100:UGRD:300 mb:anl:ENS=low-res ctl
+28:4707342:d=2020100100:VGRD:300 mb:anl:ENS=low-res ctl
+29:4872079:d=2020100100:UGRD:400 mb:anl:ENS=low-res ctl
+30:5030469:d=2020100100:VGRD:400 mb:anl:ENS=low-res ctl
+31:5193696:d=2020100100:HGT:500 mb:anl:ENS=low-res ctl
+32:5425253:d=2020100100:TMP:500 mb:anl:ENS=low-res ctl
+33:5539651:d=2020100100:RH:500 mb:anl:ENS=low-res ctl
+34:5779977:d=2020100100:UGRD:500 mb:anl:ENS=low-res ctl
+35:5937040:d=2020100100:VGRD:500 mb:anl:ENS=low-res ctl
+36:6098263:d=2020100100:HGT:700 mb:anl:ENS=low-res ctl
+37:6340327:d=2020100100:TMP:700 mb:anl:ENS=low-res ctl
+38:6461210:d=2020100100:RH:700 mb:anl:ENS=low-res ctl
+39:6704925:d=2020100100:UGRD:700 mb:anl:ENS=low-res ctl
+40:6964532:d=2020100100:VGRD:700 mb:anl:ENS=low-res ctl
+41:7226461:d=2020100100:HGT:850 mb:anl:ENS=low-res ctl
+42:7476930:d=2020100100:TMP:850 mb:anl:ENS=low-res ctl
+43:7613979:d=2020100100:RH:850 mb:anl:ENS=low-res ctl
+44:7860347:d=2020100100:VVEL:850 mb:anl:ENS=low-res ctl
+45:8168362:d=2020100100:UGRD:850 mb:anl:ENS=low-res ctl
+46:8432795:d=2020100100:VGRD:850 mb:anl:ENS=low-res ctl
+47:8700788:d=2020100100:HGT:925 mb:anl:ENS=low-res ctl
+48:8959185:d=2020100100:TMP:925 mb:anl:ENS=low-res ctl
+49:9096718:d=2020100100:RH:925 mb:anl:ENS=low-res ctl
+50:9331977:d=2020100100:UGRD:925 mb:anl:ENS=low-res ctl
+51:9595467:d=2020100100:VGRD:925 mb:anl:ENS=low-res ctl
+52:9861852:d=2020100100:TMP:1000 mb:anl:ENS=low-res ctl
+53:9995704:d=2020100100:RH:1000 mb:anl:ENS=low-res ctl
+54:10215531:d=2020100100:UGRD:1000 mb:anl:ENS=low-res ctl
+55:10479325:d=2020100100:VGRD:1000 mb:anl:ENS=low-res ctl
+56:10741456:d=2020100100:HGT:1000 mb:anl:ENS=low-res ctl
+57:11013677:d=2020100100:PRES:surface:anl:ENS=low-res ctl
+58:11252302:d=2020100100:HGT:surface:anl:ENS=low-res ctl
+59:11396835:d=2020100100:TSOIL:0-0.1 m below ground:anl:ENS=low-res ctl
+60:11496841:d=2020100100:SOILW:0-0.1 m below ground:anl:ENS=low-res ctl
+61:11590347:d=2020100100:WEASD:surface:anl:ENS=low-res ctl
+62:11660534:d=2020100100:SNOD:surface:anl:ENS=low-res ctl
+63:11726685:d=2020100100:ICETK:surface:anl:ENS=low-res ctl
+64:11749479:d=2020100100:TMP:2 m above ground:anl:ENS=low-res ctl
+65:11985302:d=2020100100:RH:2 m above ground:anl:ENS=low-res ctl
+66:12199344:d=2020100100:UGRD:10 m above ground:anl:ENS=low-res ctl
+67:12460611:d=2020100100:VGRD:10 m above ground:anl:ENS=low-res ctl
+68:12718158:d=2020100100:PWAT:entire atmosphere (considered as a single layer):anl:ENS=low-res ctl
+69:12877052:d=2020100100:CAPE:180-0 mb above ground:anl:ENS=low-res ctl
+70:13028928:d=2020100100:CIN:180-0 mb above ground:anl:ENS=low-res ctl
+71:13191254:d=2020100100:PRMSL:mean sea level:anl:ENS=low-res ctl
