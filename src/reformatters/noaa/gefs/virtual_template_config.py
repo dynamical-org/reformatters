@@ -483,6 +483,11 @@ def _s_file_data_vars(
             long_name="Visibility",
             units="m",
             standard_name="visibility_in_air",
+            comment=(
+                "Clipped at the maximum visibility this field encodes, about 24 km, "
+                "where a large fraction of cells sit. The true visibility there is at "
+                "least that far, not absent."
+            ),
             available_from=GEFS_B22_TRANSITION_DATE,
         ),
         var(
