@@ -75,6 +75,8 @@ class Job(pydantic.BaseModel):
                 ),
                 "parallelism": self.parallelism,
                 "podFailurePolicy": {
+                    # FailIndex must precede DisruptionTarget: Ignore replaces pods,
+                    # including an exit-42 pod disrupted on a spot node.
                     "rules": [
                         {
                             "action": "FailIndex",

@@ -1,5 +1,7 @@
+import json
 from collections.abc import Mapping, Sequence
-from typing import Any, ClassVar
+from pathlib import Path
+from typing import ClassVar, cast
 
 import icechunk
 import pandas as pd
@@ -24,7 +26,6 @@ from reformatters.common.virtual_source_listing import (
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
-from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 
 from .template_config import (
     EcmwfAifsSingleVirtualDataVar,
@@ -32,15 +33,79 @@ from .template_config import (
 
 SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 SOURCE_REGION = "eu-central-1"
+_IndexRow = tuple[str, str, object, int, int]
 
 
-def _exact_index_integer(value: Any) -> int:  # noqa: ANN401
-    if isinstance(value, bool):
-        raise ValueError("boolean is not an integer index field")
-    parsed = int(value)
-    if parsed != value:
-        raise ValueError(f"non-integral index field {value!r}")
-    return parsed
+def _exact_index_integer(value: object) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    raise ValueError(f"non-integer index field {value!r}")
+
+
+def _raw_index_rows(index_path: Path) -> list[dict[str, object]]:
+    rows = []
+    for line in index_path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row: object = json.loads(line)
+        if not isinstance(row, dict):
+            raise TypeError("GRIB index row is not an object")
+        typed_row = cast("dict[str, object]", row)
+        for field in ("param", "levtype", "_offset", "_length"):
+            typed_row[field]
+        rows.append(typed_row)
+    return rows
+
+
+def _validated_index_rows(index_path: Path, file_size: int) -> list[_IndexRow]:
+    try:
+        raw_rows = _raw_index_rows(index_path)
+    except (
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        UnicodeDecodeError,
+    ) as error:
+        raise SourceFileRejectedError("empty or unparseable GRIB index") from error
+    try:
+        rows = [
+            (
+                str(row["param"]),
+                str(row["levtype"]),
+                row.get("levelist"),
+                _exact_index_integer(row["_offset"]),
+                _exact_index_integer(row["_length"]),
+            )
+            for row in raw_rows
+        ]
+    except (TypeError, ValueError) as error:
+        raise SourceFileRejectedError("invalid GRIB index row fields") from error
+    if not rows:
+        raise SourceFileRejectedError("empty or unparseable GRIB index")
+    if any(
+        not 0 <= offset < offset + length <= file_size for *_, offset, length in rows
+    ):
+        raise SourceFileRejectedError(
+            f"index byte range falls outside the {file_size}-byte data file; "
+            "stale or mismatched index"
+        )
+    return rows
+
+
+def _matching_index_level(
+    raw_level: object, candidates: set[int | None]
+) -> tuple[bool, int | None]:
+    if raw_level is None:
+        return None in candidates, None
+    try:
+        level = _exact_index_integer(raw_level)
+    except TypeError, ValueError:
+        if any(raw_level == candidate for candidate in candidates):
+            raise
+        return False, None
+    return level in candidates, level
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -146,56 +211,31 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
             coord.get_index_url(), self.dataset_id, region=SOURCE_REGION
         )
         try:
-            try:
-                index_df = parse_index_file(index_path, ensemble=False)
-                entries = index_df.reset_index()
-                columns = tuple(
-                    entries[name]
-                    for name in (
-                        "param",
-                        "levtype",
-                        "levelist",
-                        "_offset",
-                        "_length",
-                    )
-                )
-            except (KeyError, OverflowError, TypeError, ValueError) as error:
-                raise SourceFileRejectedError(
-                    "empty or unparseable GRIB index"
-                ) from error
-            try:
-                index_rows = [
-                    (
-                        str(param),
-                        str(levtype),
-                        None if pd.isna(levelist) else _exact_index_integer(levelist),
-                        _exact_index_integer(raw_offset),
-                        _exact_index_integer(raw_length),
-                    )
-                    for param, levtype, levelist, raw_offset, raw_length in zip(
-                        *columns, strict=True
-                    )
-                ]
-            except (OverflowError, TypeError, ValueError) as error:
-                raise SourceFileRejectedError(
-                    "invalid GRIB index row fields"
-                ) from error
+            index_rows = _validated_index_rows(index_path, file_size)
         finally:
             index_path.unlink()
 
-        if not index_rows:
-            raise SourceFileRejectedError("empty or unparseable GRIB index")
-
         lookup = self._message_lookup(coord.data_vars)
+        requested_levels: dict[tuple[str, str], set[int | None]] = {}
+        for param, levtype, level in lookup:
+            requested_levels.setdefault((param, levtype), set()).add(level)
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
-        for param, levtype, level, offset, length in index_rows:
-            if not 0 <= offset < offset + length <= file_size:
-                raise SourceFileRejectedError(
-                    f"index byte range falls outside the "
-                    f"{file_size}-byte data file; stale or mismatched index"
+        for param, levtype, raw_level, offset, length in index_rows:
+            level_candidates = requested_levels.get((param, levtype))
+            if level_candidates is None:
+                continue
+            try:
+                level_matches, level = _matching_index_level(
+                    raw_level, level_candidates
                 )
+            except (TypeError, ValueError) as error:
+                raise SourceFileRejectedError(
+                    "invalid GRIB index row fields"
+                ) from error
+            if not level_matches:
+                continue
             matches = lookup.get((param, levtype, level))
             if not matches:
                 continue

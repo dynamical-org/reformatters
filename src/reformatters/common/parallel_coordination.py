@@ -168,6 +168,7 @@ def finalize(
     consolidated: bool,
     publish_zarr3_metadata: bool | None = None,
     exclude_coord_value_chunks: Collection[str] = (),
+    cleanup: bool = True,
 ) -> None:
     if publish_zarr3_metadata is None:
         publish_zarr3_metadata = update_template_with_results
@@ -256,11 +257,28 @@ def finalize(
                 "operational update) published concurrently and wins; re-run this "
                 "job to reprocess and publish."
             )
-        # Second pass: clean up temp branches.
-        for _role, repo in replicas_first:
+    _cleanup_after_finalize(
+        store_factory,
+        reformat_job_name,
+        branch_name,
+        workers_total,
+        cleanup,
+    )
+
+
+def _cleanup_after_finalize(
+    store_factory: StoreFactory,
+    reformat_job_name: str,
+    branch_name: str,
+    workers_total: int,
+    cleanup: bool,
+) -> None:
+    if not cleanup:
+        return
+    if branch_name != "main":
+        for _role, repo in store_factory.icechunk_repos(sort="primary-last"):
             if branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
-
     if workers_total > 1:
         store_factory.clear_coordination_files(reformat_job_name)
 

@@ -286,18 +286,66 @@ def test_file_refs_rejects_negative_offset_on_unmatched_message(
         job.file_refs(_coord(data_vars), file_size=1200)
 
 
+@pytest.mark.parametrize("field", ["_offset", "_length"])
+def test_file_refs_rejects_boolean_byte_range_in_multirow_index(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+) -> None:
+    malformed = json.loads(_index_line("2t", "sfc", 0, 1000))
+    malformed[field] = True
+    index = json.dumps(malformed) + "\n" + _index_line("skt", "sfc", 1000, 100)
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="invalid GRIB index row"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+def test_file_refs_rejects_boolean_level_in_multirow_index(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    malformed = json.loads(_index_line("sot", "sol", 0, 1000, levelist="1"))
+    malformed["levelist"] = True
+    index = json.dumps(malformed) + "\n" + _index_line("skt", "sfc", 1000, 200)
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("soil_temperature_layer_1")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="invalid GRIB index row"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+def test_file_refs_ignores_non_integral_level_on_unmatched_message(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    index = _index_line("t", "pl", 0, 1000, levelist="500") + _index_line(
+        "t", "pl", 1000, 200, levelist="0.7"
+    )
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("pressure_level/temperature")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    refs = job.file_refs(_coord(data_vars), file_size=1200)
+
+    assert [
+        (ref.out_loc["pressure_level"], ref.offset, ref.length) for ref in refs
+    ] == [(500, 0, 1000)]
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("levelist", 500.5),
-        ("levelist", True),
+        ("levelist", 500.0),
         ("_offset", 0.5),
         ("_offset", True),
         ("_length", 1000.5),
         ("_length", True),
     ],
 )
-def test_file_refs_rejects_non_integral_index_fields(
+def test_file_refs_rejects_invalid_matched_index_fields(
     template_ds: xr.DataTree,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

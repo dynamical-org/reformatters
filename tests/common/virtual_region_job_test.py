@@ -63,6 +63,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
+    SourceFileAnomaly,
     SourceFileRejectedError,
     SystemicSourceRejectionsError,
     VirtualRef,
@@ -2445,7 +2446,7 @@ def test_source_file_rejection_absolute_ceiling_yields_good_refs_then_fails() ->
 
 
 def test_systemic_rejections_publish_and_report_every_worker_before_failure(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class SystemicBackfillJob(_BaseRefLoopJob):
         def file_refs(
@@ -2469,6 +2470,18 @@ def test_systemic_rejections_publish_and_report_every_worker_before_failure(
         all_data_vars=dataset.template_config.data_vars,
         reformat_job_name="test",
     )
+    coordination_writes: list[str] = []
+    write_coordination_file = StoreFactory.write_coordination_file
+
+    def record_coordination_write(
+        factory: StoreFactory, job_name: str, key: str, data: bytes
+    ) -> None:
+        coordination_writes.append(key)
+        write_coordination_file(factory, job_name, key, data)
+
+    monkeypatch.setattr(
+        StoreFactory, "write_coordination_file", record_coordination_write
+    )
 
     dataset._process_region_jobs(
         all_jobs=all_jobs,
@@ -2481,6 +2494,10 @@ def test_systemic_rejections_publish_and_report_every_worker_before_failure(
     )
     assert dataset.store_factory.count_coordination_files("test", "results") == 1
     assert dataset.store_factory.count_coordination_files("test", "errors") == 1
+    assert [key for key in coordination_writes if "worker-0" in key] == [
+        "errors/worker-0.txt",
+        "results/worker-0.json",
+    ]
 
     with pytest.raises(
         SystemicSourceRejectionsError,
@@ -2495,6 +2512,14 @@ def test_systemic_rejections_publish_and_report_every_worker_before_failure(
             tmp_store=tmp_path / "worker-1-tmp.zarr",
             update_template_with_results=False,
         )
+
+    assert [key for key in coordination_writes if "worker-1" in key] == [
+        "errors/worker-1.txt",
+        "results/worker-1.json",
+    ]
+    assert dataset.store_factory.count_coordination_files("test", "results") == 2
+    assert dataset.store_factory.count_coordination_files("test", "errors") == 2
+    assert "_job_test" in _primary_repo(dataset.store_factory).list_branches()
 
     remaining = [coord for job in all_jobs for coord in job.source_file_coords()]
     main = _primary_repo(dataset.store_factory).readonly_session("main").store
@@ -2551,7 +2576,9 @@ def test_untyped_ref_building_exception_remains_fatal() -> None:
         list(job.process_virtual_refs(job.source_file_coords()))
 
 
-def test_empty_ref_result_remains_fatal() -> None:
+def test_empty_ref_result_is_observed_before_failing() -> None:
+    observed: list[tuple[VirtualTestSourceFileCoord, int, Sequence[VirtualRef]]] = []
+
     class EmptyJob(_BaseRefLoopJob):
         def file_refs(
             self,
@@ -2559,6 +2586,15 @@ def test_empty_ref_result_remains_fatal() -> None:
             file_size: int,  # noqa: ARG002
         ) -> list[VirtualRef]:
             return []
+
+        def source_file_anomalies(
+            self,
+            source_files: Sequence[
+                tuple[VirtualTestSourceFileCoord, int, Sequence[VirtualRef]]
+            ],
+        ) -> Sequence[SourceFileAnomaly]:
+            observed.extend(source_files)
+            return ()
 
     job = EmptyJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -2571,6 +2607,11 @@ def test_empty_ref_result_remains_fatal() -> None:
 
     with pytest.raises(AssertionError, match="file_refs returned no references"):
         list(job.process_virtual_refs(job.source_file_coords()))
+
+    assert observed
+    assert all(
+        file_size == BLOCK_NBYTES and refs == [] for _, file_size, refs in observed
+    )
 
 
 class _NothingPublishedJob(VirtualTestRegionJob):

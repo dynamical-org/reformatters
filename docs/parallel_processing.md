@@ -79,11 +79,13 @@ Worker 0 writes `setup/ready.json` after completing setup (creating branches, wr
 
 Each worker writes `results/worker-{N}.json` containing its `process_results` dict. The last worker (by index) polls until all result files are present, then aggregates them. For updates, the aggregated results drive `update_template_with_results` to trim the template based on what was actually processed.
 
-A virtual backfill worker that exceeds its source-rejection reporting threshold first commits all good refs, then writes `errors/worker-{N}.txt` before its normal results file. Non-final workers complete normally so they cannot strand coordination. The last worker reads those errors after every results file exists, finalizes and publishes the branch, then exits with the dedicated non-retryable failure code so the Kubernetes Job is visibly non-zero.
+A virtual backfill worker that exceeds its source-rejection reporting threshold first commits all good refs, then writes `errors/worker-{N}.txt` before its normal results file. Non-final workers complete normally so this exception class cannot strand coordination. The last worker reads those errors after every results file exists, finalizes and publishes the branch, then exits with the dedicated non-retryable failure code so the Kubernetes Job is visibly non-zero. The failed run retains its temp branch and coordination files so an interruption after publication but before that exit can retry safely.
+
+This publish-then-report path applies only to `SystemicSourceRejectionsError`. The representative-probe assertion that triggered the original incident, the GEFS completeness assertion, OOM, and any untyped exception still kill a worker; after its retries are exhausted, that index writes no results file and `wait_for_workers` polls every 10 seconds without a timeout. [PR #1035](https://github.com/dynamical-org/reformatters/pull/1035) bounds the coordination waits to the Job's active deadline.
 
 ### Cleanup
 
-After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
+After clean finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch. A finalized run that reports systemic source rejections retains both as retry state and for inspection.
 
 ## Failure modes
 

@@ -50,6 +50,13 @@ class SourceFileRejectedError(Exception):
     """A source file whose published contents are unsafe to reference."""
 
 
+class SourceFileAnomaly(NamedTuple):
+    """A suspicious source file observed while building virtual refs."""
+
+    url: str
+    reason: str
+
+
 class SystemicSourceRejectionsError(RuntimeError):
     """A backfill worker rejected an implausibly large source population."""
 
@@ -218,6 +225,15 @@ class VirtualRegionJob(
                 loc[dim] = template_var.get_index(dim)[0]
         return loc
 
+    def source_file_anomalies(
+        self,
+        source_files: Sequence[  # noqa: ARG002 - subclasses inspect source files
+            tuple[SOURCE_FILE_COORD, int, Sequence[VirtualRef]]
+        ],
+    ) -> Sequence[SourceFileAnomaly]:
+        """Report suspicious source files observed while building virtual refs."""
+        return ()
+
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -271,7 +287,7 @@ class VirtualRegionJob(
         """
         yield from self._process_virtual_ref_groups([remaining], len(remaining))
 
-    def _process_virtual_ref_groups(  # noqa: PLR0912
+    def _process_virtual_ref_groups(
         self,
         groups: Sequence[Sequence[SOURCE_FILE_COORD]],
         planned: int,
@@ -279,6 +295,7 @@ class VirtualRegionJob(
         last_log = time.monotonic()
         attempted = 0
         rejections: list[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]] = []
+        anomalies: list[SourceFileAnomaly] = []
         try:
             with ThreadPoolExecutor(self.download_concurrency) as pool:
                 for group in groups:
@@ -294,22 +311,13 @@ class VirtualRegionJob(
                                 pool.map(self._file_refs_or_skip, coords, sizes)
                             )
                             attempted += len(coords)
-                            for coord, result in zip(
-                                coords, build_results, strict=True
-                            ):
-                                if result.rejection is None:
-                                    continue
-                                log.warning(
-                                    f"Rejecting {coord.get_url()}: {result.rejection}"
-                                )
-                                rejections.append((coord, result.rejection))
-                            batch = [
-                                (coord, result.refs)
-                                for coord, result in zip(
-                                    coords, build_results, strict=True
-                                )
-                                if result.refs
-                            ]
+                            batch = self._accepted_ref_batch(
+                                coords,
+                                sizes,
+                                build_results,
+                                rejections,
+                                anomalies,
+                            )
                             build_s = time.monotonic() - build_start
                             ready = {id(coord) for coord in coords}
                             pending = [
@@ -353,18 +361,54 @@ class VirtualRegionJob(
                             )
         finally:
             self._log_source_rejection_summary(planned, attempted, rejections)
+            self._log_source_file_anomaly_summary(anomalies)
         if self.processing_mode == "backfill":
             self._raise_if_source_rejections_are_systemic(planned, rejections)
+
+    def _accepted_ref_batch(
+        self,
+        coords: Sequence[SOURCE_FILE_COORD],
+        sizes: Sequence[int],
+        build_results: Sequence[_FileRefsResult],
+        rejections: list[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]],
+        anomalies: list[SourceFileAnomaly],
+    ) -> list[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]:
+        for coord, result in zip(coords, build_results, strict=True):
+            if result.rejection is None:
+                continue
+            log.warning(f"Rejecting {coord.get_url()}: {result.rejection}")
+            rejections.append((coord, result.rejection))
+        accepted = [
+            (coord, size, result.refs)
+            for coord, size, result in zip(coords, sizes, build_results, strict=True)
+            if result.rejection is None
+        ]
+        new_anomalies = self.source_file_anomalies(accepted)
+        for anomaly in new_anomalies:
+            log.error(f"Detected anomalous source file {anomaly.url}: {anomaly.reason}")
+        anomalies.extend(new_anomalies)
+        for coord, _size, refs in accepted:
+            assert refs, f"file_refs returned no references for {coord.get_url()}"
+        return [(coord, refs) for coord, _size, refs in accepted]
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
     ) -> _FileRefsResult:
         try:
             refs = self.file_refs(coord, file_size)
-            assert refs, f"file_refs returned no references for {coord.get_url()}"
             return _FileRefsResult(refs)
         except SourceFileRejectedError as error:
             return _FileRefsResult([], error)
+
+    def _log_source_file_anomaly_summary(
+        self, anomalies: Sequence[SourceFileAnomaly]
+    ) -> None:
+        if anomalies:
+            noun = "file" if len(anomalies) == 1 else "files"
+            log.error(
+                f"Detected {len(anomalies)} anomalous source {noun} "
+                f"during this run (first: {anomalies[0].url})"
+            )
 
     def _raise_if_source_rejections_are_systemic(
         self,

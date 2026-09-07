@@ -513,6 +513,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
         # 3. Write results and finalize
         if workers_total > 1:
+            # Errors must precede the results files that gate the finalizer's read.
             if worker_error is not None:
                 self.store_factory.write_coordination_file(
                     reformat_job_name,
@@ -548,6 +549,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     )
                 ]
             )
+            # Retain retry state if publication will be followed by a reported failure.
             parallel_coordination.finalize(
                 self.store_factory,
                 all_jobs=all_jobs,
@@ -562,6 +564,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 consolidated=self.region_job_class.consolidated_metadata,
                 publish_zarr3_metadata=update_template_with_results or overwrite,
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
+                cleanup=not worker_errors,
             )
             if worker_errors:
                 message = (
