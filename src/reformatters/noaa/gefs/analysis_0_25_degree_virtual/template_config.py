@@ -25,7 +25,7 @@ class NoaaGefsAnalysis025DegreeVirtualTemplateConfig(NoaaGefsVirtualTemplateConf
     """Virtual GEFS analysis: the control member's shortest available lead at each
     3-hourly valid time."""
 
-    source_file_types: frozenset[GEFSSourceFileType] = frozenset({"s"})
+    source_file_types: tuple[GEFSSourceFileType, ...] = ("s",)
     window_comments: dict[str, str] = {
         "avg": "Average value in the last 6 hour period (00, 06, 12, 18 UTC) or 3 hour period (03, 09, 15, 21 UTC).",
         "accum": (

@@ -75,7 +75,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     declares dims, time structure and the window wording its time axis implies.
     """
 
-    source_file_types: frozenset[GEFSSourceFileType]
+    source_file_types: tuple[GEFSSourceFileType, ...]
     # Window wording for each non-instant step_type a variable declares.
     window_comments: dict[str, str]
 
@@ -116,7 +116,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
 
     def _catalog_data_vars(self) -> list[NoaaGefsVirtualDataVar]:
         """The variable catalog for the source files this config declares."""
-        assert self.source_file_types == frozenset({"s"}), (
+        assert self.source_file_types == ("s",), (
             "only the s file catalog is populated; the a and b catalogs land with the "
             "0.5 degree datasets"
         )

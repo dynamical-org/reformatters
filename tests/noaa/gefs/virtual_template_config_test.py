@@ -24,7 +24,7 @@ def config_with_lead_times(
     leads: pd.TimedeltaIndex,
 ) -> NoaaGefsForecastVirtualTemplateConfig:
     class Config(NoaaGefsForecastVirtualTemplateConfig):
-        source_file_types: frozenset[GEFSSourceFileType] = frozenset({"s"})
+        source_file_types: tuple[GEFSSourceFileType, ...] = ("s",)
 
         def lead_times(self) -> pd.TimedeltaIndex:
             return leads
@@ -66,7 +66,7 @@ def test_lead_times_the_window_comments_cannot_describe_are_rejected() -> None:
 def test_forecast_length_shorter_than_the_first_window_is_described() -> None:
     """A single 3 hour lead time, the shortest domain the wording has to cover."""
     config = NoaaGefsForecastVirtualTemplateConfig(
-        source_file_types=frozenset({"s"}), forecast_length=pd.Timedelta("3h")
+        source_file_types=("s",), forecast_length=pd.Timedelta("3h")
     )
     assert list(config.lead_times()) == [pd.Timedelta("0h"), pd.Timedelta("3h")]
 
