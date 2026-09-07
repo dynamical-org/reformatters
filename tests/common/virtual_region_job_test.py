@@ -1409,11 +1409,56 @@ def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
             # Distinct per worker, simulating separate pods
             tmp_store=tmp_path / f"worker-{worker_index}-tmp.zarr",
             update_template_with_results=False,
+            coordination_deadline=float("inf"),
         )
 
     _assert_all_values(dataset, n_inits=4)
     # Temp branch cleaned up after finalize.
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
+
+
+def test_backfill_timeout_does_not_publish_or_clear_temp_branch(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    main_before = repo.lookup_branch("main")
+    all_jobs = VirtualTestRegionJob.get_jobs(
+        tmp_store=dataset._tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=dataset.template_config.data_vars,
+        reformat_job_name="test",
+    )
+
+    dataset._process_region_jobs(
+        all_jobs=all_jobs,
+        worker_index=0,
+        workers_total=4,
+        reformat_job_name="test",
+        template_ds=template_ds,
+        tmp_store=tmp_path / "worker-0-tmp.zarr",
+        update_template_with_results=False,
+        coordination_deadline=float("inf"),
+    )
+    with pytest.raises(TimeoutError, match=r"missing worker indexes: \[1, 2\]"):
+        dataset._process_region_jobs(
+            all_jobs=all_jobs,
+            worker_index=3,
+            workers_total=4,
+            reformat_job_name="test",
+            template_ds=template_ds,
+            tmp_store=tmp_path / "worker-3-tmp.zarr",
+            update_template_with_results=False,
+            coordination_deadline=0,
+        )
+
+    assert repo.lookup_branch("main") == main_before
+    assert "_job_test" in repo.list_branches()
+    assert dataset.store_factory.list_coordination_files("test", "results") == [
+        "worker-0.json",
+        "worker-3.json",
+    ]
 
 
 def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
@@ -2056,6 +2101,7 @@ def test_virtual_backfill_then_fire_leaves_metadata_stable(tmp_path: Path) -> No
         template_ds=template_ds,
         tmp_store=tmp_path / "worker-tmp.zarr",
         update_template_with_results=False,
+        coordination_deadline=None,
     )
 
     root_metadata = _main_store_bytes(dataset.store_factory, "zarr.json")

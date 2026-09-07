@@ -230,6 +230,7 @@ class TestZarr3ParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=False,
+            coordination_deadline=None,
         )
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
@@ -261,6 +262,7 @@ class TestZarr3ParallelWrites:
                 template_ds=template_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=False,
+                coordination_deadline=float("inf"),
             )
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
@@ -294,6 +296,7 @@ class TestZarr3ParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=True,
+            coordination_deadline=float("inf"),
         )
 
         # Reader should still see original 2 time steps (metadata not yet expanded)
@@ -309,6 +312,7 @@ class TestZarr3ParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=True,
+            coordination_deadline=float("inf"),
         )
 
         # Now reader should see expanded dataset
@@ -316,6 +320,47 @@ class TestZarr3ParallelWrites:
         assert result.sizes["time"] == 4
         for var in ["var0", "var1", "var2", "var3"]:
             assert np.all(result[var].values == 1.0)
+
+    def test_update_timeout_does_not_publish_partial_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        dataset = self._make_dataset(tmp_path)
+        template_ds = _create_template_ds()
+        template_utils.write_metadata(
+            _create_template_ds(num_time=0), dataset.store_factory
+        )
+        all_jobs = ParallelRegionJob.get_jobs(
+            tmp_store=dataset._tmp_store(),
+            template_ds=template_ds,
+            append_dim="time",
+            all_data_vars=ParallelTemplateConfig().data_vars,
+            reformat_job_name="test",
+        )
+
+        dataset._process_region_jobs(
+            all_jobs=all_jobs,
+            worker_index=0,
+            workers_total=3,
+            reformat_job_name="test",
+            template_ds=template_ds,
+            tmp_store=dataset._tmp_store(),
+            update_template_with_results=True,
+            coordination_deadline=float("inf"),
+        )
+        with pytest.raises(TimeoutError, match=r"missing worker indexes: \[1\]"):
+            dataset._process_region_jobs(
+                all_jobs=all_jobs,
+                worker_index=2,
+                workers_total=3,
+                reformat_job_name="test",
+                template_ds=template_ds,
+                tmp_store=dataset._tmp_store(),
+                update_template_with_results=True,
+                coordination_deadline=0,
+            )
+
+        reader_ds = xr.open_zarr(dataset.store_factory.primary_store())
+        assert reader_ds.sizes["time"] == 0
 
     def test_update_rejects_structural_drift(self, tmp_path: Path) -> None:
         """An operational update whose template changed a non-append structural field
@@ -348,6 +393,7 @@ class TestZarr3ParallelWrites:
                 template_ds=drifted_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=True,
+                coordination_deadline=None,
             )
 
         # Guard ran before any writes: the store is untouched (still 2 time steps).
@@ -376,6 +422,7 @@ class TestZarr3ParallelWrites:
                 template_ds=template_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=False,
+                coordination_deadline=float("inf"),
             )
 
         # Coordination files should be cleaned up after last worker
@@ -422,6 +469,7 @@ class TestIcechunkParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=False,
+            coordination_deadline=None,
         )
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
@@ -454,6 +502,7 @@ class TestIcechunkParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=False,
+            coordination_deadline=float("inf"),
         )
 
         # Reader on main should see no new data yet
@@ -470,6 +519,7 @@ class TestIcechunkParallelWrites:
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=False,
+            coordination_deadline=float("inf"),
         )
 
         # Now reader on main should see all data
@@ -500,6 +550,7 @@ class TestIcechunkParallelWrites:
                 template_ds=template_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=False,
+                coordination_deadline=float("inf"),
             )
 
         # Temp branch should be cleaned up
@@ -555,6 +606,7 @@ class TestReplicaParallelWrites:
                 template_ds=template_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=False,
+                coordination_deadline=float("inf"),
             )
 
         # Both primary and replica should have all data
@@ -713,6 +765,7 @@ class TestWorkerEdgeCases:
                 template_ds=template_ds,
                 tmp_store=dataset._tmp_store(),
                 update_template_with_results=False,
+                coordination_deadline=float("inf"),
             )
 
         result = xr.open_zarr(dataset.store_factory.primary_store())
@@ -741,6 +794,7 @@ def _run_workers(
             template_ds=template_ds,
             tmp_store=dataset._tmp_store(),
             update_template_with_results=update_template_with_results,
+            coordination_deadline=float("inf"),
         )
 
 

@@ -315,6 +315,10 @@ class TestCoordinationFiles:
         results = [json.loads(f) for f in files]
         assert {"a": 1} in results
         assert {"b": 2} in results
+        assert factory.list_coordination_files("test-job", "results") == [
+            "worker-0.json",
+            "worker-1.json",
+        ]
 
     def test_read_returns_empty_when_no_files(self, tmp_path: str) -> None:
         factory = _local_factory(tmp_path)

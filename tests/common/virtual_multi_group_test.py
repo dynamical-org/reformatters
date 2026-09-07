@@ -682,6 +682,7 @@ def test_two_worker_backfill_disjoint(tmp_path: Path) -> None:
             template_ds=template_ds,
             tmp_store=tmp_path / f"worker-{worker_index}-tmp.zarr",
             update_template_with_results=False,
+            coordination_deadline=float("inf"),
         )
 
     _assert_all_values(dataset, n_inits=2)

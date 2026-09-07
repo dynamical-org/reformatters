@@ -50,8 +50,11 @@ class FakeStoreFactory:
         matching = {k: v for k, v in files.items() if k.startswith(f"{prefix}/")}
         return [matching[k] for k in sorted(matching)]
 
-    def count_coordination_files(self, job_name: str, prefix: str) -> int:
-        return len(self.read_all_coordination_files(job_name, prefix))
+    def list_coordination_files(self, job_name: str, prefix: str) -> list[str]:
+        files = self.files.get(job_name, {})
+        return sorted(
+            key.rsplit("/", 1)[-1] for key in files if key.startswith(f"{prefix}/")
+        )
 
     def clear_coordination_files(self, job_name: str) -> None:
         self.files.pop(job_name, None)
@@ -422,7 +425,7 @@ class TestWaitForWorkers:
         factory = FakeStoreFactory()
         # If time.sleep were called we'd notice — raise to fail loudly.
         monkeypatch.setattr(pc.time, "sleep", lambda *_: pytest.fail("should not poll"))
-        pc.wait_for_workers(factory, "job", workers_total=1)  # ty: ignore[invalid-argument-type]
+        pc.wait_for_workers(factory, "job", workers_total=1, deadline=0)  # ty: ignore[invalid-argument-type]
 
     def test_polls_until_all_results_present(
         self, monkeypatch: pytest.MonkeyPatch
@@ -439,10 +442,54 @@ class TestWaitForWorkers:
 
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
 
-        pc.wait_for_workers(factory, "job", workers_total=3)  # ty: ignore[invalid-argument-type]
+        pc.wait_for_workers(factory, "job", workers_total=3, deadline=float("inf"))  # ty: ignore[invalid-argument-type]
 
         # Started with 1 file, needs 3 → 2 polls.
         assert sleep_calls == [10, 10]
+
+    def test_never_reporting_worker_times_out_with_missing_indexes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = FakeStoreFactory()
+        factory.write_coordination_file("job", "results/worker-1.json", b"x")
+        monkeypatch.setattr(pc.time, "monotonic", lambda: 10)
+        monkeypatch.setattr(
+            pc.time, "sleep", lambda _: pytest.fail("wait continued past deadline")
+        )
+
+        with pytest.raises(
+            TimeoutError,
+            match=r"missing worker indexes: \[0, 2\]",
+        ):
+            pc.wait_for_workers(
+                factory,  # ty: ignore[invalid-argument-type]
+                "job",
+                workers_total=3,
+                deadline=10,
+            )
+
+
+class TestCoordinationDeadline:
+    def test_single_worker_needs_no_kubernetes_deadline(self) -> None:
+        assert pc.coordination_deadline_from_environment(workers_total=1) is None
+
+    def test_multi_worker_requires_kubernetes_deadline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("POD_ACTIVE_DEADLINE_SECONDS", raising=False)
+        monkeypatch.delenv("POD_TERMINATION_GRACE_PERIOD_SECONDS", raising=False)
+
+        with pytest.raises(AssertionError, match="POD_ACTIVE_DEADLINE_SECONDS"):
+            pc.coordination_deadline_from_environment(workers_total=2)
+
+    def test_reserves_kubernetes_termination_grace_period(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("POD_ACTIVE_DEADLINE_SECONDS", "600")
+        monkeypatch.setenv("POD_TERMINATION_GRACE_PERIOD_SECONDS", "30")
+        monkeypatch.setattr(pc, "_PROCESS_STARTED_AT", 100.0)
+
+        assert pc.coordination_deadline_from_environment(workers_total=2) == 670
 
 
 class TestCollectResults:
@@ -471,7 +518,12 @@ class TestCollectResults:
             "job", "results/worker-1.json", pc.dump_worker_results_json(worker_1)
         )
 
-        merged = pc.collect_results(factory, "job", workers_total=2)  # ty: ignore[invalid-argument-type]
+        merged = pc.collect_results(
+            factory,  # ty: ignore[invalid-argument-type]
+            "job",
+            workers_total=2,
+            deadline=float("inf"),
+        )
 
         # URLs identify each result unambiguously; check the merged set per var.
         merged_urls = {v: [r.url for r in rs] for v, rs in merged.items()}

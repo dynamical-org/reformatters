@@ -79,6 +79,8 @@ Worker 0 writes `setup/ready.json` after completing setup (creating branches, wr
 
 Each worker writes `results/worker-{N}.json` containing its `process_results` dict. The last worker (by index) polls until all result files are present, then aggregates them. For updates, the aggregated results drive `update_template_with_results` to trim the template based on what was actually processed.
 
+The wait shares the pod's active deadline: worker execution and result coordination must finish before that single deadline, with the pod's termination grace period reserved for reporting a Python failure. If any indexes have not written results by then, the last worker raises an error naming them. Finalization does not run, so Zarr metadata and Icechunk `main` remain unchanged and the temporary branch and coordination files remain available for inspection.
+
 ### Cleanup
 
 After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
@@ -115,7 +117,7 @@ In all cases, `main` either hasn't moved (safe) or has moved to the correct fina
 
 ### Worker exhausts per-index retry limit
 
-The entire Kubernetes job fails. The team is notified and can run a fresh job. Since the fresh job has a different job name, it gets a clean `_internal/` namespace and a new branch — no interference from the failed run.
+The entire Kubernetes job fails. If the last index is still alive, its result wait raises before Kubernetes reaches the pod deadline and names every index that never reported. The team is notified and can run a fresh job. Since the fresh job has a different job name, it gets a clean `_internal/` namespace and a new branch — no interference from the failed run.
 
 ### Concurrent jobs writing to the same dataset
 

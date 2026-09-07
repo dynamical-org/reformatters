@@ -151,6 +151,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")] = 1,
     ) -> None:
         """Update an existing dataset with the latest data."""
+        coordination_deadline = (
+            parallel_coordination.coordination_deadline_from_environment(workers_total)
+        )
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         with self._monitor(
@@ -181,6 +184,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     template_ds=template_ds,
                     tmp_store=tmp_store,
                     update_template_with_results=True,
+                    coordination_deadline=coordination_deadline,
                 )
 
         log.info(
@@ -379,6 +383,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_metadata: bool = False,
     ) -> None:
         """Orchestrate running RegionJob instances."""
+        coordination_deadline = (
+            parallel_coordination.coordination_deadline_from_environment(workers_total)
+        )
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
@@ -404,6 +411,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             template_ds=template_ds,
             tmp_store=tmp_store,
             update_template_with_results=False,
+            coordination_deadline=coordination_deadline,
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
         )
@@ -418,6 +426,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         tmp_store: Path,
         *,
         update_template_with_results: bool,
+        coordination_deadline: float | None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
     ) -> None:
@@ -427,6 +436,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         - Icechunk stores: uses a temp branch so readers on "main" never see partial data
         - Zarr v3 stores: defers metadata write until all workers finish
         """
+        if workers_total > 1:
+            assert coordination_deadline is not None
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         worker_jobs = get_worker_jobs(
@@ -510,13 +521,19 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             if update_template_with_results:
                 if workers_total > 1:
                     merged_results = parallel_coordination.collect_results(
-                        self.store_factory, reformat_job_name, workers_total
+                        self.store_factory,
+                        reformat_job_name,
+                        workers_total,
+                        coordination_deadline,
                     )
                 else:
                     merged_results = worker_results
             else:
                 parallel_coordination.wait_for_workers(
-                    self.store_factory, reformat_job_name, workers_total
+                    self.store_factory,
+                    reformat_job_name,
+                    workers_total,
+                    coordination_deadline,
                 )
                 merged_results = {}
             parallel_coordination.finalize(

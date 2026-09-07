@@ -113,6 +113,14 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 "name": "WORKERS_TOTAL",
                                 "value": "4",
                             },
+                            {
+                                "name": "POD_ACTIVE_DEADLINE_SECONDS",
+                                "value": "21600",
+                            },
+                            {
+                                "name": "POD_TERMINATION_GRACE_PERIOD_SECONDS",
+                                "value": "30",
+                            },
                         ],
                         "image": "weather-app:v1.0",
                         "name": "worker",
@@ -315,6 +323,20 @@ def test_as_kubernetes_object_with_custom_values() -> None:
         "resources"
     ]["requests"]["storage"]
     assert storage_request == "50G"
+
+
+def test_job_deadline_must_exceed_termination_grace_period() -> None:
+    with pytest.raises(ValidationError):
+        Job(
+            command=["validate"],
+            image="validator:latest",
+            dataset_id="custom_dataset",
+            cpu="1",
+            memory="1Gi",
+            workers_total=1,
+            parallelism=1,
+            pod_active_deadline=timedelta(seconds=30),
+        )
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 import pydantic
 from kubernetes import client, config
@@ -36,12 +36,23 @@ class Job(pydantic.BaseModel):
     parallelism: Annotated[int, pydantic.Field(ge=1)]
 
     pod_active_deadline: timedelta = timedelta(hours=6)
+    pod_termination_grace_period: timedelta = timedelta(seconds=30)
     ttl: timedelta = timedelta(days=1)
 
     # Opt out of consolidation. Quick jobs have minimal impact and we'd rather not interrupt and restart longer jobs.
     pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
+
+    @pydantic.model_validator(mode="after")
+    def deadline_allows_graceful_termination(self) -> Self:
+        assert self.pod_termination_grace_period >= timedelta(0), (
+            "pod_termination_grace_period must not be negative"
+        )
+        assert int(self.pod_active_deadline.total_seconds()) > int(
+            self.pod_termination_grace_period.total_seconds()
+        ), "pod_active_deadline must exceed pod_termination_grace_period"
+        return self
 
     def mounted_secret_names(self) -> Sequence[str]:
         """Secrets mounted as JSON files at /secrets/<name>.json in the pod."""
@@ -137,6 +148,14 @@ class Job(pydantic.BaseModel):
                                         "name": "WORKERS_TOTAL",
                                         "value": f"{self.workers_total}",
                                     },
+                                    {
+                                        "name": "POD_ACTIVE_DEADLINE_SECONDS",
+                                        "value": f"{int(self.pod_active_deadline.total_seconds())}",
+                                    },
+                                    {
+                                        "name": "POD_TERMINATION_GRACE_PERIOD_SECONDS",
+                                        "value": f"{int(self.pod_termination_grace_period.total_seconds())}",
+                                    },
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",
@@ -178,7 +197,9 @@ class Job(pydantic.BaseModel):
                         "securityContext": {
                             "fsGroup": 999,  # this is the `app` group our app runs under
                         },
-                        "terminationGracePeriodSeconds": 30,
+                        "terminationGracePeriodSeconds": int(
+                            self.pod_termination_grace_period.total_seconds()
+                        ),
                         "activeDeadlineSeconds": int(
                             self.pod_active_deadline.total_seconds()
                         ),

@@ -4,6 +4,8 @@ See docs/parallel_processing.md for the overall design.
 """
 
 import json
+import os
+import re
 import time
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
@@ -21,6 +23,9 @@ from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
+
+_PROCESS_STARTED_AT = time.monotonic()
+_RESULT_FILE_PATTERN = re.compile(r"worker-(?P<worker_index>\d+)\.json")
 
 _WORKER_RESULTS_ADAPTER: TypeAdapter[dict[str, list[SourceFileResult]]] = TypeAdapter(
     dict[str, list[SourceFileResult]]
@@ -123,25 +128,45 @@ def parallel_setup(
 
 
 def wait_for_workers(
-    store_factory: StoreFactory, reformat_job_name: str, workers_total: int
+    store_factory: StoreFactory,
+    reformat_job_name: str,
+    workers_total: int,
+    deadline: float | None,
 ) -> None:
     # Poll until all workers write their results file. Backfills can have
-    # many thousands of workers, so count (cheap ls) rather than read.
-    # Rely on kubernetes pod_active_deadline for timeout.
+    # many thousands of workers, so list names (cheap ls) rather than read.
     if workers_total <= 1:
         return
-    while (
-        store_factory.count_coordination_files(reformat_job_name, "results")
-        < workers_total
-    ):
+    assert deadline is not None
+    while True:
+        result_files = store_factory.list_coordination_files(
+            reformat_job_name, "results"
+        )
+        reported_workers = {
+            int(match["worker_index"])
+            for result_file in result_files
+            if (match := _RESULT_FILE_PATTERN.fullmatch(result_file)) is not None
+        }
+        missing_workers = sorted(set(range(workers_total)) - reported_workers)
+        if not missing_workers:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(
+                f"Timed out waiting for worker results for {reformat_job_name!r}; "
+                f"missing worker indexes: {missing_workers}"
+            )
         log.info("Waiting for all workers to complete...")
-        time.sleep(10)
+        time.sleep(min(10, remaining))
 
 
 def collect_results(
-    store_factory: StoreFactory, reformat_job_name: str, workers_total: int
+    store_factory: StoreFactory,
+    reformat_job_name: str,
+    workers_total: int,
+    deadline: float | None,
 ) -> Mapping[str, Sequence[SourceFileResult]]:
-    wait_for_workers(store_factory, reformat_job_name, workers_total)
+    wait_for_workers(store_factory, reformat_job_name, workers_total, deadline)
     result_files = store_factory.read_all_coordination_files(
         reformat_job_name, "results"
     )
@@ -151,6 +176,23 @@ def collect_results(
         for var_name, coords in _WORKER_RESULTS_ADAPTER.validate_json(data).items():
             merged.setdefault(var_name, []).extend(coords)
     return merged
+
+
+def coordination_deadline_from_environment(workers_total: int) -> float | None:
+    if workers_total <= 1:
+        return None
+    active_deadline = os.environ.get("POD_ACTIVE_DEADLINE_SECONDS")
+    termination_grace_period = os.environ.get("POD_TERMINATION_GRACE_PERIOD_SECONDS")
+    assert active_deadline is not None, "POD_ACTIVE_DEADLINE_SECONDS is required"
+    assert termination_grace_period is not None, (
+        "POD_TERMINATION_GRACE_PERIOD_SECONDS is required"
+    )
+    active_deadline_seconds = int(active_deadline)
+    termination_grace_period_seconds = int(termination_grace_period)
+    assert active_deadline_seconds > termination_grace_period_seconds >= 0
+    return (
+        _PROCESS_STARTED_AT + active_deadline_seconds - termination_grace_period_seconds
+    )
 
 
 def finalize(
