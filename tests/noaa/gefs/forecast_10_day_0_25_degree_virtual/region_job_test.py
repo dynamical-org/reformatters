@@ -23,6 +23,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
 from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
 )
+from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
 
 TEMPLATE_CONFIG = NoaaGefsForecast10Day025DegreeVirtualTemplateConfig()
 _HOUR_0 = pd.Timedelta(0)
@@ -260,12 +261,9 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
         "3:900:d=2024060106:RH:2 m above ground:9 hour fcst:ENS=perturbed forecast 1\n"
     )
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(index)
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_source_file_reads(
+        monkeypatch, noaa_virtual_job_module, tmp_path, lambda _url: index
+    )
 
     data_vars = [
         get_var("temperature_2m"),
@@ -306,14 +304,15 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     """At lead 9 the accumulation window is 6-9, so a 0-9 line is a different message.
     Committing the file anyway would leave a NaN column nothing ever retries."""
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: (
             "1:0:d=2024060106:APCP:surface:0-9 hour acc fcst:ENS=low-res ctl\n"
-        )
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+        ),
+        data_file_size=1200,
+    )
 
     data_vars = [get_var("total_precipitation_surface")]
     coord = NoaaGefsForecastVirtualSourceFileCoord(
@@ -363,13 +362,9 @@ def test_every_requested_variable_maps_to_a_real_message(
     lead_time = pd.Timedelta(hours=int(match.group(3)))
     index_text = fixture.read_text()
 
-    # file_refs unlinks the index it is given, so hand it a copy rather than the fixture.
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        copy = tmp_path / fixture_name
-        copy.write_text(index_text)
-        return copy
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_source_file_reads(
+        monkeypatch, noaa_virtual_job_module, tmp_path, lambda _url: fixture
+    )
 
     data_vars = TEMPLATE_CONFIG.data_vars
     (coord,) = coords_for(
