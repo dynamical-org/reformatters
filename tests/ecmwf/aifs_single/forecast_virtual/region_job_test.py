@@ -71,9 +71,9 @@ def _index_line(
     levtype: str,
     offset: int,
     length: int,
-    levelist: str | None = None,
+    levelist: object | None = None,
 ) -> str:
-    entry = {
+    entry: dict[str, object] = {
         "domain": "g",
         "date": "20250301",
         "time": "0000",
@@ -243,6 +243,99 @@ def test_file_refs_missing_level_yields_no_ref(
     refs = job.file_refs(_coord([var]), file_size=1000)
 
     assert [ref.out_loc["pressure_level"] for ref in refs] == [1000]
+
+
+@pytest.mark.parametrize("field", ["_offset", "_length"])
+@pytest.mark.parametrize("row_index", [0, 1])
+def test_file_refs_rejects_boolean_byte_range_in_every_row(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    row_index: int,
+) -> None:
+    entries = [
+        json.loads(_index_line("2t", "sfc", 0, 1000)),
+        json.loads(_index_line("skt", "sfc", 1000, 200)),
+    ]
+    entries[row_index][field] = True
+    _fake_index(
+        monkeypatch,
+        tmp_path,
+        "".join(json.dumps(entry) + "\n" for entry in entries),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(ValueError, match="non-integer index field"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+@pytest.mark.parametrize(("field", "value"), [("_offset", 0.5), ("_length", 1.5)])
+def test_file_refs_rejects_non_integral_byte_range(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: float,
+) -> None:
+    entry = json.loads(_index_line("2t", "sfc", 0, 1000))
+    entry[field] = value
+    _fake_index(monkeypatch, tmp_path, json.dumps(entry) + "\n")
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(ValueError, match="non-integer index field"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+def test_file_refs_rejects_boolean_level(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    index = _index_line("t", "pl", 0, 1000, levelist=True) + _index_line(
+        "t", "pl", 1000, 200, levelist="500"
+    )
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("pressure_level/temperature")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(ValueError, match="boolean is not an index level"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+def test_file_refs_ignores_non_integral_level_in_mixed_column(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    index = _index_line("t", "pl", 0, 1000, levelist="500") + _index_line(
+        "t", "pl", 1000, 200, levelist="0.7"
+    )
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("pressure_level/temperature")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    refs = job.file_refs(_coord(data_vars), file_size=1200)
+
+    assert [
+        (ref.out_loc["pressure_level"], ref.offset, ref.length) for ref in refs
+    ] == [(500, 0, 1000)]
+
+
+@pytest.mark.parametrize("level", [500, 500.0, "500.0", " 500"])
+def test_file_refs_preserves_accepted_level_representations(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    level: object,
+) -> None:
+    _fake_index(monkeypatch, tmp_path, _index_line("t", "pl", 0, 1000, levelist=level))
+    data_vars = [get_var("pressure_level/temperature")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    refs = job.file_refs(_coord(data_vars), file_size=1000)
+
+    assert [
+        (ref.out_loc["pressure_level"], ref.offset, ref.length) for ref in refs
+    ] == [(500, 0, 1000)]
 
 
 def test_file_refs_skips_stale_index_past_eof(

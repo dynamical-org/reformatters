@@ -1,4 +1,6 @@
+import json
 from collections.abc import Mapping, Sequence
+from decimal import Decimal, InvalidOperation
 from typing import ClassVar
 
 import icechunk
@@ -21,7 +23,6 @@ from reformatters.common.virtual_source_listing import (
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
-from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 
 from .template_config import (
     EcmwfAifsSingleVirtualDataVar,
@@ -31,6 +32,29 @@ log = get_logger(__name__)
 
 SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 SOURCE_REGION = "eu-central-1"
+type _IndexRow = tuple[str, str, bool, int | None, int, int]
+
+
+def _index_integer(value: object) -> int:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    raise ValueError(f"non-integer index field {value!r}")
+
+
+def _index_level(value: object) -> tuple[bool, int | None]:
+    if value is None:
+        return True, None
+    if isinstance(value, bool):
+        raise ValueError("boolean is not an index level")
+    try:
+        level = Decimal(str(value))
+    except InvalidOperation:
+        return False, None
+    if not level.is_finite() or level != level.to_integral_value():
+        return False, None
+    return True, int(level)
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -136,7 +160,22 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
             coord.get_index_url(), self.dataset_id, region=SOURCE_REGION
         )
         try:
-            index_df = parse_index_file(index_path, ensemble=False)
+            index_rows: list[_IndexRow] = []
+            for line in index_path.read_text().splitlines():
+                if not line.strip():
+                    continue
+                row: dict[str, object] = json.loads(line)
+                level_matches, level = _index_level(row.get("levelist"))
+                index_rows.append(
+                    (
+                        str(row["param"]),
+                        str(row["levtype"]),
+                        level_matches,
+                        level,
+                        _index_integer(row["_offset"]),
+                        _index_integer(row["_length"]),
+                    )
+                )
         finally:
             index_path.unlink()
 
@@ -144,20 +183,12 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
-        entries = index_df.reset_index()
-        for param, levtype, levelist, raw_offset, raw_length in zip(
-            entries["param"],
-            entries["levtype"],
-            entries["levelist"],
-            entries["_offset"],
-            entries["_length"],
-            strict=True,
-        ):
-            level = None if pd.isna(levelist) else int(levelist)
-            matches = lookup.get((str(param), str(levtype), level))
+        for param, levtype, level_matches, level, offset, length in index_rows:
+            if not level_matches:
+                continue
+            matches = lookup.get((param, levtype, level))
             if not matches:
                 continue
-            offset, length = int(raw_offset), int(raw_length)
             # Byte ranges past the data file mean a stale/mismatched index; skip it.
             if length <= 0 or offset + length > file_size:
                 log.warning(
