@@ -31,9 +31,6 @@ class NoaaGefsForecast35Day05DegreeVirtualTemplateConfig(
             name="NOAA GEFS forecast 35 day 0.5 degree, virtual",
             description=(
                 "Weather forecasts from the Global Ensemble Forecast System (GEFS) "
-                "operated by NOAA NWS NCEP, served as references to the source GRIB "
-                "messages. Covers every variable the 0.5 degree pgrb2a and pgrb2b "
-                "files carry, for all 31 ensemble members, out to the 840 hour lead "
-                "time the 00z cycle reaches."
+                "operated by NOAA NWS NCEP."
             ),
         )

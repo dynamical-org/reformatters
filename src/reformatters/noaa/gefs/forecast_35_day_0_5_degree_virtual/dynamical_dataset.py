@@ -35,9 +35,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four days of daily inits at the root, two for the vertical groups, whose
-            # arrays hold a ref per level. Refs per commit = arrays x refs per active
-            # split; see "Manifest splitting" in docs/virtual_datasets.md.
+            # Four days of daily inits at the root, two for the vertical groups.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 2,
@@ -51,9 +49,8 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # The dataset id plus "-validate" exceeds the 52 character cron job name limit,
-        # so the resolution takes its source file spelling.
-        cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0p5")
+        # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
+        cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
         # A cycle publishes in two stages: the lead times through 384 hours land between
         # ~init+3h46m and ~init+6h43m, then the 840 hour extension arrives in bursts
         # until ~init+28h05m. Fire just before the first stage and poll through it; the
@@ -96,12 +93,12 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
             # completeness check below, which skips append dim positions the store
             # does not reach. Inits are a day apart, so tolerating one would leave a
             # whole day unreported: a cycle is due the moment validation follows it.
-            validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=55)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=50)),
             # The newest init holds only its lead times through 384 hours, 105 of 181,
             # when validation fires; the leading tier is that share less a margin. Every
             # older init has its whole 840 hours.
             validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.55, 1.0)
+                min_present_fraction=(0.57, 1.0)
             ),
             validation.CheckVirtualDecodeHealth(),
         )
