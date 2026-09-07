@@ -243,9 +243,8 @@ def test_operational_kubernetes_resources(
     # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
     assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
 
-    # Both stay suspended until the archive is backfilled.
-    assert update_cron_job.suspend
-    assert validation_cron_job.suspend
+    assert not update_cron_job.suspend
+    assert not validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(

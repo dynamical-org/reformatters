@@ -56,7 +56,6 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
             parallelism=1,
-            suspend=True,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
@@ -68,7 +67,6 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             cpu="1.3",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]

@@ -273,8 +273,8 @@ def test_operational_kubernetes_resources(
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert validation_cron_job.schedule == "59 5,11,17,23 * * *"
     assert len(update_cron_job.secret_names) > 0
-    assert update_cron_job.suspend
-    assert validation_cron_job.suspend
+    assert not update_cron_job.suspend
+    assert not validation_cron_job.suspend
 
 
 def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
