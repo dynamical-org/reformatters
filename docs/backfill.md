@@ -36,7 +36,7 @@ Commit latency also depends on array count, because each commit read-modify-writ
 
 `jobs_per_pod` does not transfer between datasets, because refs per job spans orders of magnitude: 38 refs for an analysis position carrying one per array, against 95,000 for an ensemble forecast init carrying every lead time × ensemble member. Compute refs per job for the dataset in front of you.
 
-Where refs per commit is not the binding constraint, aim for the 3–15 minutes above rather than the smallest workable value. Pod startup costs about a minute whatever the job, so a pod holding under two minutes of work spends most of its life starting up.
+Where refs per commit is not the binding constraint, aim for the 3–15 minutes above rather than the smallest workable value.
 
 For the cpu / memory / shared-memory a dataset's jobs request, see the Kubernetes resource values in [implementation_guide.md](implementation_guide.md) §5.
 
