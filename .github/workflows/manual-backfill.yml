@@ -67,12 +67,12 @@ name: 'Manual: Backfill'
         required: false
         type: string
       jobs_per_pod:
-        description: 'Region jobs per worker pod. Materialized: 2-4 for non-ensemble datasets, 1 for ensemble; virtual: 30. For all, aim for jobs that take 3-15 minutes to amortize startup time and reduce icechunk commit compare-and-set contention.'
+        description: 'Region jobs per worker pod. Materialized: 2-4 for non-ensemble datasets, 1 for ensemble. For virtual sizing, see docs/backfill.md#tuning-parallelism.'
         required: false
         type: string
         default: '2'
       max_parallelism:
-        description: 'Maximum concurrent worker pods. Materialized: 50-200 (go higher if needed, but check cluster quotas so operational updates can still schedule); some sources cap useful parallelism (s3://ecmwf-forecasts supports at most 8). Virtual: 10 — any higher risks heavy compare-and-set contention.'
+        description: 'Maximum concurrent worker pods. Materialized: 50-200 (check cluster quotas and source limits). Virtual: 6-10; see docs/backfill.md#tuning-parallelism.'
         required: false
         type: string
         default: '10'
