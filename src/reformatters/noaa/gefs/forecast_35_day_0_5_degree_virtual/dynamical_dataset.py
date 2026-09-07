@@ -35,13 +35,13 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four days of daily inits at the root, two for the vertical groups.
+            # Eight days of daily inits at the root, fewer for the vertical groups.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 2,
-                    r"^/model_level/": 2,
-                    r"^/height_above_mean_sea_level/": 2,
-                    None: 4,
+                    r"^/model_level/": 4,
+                    r"^/height_above_mean_sea_level/": 4,
+                    None: 8,
                 },
                 dim="init_time",
             ),

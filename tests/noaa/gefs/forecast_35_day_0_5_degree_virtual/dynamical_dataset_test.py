@@ -435,21 +435,21 @@ def test_manifest_splits_hold_a_similar_number_of_refs_per_array(
     refs_per_init = 181 * 31
 
     root_split = _resolved_split_size(split, "/temperature_2m")
-    assert root_split == 4
+    assert root_split == 8
     root_refs = root_split * refs_per_init
-    assert root_refs == 22_444
+    assert root_refs == 44_888
 
     # The smallest manifest in the store, and still far above the 1000 refs icechunk
     # needs before it compresses ref locations.
     assert root_refs > 1000
 
-    for group, levels in (
-        ("pressure_level", 31),
-        ("model_level", 4),
-        ("height_above_mean_sea_level", 8),
+    for group, levels, expected_split in (
+        ("pressure_level", 31, 2),
+        ("model_level", 4, 4),
+        ("height_above_mean_sea_level", 8, 4),
     ):
         group_split = _resolved_split_size(split, f"/{group}/temperature")
-        assert group_split == 2, group
+        assert group_split == expected_split, group
         group_refs = group_split * refs_per_init * levels
         assert group_refs > root_refs, group
         # Well inside the 3 MiB a reader downloads to resolve any one chunk, at the
