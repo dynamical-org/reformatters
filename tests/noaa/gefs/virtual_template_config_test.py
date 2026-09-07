@@ -4,6 +4,9 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
+from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.template_config import (
+    NoaaGefsForecast10Day025DegreeVirtualTemplateConfig,
+)
 from reformatters.noaa.gefs.gefs_config_models import GEFSSourceFileType
 from reformatters.noaa.gefs.virtual_template_config import (
     NoaaGefsForecastVirtualTemplateConfig,
@@ -93,3 +96,9 @@ def test_window_comments_name_the_lead_times_that_carry_each_window() -> None:
             start, end = int(match.group(1)), int(match.group(2))
             assert end == lead, (lead, source_window)
             assert end - start == int(window_hours), (lead, source_window)
+
+
+def test_forecast_resolution_names_one_span_for_an_even_lead_axis() -> None:
+    """A uniformly spaced axis gets the plain wording, not a span it does not need."""
+    config = NoaaGefsForecast10Day025DegreeVirtualTemplateConfig()
+    assert config.dataset_attributes.forecast_resolution == "Forecast step 3 hourly"

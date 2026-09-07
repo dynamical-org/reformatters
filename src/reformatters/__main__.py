@@ -65,6 +65,9 @@ from reformatters.noaa.gefs.analysis_0_25_degree_virtual.dynamical_dataset impor
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.dynamical_dataset import (
     NoaaGefsForecast10Day025DegreeVirtualDataset,
 )
+from reformatters.noaa.gefs.forecast_16_day_0_5_degree_virtual.dynamical_dataset import (
+    NoaaGefsForecast16Day05DegreeVirtualDataset,
+)
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
@@ -234,6 +237,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaGefsForecast10Day025DegreeVirtualDataset(
+        primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaGefsForecast16Day05DegreeVirtualDataset(
         primary_storage_config=NoaaGefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourDataset(

@@ -1,9 +1,10 @@
 from collections.abc import Mapping, Sequence
-from typing import Any, Final, Literal, assert_never
+from typing import Annotated, Any, Final, Literal, assert_never
 from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
 from reformatters.common.deaccumulation import DEFAULT_EXPECTED_CLAMP_FRACTION
@@ -50,10 +51,11 @@ class NoaaGefsDataVar(DataVar[NoaaGefsInternalAttrs]):
 
 
 class NoaaGefsVirtualInternalAttrs(NoaaInternalAttrs):
-    """A virtual variable names the one file its messages live in, rather than the
-    lead-time-dependent GEFSFileType the materialized datasets resolve per coord."""
+    """A virtual variable names the files its messages live in, rather than the
+    lead-time-dependent GEFSFileType the materialized datasets resolve per coord. More
+    than one where the products partition the variable's levels between them."""
 
-    source_file_type: GEFSSourceFileType
+    source_file_types: Annotated[frozenset[GEFSSourceFileType], Field(min_length=1)]
     available_from: Timestamp | None = None
 
 

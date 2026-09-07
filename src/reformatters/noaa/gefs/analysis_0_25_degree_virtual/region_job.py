@@ -71,12 +71,9 @@ class NoaaGefsAnalysis025DegreeVirtualRegionJob(
                 available_from = var.internal_attrs.available_from
                 if available_from is not None and init_time < available_from:
                     continue
-                key = (
-                    init_time,
-                    time - init_time,
-                    var.internal_attrs.source_file_type,
-                )
-                grouped.setdefault(key, []).append(var)
+                for source_file_type in var.internal_attrs.source_file_types:
+                    key = (init_time, time - init_time, source_file_type)
+                    grouped.setdefault(key, []).append(var)
 
         return [
             NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
