@@ -320,10 +320,8 @@ class VirtualRegionJob(
 
         Gathers the source files across all the worker's jobs against a single readonly
         view, then runs one write loop over their union. Files whose refs the store
-        already holds are skipped unless ``overwrite_chunks`` asks for a rewrite --
-        without that, a variable whose refs all point at the wrong source file can
-        never be corrected, because its own stale refs mark every file as done.
-        a backfill worker's generator yields a single batch (one commit for the
+        already holds are skipped unless ``overwrite_chunks`` asks for a rewrite.
+        A backfill worker's generator yields a single batch (one commit for the
         whole worker), an update job's generator polls and commits per tick.
         Always returns an empty dict: virtual refs live in the icechunk manifest,
         so there is nothing to thread back to finalize.
