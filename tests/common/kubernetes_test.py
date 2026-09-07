@@ -2,11 +2,13 @@ import base64
 import json
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
 import pytest
+from kubernetes.client.exceptions import ApiException
 from pydantic import ValidationError
 
 from reformatters.common.config import Config, Env
@@ -16,6 +18,7 @@ from reformatters.common.kubernetes import (
     ReformatCronJob,
     ValidationCronJob,
     _load_secret_from_kubernetes_api,
+    job_is_active,
     load_secret,
 )
 
@@ -506,3 +509,40 @@ def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
 def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
     with pytest.raises(AssertionError):
         _cron_job(schedule).previous_fire_time(pd.Timestamp("2026-08-02T12:00"))
+
+
+@pytest.mark.parametrize(
+    ("conditions", "expected"),
+    [
+        ([], True),
+        ([SimpleNamespace(type="Complete", status="False")], True),
+        ([SimpleNamespace(type="Complete", status="True")], False),
+        ([SimpleNamespace(type="Failed", status="True")], False),
+    ],
+)
+def test_job_is_active_for_existing_job(
+    conditions: list[SimpleNamespace], expected: bool
+) -> None:
+    batch_v1 = MagicMock()
+    batch_v1.read_namespaced_job.return_value.status.conditions = conditions
+
+    with (
+        patch("reformatters.common.kubernetes.config.load_kube_config"),
+        patch(
+            "reformatters.common.kubernetes.client.BatchV1Api", return_value=batch_v1
+        ),
+    ):
+        assert job_is_active("job-name") is expected
+
+
+def test_job_is_active_returns_false_for_absent_job() -> None:
+    batch_v1 = MagicMock()
+    batch_v1.read_namespaced_job.side_effect = ApiException(status=404)
+
+    with (
+        patch("reformatters.common.kubernetes.config.load_kube_config"),
+        patch(
+            "reformatters.common.kubernetes.client.BatchV1Api", return_value=batch_v1
+        ),
+    ):
+        assert not job_is_active("missing-job")

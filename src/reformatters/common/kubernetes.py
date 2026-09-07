@@ -12,6 +12,7 @@ from typing import Annotated, Any
 
 import pydantic
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
 from reformatters.common.config import Config
 from reformatters.common.types import Timestamp
@@ -339,6 +340,24 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     assert isinstance(image, str), f"CronJob {cronjob_name} image is not a string"
     assert len(image) > 0, f"CronJob {cronjob_name} has no container image"
     return image
+
+
+def job_is_active(job_name: str, namespace: str = "default") -> bool:
+    """Whether a Kubernetes job exists without a terminal condition."""
+    config.load_kube_config()
+    batch_v1 = client.BatchV1Api()
+    try:
+        job = batch_v1.read_namespaced_job(job_name, namespace)
+    except ApiException as error:
+        if error.status == 404:
+            return False
+        raise
+
+    terminal_conditions = {"Complete", "Failed"}
+    return not any(
+        condition.type in terminal_conditions and condition.status == "True"
+        for condition in (job.status.conditions or ())
+    )
 
 
 # The daily `<minute> <hours> * * *` shape every operational schedule here uses, with

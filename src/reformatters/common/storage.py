@@ -169,6 +169,21 @@ class StoreFactory(FrozenBaseModel):
         replicas = tuple(repo for role, repo in repos if role != "primary")
         return primaries[0], replicas
 
+    def icechunk_primary_repo(self) -> icechunk.Repository:
+        """Open the existing primary Icechunk repository."""
+        if self.primary_storage_config.format != DatasetFormat.ICECHUNK:
+            raise ValueError("primary store is not an Icechunk repository")
+        role, _store_path, ic_storage = self._icechunk_storages()[0]
+        assert role == "primary"
+        repo_config, credentials = _repository_config_and_credentials(
+            self.icechunk_virtual_config
+        )
+        return icechunk.Repository.open(
+            ic_storage,
+            config=repo_config,
+            authorize_virtual_chunk_access=credentials,
+        )
+
     def _icechunk_storages(self) -> list[tuple[str, str, icechunk.Storage]]:
         """(role, store_path, storage) for each icechunk store, primary first then
         replicas (replicas skipped in dev, matching replica_stores)."""
@@ -306,6 +321,25 @@ class StoreFactory(FrozenBaseModel):
             return len(fs.ls(base, detail=False))
         except FileNotFoundError:
             return 0
+
+    def coordination_file_counts(self) -> dict[str, int]:
+        """Map coordination job prefixes to their recursive object counts."""
+        base = self._coordination_base_path()
+        fs = self._coordination_fs()
+        fs.invalidate_cache(base)
+        try:
+            entries = fs.ls(base, detail=True)
+        except FileNotFoundError:
+            return {}
+
+        counts: dict[str, int] = {}
+        for entry in entries:
+            assert isinstance(entry, Mapping)
+            if entry["type"] != "directory":
+                continue
+            path = str(entry["name"])
+            counts[Path(path).name] = len(fs.find(path, detail=False))
+        return counts
 
     def clear_coordination_files(self, job_name: str) -> None:
         path = f"{self._coordination_base_path()}/{job_name}"
