@@ -9,7 +9,6 @@ import xarray as xr
 from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualRegionJob,
     NoaaGfsAnalysisVirtualSourceFileCoord,
-    _reads_hour_0,
 )
 from reformatters.noaa.gfs.analysis_virtual.template_config import (
     NoaaGfsAnalysisVirtualTemplateConfig,
@@ -94,7 +93,6 @@ def test_sunshine_duration_reads_a_windowed_lead_at_a_synoptic_hour(
     the 1-6 hour window the variable documents, so the analysis takes it at leads 1-6
     like every other windowed variable."""
     var = get_var("sunshine_duration_surface")
-    assert var.has_hour_0_values()
 
     time = pd.Timestamp("2021-05-03T12:00")
     (coord,) = coords_for_times(template_ds, [var], [time])
@@ -118,15 +116,15 @@ def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None
         assert {c.file_type for c in coords} == {"pgrb2", "pgrb2b"}, time
 
 
-def test_hour_0_values_matches_which_instant_variables_the_source_publishes_at_f000() -> (
-    None
-):
+def test_which_instant_variables_lack_hour_0_values() -> None:
     """GFS publishes no windowed message at f000, and also drops five instantaneous
     ones. Nine other instantaneous variables share an element with a windowed sibling
     and ARE published there, so an hour-0 rule keyed on the element would wrongly drop
-    them.
+    them. SUNSD is the one entry the source does publish at f000; it is excluded by
+    override because that record covers a 3 hour window rather than the variable's own.
     """
     absent_at_hour_0 = {
+        "sunshine_duration_surface",
         "potential_evaporation_rate_surface",
         "instantaneous_precipitation_convective_surface",
         "pressure_convective_cloud_bottom",
@@ -161,10 +159,10 @@ def test_representative_var_is_carried_only_by_its_own_product(
     )
     job = make_job(template_ds, data_vars=list(data_vars))
 
-    # Keyed on the predicate that actually splits the coords into lead groups:
-    # has_hour_0_values() no longer does, since SUNSD is windowed and still True.
     picked = {
-        (c.file_type, _reads_hour_0(c.data_vars[0])): job.representative_var(c).name
+        (c.file_type, c.data_vars[0].has_hour_0_values()): job.representative_var(
+            c
+        ).name
         for c in coords
     }
     assert picked == {

@@ -1185,6 +1185,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Sunshine Duration",
             units="s",
             standard_name="duration_of_sunshine",
+            # The source does publish an f000 record, holding a 3 hour window rather
+            # than this variable's own, so no product reads it.
+            hour_0=False,
             comment=(
                 "Sunshine accumulated over the preceding 1-6 hours, not an "
                 "instantaneous value: the total restarts every 6 hours and so reaches "

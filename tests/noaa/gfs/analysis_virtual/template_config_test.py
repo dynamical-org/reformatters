@@ -85,11 +85,12 @@ def test_every_windowed_variable_describes_its_window_in_utc_times() -> None:
     )
 
 
-def test_five_instantaneous_variables_are_absent_at_lead_0() -> None:
-    """The source publishes every other instantaneous variable at lead 0.
+def test_six_instantaneous_variables_are_not_read_at_lead_0() -> None:
+    """These are read from the previous cycle at the synoptic hours, so adding or
+    removing one changes which variables can disagree with their neighbours.
 
-    These five are read from the previous cycle at the synoptic hours as a result, so
-    adding or removing one changes which variables can disagree with their neighbours.
+    The source omits five of them at lead 0. It does publish an f000 SUNSD record, on a
+    3 hour window rather than the variable's own, so that one is excluded by override.
     """
     instant_without_hour_0 = {
         var.name
@@ -97,6 +98,7 @@ def test_five_instantaneous_variables_are_absent_at_lead_0() -> None:
         if var.attrs.step_type == "instant" and not var.has_hour_0_values()
     }
     assert instant_without_hour_0 == {
+        "sunshine_duration_surface",
         "instantaneous_precipitation_convective_surface",
         "potential_evaporation_rate_surface",
         "pressure_convective_cloud_bottom",

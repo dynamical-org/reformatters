@@ -17,17 +17,6 @@ from reformatters.noaa.gfs.virtual_region_job import (
 )
 from reformatters.noaa.models import NoaaDataVar
 
-# Variables the analysis reads at leads 1-6 although the source publishes a lead 0
-# record: SUNSD's lead 0 record accumulates over 3 hours, not the documented 1-6 hours.
-WINDOWED_DESPITE_HOUR_0_RECORD = frozenset({"sunshine_duration_surface"})
-
-
-def _reads_hour_0(data_var: NoaaDataVar) -> bool:
-    return (
-        data_var.has_hour_0_values()
-        and data_var.name not in WINDOWED_DESPITE_HOUR_0_RECORD
-    )
-
 
 class NoaaGfsAnalysisVirtualSourceFileCoord(NoaaGfsVirtualSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
@@ -48,16 +37,18 @@ class NoaaGfsAnalysisVirtualRegionJob(
         data_var_group: Sequence[NoaaDataVar],
     ) -> Sequence[NoaaGfsAnalysisVirtualSourceFileCoord]:
         """Take each variable at the shortest lead it is published at, matching the
-        materialized noaa-gfs-analysis: a variable read at hour 0 comes from the cycle
-        its time falls in (leads 0-5) and any other from the cycle before the preceding
-        hour (leads 1-6), so a windowed variable's window opens at the most recent 00,
-        06, 12 or 18 hour strictly before its time.
+        materialized noaa-gfs-analysis: a variable with hour 0 values comes from the
+        cycle its time falls in (leads 0-5) and any other from the cycle before the
+        preceding hour (leads 1-6), so a windowed variable's window opens at the most
+        recent 00, 06, 12 or 18 hour strictly before its time.
         """
         times = pd.to_datetime(processing_region_ds["time"].values)
         init_frequency = f"{whole_hours(NOAA_GFS_INIT_FREQUENCY)}h"
         lead_offsets = {
-            pd.Timedelta(0): [v for v in data_var_group if _reads_hour_0(v)],
-            pd.Timedelta("1h"): [v for v in data_var_group if not _reads_hour_0(v)],
+            pd.Timedelta(0): [v for v in data_var_group if v.has_hour_0_values()],
+            pd.Timedelta("1h"): [
+                v for v in data_var_group if not v.has_hour_0_values()
+            ],
         }
 
         coords = []

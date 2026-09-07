@@ -395,7 +395,12 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
     GFS publishes no windowed message at f000 at all, and nine instantaneous variables
     share an element with a windowed sibling and ARE published there, so a rule keyed on
     the element rather than the variable would drop them.
+
+    SUNSD is the sole variable whose flag deliberately disagrees with the source: the
+    f000 record exists but holds a 3 hour window rather than the variable's own, so no
+    product reads it. Named here so a second such divergence cannot be added silently.
     """
+    reads_f000_it_publishes = {"sunshine_duration_surface"}
     published_at_f000 = {
         (element, level)
         for file_type in ("pgrb2", "pgrb2b")
@@ -419,7 +424,11 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
             for element in elements
             for level in levels
         )
-        assert var.has_hour_0_values() == in_f000, var.name
+        if var.name in reads_f000_it_publishes:
+            assert in_f000, f"{var.name} override assumes an f000 record that is gone"
+            assert not var.has_hour_0_values(), var.name
+        else:
+            assert var.has_hour_0_values() == in_f000, var.name
 
 
 @pytest.mark.slow
