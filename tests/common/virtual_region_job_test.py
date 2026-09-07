@@ -2293,7 +2293,7 @@ class _AnomalousSourceJob(VirtualTestRegionJob):
         return [SourceFileAnomaly(source_files[0][0].get_url(), "short source")]
 
 
-def test_source_anomaly_is_logged_and_refs_are_accepted(
+def test_source_anomaly_is_logged_without_rejecting_refs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     job = _AnomalousSourceJob(
@@ -2309,11 +2309,11 @@ def test_source_anomaly_is_logged_and_refs_are_accepted(
         batches = list(job.process_virtual_refs(job.source_file_coords()))
 
     assert len([coord for batch in batches for coord, _ in batch]) == 4
-    assert "Accepting refs from anomalous source file" in caplog.text
-    assert "Accepted refs from 1 anomalous source file during this run" in caplog.text
+    assert "Detected anomalous source file" in caplog.text
+    assert "Detected 1 anomalous source file during this run" in caplog.text
 
 
-def test_source_anomaly_summary_is_logged_when_consumer_stops(
+def test_source_anomaly_summary_reports_detection_when_consumer_stops(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     job = _AnomalousSourceJob(
@@ -2333,7 +2333,8 @@ def test_source_anomaly_summary_is_logged_when_consumer_stops(
         next(batches)
         batches.close()
 
-    assert "Accepted refs from 1 anomalous source file during this run" in caplog.text
+    assert "Detected 1 anomalous source file during this run" in caplog.text
+    assert "Accepted refs" not in caplog.text
 
 
 class _NothingPublishedJob(VirtualTestRegionJob):

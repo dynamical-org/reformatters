@@ -97,13 +97,20 @@ def fake_index(
 
 
 def source_metrics(
-    *, init_time: str, lead_hours: int, size: int, index_lines: int
+    *,
+    init_time: str,
+    lead_hours: int,
+    size: int,
+    index_lines: int,
+    ref_count: int = 1,
 ) -> shared_region_job_module._SourceFileMetrics:
     data_vars = [get_var("temperature_2m")]
     source_coord = coord(
         "sfc", data_vars, lead_time=pd.Timedelta(hours=lead_hours)
     ).model_copy(update={"init_time": pd.Timestamp(init_time)})
-    return shared_region_job_module._SourceFileMetrics(source_coord, size, index_lines)
+    return shared_region_job_module._SourceFileMetrics(
+        source_coord, size, index_lines, ref_count
+    )
 
 
 def test_consistent_truncation_is_an_observation_not_a_rejection(
@@ -138,8 +145,43 @@ def test_consistent_truncation_is_an_observation_not_a_rejection(
 
     assert len(anomalies) == 1
     assert anomalies[0].url == truncated_coord.get_url()
-    assert "30.0%" in anomalies[0].reason
+    assert "30.00%" in anomalies[0].reason
     assert job.source_file_anomalies([]) == []
+
+
+def test_consistent_truncation_reports_a_file_that_yields_no_refs(
+    template_ds: xr.DataTree,
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    truncated_coord = coord("sfc", data_vars, pd.Timedelta("1h")).model_copy(
+        update={"init_time": pd.Timestamp("2016-08-05T12:00")}
+    )
+    healthy_coord = coord("sfc", data_vars, pd.Timedelta("1h")).model_copy(
+        update={"init_time": pd.Timestamp("2016-08-05T11:00")}
+    )
+    job = make_job(template_ds, data_vars)
+    refs = [
+        VirtualRef(
+            data_var=data_vars[0],
+            out_loc=healthy_coord.out_loc(),
+            location=healthy_coord.get_url(),
+            offset=0,
+            length=1,
+        )
+    ]
+    job._index_line_counts[truncated_coord.get_url()] = 23
+    job._index_line_counts[healthy_coord.get_url()] = 102
+
+    anomalies = job.source_file_anomalies(
+        [
+            (truncated_coord, 17_301_504, []),
+            (healthy_coord, 85_000_000, refs),
+        ]
+    )
+
+    assert len(anomalies) == 1
+    assert anomalies[0].url == truncated_coord.get_url()
+    assert "file yielded no refs" in anomalies[0].reason
 
 
 @pytest.mark.parametrize(
@@ -194,14 +236,20 @@ def test_consistent_truncation_does_not_compare_different_leads() -> None:
         index_lines=3,
     )
     large_lead = source_metrics(
-        init_time="2016-08-05T12:00",
+        init_time="2016-08-05T13:00",
         lead_hours=6,
         size=9_771_008,
         index_lines=13,
     )
+    small_lead_peer = source_metrics(
+        init_time="2016-08-05T14:00",
+        lead_hours=4,
+        size=2_300_000,
+        index_lines=3,
+    )
 
     assert not shared_region_job_module._consistently_truncated_sources(
-        [small_lead, large_lead], max_peer_fraction=0.5
+        [small_lead, large_lead, small_lead_peer], max_peer_fraction=0.5
     )
 
 

@@ -46,7 +46,7 @@ class VirtualRef(NamedTuple):
 
 
 class SourceFileAnomaly(NamedTuple):
-    """A suspicious source file whose usable refs are still accepted."""
+    """A suspicious source file observed while building virtual refs."""
 
     url: str
     reason: str
@@ -212,7 +212,7 @@ class VirtualRegionJob(
             tuple[SOURCE_FILE_COORD, int, Sequence[VirtualRef]]
         ],
     ) -> Sequence[SourceFileAnomaly]:
-        """Report suspicious source files whose refs should still be accepted."""
+        """Report suspicious source files observed while building refs."""
         return ()
 
     def filter_already_present(
@@ -283,8 +283,8 @@ class VirtualRegionJob(
                         )
                         for anomaly in new_anomalies:
                             log.error(
-                                f"Accepting refs from anomalous source file "
-                                f"{anomaly.url}: {anomaly.reason}"
+                                f"Detected anomalous source file {anomaly.url}: "
+                                f"{anomaly.reason}"
                             )
                         anomalies.extend(new_anomalies)
                         # Drop files that yielded no refs (skipped as unreadable).
@@ -338,7 +338,7 @@ class VirtualRegionJob(
         if anomalies:
             noun = "file" if len(anomalies) == 1 else "files"
             log.error(
-                f"Accepted refs from {len(anomalies)} anomalous source {noun} "
+                f"Detected {len(anomalies)} anomalous source {noun} "
                 f"during this run (first: {anomalies[0].url})"
             )
 

@@ -59,13 +59,14 @@ class _SourceFileMetrics(NamedTuple):
     coord: NoaaVirtualSourceFileCoord[Any]
     size: int
     index_lines: int
+    ref_count: int
 
 
 class _ConsistentTruncation(NamedTuple):
     metrics: _SourceFileMetrics
     peer_size: float
     peer_index_lines: float
-    peers: int
+    peer_count: int
 
 
 _COMPARISON_EXCLUDED_FIELDS = frozenset(
@@ -247,11 +248,12 @@ class NoaaVirtualRegionJob(
         source_files: Sequence[tuple[NOAA_VIRTUAL_COORD, int, Sequence[VirtualRef]]],
     ) -> Sequence[SourceFileAnomaly]:
         for coord, size, refs in source_files:
-            if not refs:
-                continue
             url = coord.get_url()
+            index_lines = self._index_line_counts.get(url)
+            if index_lines is None:
+                continue
             self._source_file_metrics[url] = _SourceFileMetrics(
-                coord, size, self._index_line_counts[url]
+                coord, size, index_lines, len(refs)
             )
 
         anomalies = []
@@ -268,11 +270,12 @@ class NoaaVirtualRegionJob(
                 SourceFileAnomaly(
                     url,
                     f"object size {source_file.size} is "
-                    f"{source_file.size / truncated.peer_size:.1%} and index line "
+                    f"{source_file.size / truncated.peer_size:.2%} and index line "
                     f"count {source_file.index_lines} is "
-                    f"{source_file.index_lines / truncated.peer_index_lines:.1%} of "
-                    f"the medians from {truncated.peers} like-for-like file(s) at "
-                    "other init times; source may be consistently truncated",
+                    f"{source_file.index_lines / truncated.peer_index_lines:.2%} of "
+                    f"the medians from {truncated.peer_count} like-for-like file(s) at "
+                    "other init times; source may be consistently truncated"
+                    f"{'; file yielded no refs' if source_file.ref_count == 0 else ''}",
                 )
             )
         return anomalies

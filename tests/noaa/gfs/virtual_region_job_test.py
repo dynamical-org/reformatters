@@ -76,10 +76,10 @@ def test_consistent_truncation_detects_the_gfs_pgrb2b_f249_incident() -> None:
         update={"init_time": pd.Timestamp("2024-10-20T12:00")}
     )
     truncated = shared_region_job_module._SourceFileMetrics(
-        truncated_coord, 71_229_440, 112
+        truncated_coord, 71_229_440, 112, 77
     )
     healthy = shared_region_job_module._SourceFileMetrics(
-        healthy_coord, 227_056_502, 349
+        healthy_coord, 227_056_502, 349, 308
     )
 
     detected = shared_region_job_module._consistently_truncated_sources(

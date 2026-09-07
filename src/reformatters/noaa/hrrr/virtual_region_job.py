@@ -18,8 +18,9 @@ S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
 S3_BUCKET_REGION = "us-east-1"
 _S3_HTTPS_PREFIX = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
 
-# These uploads ended mid-file: the data file and its .idx stop after a handful of
-# messages. Treated as never published, like the hours the archive is missing entirely.
+# These uploads ended mid-file. The 10Z file lacks the representative temperature
+# chunk and fails the ingestion probe; admitting 12Z would permanently mark its 2%-full
+# contents as ingested. Both remain treated as never published.
 _TRUNCATED_SOURCE_FILES = (
     S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t10z.wrfnatf00.grib2",
     S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t12z.wrfnatf00.grib2",
