@@ -156,6 +156,8 @@ _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN", "TSOIL", "APTMP"})
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 
 _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
+# Scale TOZNE from Dobson units to metres; 1 DU is 1e-5 m.
+_DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
 
 # MSLET entered the s file at this cycle.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
@@ -1737,7 +1739,11 @@ def _a_b_root_data_vars(
             short_name="lgws",
             long_name="Eastward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_eastward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a westward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_eastward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         var(
             "northward_gravity_wave_surface_stress",
@@ -1748,7 +1754,11 @@ def _a_b_root_data_vars(
             short_name="mgws",
             long_name="Northward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_northward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a southward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_northward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         var(
             "wilting_point_surface",
@@ -1840,8 +1850,13 @@ def _a_b_root_data_vars(
             source_file_types=_B_FILE,
             short_name="tozne",
             long_name="Total ozone",
-            units="DU",
-            comment="Dobson units; 1 DU is a 10 um thick layer of pure ozone at standard temperature and pressure.",
+            units="m",
+            standard_name="equivalent_thickness_at_stp_of_atmosphere_ozone_content",
+            comment=(
+                "The thickness the column's ozone would occupy as pure ozone at "
+                "standard temperature and pressure; 1e-5 m is one Dobson unit."
+            ),
+            filters=[_DOBSON_UNITS_TO_M],
         ),
         var(
             "average_low_cloud_cover",
