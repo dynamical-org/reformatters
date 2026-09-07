@@ -143,7 +143,8 @@ class NoaaGfsVirtualRegionJob(
         return (element, level) not in PGRB2_PREFERRED_MESSAGES
 
     def representative_var(self, coord: GFS_VIRTUAL_COORD) -> NoaaDataVar:
-        """A variable this file fills, preferring one whose chunk needs no level pick."""
+        """A variable this file fills, preferring product-specific probes published in
+        every archive era."""
         by_name = {var.name: var for var in coord.data_vars}
         candidates = [
             *(
