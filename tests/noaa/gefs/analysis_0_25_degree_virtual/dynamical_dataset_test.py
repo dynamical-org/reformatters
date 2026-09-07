@@ -198,9 +198,8 @@ def test_operational_kubernetes_resources(
         for minute in _fire_minutes(update_cron_job.schedule)
     ]
 
-    # Both stay suspended until the archive is backfilled.
-    assert update_cron_job.suspend
-    assert validation_cron_job.suspend
+    assert not update_cron_job.suspend
+    assert not validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(
