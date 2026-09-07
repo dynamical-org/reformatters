@@ -4,6 +4,7 @@ See docs/parallel_processing.md for the overall design.
 """
 
 import json
+import re
 import time
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
@@ -21,6 +22,8 @@ from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
+
+_RESULT_FILE_PATTERN = re.compile(r"worker-(?P<worker_index>\d+)\.json")
 
 _WORKER_RESULTS_ADAPTER: TypeAdapter[dict[str, list[SourceFileResult]]] = TypeAdapter(
     dict[str, list[SourceFileResult]]
@@ -130,11 +133,22 @@ def wait_for_workers(
     # Rely on kubernetes pod_active_deadline for timeout.
     if workers_total <= 1:
         return
-    while (
-        store_factory.count_coordination_files(reformat_job_name, "results")
-        < workers_total
-    ):
-        log.info("Waiting for all workers to complete...")
+    while True:
+        result_files = store_factory.list_coordination_files(
+            reformat_job_name, "results"
+        )
+        reported_workers = {
+            int(match["worker_index"])
+            for result_file in result_files
+            if (match := _RESULT_FILE_PATTERN.fullmatch(result_file)) is not None
+        }
+        missing_workers = sorted(set(range(workers_total)) - reported_workers)
+        if not missing_workers:
+            return
+        log.info(
+            f"Waiting for {len(missing_workers)} of {workers_total} workers to "
+            f"complete; missing worker indexes: {missing_workers[:10]}"
+        )
         time.sleep(10)
 
 
