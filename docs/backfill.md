@@ -27,8 +27,16 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 ## Tuning parallelism
 
-- **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble. Virtual: ~30.
-- **max_parallelism** — materialized: 20–50. Much higher (~200) is often fine, but verify first that the cluster can fit that many of this dataset's pods: compare both the cpu and the memory one pod requests against available capacity, since either can be the binding constraint and the limit may be a quota rather than a node count. Leave headroom so operational updates can still schedule, and watch for unschedulable pods once the job starts. Some sources cap useful parallelism (`s3://ecmwf-forecasts` supports at most 8). Virtual: 10 — higher risks heavy compare-and-set contention.
+- **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.
+- **max_parallelism** — materialized: 20–50. Much higher (~200) is often fine, but verify first that the cluster can fit that many of this dataset's pods: compare both the cpu and the memory one pod requests against available capacity, since either can be the binding constraint and the limit may be a quota rather than a node count. Leave headroom so operational updates can still schedule, and watch for unschedulable pods once the job starts. Some sources cap useful parallelism (`s3://ecmwf-forecasts` supports at most 8). Virtual: 6–10; higher risks compare-and-set contention because every worker commits to the same Icechunk branch.
+
+For virtual backfills, size `jobs_per_pod` by **refs per commit** — arrays touched × refs per active split, which during a backfill is `jobs_per_pod × refs per job` because a worker commits once. Keep it under roughly half a million refs; above that, commit latency grows faster than linearly.
+
+Commit latency also depends on array count, because each commit read-modify-writes one manifest per array it touches. The same refs per commit is cheaper on a 38-array dataset than on a 300-array one, so let a few-array dataset run above that range and hold a many-array one at or below it.
+
+`jobs_per_pod` does not transfer between datasets, because refs per job spans orders of magnitude: 38 refs for an analysis position carrying one per array, against 95,000 for an ensemble forecast init carrying every lead time × ensemble member. Compute refs per job for the dataset in front of you.
+
+Where refs per commit is not the binding constraint, aim for the 3–15 minutes above rather than the smallest workable value. Pod startup costs about a minute whatever the job, so a pod holding under two minutes of work spends most of its life starting up.
 
 For the cpu / memory / shared-memory a dataset's jobs request, see the Kubernetes resource values in [implementation_guide.md](implementation_guide.md) §5.
 
