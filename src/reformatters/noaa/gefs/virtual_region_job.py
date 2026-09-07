@@ -1,8 +1,13 @@
+from collections.abc import Mapping, Sequence
 from typing import ClassVar, Generic, TypeVar
 
 import icechunk
+import pandas as pd
+import xarray as xr
 
+from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
+from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
@@ -88,3 +93,65 @@ class NoaaGefsVirtualRegionJob(
             (var for var in candidates if var.attrs.step_type == "instant"),
             candidates[0],
         )
+
+
+class NoaaGefsForecastVirtualSourceFileCoord(NoaaGefsVirtualSourceFileCoord):
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
+        return {
+            "init_time": self.init_time,
+            "lead_time": self.lead_time,
+            "ensemble_member": self.ensemble_member,
+        }
+
+
+class NoaaGefsForecastVirtualRegionJob(
+    NoaaGefsVirtualRegionJob[NoaaGefsForecastVirtualSourceFileCoord]
+):
+    """RegionJob shared by the GEFS virtual forecast datasets."""
+
+    def generate_source_file_coords(
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[NoaaGefsVirtualDataVar],
+    ) -> Sequence[NoaaGefsForecastVirtualSourceFileCoord]:
+        """One coord per (init time, ensemble member, lead time, source file), holding
+        the variables that file carries.
+
+        A variable contributes no coord where the source has no message for it -- before
+        its `available_from` cycle, or at lead 0 for a windowed quantity, whose lead 0
+        window is zero length -- so the store holds no ref there and readers get NaN.
+        """
+        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        ensemble_members = [
+            int(member) for member in processing_region_ds["ensemble_member"].values
+        ]
+
+        coords = []
+        for init_time in init_times:
+            available_vars = [
+                var
+                for var in data_var_group
+                if (available_from := var.internal_attrs.available_from) is None
+                or init_time >= available_from
+            ]
+            for lead_time in lead_times:
+                grouped: dict[GEFSSourceFileType, list[NoaaGefsVirtualDataVar]] = {}
+                for var in available_vars:
+                    if lead_time == pd.Timedelta(0) and not var.has_hour_0_values():
+                        continue
+                    grouped.setdefault(var.internal_attrs.source_file_type, []).append(
+                        var
+                    )
+                for source_file_type, data_vars in grouped.items():
+                    coords.extend(
+                        NoaaGefsForecastVirtualSourceFileCoord(
+                            init_time=init_time,
+                            lead_time=lead_time,
+                            ensemble_member=ensemble_member,
+                            source_file_type=source_file_type,
+                            data_vars=data_vars,
+                        )
+                        for ensemble_member in ensemble_members
+                    )
+        return coords

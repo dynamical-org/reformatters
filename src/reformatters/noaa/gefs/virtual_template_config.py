@@ -1,26 +1,38 @@
 import functools
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 from gribberish.zarr import GribberishCodec
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from zarr.codecs import ScaleOffset
 
 from reformatters.common.config_models import (
     ROOT,
     Coordinate,
+    CoordinateAttrs,
     DatasetAttributes,
     DataVarAttrs,
     Encoding,
     Group,
     SpatialResolution,
+    StatisticsApproximate,
 )
 from reformatters.common.iterating import item
-from reformatters.common.template_config import TemplateConfig
+from reformatters.common.pydantic import replace
+from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import CodecConfig, Dim, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    CodecConfig,
+    Dim,
+    Dims,
+    Timedelta,
+    Timestamp,
+)
+from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_coordinate_configs,
     get_shared_template_dimension_coordinates,
@@ -29,6 +41,9 @@ from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
     GEFS_ACCUMULATION_RESET_FREQUENCY,
     GEFS_B22_TRANSITION_DATE,
+    GEFS_ENSEMBLE_MEMBERS,
+    GEFS_INIT_TIME_FREQUENCY,
+    GEFS_S_FILE_LEAD_FREQUENCY,
     GEFSSourceFileType,
     NoaaGefsVirtualDataVar,
     NoaaGefsVirtualInternalAttrs,
@@ -60,7 +75,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     declares dims, time structure and the window wording its time axis implies.
     """
 
-    source_file_types: frozenset[GEFSSourceFileType]
+    source_file_types: tuple[GEFSSourceFileType, ...]
     # Window wording for each non-instant step_type a variable declares.
     window_comments: dict[str, str]
 
@@ -101,7 +116,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
 
     def _catalog_data_vars(self) -> list[NoaaGefsVirtualDataVar]:
         """The variable catalog for the source files this config declares."""
-        assert self.source_file_types == frozenset({"s"}), (
+        assert self.source_file_types == ("s",), (
             "only the s file catalog is populated; the a and b catalogs land with the "
             "0.5 degree datasets"
         )
@@ -120,6 +135,251 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
             "longitude": len(dim_coords["longitude"]),
         }
         return tuple(sizes.get(dim, 1) for dim in dims)
+
+
+def _window_length(lead_time: Timedelta) -> Timedelta:
+    """The window a lead time's windowed messages cover: the span since the last whole
+    multiple of GEFS_ACCUMULATION_RESET_FREQUENCY at or below it."""
+    partial_window = lead_time % GEFS_ACCUMULATION_RESET_FREQUENCY
+    return (
+        partial_window
+        if partial_window > pd.Timedelta(0)
+        else GEFS_ACCUMULATION_RESET_FREQUENCY
+    )
+
+
+# Lead times named before the ellipsis in each sequence window_comments enumerates.
+_WINDOW_SEQUENCE_LENGTH = 3
+
+
+def _window_lead_time_sequences() -> dict[Timedelta, str]:
+    """Every window length the GEFS lead time grid produces, mapped to the opening lead
+    times carrying it."""
+    sequences: dict[Timedelta, list[int]] = {}
+    for lead_time in pd.timedelta_range(
+        GEFS_S_FILE_LEAD_FREQUENCY,
+        GEFS_ACCUMULATION_RESET_FREQUENCY * _WINDOW_SEQUENCE_LENGTH,
+        freq=GEFS_S_FILE_LEAD_FREQUENCY,
+    ):
+        sequences.setdefault(_window_length(lead_time), []).append(
+            whole_hours(lead_time)
+        )
+    assert all(
+        len(lead_hours) == _WINDOW_SEQUENCE_LENGTH for lead_hours in sequences.values()
+    ), (
+        f"lead times every {GEFS_S_FILE_LEAD_FREQUENCY} do not repeat their windows "
+        f"every {GEFS_ACCUMULATION_RESET_FREQUENCY}, so no sequence describes them: {sequences}"
+    )
+    # Longest window first: the whole reset period, then the partial ones.
+    return {
+        window_length: ", ".join(str(hours) for hours in lead_hours) + ", ..."
+        for window_length, lead_hours in sorted(sequences.items(), reverse=True)
+    }
+
+
+_WINDOW_LEAD_TIME_SEQUENCES = _window_lead_time_sequences()
+_WINDOW_PERIODS = " or ".join(
+    f"{whole_hours(window_length)} hour period (lead times {sequence} hours)"
+    for window_length, sequence in _WINDOW_LEAD_TIME_SEQUENCES.items()
+)
+
+
+class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
+    """Virtual GEFS forecast on init_time x ensemble_member x lead_time; a
+    forecast-length subclass declares source_file_types, forecast_length and
+    dataset_attributes."""
+
+    forecast_length: Timedelta
+
+    dims: Dims = {
+        ROOT: (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+        )
+    }
+    append_dim: AppendDim = "init_time"
+    append_dim_start: Timestamp = GEFS_VIRTUAL_ARCHIVE_START
+    append_dim_frequency: Timedelta = GEFS_INIT_TIME_FREQUENCY
+
+    window_comments: dict[str, str] = {
+        "avg": f"Average value in the last {_WINDOW_PERIODS}.",
+        "accum": f"Total accumulated in the last {_WINDOW_PERIODS}.",
+        "max": f"Maximum value in the last {_WINDOW_PERIODS}.",
+        "min": f"Minimum value in the last {_WINDOW_PERIODS}.",
+    }
+
+    def lead_times(self) -> pd.TimedeltaIndex:
+        """Every lead time this dataset serves, from 0 to forecast_length."""
+        return pd.timedelta_range(
+            "0h", self.forecast_length, freq=GEFS_S_FILE_LEAD_FREQUENCY
+        )
+
+    @model_validator(mode="after")
+    def _validate_window_comments_describe_every_lead_time(self) -> Self:
+        for lead_time in self.lead_times():
+            # Lead time 0 precedes the first window, so it carries no windowed message.
+            if lead_time == pd.Timedelta(0):
+                continue
+            window_length = _window_length(lead_time)
+            assert window_length in _WINDOW_LEAD_TIME_SEQUENCES, (
+                f"window_comments does not describe lead time {whole_hours(lead_time)} "
+                f"hours, whose window is {whole_hours(window_length)} hours: the wording "
+                f"enumerates only a {_WINDOW_PERIODS}."
+            )
+        return self
+
+    def _dataset_attributes(
+        self, *, dataset_id: str, dataset_version: str, name: str, description: str
+    ) -> DatasetAttributes:
+        return replace(
+            super()._dataset_attributes(
+                dataset_id=dataset_id,
+                dataset_version=dataset_version,
+                name=name,
+                description=description,
+            ),
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=f"Forecasts initialized every {whole_hours(self.append_dim_frequency)} hours",
+            forecast_domain=f"Forecast lead time 0-{whole_hours(self.forecast_length)} hours ahead",
+            forecast_resolution=f"Forecast step {whole_hours(GEFS_S_FILE_LEAD_FREQUENCY)} hourly",
+        )
+
+    def dimension_coordinates(self) -> dict[str, Any]:
+        return {
+            "init_time": self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "ensemble_member": np.arange(GEFS_ENSEMBLE_MEMBERS),
+            "lead_time": self.lead_times(),
+            **self._spatial_dimension_coordinates(),
+        }
+
+    def derive_coordinates(
+        self, ds: xr.Dataset
+    ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+        return {
+            "valid_time": ds["init_time"] + ds["lead_time"],
+            "expected_forecast_length": (
+                ("init_time",),
+                np.full(
+                    ds[self.append_dim].size, self.forecast_length.to_timedelta64()
+                ),
+            ),
+            "spatial_ref": SPATIAL_REF_COORDS,
+        }
+
+    @computed_field
+    @property
+    def coords(self) -> Sequence[Coordinate]:
+        dim_coords = self.dimension_coordinates()
+        append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
+
+        return (
+            *self._spatial_coords(),
+            Coordinate(
+                name="init_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Forecast initialization time",
+                    standard_name="forecast_reference_time",
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(), max="Present"
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="ensemble_member",
+                encoding=Encoding(
+                    dtype="int16",
+                    fill_value=-1,
+                    chunks=len(dim_coords["ensemble_member"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Ensemble member",
+                    standard_name="realization",
+                    units="1",
+                    statistics_approximate=StatisticsApproximate(
+                        min=int(dim_coords["ensemble_member"].min()),
+                        max=int(dim_coords["ensemble_member"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="lead_time",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=float("nan"),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=len(dim_coords["lead_time"]),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Forecast lead time",
+                    standard_name="forecast_period",
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(dim_coords["lead_time"].min()),
+                        max=str(dim_coords["lead_time"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="valid_time",
+                encoding=Encoding(
+                    dtype="int64",
+                    fill_value=0,
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    calendar="proleptic_gregorian",
+                    units="seconds since 1970-01-01 00:00:00",
+                    chunks=(
+                        append_dim_coordinate_chunk_size,
+                        len(dim_coords["lead_time"]),
+                    ),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Valid time",
+                    standard_name="time",
+                    units="seconds since 1970-01-01 00:00:00",
+                    statistics_approximate=StatisticsApproximate(
+                        min=self.append_dim_start.isoformat(),
+                        max=f"Present + {whole_hours(self.forecast_length)} hours",
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="expected_forecast_length",
+                encoding=Encoding(
+                    dtype="float64",
+                    fill_value=float("nan"),
+                    compressors=[BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    units="seconds",
+                    chunks=append_dim_coordinate_chunk_size,
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Expected forecast length",
+                    units="seconds",
+                    statistics_approximate=StatisticsApproximate(
+                        min=str(self.forecast_length), max=str(self.forecast_length)
+                    ),
+                ),
+            ),
+        )
 
 
 def _virtual_encoding(

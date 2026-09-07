@@ -19,6 +19,10 @@ type GEFSFileType = Literal["a", "b", "s+a", "s+b", "s+b-b22"]
 # resolve to one of these per init and lead time.
 type GEFSSourceFileType = Literal["s", "a", "b"]
 GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
+# The s file publishes every 3 hours through GEFS_S_FILE_MAX.
+GEFS_S_FILE_LEAD_FREQUENCY = pd.Timedelta("3h")
+# gec00 plus gep01..gep30, the members GEFS v12 publishes at every cycle.
+GEFS_ENSEMBLE_MEMBERS = 31
 
 # Lead times through GEFS_PRE_EXTENSION_MAX are published within ~6.7h of init. The
 # 00z cycle then extends to 840h, arriving over the following ~21h. Requesting the

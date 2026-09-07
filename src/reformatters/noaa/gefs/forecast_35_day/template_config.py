@@ -23,7 +23,12 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
     get_shared_template_dimension_coordinates,
 )
-from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
+from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_ENSEMBLE_MEMBERS,
+    GEFS_S_FILE_LEAD_FREQUENCY,
+    GEFS_S_FILE_MAX,
+    NoaaGefsDataVar,
+)
 
 _CATEGORICAL_RESAMPLING_COMMENT = (
     "Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to "
@@ -96,10 +101,10 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[NoaaGefsDataVar]):
             "init_time": self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            "ensemble_member": np.arange(31),
-            "lead_time": pd.timedelta_range("0h", "240h", freq="3h").union(
-                pd.timedelta_range("246h", "840h", freq="6h")
-            ),
+            "ensemble_member": np.arange(GEFS_ENSEMBLE_MEMBERS),
+            "lead_time": pd.timedelta_range(
+                "0h", GEFS_S_FILE_MAX, freq=GEFS_S_FILE_LEAD_FREQUENCY
+            ).union(pd.timedelta_range("246h", "840h", freq="6h")),
             **get_shared_template_dimension_coordinates(),
         }
 

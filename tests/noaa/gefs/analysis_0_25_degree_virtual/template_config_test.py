@@ -30,7 +30,7 @@ def test_three_hourly_time_structure() -> None:
 
 def test_grid_follows_from_the_source_file_type() -> None:
     """The 0.25 degree grid falls out of source_file_types, not a hardcoded shape."""
-    assert CONFIG.source_file_types == frozenset({"s"})
+    assert CONFIG.source_file_types == ("s",)
     assert CONFIG.resolution_degrees == 0.25
     dim_coords = CONFIG.dimension_coordinates()
     assert len(dim_coords["latitude"]) == 721
