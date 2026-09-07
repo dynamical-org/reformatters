@@ -20,10 +20,10 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
     get_shared_template_dimension_coordinates,
 )
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 
 
-class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
+class GefsAnalysisTemplateConfig(TemplateConfig[NoaaGefsDataVar]):
     """Template configuration for GEFS analysis dataset."""
 
     dims: Dims = {ROOT: ("time", "latitude", "longitude")}
@@ -100,7 +100,7 @@ class GefsAnalysisTemplateConfig(TemplateConfig[GEFSDataVar]):
 
     @computed_field
     @property
-    def data_vars(self) -> Sequence[GEFSDataVar]:
+    def data_vars(self) -> Sequence[NoaaGefsDataVar]:
         """Define metadata and encoding for each data variable."""
         # CHUNKS
         var_chunks: dict[Dim, int] = {

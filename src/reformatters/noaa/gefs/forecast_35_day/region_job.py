@@ -17,9 +17,9 @@ from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_EXTENSION_REQUEST_MIN_AGE,
     GEFS_PRE_EXTENSION_MAX,
-    GEFSDataVar,
     GefsEnsembleSourceFileCoord,
     GEFSFileType,
+    NoaaGefsDataVar,
 )
 from reformatters.noaa.gefs.read_data import read_data
 from reformatters.noaa.gefs.utils import gefs_download_file
@@ -36,7 +36,7 @@ class GefsForecast35DaySourceFileCoord(GefsEnsembleSourceFileCoord):
 
 
 class GefsForecast35DayRegionJob(
-    MaterializedRegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]
+    MaterializedRegionJob[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]
 ):
     """RegionJob for GEFS Forecast 35-Day dataset processing."""
 
@@ -44,14 +44,16 @@ class GefsForecast35DayRegionJob(
 
     @classmethod
     def source_file_var_groups(
-        cls, data_vars: Sequence[GEFSDataVar]
-    ) -> Sequence[Sequence[GEFSDataVar]]:
+        cls, data_vars: Sequence[NoaaGefsDataVar]
+    ) -> Sequence[Sequence[NoaaGefsDataVar]]:
         """
         Group variables by GEFS file type and ensemble statistic.
 
         Note: forecast version doesn't include has_hour_0_values in grouping.
         """
-        grouper: dict[tuple[GEFSFileType, bool], list[GEFSDataVar]] = defaultdict(list)
+        grouper: dict[tuple[GEFSFileType, bool], list[NoaaGefsDataVar]] = defaultdict(
+            list
+        )
         for data_var in data_vars:
             gefs_file_type = data_var.internal_attrs.gefs_file_type
             grouper[(gefs_file_type, data_var.has_hour_0_values())].append(data_var)
@@ -66,7 +68,9 @@ class GefsForecast35DayRegionJob(
         return sorted(groups, key=lambda g: str(g[0].internal_attrs.gefs_file_type))
 
     def generate_source_file_coords(
-        self, processing_region_ds: xr.Dataset, data_var_group: Sequence[GEFSDataVar]
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[NoaaGefsDataVar],
     ) -> Sequence[GefsForecast35DaySourceFileCoord]:
         """Generate source file coordinates for forecast data."""
         # Filter out lead_time=0 for variables that don't have hour 0 values
@@ -95,13 +99,13 @@ class GefsForecast35DayRegionJob(
         return gefs_download_file(self.dataset_id, coord)
 
     def read_data(
-        self, coord: GefsForecast35DaySourceFileCoord, data_var: GEFSDataVar
+        self, coord: GefsForecast35DaySourceFileCoord, data_var: NoaaGefsDataVar
     ) -> ArrayND[np.generic]:
         """Read data from the source file for the given coordinate and variable."""
         return read_data(self.template_ds.to_dataset(), coord, data_var)
 
     def apply_data_transformations(
-        self, data_array: xr.DataArray, data_var: GEFSDataVar
+        self, data_array: xr.DataArray, data_var: NoaaGefsDataVar
     ) -> None:
         """
         Apply transformations to data array in place.
@@ -135,10 +139,11 @@ class GefsForecast35DayRegionJob(
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
-        all_data_vars: Sequence[GEFSDataVar],
+        all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
     ) -> tuple[
-        Sequence[RegionJob[GEFSDataVar, GefsForecast35DaySourceFileCoord]], xr.DataTree
+        Sequence[RegionJob[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]],
+        xr.DataTree,
     ]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset

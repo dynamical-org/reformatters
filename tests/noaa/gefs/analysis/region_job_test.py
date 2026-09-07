@@ -26,8 +26,8 @@ from reformatters.noaa.gefs.analysis.region_job import (
 from reformatters.noaa.gefs.analysis.template_config import GefsAnalysisTemplateConfig
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_REFORECAST_END,
-    GEFSDataVar,
-    GEFSInternalAttrs,
+    NoaaGefsDataVar,
+    NoaaGefsInternalAttrs,
 )
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
@@ -70,7 +70,7 @@ def template_ds() -> xr.Dataset:
 
 
 @pytest.fixture
-def example_data_vars() -> list[GEFSDataVar]:
+def example_data_vars() -> list[NoaaGefsDataVar]:
     """Create example GEFS data variables for testing."""
     encoding = Encoding(
         dtype="float32",
@@ -80,7 +80,7 @@ def example_data_vars() -> list[GEFSDataVar]:
     )
 
     return [
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="temperature_2m",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -89,7 +89,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 units="C",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="TMP",
                 grib_description='2[m] HTGL="Specified height level above ground"',
                 grib_index_level="2 m above ground",
@@ -98,7 +98,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 keep_mantissa_bits=10,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="precipitation_surface",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -107,7 +107,7 @@ def example_data_vars() -> list[GEFSDataVar]:
                 units="mm",
                 step_type="accum",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="APCP",
                 grib_description='0[-] SFC="Ground or water surface"',
                 grib_index_level="surface",
@@ -127,7 +127,7 @@ def test_max_vars_per_job() -> None:
 
 def test_get_processing_region(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test processing region includes proper buffer."""
     tmp_store = get_local_tmp_store()
@@ -150,7 +150,7 @@ def test_get_processing_region(
 
 def test_get_processing_region_at_boundaries(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test processing region handles boundaries correctly."""
     tmp_store = get_local_tmp_store()
@@ -182,7 +182,7 @@ def test_get_processing_region_at_boundaries(
     assert processing_region.stop == 26  # dataset length + chunk size
 
 
-def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
+def test_source_groups(example_data_vars: list[NoaaGefsDataVar]) -> None:
     """Test variable grouping by file type and hour 0 values."""
     encoding = Encoding(
         dtype="float32",
@@ -194,7 +194,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
     # Add more variables to test grouping
     all_vars = [
         *example_data_vars,
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="wind_u_10m",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -203,7 +203,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
                 units="m s-1",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="UGRD",
                 grib_description='10[m] HTGL="Specified height level above ground"',
                 grib_index_level="10 m above ground",
@@ -212,7 +212,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
                 keep_mantissa_bits=10,
             ),
         ),
-        GEFSDataVar(
+        NoaaGefsDataVar(
             name="geopotential_height_500",
             encoding=encoding,
             attrs=DataVarAttrs(
@@ -221,7 +221,7 @@ def test_source_groups(example_data_vars: list[GEFSDataVar]) -> None:
                 units="m",
                 step_type="instant",
             ),
-            internal_attrs=GEFSInternalAttrs(
+            internal_attrs=NoaaGefsInternalAttrs(
                 grib_element="HGT",
                 grib_description='500[mb] ISOBARIC="Isobaric surface"',
                 grib_index_level="500 mb",
@@ -245,7 +245,7 @@ def test_generate_source_file_coords_ensemble(
     tmp_store = get_local_tmp_store()
 
     # Use a variable that has ensemble data (control member only for analysis)
-    var = GEFSDataVar(
+    var = NoaaGefsDataVar(
         name="temperature_2m",
         encoding=Encoding(
             dtype="float32",
@@ -259,7 +259,7 @@ def test_generate_source_file_coords_ensemble(
             units="C",
             step_type="instant",
         ),
-        internal_attrs=GEFSInternalAttrs(
+        internal_attrs=NoaaGefsInternalAttrs(
             grib_element="TMP",
             grib_description='2[m] HTGL="Specified height level above ground"',
             grib_index_level="2 m above ground",
@@ -324,7 +324,9 @@ def test_generate_source_file_coords_skips_times_before_available_from(
     assert all(coord.init_time >= GEFS_REFORECAST_END for coord in coords)
 
 
-def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) -> None:
+def test_source_file_coord_url_generation(
+    example_data_vars: list[NoaaGefsDataVar],
+) -> None:
     """Test URL generation for source file coordinates."""
     coord = GefsAnalysisSourceFileCoord(
         init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
@@ -341,7 +343,7 @@ def test_source_file_coord_url_generation(example_data_vars: list[GEFSDataVar]) 
 
 
 def test_source_file_coord_out(
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test output location mapping for analysis coordinates."""
     coord = GefsAnalysisSourceFileCoord(
@@ -359,7 +361,7 @@ def test_source_file_coord_out(
 
 
 def test_source_file_coord_append_dim_coord(
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     coord = GefsAnalysisSourceFileCoord(
         init_time=pd.Timestamp("2021-01-01T00:00"),  # Use current archive period
@@ -371,7 +373,7 @@ def test_source_file_coord_append_dim_coord(
 
 def test_download_file(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download file method."""
@@ -446,7 +448,7 @@ def test_download_file(
 def test_read_data(
     mock_read_data: MagicMock,
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test read data method."""
     mock_data = np.ones((10, 15), dtype=np.float32)
@@ -484,7 +486,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
     # Create test data with known values
     data = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
 
-    var_with_rounding = GEFSDataVar(
+    var_with_rounding = NoaaGefsDataVar(
         name="test_var",
         encoding=Encoding(
             dtype="float32",
@@ -498,7 +500,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
             units="test",
             step_type="instant",
         ),
-        internal_attrs=GEFSInternalAttrs(
+        internal_attrs=NoaaGefsInternalAttrs(
             grib_element="TEST",
             grib_description="Test variable",
             grib_index_level="surface",
@@ -534,7 +536,7 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
 @patch("xarray.open_zarr")
 def test_operational_update_jobs(
     mock_open_zarr: MagicMock,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
 ) -> None:
     """Test operational_update_jobs method."""
     # Create mock existing dataset
@@ -624,7 +626,7 @@ def test_operational_update_jobs(
 
 
 def test_update_template_with_results(
-    template_ds: xr.Dataset, example_data_vars: list[GEFSDataVar]
+    template_ds: xr.Dataset, example_data_vars: list[NoaaGefsDataVar]
 ) -> None:
     data_vars = example_data_vars[:1]
     job = GefsAnalysisRegionJob(
@@ -655,7 +657,7 @@ def test_update_template_with_results(
 
 def test_download_file_fallback(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file falls back to alternative source when primary fails for recent data."""
@@ -737,7 +739,7 @@ def test_download_file_fallback(
 
 def test_download_file_no_fallback_for_old_data(
     template_ds: xr.Dataset,
-    example_data_vars: list[GEFSDataVar],
+    example_data_vars: list[NoaaGefsDataVar],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test download_file does not fallback for old data (>4 days)."""
@@ -838,7 +840,7 @@ def test_download_and_read_all_vars_reforecast() -> None:
         if dv.name not in _REFORECAST_MISSING_VARS
     ]
 
-    def _download_and_check(data_var: GEFSDataVar) -> None:
+    def _download_and_check(data_var: NoaaGefsDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -868,7 +870,7 @@ def test_download_and_read_all_vars_pre_v12() -> None:
         dv for dv in template_config.data_vars if dv.name not in _PRE_V12_MISSING_VARS
     ]
 
-    def _download_and_check(data_var: GEFSDataVar) -> None:
+    def _download_and_check(data_var: NoaaGefsDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -895,7 +897,7 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
     init_time = pd.Timestamp("2024-01-01T00:00")
     lead_time = pd.Timedelta(hours=6)
 
-    def _download_and_check(data_var: GEFSDataVar) -> None:
+    def _download_and_check(data_var: NoaaGefsDataVar) -> None:
         coord = GefsAnalysisSourceFileCoord(
             init_time=init_time,
             lead_time=lead_time,
@@ -911,8 +913,8 @@ def test_download_and_read_all_vars_current_early_lead() -> None:
 
 def _pre_v12_step_var(
     name: str, flag_values: tuple[int, ...] | None, flag_meanings: str | None
-) -> GEFSDataVar:
-    return GEFSDataVar(
+) -> NoaaGefsDataVar:
+    return NoaaGefsDataVar(
         name=name,
         encoding=Encoding(dtype="float32", fill_value=np.nan, chunks=(3,), shards=(3,)),
         attrs=DataVarAttrs(
@@ -923,7 +925,7 @@ def _pre_v12_step_var(
             flag_values=flag_values,
             flag_meanings=flag_meanings,
         ),
-        internal_attrs=GEFSInternalAttrs(
+        internal_attrs=NoaaGefsInternalAttrs(
             grib_element="TEST",
             grib_description="Test variable",
             grib_index_level="surface",

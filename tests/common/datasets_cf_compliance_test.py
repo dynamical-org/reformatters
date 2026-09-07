@@ -433,6 +433,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
+    # GEFS ice thickness covers lake as well as sea ice, matching the broader
+    # floating_ice_area_fraction used for ice cover; CF names no floating-ice thickness.
+    "ice_thickness_surface",
     # ECMWF S2S soil moisture is a mass per soil volume (kg m-3), snow albedo a
     # percentage and snow density a mass per snow volume; CF names none of them.
     "soil_moisture_0_20cm",
@@ -503,7 +506,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "icao_standard_atmosphere_reference_height_tropopause",
     "ice_growth_rate_10m_amsl",
     "ice_temperature_surface",
-    "ice_thickness_surface",
     "instantaneous_categorical_freezing_rain_surface",
     "instantaneous_categorical_ice_pellets_surface",
     "instantaneous_categorical_rain_surface",
@@ -1068,12 +1070,18 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("categorical_snow_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_snow_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_snow_surface", "step_type", "noaa-gefs-analysis-0-25-degree-virtual"),
     ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-forecast-virtual"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_ice_pellets_surface", "step_type", "noaa-gefs-analysis"),
+    (
+        "categorical_ice_pellets_surface",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
     (
         "categorical_ice_pellets_surface",
         "step_type",
@@ -1087,6 +1095,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     (
         "categorical_freezing_rain_surface",
         "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
+    (
+        "categorical_freezing_rain_surface",
+        "step_type",
         "noaa-gefs-forecast-35-day",
     ),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
@@ -1094,13 +1107,27 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("categorical_rain_surface", "step_type", "noaa-gfs-forecast"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-analysis"),
+    ("categorical_rain_surface", "step_type", "noaa-gefs-analysis-0-25-degree-virtual"),
     ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-forecast-virtual"),
+    # GEFS publishes window-average surface heat fluxes, while HRRR publishes them
+    # at the valid time.
+    ("latent_heat_flux_surface", "step_type", "noaa-gefs-analysis-0-25-degree-virtual"),
+    (
+        "sensible_heat_flux_surface",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
     # GFS and GEFS publish window-average total cloud cover.
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-analysis"),
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gefs-analysis"),
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
     (
         "total_cloud_cover_atmosphere",
         "step_type",
@@ -1114,6 +1141,23 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "total_cloud_cover_atmosphere",
         "step_type",
         "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    ),
+    # GEFS publishes window-average upward radiation fluxes, while HRRR publishes
+    # them at the valid time.
+    (
+        "upward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gefs-analysis-0-25-degree-virtual",
     ),
     # HRRR publishes instantaneous downward radiation fluxes while the other
     # sources publish interval averages.

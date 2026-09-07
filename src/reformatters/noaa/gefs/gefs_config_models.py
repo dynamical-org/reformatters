@@ -15,6 +15,9 @@ from reformatters.noaa.models import NoaaInternalAttrs
 # but `s` stops after forecast lead time 240h at which point the variable is still in `a` or `b`.
 # `s+b-b22` is the same as `s+b` when init time >= 2022-10-18T12 and `b` before.
 type GEFSFileType = Literal["a", "b", "s+a", "s+b", "s+b-b22"]
+# The concrete published file, as opposed to the GEFSFileType values above which
+# resolve to one of these per init and lead time.
+type GEFSSourceFileType = Literal["s", "a", "b"]
 GEFS_S_FILE_MAX = pd.Timedelta(hours=240)
 
 # Lead times through GEFS_PRE_EXTENSION_MAX are published within ~6.7h of init. The
@@ -31,12 +34,24 @@ GEFS_EXTENSION_REQUEST_MIN_AGE = pd.Timedelta(hours=28)
 GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 
 
-class GEFSInternalAttrs(NoaaInternalAttrs):
+class NoaaGefsInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
     available_from: Timestamp | None = None
 
 
-class GEFSDataVar(DataVar[GEFSInternalAttrs]):
+class NoaaGefsDataVar(DataVar[NoaaGefsInternalAttrs]):
+    pass
+
+
+class NoaaGefsVirtualInternalAttrs(NoaaInternalAttrs):
+    """A virtual variable names the one file its messages live in, rather than the
+    lead-time-dependent GEFSFileType the materialized datasets resolve per coord."""
+
+    source_file_type: GEFSSourceFileType
+    available_from: Timestamp | None = None
+
+
+class NoaaGefsVirtualDataVar(DataVar[NoaaGefsVirtualInternalAttrs]):
     pass
 
 
@@ -93,7 +108,7 @@ def is_v12_index(times: pd.DatetimeIndex) -> np.ndarray[Any, np.dtype[np.bool]]:
     return (times < GEFS_REFORECAST_END) | (GEFS_CURRENT_ARCHIVE_START <= times)
 
 
-def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
+def get_grib_element(var_info: NoaaGefsDataVar, init_time: pd.Timestamp) -> str:
     grib_element = var_info.internal_attrs.grib_element
     if init_time < GEFS_REFORECAST_END:
         return GEFS_REFORECAST_GRIB_ELEMENT_RENAME.get(grib_element, grib_element)
@@ -104,7 +119,7 @@ def get_grib_element(var_info: GEFSDataVar, init_time: pd.Timestamp) -> str:
 class GefsSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coordinate for GEFS forecast data."""
 
-    data_vars: Sequence[GEFSDataVar]
+    data_vars: Sequence[NoaaGefsDataVar]
 
     primary_base_url: str = "noaa-gefs-pds.s3.amazonaws.com"
     fallback_base_url: str = "nomads.ncep.noaa.gov/pub/data/nccf/com/gens/prod"

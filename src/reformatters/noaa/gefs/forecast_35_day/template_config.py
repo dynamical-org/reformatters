@@ -23,7 +23,7 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
     get_shared_data_var_configs,
     get_shared_template_dimension_coordinates,
 )
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 
 _CATEGORICAL_RESAMPLING_COMMENT = (
     "Beyond lead time 240 hours the source is 0.5 degree and bilinear resampling to "
@@ -38,7 +38,7 @@ _CATEGORICAL_RESAMPLING_COMMENT_VAR_NAMES = (
 )
 
 
-class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
+class GefsForecast35DayTemplateConfig(TemplateConfig[NoaaGefsDataVar]):
     """Template configuration for GEFS 35-day forecast dataset."""
 
     dims: Dims = {
@@ -275,7 +275,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
 
     @computed_field
     @property
-    def data_vars(self) -> Sequence[GEFSDataVar]:
+    def data_vars(self) -> Sequence[NoaaGefsDataVar]:
         """Define metadata and encoding for each data variable."""
         # CHUNKS - These chunks are about 2mb of uncompressed float32s
         var_chunks: dict[Dim, int] = {
@@ -299,7 +299,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[GEFSDataVar]):
         var_chunks_ordered = tuple(var_chunks[dim] for dim in self.dims[ROOT])
         var_shards_ordered = tuple(var_shards[dim] for dim in self.dims[ROOT])
 
-        def append_resampling_comment(var: GEFSDataVar) -> GEFSDataVar:
+        def append_resampling_comment(var: NoaaGefsDataVar) -> NoaaGefsDataVar:
             return replace(
                 var,
                 attrs=replace(

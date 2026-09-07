@@ -1,0 +1,23 @@
+1:0:d=2021072012:GUST:surface:anl:ENS=low-res ctl
+2:528109:d=2021072012:MSLET:mean sea level:anl:ENS=low-res ctl
+3:1409952:d=2021072012:PRES:surface:anl:ENS=low-res ctl
+4:2158495:d=2021072012:HGT:surface:anl:ENS=low-res ctl
+5:2611072:d=2021072012:TSOIL:0-0.1 m below ground:anl:ENS=low-res ctl
+6:2979407:d=2021072012:SOILW:0-0.1 m below ground:anl:ENS=low-res ctl
+7:3332527:d=2021072012:WEASD:surface:anl:ENS=low-res ctl
+8:3550004:d=2021072012:SNOD:surface:anl:ENS=low-res ctl
+9:3756774:d=2021072012:ICETK:surface:anl:ENS=low-res ctl
+10:3840368:d=2021072012:TMP:2 m above ground:anl:ENS=low-res ctl
+11:4284151:d=2021072012:DPT:2 m above ground:anl:ENS=low-res ctl
+12:4735414:d=2021072012:RH:2 m above ground:anl:ENS=low-res ctl
+13:5421481:d=2021072012:TMAX:2 m above ground:0-0 day max fcst:ENS=low-res ctl
+14:5865288:d=2021072012:TMIN:2 m above ground:0-0 day min fcst:ENS=low-res ctl
+15:6309095:d=2021072012:UGRD:10 m above ground:anl:ENS=low-res ctl
+16:7158066:d=2021072012:VGRD:10 m above ground:anl:ENS=low-res ctl
+17:7960740:d=2021072012:CAPE:surface:anl:ENS=low-res ctl
+18:8469754:d=2021072012:CIN:surface:anl:ENS=low-res ctl
+19:8816365:d=2021072012:PWAT:entire atmosphere (considered as a single layer):anl:ENS=low-res ctl
+20:9300395:d=2021072012:HLCY:3000-0 m above ground:anl:ENS=low-res ctl
+21:9623529:d=2021072012:CAPE:180-0 mb above ground:anl:ENS=low-res ctl
+22:10148497:d=2021072012:CIN:180-0 mb above ground:anl:ENS=low-res ctl
+23:10525186:d=2021072012:PRMSL:mean sea level:anl:ENS=low-res ctl

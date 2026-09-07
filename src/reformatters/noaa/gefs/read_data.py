@@ -12,14 +12,14 @@ from reformatters.common.config import Config
 from reformatters.common.types import Array2D, ArrayFloat32
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ACCUMULATION_RESET_HOURS,
-    GEFSDataVar,
     GefsSourceFileCoord,
+    NoaaGefsDataVar,
     get_grib_element,
     is_v12,
 )
 
 
-def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
+def get_hours_str(var_info: NoaaGefsDataVar, lead_time_hours: float) -> str:
     if lead_time_hours == 0:
         hours_str = "anl"  # analysis
     elif var_info.attrs.step_type == "instant":
@@ -37,7 +37,7 @@ def get_hours_str(var_info: GEFSDataVar, lead_time_hours: float) -> str:
 def read_data(
     template: xr.Dataset,
     coord: GefsSourceFileCoord,
-    data_var: GEFSDataVar,
+    data_var: NoaaGefsDataVar,
 ) -> ArrayFloat32:
     grib_element = get_grib_element(data_var, coord.init_time)
     if data_var.internal_attrs.include_lead_time_suffix:

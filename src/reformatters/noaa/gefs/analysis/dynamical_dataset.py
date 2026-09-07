@@ -4,13 +4,15 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
-from reformatters.noaa.gefs.gefs_config_models import GEFSDataVar
+from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 
 from .region_job import GefsAnalysisRegionJob, GefsAnalysisSourceFileCoord
 from .template_config import GefsAnalysisTemplateConfig
 
 
-class GefsAnalysisDataset(DynamicalDataset[GEFSDataVar, GefsAnalysisSourceFileCoord]):
+class GefsAnalysisDataset(
+    DynamicalDataset[NoaaGefsDataVar, GefsAnalysisSourceFileCoord]
+):
     """GEFS analysis dataset implementation."""
 
     template_config: GefsAnalysisTemplateConfig = GefsAnalysisTemplateConfig()
