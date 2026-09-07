@@ -139,6 +139,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # Whether setup/finalize metadata writes embed zarr consolidated metadata.
     consolidated_metadata: ClassVar[bool] = True
 
+    # Whether a job writes every chunk of its region regardless of what the store
+    # already holds; such a variant is always driven with overwrite_chunks=True.
+    rewrites_whole_region: ClassVar[bool] = True
+
     @classmethod
     def source_file_var_groups(
         cls,

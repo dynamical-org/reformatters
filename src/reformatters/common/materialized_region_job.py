@@ -127,9 +127,12 @@ class MaterializedRegionJob(
         branch_name: str,
         worker_index: int,
         *,
-        overwrite_chunks: bool,  # noqa: ARG003 - always rewrites its region
+        overwrite_chunks: bool,
     ) -> dict[str, list[SourceFileResult]]:
         """Write all of this worker's jobs to ``branch_name`` in a single commit."""
+        assert overwrite_chunks, (
+            "Materialized jobs rewrite every chunk of their region; see rewrites_whole_region"
+        )
         # One commit per worker; an empty job set would make an empty icechunk
         # commit (which raises), so the caller must filter empty workers out.
         assert worker_jobs, "process_worker_jobs requires at least one job"

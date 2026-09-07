@@ -67,6 +67,10 @@ class VirtualRegionJob(
     # see "Metadata refresh" in docs/virtual_datasets.md.
     consolidated_metadata: ClassVar[bool] = False
 
+    # Virtual jobs resume: files whose refs the store already holds are skipped unless
+    # the caller asks for a rewrite.
+    rewrites_whole_region: ClassVar[bool] = False
+
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 

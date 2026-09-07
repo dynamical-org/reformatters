@@ -491,7 +491,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 self.store_factory,
                 branch_name,
                 worker_index,
-                overwrite_chunks=overwrite_chunks,
+                overwrite_chunks=overwrite_chunks
+                or self.region_job_class.rewrites_whole_region,
             )
             if worker_jobs
             else {}
