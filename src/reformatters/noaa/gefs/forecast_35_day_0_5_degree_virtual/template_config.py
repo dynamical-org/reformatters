@@ -28,7 +28,7 @@ class NoaaGefsForecast35Day05DegreeVirtualTemplateConfig(
         return self._dataset_attributes(
             dataset_id="noaa-gefs-forecast-35-day-0-5-degree-virtual",
             dataset_version="0.1.0",
-            name="NOAA GEFS forecast 35 day 0.5 degree, virtual",
+            name="NOAA GEFS forecast, 35 day, 0.5 degree, virtual",
             description=(
                 "Weather forecasts from the Global Ensemble Forecast System (GEFS) "
                 "operated by NOAA NWS NCEP."
