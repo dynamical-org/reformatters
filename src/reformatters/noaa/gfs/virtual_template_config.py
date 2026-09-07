@@ -2209,7 +2209,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2222,7 +2224,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2235,7 +2239,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2248,7 +2254,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2261,7 +2269,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2274,7 +2284,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2287,7 +2299,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2300,7 +2314,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2313,7 +2329,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2326,7 +2344,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2339,7 +2359,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2352,7 +2374,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2616,7 +2640,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2629,7 +2655,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2642,7 +2670,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2655,7 +2685,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2668,7 +2700,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2681,7 +2715,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2694,7 +2730,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2707,7 +2745,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2720,7 +2760,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2733,7 +2775,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2746,7 +2790,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2759,7 +2805,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2772,7 +2820,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2785,7 +2835,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2798,7 +2850,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2811,7 +2865,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2824,7 +2880,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2837,7 +2895,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2850,7 +2910,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2863,7 +2925,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2876,7 +2940,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2889,7 +2955,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2902,7 +2970,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2915,7 +2985,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2928,7 +3000,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2941,7 +3015,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2954,7 +3030,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2967,7 +3045,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2980,7 +3060,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -2993,7 +3075,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3006,7 +3090,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="eastward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3019,7 +3105,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="northward_wind",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3032,7 +3120,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_temperature",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3045,7 +3135,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="geopotential_height",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3058,7 +3150,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="air_pressure",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(
@@ -3071,7 +3165,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="wind_speed_shear",
             comment=(
                 "NaN where this potential vorticity surface does not exist in the "
-                "column."
+                "column; positive potential vorticity surfaces are largely absent in the "
+                "southern hemisphere and negative potential vorticity surfaces in the "
+                "northern hemisphere."
             ),
         ),
         root_var(

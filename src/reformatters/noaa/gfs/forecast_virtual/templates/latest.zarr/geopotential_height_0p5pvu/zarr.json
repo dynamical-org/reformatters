@@ -39,7 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "NaN where this potential vorticity surface does not exist in the column.",
+    "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
