@@ -5,6 +5,7 @@ import icechunk
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.config_models import ROOT
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
@@ -85,13 +86,15 @@ class NoaaGefsVirtualRegionJob(
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
         """Probe file presence through a variable the archive published in every era,
-        preferring an instant one so the probe lands where data exists at every step."""
+        preferring a root one -- the products partition each vertical group's levels, so
+        a group variable's probe cell can be a level this file never carries -- and an
+        instant one, so the probe lands where data exists at every step."""
         candidates = [
             var for var in coord.data_vars if var.internal_attrs.available_from is None
         ] or list(coord.data_vars)  # a run of only later-era vars must probe one
-        return next(
-            (var for var in candidates if var.attrs.step_type == "instant"),
-            candidates[0],
+        return min(
+            candidates,
+            key=lambda var: (var.group is not ROOT, var.attrs.step_type != "instant"),
         )
 
 
@@ -140,9 +143,8 @@ class NoaaGefsForecastVirtualRegionJob(
                 for var in available_vars:
                     if lead_time == pd.Timedelta(0) and not var.has_hour_0_values():
                         continue
-                    grouped.setdefault(var.internal_attrs.source_file_type, []).append(
-                        var
-                    )
+                    for source_file_type in var.internal_attrs.source_file_types:
+                        grouped.setdefault(source_file_type, []).append(var)
                 for source_file_type, data_vars in grouped.items():
                     coords.extend(
                         NoaaGefsForecastVirtualSourceFileCoord(

@@ -38,6 +38,7 @@ type SpatialResolution = Literal[
     "0.0625 degrees (~7km)",
     "0.1 degrees (~10km)",
     "0.25 degrees (~20km)",
+    "0.5 degrees (~40km)",
     "1.5 degrees (~165km)",
     "0-240 hours: 0.25 degrees (~20km), 246-840 hours: 0.5 degrees (~40km)",
     "2.5 km",
