@@ -16,6 +16,9 @@ from reformatters.noaa.gfs.analysis_virtual.region_job import (
 from reformatters.noaa.gfs.analysis_virtual.template_config import (
     NoaaGfsAnalysisVirtualTemplateConfig,
 )
+from reformatters.noaa.gfs.forecast_virtual.region_job import (
+    NoaaGfsForecastVirtualSourceFileCoord,
+)
 from reformatters.noaa.gfs.virtual_region_job import (
     _PROBE_VERTICAL_LEVEL,
     PGRB2_PREFERRED_MESSAGES,
@@ -60,6 +63,30 @@ def index_lines(
     return parse_grib_index_lines(
         cached_grib_index(index_url(era, file_type, lead_hours, hour), _DATASET_ID)
     )
+
+
+def test_consistent_truncation_detects_the_gfs_pgrb2b_f249_incident() -> None:
+    truncated_coord = NoaaGfsForecastVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2024-10-20T18:00"),
+        lead_time=pd.Timedelta("249h"),
+        file_type="pgrb2b",
+        data_vars=[],
+    )
+    healthy_coord = truncated_coord.model_copy(
+        update={"init_time": pd.Timestamp("2024-10-20T12:00")}
+    )
+    truncated = shared_region_job_module._SourceFileMetrics(
+        truncated_coord, 71_229_440, 112
+    )
+    healthy = shared_region_job_module._SourceFileMetrics(
+        healthy_coord, 227_056_502, 349
+    )
+
+    detected = shared_region_job_module._consistently_truncated_sources(
+        [truncated, healthy], max_peer_fraction=0.5
+    )
+
+    assert [result.metrics for result in detected] == [truncated]
 
 
 @pytest.mark.slow

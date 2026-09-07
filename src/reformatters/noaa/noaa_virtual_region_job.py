@@ -1,6 +1,11 @@
 import struct
+from collections import defaultdict
 from collections.abc import Sequence
-from typing import Any, ClassVar, Generic, TypeVar
+from statistics import median
+from threading import Lock
+from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
+
+from pydantic import PrivateAttr
 
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
@@ -8,7 +13,11 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    SourceFileAnomaly,
+    VirtualRef,
+    VirtualRegionJob,
+)
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
@@ -46,6 +55,71 @@ NOAA_VIRTUAL_COORD = TypeVar(
 )
 
 
+class _SourceFileMetrics(NamedTuple):
+    coord: NoaaVirtualSourceFileCoord[Any]
+    size: int
+    index_lines: int
+
+
+class _ConsistentTruncation(NamedTuple):
+    metrics: _SourceFileMetrics
+    peer_size: float
+    peer_index_lines: float
+    peers: int
+
+
+_COMPARISON_EXCLUDED_FIELDS = frozenset(
+    {"init_time", "data_vars", "status", "downloaded_path"}
+)
+
+
+def _comparison_key(
+    coord: NoaaVirtualSourceFileCoord[Any],
+) -> tuple[type[NoaaVirtualSourceFileCoord[Any]], tuple[tuple[str, object], ...]]:
+    return (
+        type(coord),
+        tuple(
+            (name, getattr(coord, name))
+            for name in type(coord).model_fields
+            if name not in _COMPARISON_EXCLUDED_FIELDS
+        ),
+    )
+
+
+def _consistently_truncated_sources(
+    source_files: Sequence[_SourceFileMetrics], max_peer_fraction: float
+) -> list[_ConsistentTruncation]:
+    by_role: dict[
+        tuple[type[NoaaVirtualSourceFileCoord[Any]], tuple[tuple[str, object], ...]],
+        list[_SourceFileMetrics],
+    ] = defaultdict(list)
+    for source_file in source_files:
+        by_role[_comparison_key(source_file.coord)].append(source_file)
+
+    truncated = []
+    for cohort in by_role.values():
+        for source_file in cohort:
+            peers = [
+                peer
+                for peer in cohort
+                if peer.coord.init_time != source_file.coord.init_time
+            ]
+            if not peers:
+                continue
+            peer_size = median(peer.size for peer in peers)
+            peer_index_lines = median(peer.index_lines for peer in peers)
+            if (
+                source_file.size < max_peer_fraction * peer_size
+                and source_file.index_lines < max_peer_fraction * peer_index_lines
+            ):
+                truncated.append(
+                    _ConsistentTruncation(
+                        source_file, peer_size, peer_index_lines, len(peers)
+                    )
+                )
+    return truncated
+
+
 class NoaaVirtualRegionJob(
     VirtualRegionJob[NOAA_DATA_VAR, NOAA_VIRTUAL_COORD],
     Generic[NOAA_DATA_VAR, NOAA_VIRTUAL_COORD],
@@ -60,6 +134,14 @@ class NoaaVirtualRegionJob(
     # The s3:// bucket URL prefix source files live under, and the bucket's region.
     source_location_prefix: ClassVar[str]
     source_bucket_region: ClassVar[str]
+    consistent_truncation_max_peer_fraction: ClassVar[float] = 0.5
+
+    _index_line_counts: dict[str, int] = PrivateAttr(default_factory=dict)
+    _source_file_metrics: dict[str, _SourceFileMetrics] = PrivateAttr(
+        default_factory=dict
+    )
+    _reported_consistent_truncations: set[str] = PrivateAttr(default_factory=set)
+    _index_line_counts_lock: Lock = PrivateAttr(default_factory=Lock)
 
     def discover_available(
         self, pending: list[NOAA_VIRTUAL_COORD]
@@ -95,6 +177,9 @@ class NoaaVirtualRegionJob(
             index_lines = parse_grib_index_lines(index_path)
         finally:
             index_path.unlink()
+
+        with self._index_line_counts_lock:
+            self._index_line_counts[coord.get_url()] = len(index_lines)
 
         if not index_lines:
             log.warning(f"Skipping {coord.get_url()}: empty or unparseable grib index")
@@ -156,6 +241,41 @@ class NoaaVirtualRegionJob(
                 )
         self._check_refs_complete(coord, refs)
         return refs
+
+    def source_file_anomalies(
+        self,
+        source_files: Sequence[tuple[NOAA_VIRTUAL_COORD, int, Sequence[VirtualRef]]],
+    ) -> Sequence[SourceFileAnomaly]:
+        for coord, size, refs in source_files:
+            if not refs:
+                continue
+            url = coord.get_url()
+            self._source_file_metrics[url] = _SourceFileMetrics(
+                coord, size, self._index_line_counts[url]
+            )
+
+        anomalies = []
+        for truncated in _consistently_truncated_sources(
+            list(self._source_file_metrics.values()),
+            self.consistent_truncation_max_peer_fraction,
+        ):
+            source_file = truncated.metrics
+            url = source_file.coord.get_url()
+            if url in self._reported_consistent_truncations:
+                continue
+            self._reported_consistent_truncations.add(url)
+            anomalies.append(
+                SourceFileAnomaly(
+                    url,
+                    f"object size {source_file.size} is "
+                    f"{source_file.size / truncated.peer_size:.1%} and index line "
+                    f"count {source_file.index_lines} is "
+                    f"{source_file.index_lines / truncated.peer_index_lines:.1%} of "
+                    f"the medians from {truncated.peers} like-for-like file(s) at "
+                    "other init times; source may be consistently truncated",
+                )
+            )
+        return anomalies
 
     def _check_refs_complete(
         self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]

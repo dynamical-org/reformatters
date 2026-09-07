@@ -13,6 +13,7 @@ import xarray as xr
 from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
     NoaaHrrrForecast48HourVirtualRegionJob,
@@ -92,6 +93,118 @@ def fake_index(
     )
 
 
+# --- Consistent truncation detection ---
+
+
+def source_metrics(
+    *, init_time: str, lead_hours: int, size: int, index_lines: int
+) -> shared_region_job_module._SourceFileMetrics:
+    data_vars = [get_var("temperature_2m")]
+    source_coord = coord(
+        "sfc", data_vars, lead_time=pd.Timedelta(hours=lead_hours)
+    ).model_copy(update={"init_time": pd.Timestamp(init_time)})
+    return shared_region_job_module._SourceFileMetrics(source_coord, size, index_lines)
+
+
+def test_consistent_truncation_is_an_observation_not_a_rejection(
+    template_ds: xr.DataTree,
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    truncated_coord = coord("sfc", data_vars).model_copy(
+        update={"init_time": pd.Timestamp("2024-10-20T18:00")}
+    )
+    healthy_coord = coord("sfc", data_vars).model_copy(
+        update={"init_time": pd.Timestamp("2024-10-20T12:00")}
+    )
+    job = make_job(template_ds, data_vars)
+    refs = [
+        VirtualRef(
+            data_var=data_vars[0],
+            out_loc=truncated_coord.out_loc(),
+            location=truncated_coord.get_url(),
+            offset=0,
+            length=1,
+        )
+    ]
+    job._index_line_counts[truncated_coord.get_url()] = 30
+    job._index_line_counts[healthy_coord.get_url()] = 100
+
+    anomalies = job.source_file_anomalies(
+        [
+            (truncated_coord, 30, refs),
+            (healthy_coord, 100, refs),
+        ]
+    )
+
+    assert len(anomalies) == 1
+    assert anomalies[0].url == truncated_coord.get_url()
+    assert "30.0%" in anomalies[0].reason
+    assert job.source_file_anomalies([]) == []
+
+
+@pytest.mark.parametrize(
+    ("target_size", "target_lines"),
+    [(40, 100), (100, 40)],
+)
+def test_consistent_truncation_requires_both_signals(
+    target_size: int, target_lines: int
+) -> None:
+    target = source_metrics(
+        init_time="2014-07-30T18:00",
+        lead_hours=0,
+        size=target_size,
+        index_lines=target_lines,
+    )
+    peer = source_metrics(
+        init_time="2014-07-31T00:00",
+        lead_hours=0,
+        size=100,
+        index_lines=100,
+    )
+
+    assert not shared_region_job_module._consistently_truncated_sources(
+        [target, peer], max_peer_fraction=0.5
+    )
+
+
+def test_consistent_truncation_accepts_early_hrrr_short_indexes() -> None:
+    short_index = source_metrics(
+        init_time="2014-07-30T18:00",
+        lead_hours=0,
+        size=90_008_392,
+        index_lines=56,
+    )
+    short_index_peer = source_metrics(
+        init_time="2014-07-31T00:00",
+        lead_hours=0,
+        size=84_665_319,
+        index_lines=56,
+    )
+
+    assert not shared_region_job_module._consistently_truncated_sources(
+        [short_index, short_index_peer], max_peer_fraction=0.5
+    )
+
+
+def test_consistent_truncation_does_not_compare_different_leads() -> None:
+    small_lead = source_metrics(
+        init_time="2016-08-05T12:00",
+        lead_hours=4,
+        size=2_240_512,
+        index_lines=3,
+    )
+    large_lead = source_metrics(
+        init_time="2016-08-05T12:00",
+        lead_hours=6,
+        size=9_771_008,
+        index_lines=13,
+    )
+
+    assert not shared_region_job_module._consistently_truncated_sources(
+        [small_lead, large_lead], max_peer_fraction=0.5
+    )
+
+
 # --- Byte ranges and message matching ---
 
 _SFC_INDEX = (
@@ -113,9 +226,11 @@ def test_file_refs_window_disambiguation_and_skips_unmatched(
         get_var("total_precipitation_surface"),  # 5-6 hour acc window
     ]
     job = make_job(template_ds, data_vars)
-    refs = job.file_refs(coord("sfc", data_vars), file_size=9000)
+    source_coord = coord("sfc", data_vars)
+    refs = job.file_refs(source_coord, file_size=9000)
 
     by_name = {r.data_var.name: r for r in refs}
+    assert job._index_line_counts[source_coord.get_url()] == 5
     # REFC and the unnamed experimental message are not in data_vars -> not emitted.
     assert set(by_name) == {
         "temperature_2m",
