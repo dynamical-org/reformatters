@@ -68,6 +68,10 @@ class VirtualRegionJob(
     # see "Metadata refresh" in docs/virtual_datasets.md.
     consolidated_metadata: ClassVar[bool] = False
 
+    # Virtual jobs resume: files whose refs the store already holds are skipped unless
+    # the caller asks for a rewrite.
+    rewrites_whole_region: ClassVar[bool] = False
+
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
 
@@ -315,12 +319,15 @@ class VirtualRegionJob(
         store_factory: storage.StoreFactory,
         branch_name: str,
         worker_index: int,  # noqa: ARG003 - per-batch commit messages don't carry it
+        *,
+        overwrite_chunks: bool,
     ) -> dict[str, list[SourceFileResult]]:
         """Drive the whole worker's virtual write loop on ``branch_name``.
 
-        Gathers the not-already-present source files across all the worker's jobs
-        against a single readonly view, then runs one write loop over their union:
-        a backfill worker's generator yields a single batch (one commit for the
+        Gathers the source files across all the worker's jobs against a single readonly
+        view, then runs one write loop over their union. Files whose refs the store
+        already holds are skipped unless ``overwrite_chunks`` asks for a rewrite.
+        A backfill worker's generator yields a single batch (one commit for the
         whole worker), an update job's generator polls and commits per tick.
         Always returns an empty dict: virtual refs live in the icechunk manifest,
         so there is nothing to thread back to finalize.
@@ -337,8 +344,12 @@ class VirtualRegionJob(
         remaining = [
             coord
             for job in jobs
-            for coord in job.filter_already_present(
-                job.source_file_coords(), readonly_store
+            for coord in (
+                job.source_file_coords()
+                if overwrite_chunks
+                else job.filter_already_present(
+                    job.source_file_coords(), readonly_store
+                )
             )
         ]
         # An all-already-present worker writes nothing; an empty icechunk commit

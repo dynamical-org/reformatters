@@ -148,6 +148,10 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # Whether setup/finalize metadata writes embed zarr consolidated metadata.
     consolidated_metadata: ClassVar[bool] = True
 
+    # Whether a job writes every chunk of its region regardless of what the store
+    # already holds; such a variant is always driven with overwrite_chunks=True.
+    rewrites_whole_region: ClassVar[bool] = True
+
     @classmethod
     def source_file_var_groups(
         cls,
@@ -467,6 +471,8 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         store_factory: storage.StoreFactory,
         branch_name: str,
         worker_index: int,
+        *,
+        overwrite_chunks: bool,
     ) -> dict[str, list[SourceFileResult]]:
         """Process one worker's region jobs against ``branch_name`` and
         return the per-variable source file results.

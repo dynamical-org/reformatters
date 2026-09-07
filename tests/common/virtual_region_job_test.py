@@ -1089,6 +1089,32 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     assert job.filter_already_present(candidates, readonly) == []
 
 
+def test_overwrite_chunks_rewrites_already_present_refs(tmp_path: Path) -> None:
+    """Without this, a variable whose refs all point at the wrong source file could
+    never be corrected: its own stale refs mark every file as already done."""
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+
+    _process_virtual(job, repo)
+    snapshots_after_first = _snapshot_count(repo)
+
+    # Resuming skips everything, which is what a plain re-run should do.
+    VirtualTestRegionJob.process_worker_jobs(
+        [job], dataset.store_factory, "main", 0, overwrite_chunks=False
+    )
+    assert _snapshot_count(repo) == snapshots_after_first
+
+    # Asking for a rewrite writes the refs again rather than skipping them.
+    VirtualTestRegionJob.process_worker_jobs(
+        [job], dataset.store_factory, "main", 0, overwrite_chunks=True
+    )
+    assert _snapshot_count(repo) > snapshots_after_first
+    _assert_store_values(repo.readonly_session("main").store, n_inits=4)
+
+
 def test_filter_already_present_mixed_candidates(tmp_path: Path) -> None:
     # One filter call over a mix: already-emitted (dropped), not-yet-emitted (kept),
     # and an out-of-template label whose chunk_key is None (kept as remaining).
@@ -1219,7 +1245,11 @@ def test_backfill_worker_commits_once_across_multiple_jobs(tmp_path: Path) -> No
 
     before = _snapshot_count(repo)
     results = VirtualTestRegionJob.process_worker_jobs(
-        worker_jobs, dataset.store_factory, "main", worker_index=0
+        worker_jobs,
+        dataset.store_factory,
+        "main",
+        worker_index=0,
+        overwrite_chunks=False,
     )
     assert results == {}
     assert _snapshot_count(repo) - before == 1
@@ -1239,12 +1269,20 @@ def test_all_present_worker_makes_no_commit(tmp_path: Path) -> None:
         _make_region_job(template_ds, region=slice(i, i + 1)) for i in range(4)
     ]
     VirtualTestRegionJob.process_worker_jobs(
-        worker_jobs, dataset.store_factory, "main", worker_index=0
+        worker_jobs,
+        dataset.store_factory,
+        "main",
+        worker_index=0,
+        overwrite_chunks=False,
     )
     after_first = _snapshot_count(repo)
 
     VirtualTestRegionJob.process_worker_jobs(
-        worker_jobs, dataset.store_factory, "main", worker_index=0
+        worker_jobs,
+        dataset.store_factory,
+        "main",
+        worker_index=0,
+        overwrite_chunks=False,
     )
     assert _snapshot_count(repo) == after_first
 
@@ -1282,7 +1320,11 @@ def test_batched_driver_region_is_poisoned(tmp_path: Path) -> None:
     ]
     with pytest.raises(AssertionError, match=r"self\.region"):
         RegionReadingJob.process_worker_jobs(
-            worker_jobs, dataset.store_factory, "main", worker_index=0
+            worker_jobs,
+            dataset.store_factory,
+            "main",
+            worker_index=0,
+            overwrite_chunks=False,
         )
 
 
@@ -1323,6 +1365,7 @@ def test_driver_receives_the_stores_ingested_through(tmp_path: Path) -> None:
             dataset.store_factory,
             "main",
             worker_index=0,
+            overwrite_chunks=False,
         )
 
     init_times = full_template.to_dataset().get_index("init_time")
@@ -2143,7 +2186,9 @@ def test_update_window_ends_at_the_scheduled_fire(
     monkeypatch.setattr(
         VirtualTestRegionJob,
         "process_worker_jobs",
-        classmethod(lambda cls, worker_jobs, *args: driven.extend(worker_jobs) or {}),
+        classmethod(
+            lambda cls, worker_jobs, *args, **kwargs: driven.extend(worker_jobs) or {}
+        ),
     )
 
     dataset.update("test-update")
@@ -2289,7 +2334,9 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     monkeypatch.setattr(
         VirtualTestRegionJob,
         "process_worker_jobs",
-        classmethod(lambda cls, worker_jobs, *args: driven.extend(worker_jobs) or {}),
+        classmethod(
+            lambda cls, worker_jobs, *args, **kwargs: driven.extend(worker_jobs) or {}
+        ),
     )
     dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 

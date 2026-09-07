@@ -487,7 +487,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # lifecycle and commit cadence behind this one call.
         worker_results: dict[str, list[SourceFileResult]] = (
             self.region_job_class.process_worker_jobs(
-                worker_jobs, self.store_factory, branch_name, worker_index
+                worker_jobs,
+                self.store_factory,
+                branch_name,
+                worker_index,
+                overwrite_chunks=overwrite_chunks
+                or self.region_job_class.rewrites_whole_region,
             )
             if worker_jobs
             else {}
@@ -560,7 +565,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # ingesting. No-op commit-wise when the store already matches the template.
         job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
-            [job], self.store_factory, "main", worker_index
+            [job], self.store_factory, "main", worker_index, overwrite_chunks=False
         )
 
     def validate_dataset(
