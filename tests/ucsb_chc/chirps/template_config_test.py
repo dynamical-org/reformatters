@@ -14,6 +14,7 @@ from reformatters.ucsb_chc.chirps.analysis_final.template_config import (
 from reformatters.ucsb_chc.chirps.analysis_preliminary.template_config import (
     UcsbChcChirpsAnalysisPreliminaryTemplateConfig,
 )
+from reformatters.ucsb_chc.chirps.chirps_config_models import ChirpsProduct
 from reformatters.ucsb_chc.chirps.region_job import (
     UcsbChcChirpsAnalysisSourceFileCoord,
 )
@@ -21,7 +22,6 @@ from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LAT_SIZE,
     GRID_LON_SIZE,
     SOURCE_FILL_VALUE,
-    ChirpsProduct,
 )
 
 
@@ -84,7 +84,6 @@ def test_precipitation_surface_metadata() -> None:
 
 @pytest.fixture(scope="session")
 def example_source_file_paths() -> dict[ChirpsProduct, Path]:
-    """The first real file of each product: 1981 final and 2025 preliminary."""
     config = UcsbChcChirpsAnalysisFinalTemplateConfig()
     region_job = UcsbChcChirpsAnalysisFinalRegionJob.model_construct(
         tmp_store=Mock(),
@@ -140,8 +139,6 @@ def test_grid_matches_source_file(
 def test_source_fill_value_is_the_only_missing_value_marker(
     example_source_file_paths: dict[ChirpsProduct, Path], product: ChirpsProduct
 ) -> None:
-    """The masking design rests on the source declaring no nodata tag and marking
-    every missing cell with one value; both are checked against real files."""
     with rasterio.open(example_source_file_paths[product]) as reader:
         assert reader.nodata is None
         data = reader.read(1, out_dtype=np.float32)

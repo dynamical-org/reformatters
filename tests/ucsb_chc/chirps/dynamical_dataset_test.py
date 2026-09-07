@@ -104,7 +104,6 @@ def test_backfill_local_and_operational_update(
         backfilled_ds["time"], pd.date_range(first_day, periods=2, freq="1D")
     )
 
-    # The operational update appends the third day.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -192,7 +191,6 @@ def test_update_trims_to_last_day_with_data(
 
     updated_ds = _open_store(dataset)
     assert_array_equal(updated_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
-    # The store ends at the last day with data: no NaN tail is published.
     land = updated_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
     assert np.isfinite(land.values).all()
 
@@ -254,10 +252,7 @@ def test_update_stops_before_an_unread_day_and_fills_it_in_later(
 def test_update_spanning_two_time_shards_extends_through_the_second(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The finalizer calls this once, on the earliest job, with every job's results,
-    so an update that crosses a time shard boundary must still publish both shards."""
     dataset = _preliminary_dataset()
-    # Two days per time shard, so the update spans more than one of them.
     original_get_template = dataset._get_template
     monkeypatch.setattr(
         dataset,
@@ -290,7 +285,6 @@ def test_operational_kubernetes_resources() -> None:
         )
         assert update_cron_job.name == f"{dataset.dataset_id}-update"
         assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-        # Suspended until the store is backfilled.
         assert update_cron_job.suspend
         assert validation_cron_job.suspend
         assert update_cron_job.secret_names == [
@@ -315,8 +309,6 @@ def test_validators(dataset: UcsbChcChirpsAnalysisMaterializedDataset) -> None:
 
 
 def _nan_check_dataset(missing_newest: bool) -> xr.Dataset:
-    """A CHIRPS-shaped grid: a fixed ocean mask that is NaN on every day, optionally
-    with the newest day missing entirely."""
     times = pd.date_range("2025-01-01", periods=3, freq="1D")
     lat = np.linspace(59.975, -59.975, 60)
     lon = np.linspace(-179.975, 179.975, 180)

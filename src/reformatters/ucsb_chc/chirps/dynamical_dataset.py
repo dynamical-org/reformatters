@@ -15,24 +15,17 @@ from reformatters.ucsb_chc.chirps.region_job import (
 class UcsbChcChirpsAnalysisMaterializedDataset(
     DynamicalDataset[DataVar[BaseInternalAttrs], UcsbChcChirpsAnalysisSourceFileCoord]
 ):
-    """Shared base for the final and preliminary materialized CHIRPS analysis datasets.
-
-    Subclasses set `template_config`, `region_job_class` and the schedule / latency
-    class attributes.
-    """
-
     region_job_class: type[UcsbChcChirpsAnalysisMaterializedRegionJob]
 
     update_schedule: ClassVar[str]
     validate_schedule: ClassVar[str]
     max_expected_delay: ClassVar[timedelta]
-    update_deadline: ClassVar[timedelta] = timedelta(minutes=60)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule=self.update_schedule,
-            pod_active_deadline=self.update_deadline,
+            pod_active_deadline=timedelta(minutes=60),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",

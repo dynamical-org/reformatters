@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -37,10 +38,15 @@ from reformatters.ucsb_chc.chirps.template_config import (
 
 _BASE_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily"
 
-# product -> (archive directory, filename infix)
-_PRODUCT_PATHS: dict[ChirpsProduct, tuple[str, str]] = {
-    "final": ("final/rnl", "rnl"),
-    "preliminary": ("prelim/sat", "prelim"),
+
+class _ProductPath(NamedTuple):
+    directory: str
+    filename_infix: str
+
+
+_PRODUCT_PATHS: dict[ChirpsProduct, _ProductPath] = {
+    "final": _ProductPath("final/rnl", "rnl"),
+    "preliminary": _ProductPath("prelim/sat", "prelim"),
 }
 
 
@@ -54,10 +60,10 @@ class UcsbChcChirpsAnalysisSourceFileCoord(SourceFileCoord):
         return {"time": self.time}
 
     def get_url(self) -> str:
-        directory, infix = _PRODUCT_PATHS[self.product]
+        path = _PRODUCT_PATHS[self.product]
         return (
-            f"{_BASE_URL}/{directory}/{self.time:%Y}/"
-            f"chirps-v3.0.{infix}.{self.time:%Y.%m.%d}.tif"
+            f"{_BASE_URL}/{path.directory}/{self.time:%Y}/"
+            f"chirps-v3.0.{path.filename_infix}.{self.time:%Y.%m.%d}.tif"
         )
 
 
@@ -104,12 +110,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.DataTree:
-        """Trim to the day before the first one the update did not read.
-
-        The base implementation keeps everything through the newest day read, which
-        would publish an unread day in between as NaN; later updates start from the
-        store's newest day and would never fill it in.
-        """
+        """Trim the template before the first day not successfully read."""
         # A day whose download failed is absent from the results, so a Succeeded
         # status is the only evidence a day was read.
         read_times = {
@@ -118,7 +119,6 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
             for result in results
             if result.status == SourceFileStatus.Succeeded
         }
-        # This runs once for the whole update, on the job with the earliest region.
         times = self.template_ds.coords[self.append_dim].values
         stop = self.region.start
         for i in range(self.region.start, len(times)):

@@ -58,12 +58,6 @@ _SPATIAL_REF_WKT = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,2
 
 
 class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAttrs]]):
-    """Shared structure for the UCSB CHC CHIRPS daily analysis datasets.
-
-    Concrete subclasses set `product` (final/preliminary) and `append_dim_start`;
-    everything else is shared.
-    """
-
     dims: Dims = {ROOT: ("time", "latitude", "longitude")}
     append_dim: AppendDim = "time"
     append_dim_frequency: Timedelta = pd.Timedelta("1D")

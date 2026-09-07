@@ -16,6 +16,10 @@ from reformatters.ucsb_chc.chirps.analysis_final.template_config import (
 from reformatters.ucsb_chc.chirps.analysis_preliminary.region_job import (
     UcsbChcChirpsAnalysisPreliminaryRegionJob,
 )
+from reformatters.ucsb_chc.chirps.analysis_preliminary.template_config import (
+    UcsbChcChirpsAnalysisPreliminaryTemplateConfig,
+)
+from reformatters.ucsb_chc.chirps.chirps_config_models import ChirpsProduct
 from reformatters.ucsb_chc.chirps.region_job import (
     UcsbChcChirpsAnalysisMaterializedRegionJob,
     UcsbChcChirpsAnalysisSourceFileCoord,
@@ -25,7 +29,6 @@ from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LON_SIZE,
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
-    ChirpsProduct,
 )
 
 
@@ -37,12 +40,15 @@ def _job(
         if product == "final"
         else UcsbChcChirpsAnalysisPreliminaryRegionJob
     )
+    config = (
+        UcsbChcChirpsAnalysisFinalTemplateConfig()
+        if product == "final"
+        else UcsbChcChirpsAnalysisPreliminaryTemplateConfig()
+    )
     return job_class(
         tmp_store=Path("unused.zarr"),
-        template_ds=xr.DataTree(
-            xr.Dataset(attrs={"dataset_id": f"ucsb-chc-chirps-analysis-{product}"})
-        ),
-        data_vars=list(UcsbChcChirpsAnalysisFinalTemplateConfig().data_vars),
+        template_ds=xr.DataTree(xr.Dataset(attrs={"dataset_id": config.dataset_id})),
+        data_vars=list(config.data_vars),
         append_dim="time",
         region=slice(0, 1),
         reformat_job_name="test",
@@ -82,8 +88,6 @@ def test_preliminary_url() -> None:
 def test_download_file_never_falls_back_to_the_other_product(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # For a day both products publish, the preliminary dataset must fail rather than
-    # read the final file, even though that file would download successfully.
     requested: list[str] = []
 
     def fake_download(url: str, dataset_id: str) -> Path:
@@ -109,8 +113,6 @@ def test_download_file_never_falls_back_to_the_other_product(
 def test_download_file_propagates_missing_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A day the source has not published yet must surface as a missing file so the
-    # base job leaves it NaN and the update trims it away.
     def fake_download(url: str, dataset_id: str) -> Path:
         raise FileNotFoundError(url)
 
