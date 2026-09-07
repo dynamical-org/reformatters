@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from itertools import groupby
@@ -47,10 +48,6 @@ class VirtualRef(NamedTuple):
 
 class SourceFileRejectedError(Exception):
     """A source file whose published contents are unsafe to reference."""
-
-
-class AmbiguousSourceFileRejectedError(SourceFileRejectedError):
-    """A rejection that can also indicate a bug in the ref-building configuration."""
 
 
 class _FileRefsResult(NamedTuple):
@@ -102,9 +99,10 @@ class VirtualRegionJob(
     download_concurrency: ClassVar[int] = 64
 
     # One isolated rejection is plausibly a bad source file. A burst indicates a
-    # systemic source or ref-building failure and must stop the worker.
+    # systemic source failure and must stop the worker.
     source_rejection_tolerance: ClassVar[int] = 1
     source_rejection_max_fraction: ClassVar[float] = 0.1
+    source_rejection_max_count: ClassVar[int] = 20
 
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
@@ -216,14 +214,6 @@ class VirtualRegionJob(
                 loc[dim] = template_var.get_index(dim)[0]
         return loc
 
-    def source_file_rejection(
-        self,
-        coord: SOURCE_FILE_COORD,  # noqa: ARG002 - subclasses inspect the source coord
-        file_refs: Sequence[VirtualRef],  # noqa: ARG002 - subclasses inspect the refs
-    ) -> SourceFileRejectedError | None:
-        """Return why a source file must be discarded, or None to accept its refs."""
-        return None
-
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -269,107 +259,141 @@ class VirtualRegionJob(
         a backfill sweeps once and exits, an update polls until everything is ingested
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
         pairs — never split a file, never yield empty. SourceFileRejectedError drops
-        one file at ERROR; a burst fails the worker. Source-agnostic: it only asks
-        discover_available which coords are ready. Override only for a different batching
-        policy. See "The write loop" in docs/virtual_datasets.md.
+        one file with a WARNING detail and per-run ERROR summary; a burst fails the
+        worker. Source-agnostic: it only asks discover_available which coords are ready.
+        Override only for a different batching policy. See "The write loop" in
+        docs/virtual_datasets.md.
         """
-        pending = list(remaining)
+        yield from self._process_virtual_ref_groups([remaining], len(remaining))
+
+    def _process_virtual_ref_groups(
+        self,
+        groups: Sequence[Sequence[SOURCE_FILE_COORD]],
+        planned: int,
+    ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
         last_log = time.monotonic()
         attempted = 0
         rejections: list[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]] = []
-        with ThreadPoolExecutor(self.download_concurrency) as pool:
-            while pending:
-                tick_start = time.monotonic()
-                available = self.discover_available(pending)
-                discover_s = time.monotonic() - tick_start
-                if available:
-                    coords, sizes = zip(*available, strict=True)
-                    build_start = time.monotonic()
-                    build_results = list(
-                        pool.map(self._file_refs_or_skip, coords, sizes)
-                    )
-                    attempted += len(coords)
-                    for coord, result in zip(coords, build_results, strict=True):
-                        if result.rejection is None:
-                            continue
-                        log.error(f"Skipping {coord.get_url()}: {result.rejection}")
-                        rejections.append((coord, result.rejection))
-                    self._raise_if_source_rejections_are_systemic(attempted, rejections)
-                    # Drop files that yielded no refs (skipped as unreadable).
-                    batch = [
-                        (coord, result.refs)
-                        for coord, result in zip(coords, build_results, strict=True)
-                        if result.refs
-                    ]
-                    build_s = time.monotonic() - build_start
-                    ready = {id(coord) for coord in coords}
-                    pending = [coord for coord in pending if id(coord) not in ready]
-                    skipped = len(coords) - len(batch)
-                    log.info(
-                        f"Ingesting {len(batch)} files"
-                        f"{f' ({skipped} skipped)' if skipped else ''}, "
-                        f"{len(pending)} still pending "
-                        f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
-                    )
-                    last_log = time.monotonic()
-                    if batch:
-                        yield batch
-                if self.processing_mode == "backfill":
-                    if pending:
-                        log.info(
-                            f"{len(pending)} source files not present, skipping "
-                            f"(first: {pending[0].get_url()})"
-                        )
-                    return
-                if pending:
-                    if pd.Timestamp.now() >= self.poll_deadline:
-                        log.info(
-                            f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet published, leaving them to the next update "
-                            f"(first: {pending[0].get_url()})"
-                        )
-                        return
-                    # Break the silence under the 350s network idle timeout.
-                    if time.monotonic() - last_log >= 4 * 60:
-                        log.info(f"Waiting on {len(pending)} source files")
-                        last_log = time.monotonic()
-                    elapsed = time.monotonic() - tick_start
-                    time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
+        try:
+            with ThreadPoolExecutor(self.download_concurrency) as pool:
+                for group in groups:
+                    pending = list(group)
+                    while pending:
+                        tick_start = time.monotonic()
+                        available = self.discover_available(pending)
+                        discover_s = time.monotonic() - tick_start
+                        if available:
+                            coords, sizes = zip(*available, strict=True)
+                            build_start = time.monotonic()
+                            build_results = list(
+                                pool.map(self._file_refs_or_skip, coords, sizes)
+                            )
+                            attempted += len(coords)
+                            for coord, result in zip(
+                                coords, build_results, strict=True
+                            ):
+                                if result.rejection is None:
+                                    continue
+                                log.warning(
+                                    f"Rejecting {coord.get_url()}: {result.rejection}"
+                                )
+                                rejections.append((coord, result.rejection))
+                            self._raise_if_source_rejections_are_systemic(
+                                planned, rejections
+                            )
+                            batch = [
+                                (coord, result.refs)
+                                for coord, result in zip(
+                                    coords, build_results, strict=True
+                                )
+                                if result.refs
+                            ]
+                            build_s = time.monotonic() - build_start
+                            ready = {id(coord) for coord in coords}
+                            pending = [
+                                coord for coord in pending if id(coord) not in ready
+                            ]
+                            skipped = len(coords) - len(batch)
+                            log.info(
+                                f"Ingesting {len(batch)} files"
+                                f"{f' ({skipped} skipped)' if skipped else ''}, "
+                                f"{len(pending)} still pending "
+                                f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
+                            )
+                            last_log = time.monotonic()
+                            if batch:
+                                yield batch
+                        if self.processing_mode != "update":
+                            if pending:
+                                log.info(
+                                    f"{len(pending)} source files not present, skipping "
+                                    f"(first: {pending[0].get_url()})"
+                                )
+                            break
+                        if pending:
+                            if pd.Timestamp.now() >= self.poll_deadline:
+                                log.info(
+                                    f"Poll deadline reached with {len(pending)} source "
+                                    "files not yet published, leaving them to the next "
+                                    f"update (first: {pending[0].get_url()})"
+                                )
+                                break
+                            # Break the silence under the 350s network idle timeout.
+                            if time.monotonic() - last_log >= 4 * 60:
+                                log.info(f"Waiting on {len(pending)} source files")
+                                last_log = time.monotonic()
+                            elapsed = time.monotonic() - tick_start
+                            time.sleep(
+                                max(
+                                    0.0,
+                                    self.tick_interval.total_seconds() - elapsed,
+                                )
+                            )
+        finally:
+            self._log_source_rejection_summary(planned, attempted, rejections)
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
     ) -> _FileRefsResult:
         try:
             refs = self.file_refs(coord, file_size)
-            rejection = self.source_file_rejection(coord, refs)
-            assert refs or rejection is not None, (
-                "file_refs returned no references without rejecting the source file"
-            )
-            return _FileRefsResult([] if rejection is not None else refs, rejection)
+            assert refs, "file_refs returned no references"
+            return _FileRefsResult(refs)
         except SourceFileRejectedError as error:
             return _FileRefsResult([], error)
 
     def _raise_if_source_rejections_are_systemic(
         self,
-        attempted: int,
+        planned: int,
         rejections: Sequence[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]],
     ) -> None:
         rejected = len(rejections)
-        fraction = rejected / attempted
-        if (
-            rejected <= self.source_rejection_tolerance
-            or fraction < self.source_rejection_max_fraction
+        fraction = rejected / planned
+        if rejected <= self.source_rejection_tolerance or (
+            fraction < self.source_rejection_max_fraction
+            and rejected <= self.source_rejection_max_count
         ):
             return
         first_coord, first_error = rejections[0]
-        ambiguous = sum(
-            isinstance(error, AmbiguousSourceFileRejectedError)
-            for _, error in rejections
-        )
         raise RuntimeError(
-            f"Rejected {rejected} of {attempted} source files ({fraction:.1%}; "
-            f"{ambiguous} ambiguous): systemic source or ref-building failure; first: "
-            f"{first_coord.get_url()}: {first_error}"
+            f"Rejected {rejected} of {planned} planned source files ({fraction:.1%}): "
+            f"systemic source failure; first: {first_coord.get_url()}: {first_error}"
+        )
+
+    def _log_source_rejection_summary(
+        self,
+        planned: int,
+        attempted: int,
+        rejections: Sequence[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]],
+    ) -> None:
+        if not rejections:
+            return
+        counts = Counter(type(error).__name__ for _, error in rejections)
+        first_coord, first_error = rejections[0]
+        log.error(
+            f"Rejected {len(rejections)} of {planned} planned source files after "
+            f"attempting {attempted}; rejection types: {dict(sorted(counts.items()))}; "
+            f"first: {first_coord.get_url()}: {first_error}"
         )
 
     @classmethod

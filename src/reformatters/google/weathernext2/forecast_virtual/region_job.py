@@ -1,4 +1,5 @@
 from base64 import b64decode
+from binascii import Error as BinasciiError
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -27,7 +28,11 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    SourceFileRejectedError,
+    VirtualRef,
+    VirtualRegionJob,
+)
 
 from .template_config import (
     PER_INIT_STORE_DATE,
@@ -55,6 +60,7 @@ log = get_logger(__name__)
 class NativeObjectMetadata(NamedTuple):
     size: int
     etag_checksum: str
+    rejection_reason: str | None = None
 
 
 def weathernext2_virtual_chunk_containers() -> tuple[
@@ -370,7 +376,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             coords_by_manifest.setdefault(manifest_index, []).append(coord)
         for coords in coords_by_manifest.values():
             coords.sort(key=lambda coord: (coord.init_time, coord.lead_time))
-            yield from super().process_virtual_refs(coords)
+        yield from self._process_virtual_ref_groups(
+            list(coords_by_manifest.values()), len(remaining)
+        )
 
     def file_refs(
         self,
@@ -379,6 +387,20 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
     ) -> list[VirtualRef]:
         chunks = self._source_chunks(coord)
         assert set(coord.chunk_metadata) == {chunk.location for chunk in chunks}
+        invalid = [
+            (
+                location,
+                metadata.rejection_reason or f"non-positive size {metadata.size}",
+            )
+            for location, metadata in coord.chunk_metadata.items()
+            if metadata.size <= 0 or metadata.rejection_reason is not None
+        ]
+        if invalid:
+            location, reason = min(invalid)
+            raise SourceFileRejectedError(
+                f"{len(invalid)} listed source object(s) have invalid metadata; "
+                f"first: {location}: {reason}"
+            )
         return [
             VirtualRef(
                 data_var=chunk.data_var,
@@ -452,14 +474,27 @@ def _list_objects(
             assert key.startswith(query.prefix), (
                 f"listed object escaped prefix {query.prefix}: {key}"
             )
-            size = int(item["size"])
-            assert size > 0, f"invalid object size for {key}: {size}"
             location = f"{PROXY_LOCATION_PREFIX}{key}"
             assert location not in objects, f"duplicate listed object: {key}"
-            md5 = b64decode(str(item["md5Hash"]), validate=True)
-            assert len(md5) == 16, f"invalid object MD5 for {key}"
+            reasons = []
+            try:
+                size = int(item["size"])
+            except KeyError, TypeError, ValueError:
+                size = 0
+                reasons.append("missing or non-integer size")
+            else:
+                if size <= 0:
+                    reasons.append(f"non-positive size {size}")
+            try:
+                md5 = b64decode(str(item["md5Hash"]), validate=True)
+            except BinasciiError, KeyError:
+                md5 = b""
+            if len(md5) != 16:
+                reasons.append("missing or invalid MD5")
             objects[location] = NativeObjectMetadata(
-                size=size, etag_checksum=f'"{md5.hex()}"'
+                size=size,
+                etag_checksum=f'"{md5.hex()}"',
+                rejection_reason="; ".join(reasons) or None,
             )
         page_token = payload.get("nextPageToken")
         if page_token is None:

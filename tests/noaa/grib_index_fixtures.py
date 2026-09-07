@@ -76,7 +76,7 @@ def stub_grib_source_file_reads(
             # The guard only requires the declared message to fit the remaining bytes,
             # and the caller's file_size is unknown here, so declare the smallest that
             # always fits. A test about the guard itself stubs s3_read_bytes instead.
-            length = 1
+            length = GRIB_SECTION_0_BYTES
         return grib_section_0(length)
 
     monkeypatch.setattr(module, "s3_download_to_disk", download)

@@ -14,7 +14,6 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
-    AmbiguousSourceFileRejectedError,
     SourceFileRejectedError,
     VirtualRef,
 )
@@ -201,7 +200,7 @@ def test_file_refs_duplicate_messages_keep_the_first_and_still_fill_every_variab
         assert (ref.offset, ref.length) == (0, 1000)
 
 
-def test_file_refs_skips_index_whose_bad_range_is_on_an_unmatched_message(
+def test_file_refs_rejects_index_whose_bad_range_is_on_an_unmatched_message(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # Rejecting the index discards the whole file, so every message's range is
@@ -268,7 +267,7 @@ def test_file_refs_lead_0_instant_uses_anl_window(
     assert [r.data_var.name for r in refs] == ["temperature_2m"]
 
 
-def test_missing_representative_chunk_is_an_ambiguous_source_rejection(
+def test_missing_representative_chunk_is_fatal(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(
@@ -282,10 +281,8 @@ def test_missing_representative_chunk_is_an_ambiguous_source_rejection(
     job = make_job(template_ds, data_vars)
     refs = job.file_refs(file_coord, file_size=1000)
 
-    rejection = job.source_file_rejection(file_coord, refs)
-
-    assert isinstance(rejection, AmbiguousSourceFileRejectedError)
-    assert "empty refs" in str(rejection)
+    with pytest.raises(AssertionError, match="empty refs"):
+        job._assert_probe_chunk_covered(file_coord, refs)
 
 
 def test_internal_probe_assertion_remains_fatal(
@@ -308,10 +305,10 @@ def test_internal_probe_assertion_remains_fatal(
     )
 
     with pytest.raises(AssertionError, match="our representative bug"):
-        job.source_file_rejection(file_coord, [ref])
+        job._assert_probe_chunk_covered(file_coord, [ref])
 
 
-def test_file_refs_skips_index_with_non_increasing_offsets(
+def test_file_refs_rejects_index_with_non_increasing_offsets(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(
@@ -326,13 +323,33 @@ def test_file_refs_skips_index_with_non_increasing_offsets(
         job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
-def test_file_refs_skips_index_reaching_past_the_data_file(
+def test_file_refs_rejects_negative_index_offset_before_reading_data(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:-1:d=2018071312:TMP:2 m above ground:6 hour fcst:\n",
+    )
+
+    def must_not_read(url: str, **kwargs: object) -> bytes:
+        raise AssertionError("negative range read attempted")
+
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", must_not_read)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="byte ranges"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
+
+
+def test_file_refs_rejects_index_reaching_past_the_data_file(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(monkeypatch, tmp_path, _SFC_INDEX)
     data_vars = [get_var("temperature_2m")]  # index says bytes 500..1500
     job = make_job(template_ds, data_vars)
-    with pytest.raises(SourceFileRejectedError, match="last offset"):
+    with pytest.raises(SourceFileRejectedError, match="byte ranges"):
         job.file_refs(coord("sfc", data_vars), file_size=1200)
 
 
@@ -359,7 +376,7 @@ def test_stubbed_source_file_reads_are_all_keyed_on_the_index_url(
     assert all(url.endswith(".idx") for url in requested), requested
 
 
-def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
+def test_file_refs_rejects_index_whose_offsets_drifted_but_stayed_in_bounds(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # A re-uploaded object leaves its sidecar index naming byte ranges that are no
@@ -379,7 +396,27 @@ def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
         job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
-def test_file_refs_skips_index_whose_middle_message_was_resized(
+@pytest.mark.parametrize("declared_length", [0, 15])
+def test_file_refs_rejects_impossible_declared_grib_length(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    declared_length: int,
+) -> None:
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, **kwargs: grib_section_0(declared_length),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
+
+
+def test_file_refs_rejects_index_whose_middle_message_was_resized(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The case a first-entry check cannot see: message 1 is untouched, so its length still
@@ -400,7 +437,7 @@ def test_file_refs_skips_index_whose_middle_message_was_resized(
         job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
-def test_file_refs_skips_index_whose_last_offset_is_past_the_file_end(
+def test_file_refs_rejects_index_whose_last_offset_is_past_the_file_end(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # A stale index can name a last offset beyond the object, where a ranged GET would
@@ -438,7 +475,7 @@ def test_file_refs_accepts_an_index_that_omits_trailing_messages(
     ] == ["temperature_2m"]
 
 
-def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(
+def test_file_refs_rejects_index_whose_offsets_are_uniformly_shifted(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # Displacing every offset by the same amount leaves each span the right length and
@@ -465,7 +502,7 @@ def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(
         job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
-def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
+def test_file_refs_rejects_an_object_too_short_to_hold_a_grib_header(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # A truncated or non-GRIB object is untrusted source state, so it discards the one
@@ -483,7 +520,7 @@ def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
         job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
-def test_file_refs_skips_empty_index(
+def test_file_refs_rejects_empty_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(monkeypatch, tmp_path, "")

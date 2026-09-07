@@ -170,9 +170,7 @@ class ExampleVirtualRegionJob(
         #     )
         #     for var, start, end in zip(coord.data_vars, starts, ends, strict=True)
         # ]
-        raise NotImplementedError(
-            "Return the VirtualRefs for one source file, or [] to skip it."
-        )
+        raise NotImplementedError("Return the VirtualRefs for one source file.")
 
     # filter_already_present probes one "representative" variable per file to decide
     # whether the file is already in the manifest. The default picks the first instant

@@ -9,7 +9,6 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
-from reformatters.common.virtual_region_job import AmbiguousSourceFileRejectedError
 from reformatters.noaa import noaa_virtual_region_job as noaa_virtual_job_module
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.region_job import (
     NoaaGefsForecast10Day025DegreeVirtualRegionJob,
@@ -325,7 +324,7 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AmbiguousSourceFileRejectedError, match="has no message for"):
+    with pytest.raises(AssertionError, match="has no message for"):
         job.file_refs(coord, file_size=1200)
 
 

@@ -137,33 +137,49 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
             coord.get_index_url(), self.dataset_id, region=SOURCE_REGION
         )
         try:
-            index_df = parse_index_file(index_path, ensemble=False)
+            try:
+                index_df = parse_index_file(index_path, ensemble=False)
+                entries = index_df.reset_index()
+                index_rows = [
+                    (
+                        str(param),
+                        str(levtype),
+                        None if pd.isna(levelist) else int(levelist),
+                        int(raw_offset),
+                        int(raw_length),
+                    )
+                    for param, levtype, levelist, raw_offset, raw_length in zip(
+                        entries["param"],
+                        entries["levtype"],
+                        entries["levelist"],
+                        entries["_offset"],
+                        entries["_length"],
+                        strict=True,
+                    )
+                ]
+            except (KeyError, OverflowError, TypeError, ValueError) as error:
+                raise SourceFileRejectedError(
+                    "empty or unparseable GRIB index"
+                ) from error
         finally:
             index_path.unlink()
+
+        if not index_rows:
+            raise SourceFileRejectedError("empty or unparseable GRIB index")
 
         lookup = self._message_lookup(coord.data_vars)
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
-        entries = index_df.reset_index()
-        for param, levtype, levelist, raw_offset, raw_length in zip(
-            entries["param"],
-            entries["levtype"],
-            entries["levelist"],
-            entries["_offset"],
-            entries["_length"],
-            strict=True,
-        ):
-            level = None if pd.isna(levelist) else int(levelist)
-            matches = lookup.get((str(param), str(levtype), level))
-            if not matches:
-                continue
-            offset, length = int(raw_offset), int(raw_length)
-            if length <= 0 or offset + length > file_size:
+        for param, levtype, level, offset, length in index_rows:
+            if not 0 <= offset < offset + length <= file_size:
                 raise SourceFileRejectedError(
                     f"index byte range falls outside the "
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
+            matches = lookup.get((param, levtype, level))
+            if not matches:
+                continue
             for var, level_label in matches:
                 refs.append(
                     VirtualRef(

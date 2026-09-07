@@ -8,10 +8,7 @@ import xarray as xr
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
-from reformatters.common.virtual_region_job import (
-    AmbiguousSourceFileRejectedError,
-    VirtualRef,
-)
+from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
     GEFSSourceFileType,
@@ -81,11 +78,10 @@ class NoaaGefsVirtualRegionJob(
         unmatched = sorted(
             var.name for var in coord.data_vars if var.path not in filled
         )
-        if unmatched:
-            raise AmbiguousSourceFileRejectedError(
-                f"the index has no message for {unmatched}; "
-                "the source may be incomplete or its era may not be modelled"
-            )
+        assert not unmatched, (
+            f"{coord.get_url()} has no message for {unmatched}; "
+            "the source era is not modelled by this catalog"
+        )
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
         """Probe file presence through a variable the archive published in every era,

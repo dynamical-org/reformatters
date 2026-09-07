@@ -246,12 +246,42 @@ def test_file_refs_missing_level_yields_no_ref(
     assert [ref.out_loc["pressure_level"] for ref in refs] == [1000]
 
 
-def test_file_refs_skips_stale_index_past_eof(
+def test_file_refs_rejects_stale_index_past_eof(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _fake_index(monkeypatch, tmp_path, _index_line("2t", "sfc", 500, 1000))
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
+    with pytest.raises(SourceFileRejectedError, match="stale or mismatched"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+@pytest.mark.parametrize(
+    "index",
+    ["", "not json\n", json.dumps({"param": "2t", "_offset": 0}) + "\n"],
+)
+def test_file_refs_rejects_empty_or_malformed_index(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    index: str,
+) -> None:
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="unparseable"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
+def test_file_refs_rejects_negative_offset_on_unmatched_message(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    index = _index_line("skt", "sfc", -1, 1000)
+    _fake_index(monkeypatch, tmp_path, index)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars=data_vars)
+
     with pytest.raises(SourceFileRejectedError, match="stale or mismatched"):
         job.file_refs(_coord(data_vars), file_size=1200)
 

@@ -8,7 +8,6 @@ from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCo
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import (
-    AmbiguousSourceFileRejectedError,
     SourceFileRejectedError,
     VirtualRef,
     VirtualRegionJob,
@@ -28,6 +27,7 @@ GRIB_SECTION_0_BYTES = 16
 
 
 NOAA_DATA_VAR = TypeVar("NOAA_DATA_VAR", bound=DataVar[NoaaInternalAttrs])
+_INVALID_INDEX = "empty or unparseable GRIB index"
 
 
 class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]):
@@ -96,15 +96,13 @@ class NoaaVirtualRegionJob(
         try:
             try:
                 index_lines = parse_grib_index_lines(index_path)
-            except (IndexError, UnicodeError, ValueError) as error:
-                raise SourceFileRejectedError(
-                    "empty or unparseable GRIB index"
-                ) from error
+            except (IndexError, ValueError) as error:
+                raise SourceFileRejectedError(_INVALID_INDEX) from error
         finally:
             index_path.unlink()
 
         if not index_lines:
-            raise SourceFileRejectedError("empty or unparseable GRIB index")
+            raise SourceFileRejectedError(_INVALID_INDEX)
 
         lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
         # Each message's end byte is the next message's start; the last is the file end.
@@ -112,11 +110,25 @@ class NoaaVirtualRegionJob(
         ends = [*starts[1:], file_size]
 
         location = coord.get_url()
+        # Checked for every message, matched or not: a corrupt range anywhere in the
+        # index condemns the whole file.
+        if any(
+            not 0 <= start < end <= file_size
+            for start, end in zip(starts, ends, strict=True)
+        ):
+            raise SourceFileRejectedError(
+                f"index byte ranges fall outside the {file_size}-byte data file; "
+                "stale or mismatched index"
+            )
         # A message that changed size shifts every offset after it, so the last entry is
         # where any staleness shows: bounds alone cannot see it. Not an equality against
         # the file end - a healthy index may omit trailing messages the object still has.
         declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
-        if declared_length is None or declared_length > file_size - starts[-1]:
+        if (
+            declared_length is None
+            or declared_length < GRIB_SECTION_0_BYTES
+            or declared_length > file_size - starts[-1]
+        ):
             raise SourceFileRejectedError(
                 f"the index's last offset {starts[-1]} does not "
                 f"begin a GRIB message that fits the {file_size}-byte data file; "
@@ -127,14 +139,6 @@ class NoaaVirtualRegionJob(
         refs = []
         filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
-            # Byte ranges past the data file mean a stale/mismatched index; skip it.
-            # Checked for every message, matched or not: the whole file is discarded,
-            # so a corrupt range anywhere in the index condemns all of it.
-            if end > file_size or end <= start:
-                raise SourceFileRejectedError(
-                    f"index byte ranges fall outside the "
-                    f"{file_size}-byte data file; stale or mismatched index"
-                )
             if not self.owns_index_message(coord, element, level):
                 continue
             matches = lookup.get((element, level, window))
@@ -161,16 +165,10 @@ class NoaaVirtualRegionJob(
         self._check_refs_complete(coord, refs)
         return refs
 
-    def source_file_rejection(
-        self, coord: NOAA_VIRTUAL_COORD, file_refs: Sequence[VirtualRef]
-    ) -> AmbiguousSourceFileRejectedError | None:
-        error = self._probe_chunk_coverage_error(coord, file_refs)
-        return AmbiguousSourceFileRejectedError(error) if error is not None else None
-
     def _check_refs_complete(
         self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
     ) -> None:
-        """Hook for a subclass to reject a file whose index matched only some of the
+        """Hook for a subclass to fail if an index matched only some of the
         coord's variables. Reached only once the index parsed and every byte range
         checked out, so an empty `refs` here means nothing matched, not a skipped file.
         """

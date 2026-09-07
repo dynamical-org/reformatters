@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import Mock
 
 import httpx
@@ -8,6 +9,7 @@ import pytest
 import xarray as xr
 from zarr.storage import MemoryStore
 
+from reformatters.common.virtual_region_job import SourceFileRejectedError
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -211,6 +213,70 @@ def test_operational_refs_keep_singleton_member_and_level_chunks(
     )
 
 
+def test_file_refs_rejects_zero_byte_source_object() -> None:
+    var = _var(OPERATIONAL, "temperature_2m")
+    template = OPERATIONAL.get_template(pd.Timestamp("2025-03-01T12:00"))
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        template,
+        [var],
+    )
+    coord = _coord(OPERATIONAL, [var], pd.Timestamp("2025-03-01T06:00"))
+    chunks = job._source_chunks(coord)
+    coord.chunk_metadata.update(
+        {
+            chunk.location: region_job_module.NativeObjectMetadata(
+                size=0 if index == 0 else 100,
+                etag_checksum='"00000000000000000000000000000000"',
+            )
+            for index, chunk in enumerate(chunks)
+        }
+    )
+
+    with pytest.raises(SourceFileRejectedError, match="non-positive size"):
+        job.file_refs(coord, 0)
+
+
+def test_backfill_rejection_accounting_spans_manifest_groups() -> None:
+    class RejectingJob(GoogleWeathernext2ForecastHistoricalVirtualRegionJob):
+        manifest_init_split: ClassVar[int] = 1
+
+        def discover_available(
+            self,
+            pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord],
+        ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
+            for coord in pending:
+                coord.chunk_metadata.update(
+                    {
+                        chunk.location: region_job_module.NativeObjectMetadata(
+                            size=0,
+                            etag_checksum="",
+                        )
+                        for chunk in self._source_chunks(coord)
+                    }
+                )
+            return [(coord, 0) for coord in pending]
+
+    var = _var(HISTORICAL, "temperature_2m")
+    template = HISTORICAL.get_template(pd.Timestamp("2022-01-03T00:00"))
+    job = RejectingJob(
+        tmp_store=Path("unused.zarr"),
+        template_ds=template,
+        data_vars=[var],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    coords = [
+        _coord(HISTORICAL, [var], pd.Timestamp(init_time))
+        for init_time in ("2022-01-01T00:00", "2022-01-01T06:00")
+    ]
+
+    with pytest.raises(RuntimeError, match="Rejected 2 of 2 planned source files"):
+        list(job.process_virtual_refs(coords))
+
+
 def test_operational_generation_enforces_strict_init_time_cutoff() -> None:
     init_time = pd.Timestamp("2025-03-01T00:00")
     template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
@@ -383,3 +449,33 @@ def test_object_listing_retries_transient_response() -> None:
         )
     }
     assert client.get.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("metadata", "reason"),
+    [
+        ({"size": "not-an-integer", "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA=="}, "size"),
+        ({"size": "100", "md5Hash": "not-base64"}, "MD5"),
+    ],
+)
+def test_object_listing_preserves_invalid_source_metadata_for_rejection(
+    metadata: dict[str, str], reason: str
+) -> None:
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    response = httpx.Response(
+        200,
+        request=httpx.Request("GET", OBJECTS_LOCATION),
+        json={"items": [{"name": f"{prefix}0.1.0.0", **metadata}]},
+    )
+    client = Mock()
+    client.get.return_value = response
+
+    objects = region_job_module._list_objects(
+        client,
+        region_job_module.ObjectListingQuery(prefix),
+    )
+
+    assert objects is not None
+    [object_metadata] = objects.values()
+    assert object_metadata.rejection_reason is not None
+    assert reason in object_metadata.rejection_reason
