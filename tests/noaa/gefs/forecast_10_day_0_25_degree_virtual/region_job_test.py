@@ -197,7 +197,7 @@ def test_forecast_discovery_releases_a_partly_published_init(
     """A forecast publishes one lead at a time over ~110 minutes; withholding an init
     until every lead of every member landed would delay its first lead by the length of
     the whole run. So every file the source has published is released immediately, and
-    the ragged leading edge is absorbed by min_present_fraction instead.
+    the newest init stays ragged until the run's own polling fills it in.
 
     The analysis dataset deliberately does the opposite, which is why this is asserted
     on behaviour rather than on discover_available being left unoverridden.

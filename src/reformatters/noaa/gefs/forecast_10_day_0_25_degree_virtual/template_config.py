@@ -29,10 +29,6 @@ class NoaaGefsForecast10Day025DegreeVirtualTemplateConfig(
             name="NOAA GEFS forecast, 10 day, 0.25 degree, virtual",
             description=(
                 "Weather forecasts from the Global Ensemble Forecast System (GEFS) "
-                "operated by NOAA NWS NCEP, served as references to the source GRIB "
-                "messages. Covers every variable the 0.25 degree pgrb2s file carries, "
-                "for all 31 ensemble members, through the 240 hour lead time where "
-                "that file ends; the materialized noaa-gefs-forecast-35-day continues "
-                "past it on a coarser grid."
+                "operated by NOAA NWS NCEP."
             ),
         )

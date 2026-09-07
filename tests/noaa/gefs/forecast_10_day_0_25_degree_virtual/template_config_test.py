@@ -81,9 +81,7 @@ def test_window_comments_are_phrased_in_lead_time() -> None:
     )
     assert get_var("total_precipitation_surface").attrs.comment == (
         "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... hours) "
-        "or 3 hour period (lead times 3, 9, 15, ... hours). Subtracting the value at an "
-        "earlier lead time with the same window start gives the exact total between "
-        "those two lead times."
+        "or 3 hour period (lead times 3, 9, 15, ... hours)."
     )
 
 

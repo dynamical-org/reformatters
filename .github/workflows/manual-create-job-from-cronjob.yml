@@ -40,8 +40,8 @@ name: 'Manual: Create Job from CronJob'
         - noaa-gefs-analysis-0-25-degree-virtual-validate
         - noaa-gefs-analysis-update
         - noaa-gefs-analysis-validate
-        - noaa-gefs-forecast-10-day-0p25-virtual-update
-        - noaa-gefs-forecast-10-day-0p25-virtual-validate
+        - noaa-gefs-forecast-10-day-0-25-virtual-update
+        - noaa-gefs-forecast-10-day-0-25-virtual-validate
         - noaa-gefs-forecast-35-day-update
         - noaa-gefs-forecast-35-day-validate
         - noaa-gfs-analysis-update

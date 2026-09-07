@@ -206,11 +206,7 @@ class NoaaGefsForecastVirtualTemplateConfig(NoaaGefsVirtualTemplateConfig):
 
     window_comments: dict[str, str] = {
         "avg": f"Average value in the last {_WINDOW_PERIODS}.",
-        "accum": (
-            f"Total accumulated in the last {_WINDOW_PERIODS}. Subtracting the value at "
-            "an earlier lead time with the same window start gives the exact total "
-            "between those two lead times."
-        ),
+        "accum": f"Total accumulated in the last {_WINDOW_PERIODS}.",
         "max": f"Maximum value in the last {_WINDOW_PERIODS}.",
         "min": f"Minimum value in the last {_WINDOW_PERIODS}.",
     }

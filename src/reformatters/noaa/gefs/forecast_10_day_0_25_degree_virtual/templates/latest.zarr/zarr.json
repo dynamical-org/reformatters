@@ -3,7 +3,7 @@
     "dataset_id": "noaa-gefs-forecast-10-day-0-25-degree-virtual",
     "dataset_version": "0.1.0",
     "name": "NOAA GEFS forecast, 10 day, 0.25 degree, virtual",
-    "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP, served as references to the source GRIB messages. Covers every variable the 0.25 degree pgrb2s file carries, for all 31 ensemble members, through the 240 hour lead time where that file ends; the materialized noaa-gefs-forecast-35-day continues past it on a coarser grid.",
+    "description": "Weather forecasts from the Global Ensemble Forecast System (GEFS) operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP GEFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
@@ -2183,7 +2183,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times.",
+          "comment": "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours).",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

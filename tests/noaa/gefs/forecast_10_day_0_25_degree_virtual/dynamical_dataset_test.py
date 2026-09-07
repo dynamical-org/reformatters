@@ -267,11 +267,11 @@ def test_operational_update_window_spans_three_update_fires(
 def test_cron_job_names_fit_the_kubernetes_limit(
     dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
 ) -> None:
-    """The dataset id plus "-validate" is two characters over, so the names abbreviate
-    the resolution. Constructing the CronJobs at all is the check -- the field validator
+    """The dataset id plus "-validate" is two characters over, so the names drop
+    "-degree". Constructing the CronJobs at all is the check -- the field validator
     rejects a longer name -- but pin the abbreviation so it stays recognizable."""
     for cron_job in dataset.operational_kubernetes_resources("test-image-tag"):
-        assert cron_job.name.startswith("noaa-gefs-forecast-10-day-0p25-virtual-")
+        assert cron_job.name.startswith("noaa-gefs-forecast-10-day-0-25-virtual-")
         assert len(cron_job.name) <= 52
         assert cron_job.dataset_id == dataset.dataset_id
 
@@ -293,18 +293,18 @@ def test_validators(
         - GEFS_INIT_TIME_FREQUENCY
     )
 
-    # The newest init is 6h25m old when validation fires, so one cycle that rolled its
-    # files to the next fire still passes and two stalled cycles fail.
+    # The newest init is 6h25m old when validation fires and the update that ingested
+    # it stopped writing 10 minutes earlier, so the first stalled cycle alerts.
     assert validation_fire - newest_init == pd.Timedelta("6h25m")
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=12)
+    assert current_data.max_delay == timedelta(hours=6, minutes=20)
     assert (
         _stalled_cycles_before_alerting(
             current_data.max_delay, validation_fire, newest_init, monkeypatch
         )
-        == 2
+        == 1
     )
 
     completeness = next(
@@ -314,22 +314,10 @@ def test_validators(
     )
     assert completeness.include_vars == "all"
     assert completeness.exclude_vars == ()
-    # The leading tier covers the newest init, which the source may still be finishing;
-    # every older init must be whole.
-    assert completeness.min_present_fraction == (0.95, 1.0)
-    expected_files_per_init = 81 * 31
-    allowed_missing = max(
-        missing
-        for missing in range(expected_files_per_init)
-        if (expected_files_per_init - missing) / expected_files_per_init >= 0.95
-    )
-    # The last four lead times of every member, which the source lays down in its final
-    # ~20 minutes; a fifth lead time's worth would fail.
-    assert 4 * 31 <= allowed_missing < 5 * 31
-    # Absorbing that tail costs more than one member's worth of files, so a member
-    # missing entirely passes while its init is newest. It is caught one fire later,
-    # when the 18 hour update window still covers that init under the 1.0 tier.
-    assert 81 < allowed_missing
+    # Every init the store reached must be whole: the source finishes publishing before
+    # validation fires, and an init the source has not started is skipped by the
+    # append-dim extent clamp rather than checked here.
+    assert completeness.min_present_fraction == (1.0,)
 
     decode_health = next(
         v for v in validators if isinstance(v, validation.CheckVirtualDecodeHealth)
