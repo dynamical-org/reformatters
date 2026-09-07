@@ -51,18 +51,19 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
-        # A run publishes ~init+3h46m through ~init+28h05m.
-        # Fire just before the first files become available and stop 30m after expected completion.
+        # f000-f384 publishes ~init+3h46m through ~init+6h43m; f390-f840 publishes in
+        # bursts until ~init+28h05m. Fire just before the first burst; the 6h deadline
+        # covers it, and the extension is ingested as soon as the next day's fire finds it.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="45 3 * * *",
             pod_active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="4",
+            cpu="3.5",
             # A fire opens by ingesting the whole extension of the previous cycle,
             # the largest single batch of refs it holds.
-            memory="16G",
+            memory="15G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
             parallelism=1,
