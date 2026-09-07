@@ -31,7 +31,7 @@ def test_lead_times_reach_the_end_of_the_00z_extension() -> None:
 def test_dataset_attributes() -> None:
     attrs = CONFIG.dataset_attributes
     assert attrs.dataset_id == "noaa-gefs-forecast-35-day-0-5-degree-virtual"
-    assert attrs.name == "NOAA GEFS forecast 35 day 0.5 degree, virtual"
+    assert attrs.name == "NOAA GEFS forecast, 35 day, 0.5 degree, virtual"
     assert attrs.dataset_version == "0.1.0"
     assert attrs.time_domain == "Forecasts initialized 2020-10-01 00:00:00 UTC to Present"  # fmt: skip
     assert attrs.time_resolution == "Forecasts initialized every 24 hours"
