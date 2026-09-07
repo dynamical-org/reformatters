@@ -1,0 +1,66 @@
+{
+  "shape": [
+    1,
+    31,
+    181,
+    361,
+    720
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1,
+        361,
+        720
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "HINDEX",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Haines Index",
+    "short_name": "hindex",
+    "units": "1",
+    "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+    "step_type": "instant",
+    "flag_values": [
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "flag_meanings": "very_low_potential very_low_potential low_potential moderate_potential high_potential",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "ensemble_member",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

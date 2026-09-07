@@ -33,6 +33,7 @@ GEFS_ENSEMBLE_MEMBERS = 31
 # pins. It sits near the top of that range so a mid-cycle catch-up run skips the
 # extension rather than writing a partial one.
 GEFS_PRE_EXTENSION_MAX = pd.Timedelta(hours=384)
+GEFS_EXTENSION_MAX = pd.Timedelta(hours=840)
 GEFS_EXTENSION_REQUEST_MIN_AGE = pd.Timedelta(hours=28)
 
 GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")

@@ -526,6 +526,59 @@ def _forecast_resolution(lead_times: pd.TimedeltaIndex) -> str:
     )
 
 
+# The a and b files publish every 3 hours through _AB_FINE_LEAD_MAX and every 6 hours
+# from there to a config's forecast_length.
+_AB_FINE_LEAD_FREQUENCY = pd.Timedelta("3h")
+_AB_FINE_LEAD_MAX = pd.Timedelta("240h")
+_AB_COARSE_LEAD_FREQUENCY = pd.Timedelta("6h")
+
+
+class NoaaGefsForecastABVirtualTemplateConfig(NoaaGefsForecastVirtualTemplateConfig):
+    """Virtual GEFS forecast from the 0.5 degree pgrb2a and pgrb2b products: every
+    variable they carry, in the three vertical groups they populate, on the lead time
+    grid they publish. A subclass declares forecast_length, the init cadence its
+    forecast length is published at, and dataset_attributes."""
+
+    source_file_types: tuple[GEFSSourceFileType, ...] = ("a", "b")
+
+    dims: Dims = {
+        ROOT: ("init_time", "ensemble_member", "lead_time", "latitude", "longitude"),
+        "pressure_level": (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+            "pressure_level",
+        ),
+        "model_level": (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+            "model_level",
+        ),
+        "height_above_mean_sea_level": (
+            "init_time",
+            "ensemble_member",
+            "lead_time",
+            "latitude",
+            "longitude",
+            "height_above_mean_sea_level",
+        ),
+    }
+
+    def lead_times(self) -> pd.TimedeltaIndex:
+        return pd.timedelta_range(
+            "0h", _AB_FINE_LEAD_MAX, freq=_AB_FINE_LEAD_FREQUENCY
+        ).union(
+            pd.timedelta_range(
+                _AB_FINE_LEAD_MAX, self.forecast_length, freq=_AB_COARSE_LEAD_FREQUENCY
+            )
+        )
+
+
 def _virtual_encoding(
     element: str, chunks: tuple[int, ...], filters: Sequence[CodecConfig]
 ) -> Encoding:
