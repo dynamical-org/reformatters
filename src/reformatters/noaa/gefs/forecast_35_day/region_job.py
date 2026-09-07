@@ -121,6 +121,7 @@ class GefsForecast35DayRegionJob(
                     data_array,
                     dim="lead_time",
                     reset_frequency=reset_freq,
+                    expected_clamp_fraction=data_var.internal_attrs.deaccumulation_expected_clamp_fraction,
                 )
             except ValueError:
                 log.exception(f"Error deaccumulating {data_var.name}")

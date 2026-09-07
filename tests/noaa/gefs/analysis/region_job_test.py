@@ -1,3 +1,4 @@
+import logging
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -11,6 +12,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
+from reformatters.common.deaccumulation import DEFAULT_EXPECTED_CLAMP_FRACTION
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import SourceFileResult, SourceFileStatus
 from reformatters.common.storage import (
@@ -32,6 +34,12 @@ from reformatters.noaa.gefs.gefs_config_models import (
 from reformatters.noaa.noaa_utils import (
     NOMADS_RETRY_STATUS_CODES,
     nomads_rate_limiter,
+)
+
+PRECIPITATION_SURFACE = next(
+    data_var
+    for data_var in GefsAnalysisTemplateConfig().data_vars
+    if data_var.name == "precipitation_surface"
 )
 
 
@@ -531,6 +539,65 @@ def test_apply_data_transformations(template_ds: xr.Dataset) -> None:
     # Data should be modified in place (exact changes depend on rounding)
     assert data_array.dtype == np.float32
     # The binary rounding should have been applied
+
+
+# A 6 hourly bucket whose 0-6 hour accumulation reads 0.05mm below its 0-3 hour
+# accumulation, the shape the coarser 0-6 hour packing produces. The dip is a negative
+# step rate above the invalid threshold, so it clamps to 0: one of sixteen values, 6.25%.
+APCP_WITH_ONE_CLAMPED_STEP = [0.0, 0.05] + [0.0] * 14
+
+
+def deaccumulation_errors(
+    template_ds: xr.Dataset,
+    data_var: NoaaGefsDataVar,
+    caplog: pytest.LogCaptureFixture,
+) -> list[str]:
+    data_array = xr.DataArray(
+        np.array(APCP_WITH_ONE_CLAMPED_STEP, dtype=np.float32),
+        dims=["time"],
+        coords={
+            "time": pd.date_range(
+                "2026-09-05T00:00", periods=len(APCP_WITH_ONE_CLAMPED_STEP), freq="3h"
+            )
+        },
+        attrs={"units": data_var.attrs.units},
+    )
+    job = GefsAnalysisRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=xr.DataTree.from_dict({"/": template_ds}),
+        data_vars=[data_var],
+        append_dim="time",
+        region=slice(0, len(APCP_WITH_ONE_CLAMPED_STEP)),
+        reformat_job_name="test-job",
+    )
+
+    with caplog.at_level(logging.ERROR):
+        job.apply_data_transformations(data_array, data_var)
+
+    assert data_array[2] == 0.0  # the dip clamped rather than going negative
+    return [record.message for record in caplog.records]
+
+
+def test_precipitation_allows_the_clamping_coarse_apcp_packing_produces(
+    template_ds: xr.Dataset, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert deaccumulation_errors(template_ds, PRECIPITATION_SURFACE, caplog) == []
+
+
+def test_precipitation_clamp_allowance_comes_from_the_variable(
+    template_ds: xr.Dataset, caplog: pytest.LogCaptureFixture
+) -> None:
+    default_allowance_var = replace(
+        PRECIPITATION_SURFACE,
+        internal_attrs=replace(
+            PRECIPITATION_SURFACE.internal_attrs,
+            deaccumulation_expected_clamp_fraction=DEFAULT_EXPECTED_CLAMP_FRACTION,
+        ),
+    )
+    assert any(
+        "Error deaccumulating precipitation_surface" in message
+        for message in deaccumulation_errors(template_ds, default_allowance_var, caplog)
+    )
 
 
 @patch("xarray.open_zarr")

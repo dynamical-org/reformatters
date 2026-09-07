@@ -439,6 +439,11 @@ def get_shared_data_var_configs(
                 include_lead_time_suffix=True,
                 deaccumulate_to_rate=True,
                 window_reset_frequency=pd.Timedelta("6h"),
+                # In cycles with high global precipitation the 0-6 hour APCP message is
+                # packed to 0.1mm while the 0-3 hour message keeps 0.01mm, so the 3-6 hour
+                # step reads negative by up to one 0.1mm quantum (-9e-6 mm s-1, far above
+                # the invalid threshold) across ~13% of its values.
+                deaccumulation_expected_clamp_fraction=0.15,
                 keep_mantissa_bits=keep_mantissa_bits_default,
             ),
         ),
