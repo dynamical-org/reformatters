@@ -25,6 +25,7 @@ from reformatters.noaa.gefs.common_gefs_template_config import (
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_ENSEMBLE_MEMBERS,
+    GEFS_EXTENSION_MAX,
     GEFS_S_FILE_LEAD_FREQUENCY,
     GEFS_S_FILE_MAX,
     NoaaGefsDataVar,
@@ -104,7 +105,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[NoaaGefsDataVar]):
             "ensemble_member": np.arange(GEFS_ENSEMBLE_MEMBERS),
             "lead_time": pd.timedelta_range(
                 "0h", GEFS_S_FILE_MAX, freq=GEFS_S_FILE_LEAD_FREQUENCY
-            ).union(pd.timedelta_range("246h", "840h", freq="6h")),
+            ).union(pd.timedelta_range("246h", GEFS_EXTENSION_MAX, freq="6h")),
             **get_shared_template_dimension_coordinates(),
         }
 
@@ -115,7 +116,7 @@ class GefsForecast35DayTemplateConfig(TemplateConfig[NoaaGefsDataVar]):
         # Expected forecast length by init hour (00 UTC: 35 days, others: 16 days)
         expected_forecast_length_by_init_hour = pd.Series(
             {
-                0: pd.Timedelta(hours=840),
+                0: GEFS_EXTENSION_MAX,
                 6: pd.Timedelta(hours=384),
                 12: pd.Timedelta(hours=384),
                 18: pd.Timedelta(hours=384),

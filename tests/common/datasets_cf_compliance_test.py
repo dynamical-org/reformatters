@@ -927,7 +927,17 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("tcc", "long_name", "noaa-gfs-forecast-virtual"),
     ("tcc", "standard_name", "noaa-gfs-forecast-virtual"),
     ("tcc", "long_name", "noaa-gefs-forecast-16-day-0-5-degree-virtual"),
+    (
+        "tcc",
+        "long_name",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
     ("tcc", "standard_name", "noaa-gefs-forecast-16-day-0-5-degree-virtual"),
+    (
+        "tcc",
+        "standard_name",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
     # HRRR is on a Lambert-conformal grid whose GRIB messages set the grid-relative
     # wind flag, so its components follow the grid axes (x_wind/y_wind) rather than
     # east and north. The lat-lon datasets carry genuinely earth-relative winds.
@@ -1097,6 +1107,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
+    (
+        "categorical_snow_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
     ("categorical_snow_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_snow_surface", "step_type", "noaa-gfs-forecast-virtual"),
@@ -1117,6 +1132,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "categorical_ice_pellets_surface",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "categorical_ice_pellets_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     (
         "categorical_ice_pellets_surface",
@@ -1146,6 +1166,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     (
         "categorical_freezing_rain_surface",
         "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
+    (
+        "categorical_freezing_rain_surface",
+        "step_type",
         "noaa-gefs-forecast-35-day",
     ),
     ("categorical_freezing_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
@@ -1164,6 +1189,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
+    (
+        "categorical_rain_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
     ("categorical_rain_surface", "step_type", "noaa-gefs-forecast-35-day"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-analysis-virtual"),
     ("categorical_rain_surface", "step_type", "noaa-gfs-forecast-virtual"),
@@ -1181,6 +1211,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
     (
+        "latent_heat_flux_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
+    (
         "sensible_heat_flux_surface",
         "step_type",
         "noaa-gefs-analysis-0-25-degree-virtual",
@@ -1194,6 +1229,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "sensible_heat_flux_surface",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "sensible_heat_flux_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     # GFS and GEFS publish window-average total cloud cover.
     ("total_cloud_cover_atmosphere", "step_type", "noaa-gfs-forecast"),
@@ -1213,6 +1253,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "total_cloud_cover_atmosphere",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "total_cloud_cover_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     (
         "total_cloud_cover_atmosphere",
@@ -1246,6 +1291,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
     (
+        "upward_short_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
+    (
         "upward_long_wave_radiation_flux_surface",
         "step_type",
         "noaa-gefs-analysis-0-25-degree-virtual",
@@ -1261,6 +1311,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
     (
+        "upward_long_wave_radiation_flux_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
+    (
         "upward_long_wave_radiation_flux_top_of_atmosphere",
         "step_type",
         "noaa-gefs-analysis-0-25-degree-virtual",
@@ -1274,6 +1329,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "upward_long_wave_radiation_flux_top_of_atmosphere",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     # HRRR publishes instantaneous downward radiation fluxes while the other
     # sources publish interval averages.
@@ -1341,6 +1401,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
     ),
     (
+        "ground_heat_flux_surface",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    ),
+    (
         "upward_short_wave_radiation_flux_surface",
         "step_type",
         "noaa-gfs-analysis-virtual",
@@ -1369,6 +1434,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "upward_short_wave_radiation_flux_top_of_atmosphere",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "upward_short_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     (
         "upward_short_wave_radiation_flux_top_of_atmosphere",
@@ -1379,6 +1449,11 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
         "upward_long_wave_radiation_flux_top_of_atmosphere",
         "step_type",
         "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    ),
+    (
+        "upward_long_wave_radiation_flux_top_of_atmosphere",
+        "step_type",
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
     ),
     (
         "upward_long_wave_radiation_flux_top_of_atmosphere",

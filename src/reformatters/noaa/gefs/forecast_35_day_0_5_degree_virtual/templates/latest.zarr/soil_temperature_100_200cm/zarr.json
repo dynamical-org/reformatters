@@ -1,0 +1,65 @@
+{
+  "shape": [
+    1,
+    31,
+    181,
+    361,
+    720
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1,
+        361,
+        720
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "offset": -273.15
+      }
+    },
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "TSOIL",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Soil temperature",
+    "short_name": "sot",
+    "standard_name": "soil_temperature",
+    "units": "degree_Celsius",
+    "comment": "NaN over open water, available over land and sea ice.",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "ensemble_member",
+    "lead_time",
+    "latitude",
+    "longitude"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
