@@ -24,7 +24,7 @@ class NoaaGefsForecast16Day05DegreeVirtualTemplateConfig(
     """Virtual GEFS 16 day forecast: every 0.5 degree pgrb2a and pgrb2b message of all
     31 ensemble members, out to the 384 hour lead where those files end."""
 
-    source_file_types: frozenset[GEFSSourceFileType] = frozenset({"a", "b"})
+    source_file_types: tuple[GEFSSourceFileType, ...] = ("a", "b")
     forecast_length: Timedelta = GEFS_PRE_EXTENSION_MAX
 
     dims: Dims = {
