@@ -459,7 +459,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         branch_name: str,
         worker_index: int,
         *,
-        overwrite_chunks: bool = False,
+        overwrite_chunks: bool,
     ) -> dict[str, list[SourceFileResult]]:
         """Process one worker's region jobs against ``branch_name`` and
         return the per-variable source file results.

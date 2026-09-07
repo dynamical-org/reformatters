@@ -20,10 +20,10 @@ The Cartesian product of regions and variable groups produces the full job list,
 
 ## The worker-processing seam
 
-`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name, worker_index)` is the single polymorphic call the coordinator (`DynamicalDataset._process_region_jobs`) drives every dataset variant through. Each variant owns its store/session lifecycle and commit cadence behind it:
+`RegionJob.process_worker_jobs(worker_jobs, store_factory, branch_name, worker_index, overwrite_chunks=...)` is the single polymorphic call the coordinator (`DynamicalDataset._process_region_jobs`) drives every dataset variant through. Each variant owns its store/session lifecycle and commit cadence behind it:
 
 - **Materialized** — opens stores once and writes all of the worker's jobs in a single commit.
-- **Virtual** — gathers the worker's not-already-present source files across all its jobs, then commits each batch its generator yields (a backfill yields once → one commit per worker, like materialized; an operational update yields per poll tick), because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
+- **Virtual** — gathers the worker's source files across all its jobs, dropping the already-present ones unless `overwrite_chunks` asks for a rewrite, then commits each batch its generator yields (a backfill yields once → one commit per worker, like materialized; an operational update yields per poll tick), because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
 
 The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which are single-writer (see below).
 

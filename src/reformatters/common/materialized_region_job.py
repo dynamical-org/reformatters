@@ -127,7 +127,7 @@ class MaterializedRegionJob(
         branch_name: str,
         worker_index: int,
         *,
-        overwrite_chunks: bool = False,  # noqa: ARG003 - always rewrites its region
+        overwrite_chunks: bool,  # noqa: ARG003 - always rewrites its region
     ) -> dict[str, list[SourceFileResult]]:
         """Write all of this worker's jobs to ``branch_name`` in a single commit."""
         # One commit per worker; an empty job set would make an empty icechunk

@@ -314,7 +314,7 @@ class VirtualRegionJob(
         branch_name: str,
         worker_index: int,  # noqa: ARG003 - per-batch commit messages don't carry it
         *,
-        overwrite_chunks: bool = False,
+        overwrite_chunks: bool,
     ) -> dict[str, list[SourceFileResult]]:
         """Drive the whole worker's virtual write loop on ``branch_name``.
 

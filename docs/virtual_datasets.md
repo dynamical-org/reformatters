@@ -24,7 +24,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 `process_worker_jobs` gathers the not-already-present source files across all of a worker's region jobs (one readonly view, one filter pass) into `remaining`, then `VirtualRegionJob.process_virtual` runs the same write loop over that union for both backfills and operational updates; only the branch differs (a temp branch for backfill, `main` for operational):
 
 1. `generate_source_file_coords` lists candidate source files for each of the worker's region jobs.
-2. `filter_already_present` drops files whose refs are already in the manifest; the survivors across the worker's jobs are unioned into `remaining`.
+2. `filter_already_present` drops files whose refs are already in the manifest; the survivors across the worker's jobs are unioned into `remaining`. An `overwrite_chunks` backfill skips this step, so refs pointing at the wrong source file are rewritten rather than treated as done.
 3. `process_virtual_refs(remaining)` — a concrete `VirtualRegionJob` generator — each tick asks `discover_available` which files are ready, builds their refs with `file_refs`, and yields batches of `(source file coord, its VirtualRefs)` pairs.
 4. Each yield is committed atomically: open fresh writable sessions (a committed icechunk session is read-only), grow the append dim if needed (`sync_dims_to`), `set_virtual_refs`, commit.
 
