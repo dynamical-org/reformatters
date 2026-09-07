@@ -1,8 +1,9 @@
+import struct
 from collections.abc import Sequence
 from typing import Any, ClassVar, Generic, TypeVar
 
 from reformatters.common.config_models import ROOT, DataVar
-from reformatters.common.download import s3_download_to_disk, s3_store
+from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.time_utils import whole_hours
@@ -18,6 +19,10 @@ from reformatters.noaa.noaa_grib_index import (
 )
 
 log = get_logger(__name__)
+
+# GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
+# total length as a big endian u64.
+GRIB_SECTION_0_BYTES = 16
 
 
 NOAA_DATA_VAR = TypeVar("NOAA_DATA_VAR", bound=DataVar[NoaaInternalAttrs])
@@ -100,8 +105,20 @@ class NoaaVirtualRegionJob(
         starts = [start for start, *_ in index_lines]
         ends = [*starts[1:], file_size]
 
-        out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
+        # A message that changed size shifts every offset after it, so the last entry is
+        # where any staleness shows: bounds alone cannot see it. Not an equality against
+        # the file end - a healthy index may omit trailing messages the object still has.
+        declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
+        if declared_length is None or declared_length > file_size - starts[-1]:
+            log.error(
+                f"Skipping {location}: the index's last offset {starts[-1]} does not "
+                f"begin a GRIB message that fits the {file_size}-byte data file; "
+                f"stale or mismatched index"
+            )
+            return []
+
+        out_loc_base = dict(coord.out_loc())
         refs = []
         filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
         for (start, element, level, window), end in zip(index_lines, ends, strict=True):
@@ -109,7 +126,7 @@ class NoaaVirtualRegionJob(
             # Checked for every message, matched or not: the whole file is discarded,
             # so a corrupt range anywhere in the index condemns all of it.
             if end > file_size or end <= start:
-                log.warning(
+                log.error(
                     f"Skipping {location}: index byte ranges fall outside the "
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
@@ -147,6 +164,26 @@ class NoaaVirtualRegionJob(
         coord's variables. Reached only once the index parsed and every byte range
         checked out, so an empty `refs` here means nothing matched, not a skipped file.
         """
+
+    def grib_message_length_at(
+        self, coord: NOAA_VIRTUAL_COORD, offset: int, file_size: int
+    ) -> int | None:
+        """The edition 2 message length the data file declares at `offset`, read from the
+        object itself and so independent of the index, or None if no such message starts
+        there. A stale index can put `offset` past the end, which a ranged GET rejects.
+        """
+        if offset + GRIB_SECTION_0_BYTES > file_size:
+            return None
+        header = s3_read_bytes(
+            coord.get_url(),
+            region=self.source_bucket_region,
+            start=offset,
+            end=offset + GRIB_SECTION_0_BYTES,
+        )
+        if header[:4] != b"GRIB" or header[7] != 2:
+            return None
+        (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
+        return length
 
     def _message_lookup(
         self, data_vars: Sequence[NOAA_DATA_VAR], lead_hours: int

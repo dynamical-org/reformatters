@@ -86,6 +86,22 @@ def test_every_hour_of_a_day_takes_the_shortest_published_lead(
         assert pd.Timedelta("1h") <= time - previous_cycle <= pd.Timedelta("6h"), time
 
 
+def test_sunshine_duration_reads_a_windowed_lead_at_a_synoptic_hour(
+    template_ds: xr.DataTree,
+) -> None:
+    """SUNSD is published at f000, but that record accumulates over 3 hours rather than
+    the 1-6 hour window the variable documents, so the analysis takes it at leads 1-6
+    like every other windowed variable."""
+    var = get_var("sunshine_duration_surface")
+
+    time = pd.Timestamp("2021-05-03T12:00")
+    (coord,) = coords_for_times(template_ds, [var], [time])
+    assert (coord.init_time, coord.lead_time) == (
+        pd.Timestamp("2021-05-03T06:00"),
+        pd.Timedelta("6h"),
+    )
+
+
 def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None:
     """Away from a 00, 06, 12 or 18 hour the two variable sets share a file, so a time
     costs two coords; at one they come from different cycles and it costs four."""
@@ -100,15 +116,15 @@ def test_both_products_are_read_for_every_time(template_ds: xr.DataTree) -> None
         assert {c.file_type for c in coords} == {"pgrb2", "pgrb2b"}, time
 
 
-def test_the_five_instant_variables_absent_at_hour_0_are_read_at_a_longer_lead() -> (
-    None
-):
+def test_which_instant_variables_lack_hour_0_values() -> None:
     """GFS publishes no windowed message at f000, and also drops five instantaneous
     ones. Nine other instantaneous variables share an element with a windowed sibling
     and ARE published there, so an hour-0 rule keyed on the element would wrongly drop
-    them.
+    them. SUNSD is the one entry the source does publish at f000; it is excluded by
+    override because that record covers a 3 hour window rather than the variable's own.
     """
     absent_at_hour_0 = {
+        "sunshine_duration_surface",
         "potential_evaporation_rate_surface",
         "instantaneous_precipitation_convective_surface",
         "pressure_convective_cloud_bottom",

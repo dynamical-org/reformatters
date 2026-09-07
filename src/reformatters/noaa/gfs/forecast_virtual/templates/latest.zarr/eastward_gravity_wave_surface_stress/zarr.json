@@ -37,9 +37,8 @@
   "attributes": {
     "long_name": "Eastward gravity wave surface stress",
     "short_name": "lgws",
-    "standard_name": "atmosphere_eastward_stress_due_to_gravity_wave_drag",
     "units": "Pa",
-    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
+    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Positive values are a westward gravity wave drag force on the atmosphere: the opposite sign convention to CF's atmosphere_eastward_stress_due_to_gravity_wave_drag.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -29,7 +29,10 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
-from tests.noaa.grib_index_fixtures import stub_grib_index_download
+from tests.noaa.grib_index_fixtures import (
+    grib_section_0,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 # The archive's first init, so its position along init_time is 0.
@@ -74,9 +77,18 @@ def coord(
     )
 
 
-def fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    stub_grib_index_download(
-        monkeypatch, shared_region_job_module, tmp_path, lambda _url: content
+def fake_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    content: str,
+    data_file_size: int | None = None,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda _url: content,
+        data_file_size=data_file_size,
     )
 
 
@@ -133,7 +145,10 @@ def test_file_refs_one_message_fills_two_variables_sharing_a_window(
     # render the identical idx window string, so the single matching message must
     # populate both variables rather than one silently displacing the other.
     fake_index(
-        monkeypatch, tmp_path, "1:0:d=2018071312:APCP:surface:0-1 hour acc fcst:\n"
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:APCP:surface:0-1 hour acc fcst:\n",
+        data_file_size=1000,
     )
     data_vars = [
         get_var("total_precipitation_run_total_surface"),
@@ -232,7 +247,12 @@ def test_file_refs_matches_element_alternative_spellings(
 def test_file_refs_lead_0_instant_uses_anl_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    fake_index(monkeypatch, tmp_path, "1:0:d=2018071312:TMP:2 m above ground:anl:\n")
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:anl:\n",
+        data_file_size=1000,
+    )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
     refs = job.file_refs(
@@ -265,6 +285,148 @@ def test_file_refs_skips_index_reaching_past_the_data_file(
     assert job.file_refs(coord("sfc", data_vars), file_size=1200) == []
 
 
+def test_stubbed_source_file_reads_are_all_keyed_on_the_index_url(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # file_refs downloads `<data url>.idx` and reads the data url's header, so a
+    # make_index keyed on the url must see the index's for both. Handed the data url it
+    # would fetch the whole GRIB file where a test supplies a real index.
+    requested: list[str] = []
+
+    def make_index(url: str) -> str:
+        requested.append(url)
+        return _SFC_INDEX
+
+    stub_grib_source_file_reads(
+        monkeypatch, shared_region_job_module, tmp_path, make_index
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000)
+    assert requested
+    assert all(url.endswith(".idx") for url in requested), requested
+
+
+def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A re-uploaded object leaves its sidecar index naming byte ranges that are no
+    # longer message boundaries but are still inside the file, so the ranges alone
+    # cannot condemn it: refs built from them exist and do not decode.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    # The last entry is at 3000 in a 9000-byte file, so a message declaring more than
+    # the 6000 bytes that remain cannot be the one the index describes.
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, **kwargs: grib_section_0(7000),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_index_whose_middle_message_was_resized(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The case a first-entry check cannot see: message 1 is untouched, so its length still
+    # agrees, but a later message changed size and shifted every offset after it. The
+    # index's last offset then lands mid-message, where there is no GRIB magic.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: (
+            grib_section_0(500) if start == 0 else bytes(16)
+        ),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_index_whose_last_offset_is_past_the_file_end(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A stale index can name a last offset beyond the object, where a ranged GET would
+    # 416. The guard must reject without reading rather than raise into the pool.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+
+    def must_not_read(url: str, **kwargs: object) -> bytes:
+        raise AssertionError("read attempted past the end of the file")
+
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", must_not_read)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=3005) == []
+
+
+def test_file_refs_accepts_an_index_that_omits_trailing_messages(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Real early-HRRR indexes list fewer messages than the object holds, so the last
+    # entry's message ends well before EOF. Requiring it to end AT the file end rejects
+    # 7 of 845 healthy real objects, so the guard only requires that it fit.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, **kwargs: grib_section_0(500),  # 500 of the 6000 bytes remaining
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert [
+        r.data_var.name for r in job.file_refs(coord("sfc", data_vars), file_size=9000)
+    ] == ["temperature_2m"]
+
+
+def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Displacing every offset by the same amount leaves each span the right length and
+    # inside the file, so neither the bounds check nor a message length read at byte 0
+    # sees anything wrong. Reading where the index says the message starts does: the
+    # offset lands mid-message, which carries no GRIB magic.
+    shifted = "".join(
+        line.replace(f":{line.split(':')[1]}:", f":{int(line.split(':')[1]) + 100}:", 1)
+        + "\n"
+        for line in _SFC_INDEX.splitlines()
+    )
+    fake_index(monkeypatch, tmp_path, shifted)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: (
+            grib_section_0(500) if start == 0 else bytes(16)
+        ),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A truncated or non-GRIB object is untrusted source state, so it discards the one
+    # file like any other stale index rather than raising and taking the worker with it.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: b"GRI",
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
 def test_file_refs_skips_empty_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -285,7 +447,10 @@ def test_root_var_chunk_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(
-        monkeypatch, tmp_path, "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n",
+        data_file_size=1000,
     )
     var = get_var("temperature_2m")
     job = make_job(template_ds, [var])

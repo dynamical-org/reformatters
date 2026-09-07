@@ -26,7 +26,10 @@ from reformatters.noaa.noaa_grib_index import (
     grib_index_window_str,
     parse_grib_index_lines,
 )
-from tests.noaa.grib_index_fixtures import cached_grib_index, stub_grib_index_download
+from tests.noaa.grib_index_fixtures import (
+    cached_grib_index,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaGfsForecastVirtualTemplateConfig()
 _DATASET_ID = "noaa-gfs-forecast-virtual-test"
@@ -115,14 +118,16 @@ def test_each_lead_reads_both_products(template_ds: xr.DataTree) -> None:
     assert sorted({c.lead_time for c in coords}) == list(lead_times)
 
 
-def test_hour_0_drops_only_the_variables_the_source_omits_there(
+def test_which_variables_hour_0_drops(
     template_ds: xr.DataTree,
 ) -> None:
     """Nine instantaneous variables share a grib element with a windowed sibling and
     ARE published at f000, so an hour-0 rule keyed on the element would drop them."""
     absent_at_hour_0 = {
         # Every windowed variable, plus five instantaneous convection/evaporation
-        # diagnostics the analysis step does not produce.
+        # diagnostics the analysis step does not produce, plus SUNSD, whose f000 record
+        # the source does publish but on a 3 hour window rather than the variable's own.
+        "sunshine_duration_surface",
         "potential_evaporation_rate_surface",
         "instantaneous_precipitation_convective_surface",
         "pressure_convective_cloud_bottom",
@@ -377,7 +382,7 @@ def test_the_running_totals_render_the_window_the_source_uses(
 @pytest.mark.parametrize(
     ("file_type", "lead_hours", "expected_refs"),
     [
-        ("pgrb2", 0, 696),
+        ("pgrb2", 0, 695),  # one fewer than the source: SUNSD is not read at f000
         ("pgrb2", 1, 743),
         ("pgrb2", 24, 743),
         ("pgrb2", 123, 743),
@@ -401,9 +406,11 @@ def test_every_source_message_reaches_an_array(
     A wrong idx level string, element spelling or rendered window string shows up here
     as a missing ref and a duplicated one as an extra. The counts equal the source's own
     message counts: every array position a file can fill is filled, and the leads where
-    two index lines describe one message still yield one ref per position.
+    two index lines describe one message still yield one ref per position. The one
+    exception is pgrb2 at f000, where SUNSD's message is deliberately left unread
+    because it holds a 3 hour window rather than the variable's own.
     """
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -444,7 +451,7 @@ def test_a_job_filtered_to_a_pressure_level_variable_probes_a_level_it_fills(
     """The two products split the isobaric coordinate, so the probe cell of a job
     carrying only a vertical-group variable has to be chosen per product. This is the
     single-variable backfill of docs/add_new_variable.md."""
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -490,7 +497,7 @@ def test_the_bucket_and_the_run_total_share_one_index_line_at_short_leads(
         ("ACPCP", "surface", f"0-{lead_hours} hour acc fcst"),
     ]
 
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,
@@ -533,7 +540,7 @@ def test_the_bucket_and_the_run_total_separate_past_lead_6(
     era: str,
     tmp_path: Path,
 ) -> None:
-    stub_grib_index_download(
+    stub_grib_source_file_reads(
         monkeypatch,
         shared_region_job_module,
         tmp_path,

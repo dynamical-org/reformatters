@@ -174,6 +174,18 @@ def s3_download_to_disk(
     return local_path
 
 
+def s3_read_bytes(url: str, *, region: str, start: int, end: int) -> bytes:
+    """The `[start, end)` byte range of s3://bucket/key, via the anonymous S3 store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "s3", url
+    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
+    return bytes(
+        obstore.get_range(
+            store, parsed_url.path.removeprefix("/"), start=start, end=end
+        )
+    )
+
+
 def get_local_path(dataset_id: str, path: str, local_path_suffix: str = "") -> Path:
     base_local = DOWNLOAD_DIR / dataset_id / path.removeprefix("/")
     return (

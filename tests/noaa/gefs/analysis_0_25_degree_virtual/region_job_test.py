@@ -22,6 +22,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     NoaaGefsVirtualDataVar,
 )
 from reformatters.noaa.gefs.virtual_region_job import NoaaGefsVirtualRegionJob
+from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
 
 TEMPLATE_CONFIG = NoaaGefsAnalysis025DegreeVirtualTemplateConfig()
 _HOUR_0 = pd.Timedelta(0)
@@ -247,12 +248,9 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
         "3:900:d=2024060106:RH:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
     )
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(index)
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_source_file_reads(
+        monkeypatch, noaa_virtual_job_module, tmp_path, lambda _url: index
+    )
 
     data_vars = [
         get_var("temperature_2m"),
@@ -285,14 +283,15 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     """At lead 6 the accumulation window is 0-6, so a 0-3 line is a different message.
     Committing the file anyway would leave a NaN column nothing ever retries."""
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: (
             "1:0:d=2024060100:APCP:surface:0-3 hour acc fcst:ENS=low-res ctl\n"
-        )
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+        ),
+        data_file_size=1200,
+    )
 
     data_vars = [get_var("total_precipitation_surface")]
     coord = NoaaGefsAnalysis025DegreeVirtualSourceFileCoord(
@@ -313,15 +312,16 @@ def test_file_refs_takes_the_first_of_two_element_spellings_for_one_chunk(
     carrying two of them offers the same chunk twice; the earlier message wins, so the
     variable gets exactly one ref and which bytes it points at is deterministic."""
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: (
             "1:0:d=2024060106:TMP:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
             "2:500:d=2024060106:TMPK:2 m above ground:3 hour fcst:ENS=low-res ctl\n"
-        )
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+        ),
+        data_file_size=1200,
+    )
 
     temperature = get_var("temperature_2m")
     assert temperature.internal_attrs.grib_element == "TMP"
@@ -357,15 +357,16 @@ def test_file_refs_matches_a_file_carrying_one_element_spelling(
     variable; the spellings it did not use are not messages the file failed to deliver.
     """
 
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        path = tmp_path / "index.idx"
-        path.write_text(
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: (
             f"1:0:d=2024060106:{present_element}:2 m above ground:"
             "3 hour fcst:ENS=low-res ctl\n"
-        )
-        return path
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+        ),
+        data_file_size=1200,
+    )
 
     temperature = get_var("temperature_2m")
     assert temperature.internal_attrs.grib_element == "TMP"
@@ -536,13 +537,9 @@ def test_every_requested_variable_maps_to_a_real_message(
     lead_time = pd.Timedelta(hours=int(lead_str))
     index_text = fixture.read_text()
 
-    # file_refs unlinks the index it is given, so hand it a copy rather than the fixture.
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
-        copy = tmp_path / fixture_name
-        copy.write_text(index_text)
-        return copy
-
-    monkeypatch.setattr(noaa_virtual_job_module, "s3_download_to_disk", fake_download)
+    stub_grib_source_file_reads(
+        monkeypatch, noaa_virtual_job_module, tmp_path, lambda _url: index_text
+    )
 
     data_vars = TEMPLATE_CONFIG.data_vars
     coords = coords_at(template_ds, [init_time + lead_time], data_vars)

@@ -53,6 +53,8 @@ _CELSIUS_ELEMENTS = frozenset(
 # ScaleOffset decodes on read as value / scale + offset (see zarr.codecs.ScaleOffset).
 # Scale WEASD from mm to CF lwe_thickness_of_surface_snow_amount's metres.
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
+# Scale TOZNE from Dobson units to metres; 1 DU is 1e-5 m.
+_DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
 
 type WindowKind = Literal["instant", "max", "min", "avg", "acc_6h", "acc_run"]
 
@@ -1109,7 +1111,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="lgws",
             long_name="Eastward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_eastward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a westward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_eastward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         root_var(
             "northward_gravity_wave_surface_stress",
@@ -1119,7 +1125,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="mgws",
             long_name="Northward gravity wave surface stress",
             units="Pa",
-            standard_name="atmosphere_northward_stress_due_to_gravity_wave_drag",
+            comment=(
+                "Positive values are a southward gravity wave drag force on the "
+                "atmosphere: the opposite sign convention to CF's "
+                "atmosphere_northward_stress_due_to_gravity_wave_drag."
+            ),
         ),
         root_var(
             "vegetation_surface",
@@ -1175,6 +1185,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Sunshine Duration",
             units="s",
             standard_name="duration_of_sunshine",
+            # The source does publish an f000 record, holding a 3 hour window rather
+            # than this variable's own, so no product reads it.
+            hour_0=False,
             comment=(
                 "Sunshine accumulated over the preceding 1-6 hours, not an "
                 "instantaneous value: the total restarts every 6 hours and so reaches "
@@ -1244,11 +1257,13 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             level="entire atmosphere (considered as a single layer)",
             short_name="tozne",
             long_name="Total ozone",
-            units="DU",
+            units="m",
+            standard_name="equivalent_thickness_at_stp_of_atmosphere_ozone_content",
             comment=(
-                "Dobson units; 1 DU is a 10 um thick layer of pure ozone at standard "
-                "temperature and pressure."
+                "The thickness the column's ozone would occupy as pure ozone at "
+                "standard temperature and pressure; 1e-5 m is one Dobson unit."
             ),
+            filters=[_DOBSON_UNITS_TO_M],
         ),
         root_var(
             "low_cloud_cover",

@@ -2551,9 +2551,8 @@
         "attributes": {
           "long_name": "Eastward gravity wave surface stress",
           "short_name": "lgws",
-          "standard_name": "atmosphere_eastward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Positive values are a westward gravity wave drag force on the atmosphere: the opposite sign convention to CF's atmosphere_eastward_stress_due_to_gravity_wave_drag.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6077,9 +6076,8 @@
         "attributes": {
           "long_name": "Northward gravity wave surface stress",
           "short_name": "mgws",
-          "standard_name": "atmosphere_northward_stress_due_to_gravity_wave_drag",
           "units": "Pa",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step.",
+          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Positive values are a southward gravity wave drag force on the atmosphere: the opposite sign convention to CF's atmosphere_northward_stress_due_to_gravity_wave_drag.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12382,6 +12380,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 100000.0
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "TOZNE",
@@ -12393,8 +12397,9 @@
         "attributes": {
           "long_name": "Total ozone",
           "short_name": "tozne",
-          "units": "DU",
-          "comment": "Dobson units; 1 DU is a 10 um thick layer of pure ozone at standard temperature and pressure.",
+          "standard_name": "equivalent_thickness_at_stp_of_atmosphere_ozone_content",
+          "units": "m",
+          "comment": "The thickness the column's ozone would occupy as pure ozone at standard temperature and pressure; 1e-5 m is one Dobson unit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
