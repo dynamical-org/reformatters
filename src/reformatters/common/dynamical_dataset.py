@@ -491,6 +491,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             tmp_store=tmp_store,
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
+            deadline=coordination_deadline,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 

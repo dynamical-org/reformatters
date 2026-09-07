@@ -73,7 +73,7 @@ For `workers_total > 1`, workers coordinate via files in an object store directo
 
 ### Setup signal
 
-Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.
+Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding. This poll shares the same deadline as processing and result coordination; if worker 0 never reports readiness, each waiting worker raises an error naming index 0 while the live store remains untouched.
 
 ### Results
 
@@ -105,6 +105,8 @@ On restart, worker 0 retries setup:
 - `setup/ready.json` is written (or overwritten) when setup completes
 
 Workers 1+ that were polling for setup will proceed once the file appears.
+
+If worker 0 never reaches readiness before exhausting its retries, those workers stop polling at the shared coordination deadline and report that index 0 did not complete setup.
 
 ### Last worker dies during finalization
 

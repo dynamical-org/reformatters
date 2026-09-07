@@ -183,6 +183,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=[],
             consolidated=True,
+            deadline=None,
         )
 
         stub_io["write_metadata"].assert_called_once_with(
@@ -207,6 +208,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=[],
             consolidated=True,
+            deadline=None,
         )
 
         assert result == {}
@@ -234,6 +236,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
             consolidated=True,
+            deadline=None,
         )
 
         # Each repo had create_branch called with the main snapshot captured.
@@ -299,6 +302,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
             consolidated=True,
+            deadline=None,
         )
 
         # setdefault must preserve the prior-attempt snapshot, not refresh from main.
@@ -327,6 +331,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=[("primary", primary_repo)],  # ty: ignore[invalid-argument-type]
             consolidated=True,
+            deadline=None,
         )
 
         assert primary_repo.create_branch_calls == [
@@ -357,6 +362,7 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
             consolidated=True,
+            deadline=None,
         )
 
         assert primary_repo.create_branch_calls == []
@@ -379,6 +385,7 @@ class TestParallelSetupLaterWorker:
             tmp_store=tmp_path,
             icechunk_repos=[],
             consolidated=True,
+            deadline=None,
         )
         assert result == {}
         stub_io["write_metadata"].assert_not_called()
@@ -412,10 +419,36 @@ class TestParallelSetupLaterWorker:
             tmp_store=tmp_path,
             icechunk_repos=[],
             consolidated=True,
+            deadline=float("inf"),
         )
 
         assert result == payload
         assert sleep_calls == [5]
+
+    def test_never_ready_worker_zero_times_out(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = FakeStoreFactory()
+        monkeypatch.setattr(pc.time, "monotonic", lambda: 10)
+        monkeypatch.setattr(
+            pc.time,
+            "sleep",
+            lambda _: pytest.fail("setup wait continued past deadline"),
+        )
+
+        with pytest.raises(TimeoutError, match="worker index 0"):
+            pc.parallel_setup(
+                factory,  # ty: ignore[invalid-argument-type]
+                is_first=False,
+                workers_total=3,
+                reformat_job_name="job",
+                branch_name="temp",
+                template_ds=_template(),
+                tmp_store=tmp_path,
+                icechunk_repos=[],
+                consolidated=True,
+                deadline=10,
+            )
 
 
 class TestWaitForWorkers:

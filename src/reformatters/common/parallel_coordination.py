@@ -55,6 +55,7 @@ def parallel_setup(
     tmp_store: Path,
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
+    deadline: float | None,
     exclude_coord_value_chunks: Collection[str] = (),
 ) -> SetupInfo:
     if is_first:
@@ -111,14 +112,21 @@ def parallel_setup(
             )
         return setup_info
 
-    # Poll until worker 0 completes setup. Rely on kubernetes pod_active_deadline for timeout.
+    # Poll until worker 0 completes setup.
     if workers_total > 1:
+        assert deadline is not None
         setup_files = store_factory.read_all_coordination_files(
             reformat_job_name, "setup"
         )
         while not setup_files:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Timed out waiting for worker index 0 to complete setup for "
+                    f"{reformat_job_name!r}"
+                )
             log.info("Waiting for worker 0 to complete setup...")
-            time.sleep(5)
+            time.sleep(min(5, remaining))
             setup_files = store_factory.read_all_coordination_files(
                 reformat_job_name, "setup"
             )
