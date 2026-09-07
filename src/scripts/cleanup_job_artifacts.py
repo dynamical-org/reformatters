@@ -43,7 +43,9 @@ def _refuse(message: str) -> NoReturn:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("dataset_id")
     parser.add_argument(
         "--job",

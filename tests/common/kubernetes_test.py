@@ -546,3 +546,18 @@ def test_job_is_active_returns_false_for_absent_job() -> None:
         ),
     ):
         assert not job_is_active("missing-job")
+
+
+def test_job_is_active_raises_when_the_api_is_unreachable() -> None:
+    """An API error must not read as an absent, and so finished, job."""
+    batch_v1 = MagicMock()
+    batch_v1.read_namespaced_job.side_effect = ApiException(status=503)
+
+    with (
+        patch("reformatters.common.kubernetes.config.load_kube_config"),
+        patch(
+            "reformatters.common.kubernetes.client.BatchV1Api", return_value=batch_v1
+        ),
+        pytest.raises(ApiException),
+    ):
+        job_is_active("job-name")

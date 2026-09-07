@@ -342,12 +342,12 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     return image
 
 
-def job_is_active(job_name: str, namespace: str = "default") -> bool:
+def job_is_active(job_name: str) -> bool:
     """Whether a Kubernetes job exists without a terminal condition."""
     config.load_kube_config()
     batch_v1 = client.BatchV1Api()
     try:
-        job = batch_v1.read_namespaced_job(job_name, namespace)
+        job = batch_v1.read_namespaced_job(job_name, "default")
     except ApiException as error:
         if error.status == 404:
             return False

@@ -1,7 +1,9 @@
+import hashlib
 from pathlib import Path
 
 import icechunk
 import pytest
+from kubernetes.client.exceptions import ApiException
 
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from scripts import cleanup_job_artifacts
@@ -88,3 +90,95 @@ def test_dry_run_deletes_nothing(
 
     assert set(_repo(store_factory).list_branches()) == {"main", "_job_stale-job"}
     assert store_factory.coordination_file_counts() == {"stale-job": 1}
+
+
+def test_apply_leaves_non_job_branches_alone(
+    store_factory: StoreFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create_artifacts(store_factory, "stale-job")
+    repo = _repo(store_factory)
+    repo.create_branch("staging", repo.lookup_branch("main"))
+    monkeypatch.setattr(
+        cleanup_job_artifacts.kubernetes, "job_is_active", lambda _: False
+    )
+
+    cleanup_job_artifacts.cleanup_job_artifacts(store_factory, apply=True)
+
+    assert set(_repo(store_factory).list_branches()) == {"main", "staging"}
+
+
+@pytest.mark.parametrize("branch", ["main", "staging"])
+def test_delete_job_branch_refuses_branches_without_the_job_prefix(
+    store_factory: StoreFactory, branch: str
+) -> None:
+    repo = _repo(store_factory)
+    repo.create_branch("staging", repo.lookup_branch("main"))
+
+    with pytest.raises(SystemExit, match="not a disposable job branch"):
+        cleanup_job_artifacts._delete_job_branch(repo, branch)
+
+    assert set(_repo(store_factory).list_branches()) == {"main", "staging"}
+
+
+def test_job_filter_matches_the_full_job_name_not_a_prefix(
+    store_factory: StoreFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Job names differ only in a trailing random suffix, so a prefix must not match."""
+    _create_artifacts(store_factory, "backfill-2026-09-06t05-00-0-muv9")
+    monkeypatch.setattr(
+        cleanup_job_artifacts.kubernetes, "job_is_active", lambda _: False
+    )
+
+    cleanup_job_artifacts.cleanup_job_artifacts(
+        store_factory, job_names=["backfill-2026-09-06t05-00-0"], apply=True
+    )
+
+    assert set(_repo(store_factory).list_branches()) == {
+        "main",
+        "_job_backfill-2026-09-06t05-00-0-muv9",
+    }
+    assert store_factory.coordination_file_counts() == {
+        "backfill-2026-09-06t05-00-0-muv9": 1
+    }
+
+
+def test_apply_stops_when_the_kubernetes_lookup_fails(
+    store_factory: StoreFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unreachable Kubernetes API must not read as an absent, and so stale, job."""
+
+    def raise_api_error(job_name: str) -> bool:
+        raise ApiException(status=500)
+
+    _create_artifacts(store_factory, "stale-job")
+    monkeypatch.setattr(
+        cleanup_job_artifacts.kubernetes, "job_is_active", raise_api_error
+    )
+
+    with pytest.raises(ApiException):
+        cleanup_job_artifacts.cleanup_job_artifacts(store_factory, apply=True)
+
+    assert set(_repo(store_factory).list_branches()) == {"main", "_job_stale-job"}
+    assert store_factory.coordination_file_counts() == {"stale-job": 1}
+
+
+def test_dry_run_writes_nothing_to_the_store(
+    store_factory: StoreFactory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _create_artifacts(store_factory, "stale-job")
+    monkeypatch.setattr(
+        cleanup_job_artifacts.kubernetes, "job_is_active", lambda _: False
+    )
+    before = _tree_digest(tmp_path)
+
+    cleanup_job_artifacts.cleanup_job_artifacts(store_factory)
+
+    assert _tree_digest(tmp_path) == before
+
+
+def _tree_digest(root: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
