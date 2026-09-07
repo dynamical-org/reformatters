@@ -24,6 +24,7 @@ from reformatters.common.config import Config
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import (
+    SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE,
     CronJob,
     Job,
     ReformatCronJob,
@@ -46,7 +47,10 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike, Timestamp
-from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    SystemicSourceRejectionsError,
+    VirtualRegionJob,
+)
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -396,17 +400,20 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             filter_variable_names=filter_variable_names,
         )
 
-        self._process_region_jobs(
-            all_jobs=all_jobs,
-            worker_index=worker_index,
-            workers_total=workers_total,
-            reformat_job_name=reformat_job_name,
-            template_ds=template_ds,
-            tmp_store=tmp_store,
-            update_template_with_results=False,
-            overwrite_chunks=overwrite_chunks,
-            overwrite_metadata=overwrite_metadata,
-        )
+        try:
+            self._process_region_jobs(
+                all_jobs=all_jobs,
+                worker_index=worker_index,
+                workers_total=workers_total,
+                reformat_job_name=reformat_job_name,
+                template_ds=template_ds,
+                tmp_store=tmp_store,
+                update_template_with_results=False,
+                overwrite_chunks=overwrite_chunks,
+                overwrite_metadata=overwrite_metadata,
+            )
+        except SystemicSourceRejectionsError as error:
+            raise typer.Exit(SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE) from error
 
     def _process_region_jobs(
         self,
@@ -485,21 +492,33 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
         # 2. Process jobs. Each region job variant owns its own store/session
         # lifecycle and commit cadence behind this one call.
-        worker_results: dict[str, list[SourceFileResult]] = (
-            self.region_job_class.process_worker_jobs(
-                worker_jobs,
-                self.store_factory,
-                branch_name,
-                worker_index,
-                overwrite_chunks=overwrite_chunks
-                or self.region_job_class.rewrites_whole_region,
+        worker_error: SystemicSourceRejectionsError | None = None
+        try:
+            worker_results: dict[str, list[SourceFileResult]] = (
+                self.region_job_class.process_worker_jobs(
+                    worker_jobs,
+                    self.store_factory,
+                    branch_name,
+                    worker_index,
+                    overwrite_chunks=overwrite_chunks
+                    or self.region_job_class.rewrites_whole_region,
+                )
+                if worker_jobs
+                else {}
             )
-            if worker_jobs
-            else {}
-        )
+        except SystemicSourceRejectionsError as error:
+            assert issubclass(self.region_job_class, VirtualRegionJob)
+            worker_error = error
+            worker_results = {}
 
         # 3. Write results and finalize
         if workers_total > 1:
+            if worker_error is not None:
+                self.store_factory.write_coordination_file(
+                    reformat_job_name,
+                    f"errors/worker-{worker_index}.txt",
+                    str(worker_error).encode(),
+                )
             self.store_factory.write_coordination_file(
                 reformat_job_name,
                 f"results/worker-{worker_index}.json",
@@ -519,6 +538,16 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     self.store_factory, reformat_job_name, workers_total
                 )
                 merged_results = {}
+            worker_errors = (
+                [str(worker_error)]
+                if workers_total == 1 and worker_error is not None
+                else [
+                    error.decode()
+                    for error in self.store_factory.read_all_coordination_files(
+                        reformat_job_name, "errors"
+                    )
+                ]
+            )
             parallel_coordination.finalize(
                 self.store_factory,
                 all_jobs=all_jobs,
@@ -534,6 +563,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 publish_zarr3_metadata=update_template_with_results or overwrite,
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
+            if worker_errors:
+                message = (
+                    f"Published all good refs after {len(worker_errors)} worker(s) "
+                    f"reported systemic source rejections; first: {worker_errors[0]}"
+                )
+                log.error(message)
+                raise SystemicSourceRejectionsError(message)
 
     def _run_virtual_operational_update(
         self,

@@ -24,6 +24,7 @@ import icechunk
 import numpy as np
 import pandas as pd
 import pytest
+import typer
 import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
@@ -41,7 +42,12 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import get_worker_jobs, item
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import (
+    SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE,
+    CronJob,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
@@ -58,6 +64,7 @@ from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
     SourceFileRejectedError,
+    SystemicSourceRejectionsError,
     VirtualRef,
     VirtualRegionJob,
     _exists_many,
@@ -2314,6 +2321,39 @@ def test_source_file_rejection_discards_one_file_with_error_summary(
     assert "Rejected 1 of 8 planned source files" in caplog.text
 
 
+def test_source_file_rejection_summary_counts_reasons(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class TwoReasonsJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            reason = (
+                "truncated object"
+                if coord.lead_time == LEAD_TIMES[0]
+                else "invalid index"
+            )
+            raise SourceFileRejectedError(reason)
+
+    job = TwoReasonsJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(2),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp.now() - pd.Timedelta("1s"),
+    )
+
+    with caplog.at_level("ERROR"):
+        assert list(job.process_virtual_refs(job.source_file_coords())) == []
+
+    assert "reasons: {'invalid index': 2, 'truncated object': 2}" in caplog.text
+
+
 def test_high_source_file_rejection_rate_is_fatal() -> None:
     class SystemicSourceFailureJob(_BaseRefLoopJob):
         def file_refs(
@@ -2336,7 +2376,7 @@ def test_high_source_file_rejection_rate_is_fatal() -> None:
         list(job.process_virtual_refs(job.source_file_coords()))
 
 
-def test_update_rejection_rate_uses_all_planned_files_as_denominator(
+def test_update_rejection_summary_uses_all_planned_files_as_denominator(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class TwoAvailableRejectedFilesJob(_BaseRefLoopJob):
@@ -2370,7 +2410,7 @@ def test_update_rejection_rate_uses_all_planned_files_as_denominator(
     assert "Rejected 2 of 22 planned source files" in caplog.text
 
 
-def test_source_file_rejection_absolute_ceiling_is_fatal() -> None:
+def test_source_file_rejection_absolute_ceiling_yields_good_refs_then_fails() -> None:
     rejected_coords: set[tuple[pd.Timestamp, pd.Timedelta]] = set()
 
     class TooManyRejectedFilesJob(_BaseRefLoopJob):
@@ -2395,8 +2435,98 @@ def test_source_file_rejection_absolute_ceiling_is_fatal() -> None:
         (coord.init_time, coord.lead_time) for coord in job.source_file_coords()[:21]
     )
 
-    with pytest.raises(RuntimeError, match="Rejected 21 of 220 planned source files"):
-        list(job.process_virtual_refs(job.source_file_coords()))
+    batches = job.process_virtual_refs(job.source_file_coords())
+    assert len(next(batches)) == 199
+    with pytest.raises(
+        SystemicSourceRejectionsError,
+        match="Rejected 21 of 220 planned source files",
+    ):
+        next(batches)
+
+
+def test_systemic_rejections_publish_and_report_every_worker_before_failure(
+    tmp_path: Path,
+) -> None:
+    class SystemicBackfillJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            if coord.lead_time == LEAD_TIMES[0]:
+                raise SourceFileRejectedError("published bytes are incomplete")
+            return [_ref_for(self, coord)]
+
+    dataset = _make_dataset(tmp_path).model_copy(
+        update={"region_job_class": SystemicBackfillJob}
+    )
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    all_jobs = SystemicBackfillJob.get_jobs(
+        tmp_store=dataset._tmp_store(),
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=dataset.template_config.data_vars,
+        reformat_job_name="test",
+    )
+
+    dataset._process_region_jobs(
+        all_jobs=all_jobs,
+        worker_index=0,
+        workers_total=2,
+        reformat_job_name="test",
+        template_ds=template_ds,
+        tmp_store=tmp_path / "worker-0-tmp.zarr",
+        update_template_with_results=False,
+    )
+    assert dataset.store_factory.count_coordination_files("test", "results") == 1
+    assert dataset.store_factory.count_coordination_files("test", "errors") == 1
+
+    with pytest.raises(
+        SystemicSourceRejectionsError,
+        match="Published all good refs after 2 worker",
+    ):
+        dataset._process_region_jobs(
+            all_jobs=all_jobs,
+            worker_index=1,
+            workers_total=2,
+            reformat_job_name="test",
+            template_ds=template_ds,
+            tmp_store=tmp_path / "worker-1-tmp.zarr",
+            update_template_with_results=False,
+        )
+
+    remaining = [coord for job in all_jobs for coord in job.source_file_coords()]
+    main = _primary_repo(dataset.store_factory).readonly_session("main").store
+    assert {
+        coord.lead_time for coord in all_jobs[0].filter_already_present(remaining, main)
+    } == {LEAD_TIMES[0]}
+
+
+def test_backfill_maps_reported_source_rejections_to_non_retryable_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+
+    def raise_reported_failure(*args: object, **kwargs: object) -> None:
+        raise SystemicSourceRejectionsError("already finalized")
+
+    monkeypatch.setattr(
+        type(dataset),
+        "_get_template",
+        lambda self, append_dim_end: _create_template_ds(1),
+    )
+    monkeypatch.setattr(type(dataset), "_process_region_jobs", raise_reported_failure)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        dataset.backfill(
+            APPEND_DIM_START,
+            reformat_job_name="test",
+            worker_index=0,
+            workers_total=1,
+        )
+
+    assert exc_info.value.exit_code == SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE
 
 
 def test_untyped_ref_building_exception_remains_fatal() -> None:

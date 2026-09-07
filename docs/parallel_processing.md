@@ -79,6 +79,8 @@ Worker 0 writes `setup/ready.json` after completing setup (creating branches, wr
 
 Each worker writes `results/worker-{N}.json` containing its `process_results` dict. The last worker (by index) polls until all result files are present, then aggregates them. For updates, the aggregated results drive `update_template_with_results` to trim the template based on what was actually processed.
 
+A virtual backfill worker that exceeds its source-rejection reporting threshold first commits all good refs, then writes `errors/worker-{N}.txt` before its normal results file. Non-final workers complete normally so they cannot strand coordination. The last worker reads those errors after every results file exists, finalizes and publishes the branch, then exits with the dedicated non-retryable failure code so the Kubernetes Job is visibly non-zero.
+
 ### Cleanup
 
 After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.

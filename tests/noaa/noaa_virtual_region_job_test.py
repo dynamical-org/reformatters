@@ -267,7 +267,7 @@ def test_file_refs_lead_0_instant_uses_anl_window(
     assert [r.data_var.name for r in refs] == ["temperature_2m"]
 
 
-def test_missing_representative_chunk_is_fatal(
+def test_empty_refs_are_fatal_through_the_write_loop(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_index(
@@ -279,10 +279,17 @@ def test_missing_representative_chunk_is_fatal(
     data_vars = [get_var("temperature_2m")]
     file_coord = coord("sfc", data_vars)
     job = make_job(template_ds, data_vars)
-    refs = job.file_refs(file_coord, file_size=1000)
+    monkeypatch.setattr(
+        type(job),
+        "discover_available",
+        lambda self, pending: [(pending[0], 1000)],
+    )
 
-    with pytest.raises(AssertionError, match="empty refs"):
-        job._assert_probe_chunk_covered(file_coord, refs)
+    with pytest.raises(
+        AssertionError,
+        match=f"file_refs returned no references for {file_coord.get_url()}",
+    ):
+        list(job.process_virtual_refs([file_coord]))
 
 
 def test_internal_probe_assertion_remains_fatal(

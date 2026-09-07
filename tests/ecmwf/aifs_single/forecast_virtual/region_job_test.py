@@ -286,6 +286,34 @@ def test_file_refs_rejects_negative_offset_on_unmatched_message(
         job.file_refs(_coord(data_vars), file_size=1200)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("levelist", 500.5),
+        ("levelist", True),
+        ("_offset", 0.5),
+        ("_offset", True),
+        ("_length", 1000.5),
+        ("_length", True),
+    ],
+)
+def test_file_refs_rejects_non_integral_index_fields(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    entry = json.loads(_index_line("t", "pl", 0, 1000, levelist="500"))
+    entry[field] = value
+    _fake_index(monkeypatch, tmp_path, json.dumps(entry) + "\n")
+    data_vars = [get_var("pressure_level/temperature")]
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="invalid GRIB index row"):
+        job.file_refs(_coord(data_vars), file_size=1200)
+
+
 # --- discover_available ---
 
 

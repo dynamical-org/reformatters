@@ -229,6 +229,7 @@ def test_file_refs_rejects_zero_byte_source_object() -> None:
             chunk.location: region_job_module.NativeObjectMetadata(
                 size=0 if index == 0 else 100,
                 etag_checksum='"00000000000000000000000000000000"',
+                rejection_reason=("non-positive size 0" if index == 0 else None),
             )
             for index, chunk in enumerate(chunks)
         }
@@ -252,6 +253,7 @@ def test_backfill_rejection_accounting_spans_manifest_groups() -> None:
                         chunk.location: region_job_module.NativeObjectMetadata(
                             size=0,
                             etag_checksum="",
+                            rejection_reason="non-positive size 0",
                         )
                         for chunk in self._source_chunks(coord)
                     }
@@ -455,11 +457,14 @@ def test_object_listing_retries_transient_response() -> None:
     ("metadata", "reason"),
     [
         ({"size": "not-an-integer", "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA=="}, "size"),
+        ({"size": 1.5, "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA=="}, "size"),
+        ({"size": True, "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA=="}, "size"),
         ({"size": "100", "md5Hash": "not-base64"}, "MD5"),
+        ({"size": "100", "md5Hash": "é"}, "MD5"),
     ],
 )
 def test_object_listing_preserves_invalid_source_metadata_for_rejection(
-    metadata: dict[str, str], reason: str
+    metadata: dict[str, object], reason: str
 ) -> None:
     prefix = "weathernext_2_0_0/zarr/store/temperature/"
     response = httpx.Response(
@@ -479,3 +484,49 @@ def test_object_listing_preserves_invalid_source_metadata_for_rejection(
     [object_metadata] = objects.values()
     assert object_metadata.rejection_reason is not None
     assert reason in object_metadata.rejection_reason
+
+
+def test_object_listing_preserves_overflowing_json_size_for_rejection() -> None:
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    response = httpx.Response(
+        200,
+        request=httpx.Request("GET", OBJECTS_LOCATION),
+        content=(
+            f'{{"items":[{{"name":"{prefix}0.1.0.0","size":1e999,'
+            '"md5Hash":"AAAAAAAAAAAAAAAAAAAAAA=="}]}'
+        ).encode(),
+    )
+    client = Mock()
+    client.get.return_value = response
+
+    objects = region_job_module._list_objects(
+        client,
+        region_job_module.ObjectListingQuery(prefix),
+    )
+
+    assert objects is not None
+    [object_metadata] = objects.values()
+    assert object_metadata.rejection_reason is not None
+    assert "size" in object_metadata.rejection_reason
+
+
+@pytest.mark.parametrize("missing_field", ["size", "md5Hash"])
+def test_object_listing_missing_required_metadata_is_fatal(
+    missing_field: str,
+) -> None:
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    metadata = {"size": "100", "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA=="}
+    del metadata[missing_field]
+    response = httpx.Response(
+        200,
+        request=httpx.Request("GET", OBJECTS_LOCATION),
+        json={"items": [{"name": f"{prefix}0.1.0.0", **metadata}]},
+    )
+    client = Mock()
+    client.get.return_value = response
+
+    with pytest.raises(KeyError, match=missing_field):
+        region_job_module._list_objects(
+            client,
+            region_job_module.ObjectListingQuery(prefix),
+        )

@@ -63,6 +63,16 @@ class NativeObjectMetadata(NamedTuple):
     rejection_reason: str | None = None
 
 
+def _parse_object_size(value: object) -> int:
+    if isinstance(value, bool):
+        raise ValueError("boolean object size")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    raise ValueError(f"non-integer object size {value!r}")
+
+
 def weathernext2_virtual_chunk_containers() -> tuple[
     icechunk.VirtualChunkContainer, ...
 ]:
@@ -388,12 +398,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         chunks = self._source_chunks(coord)
         assert set(coord.chunk_metadata) == {chunk.location for chunk in chunks}
         invalid = [
-            (
-                location,
-                metadata.rejection_reason or f"non-positive size {metadata.size}",
-            )
+            (location, metadata.rejection_reason)
             for location, metadata in coord.chunk_metadata.items()
-            if metadata.size <= 0 or metadata.rejection_reason is not None
+            if metadata.rejection_reason is not None
         ]
         if invalid:
             location, reason = min(invalid)
@@ -476,18 +483,22 @@ def _list_objects(
             )
             location = f"{PROXY_LOCATION_PREFIX}{key}"
             assert location not in objects, f"duplicate listed object: {key}"
-            reasons = []
+            reasons: list[str] = []
+            raw_size = item["size"]
             try:
-                size = int(item["size"])
-            except KeyError, TypeError, ValueError:
+                size = _parse_object_size(raw_size)
+            except OverflowError, TypeError, ValueError:
                 size = 0
-                reasons.append("missing or non-integer size")
+                reasons.append("invalid non-integer size")
             else:
                 if size <= 0:
                     reasons.append(f"non-positive size {size}")
+            raw_md5 = item["md5Hash"]
             try:
-                md5 = b64decode(str(item["md5Hash"]), validate=True)
-            except BinasciiError, KeyError:
+                if not isinstance(raw_md5, str):
+                    raise ValueError("MD5 is not text")
+                md5 = b64decode(raw_md5, validate=True)
+            except BinasciiError, ValueError:
                 md5 = b""
             if len(md5) != 16:
                 reasons.append("missing or invalid MD5")

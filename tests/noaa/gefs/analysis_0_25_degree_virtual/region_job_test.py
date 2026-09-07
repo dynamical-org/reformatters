@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 
 from reformatters.common.pydantic import replace
+from reformatters.common.virtual_region_job import SourceFileRejectedError, VirtualRef
 from reformatters.noaa import noaa_virtual_region_job as noaa_virtual_job_module
 from reformatters.noaa.gefs.analysis_0_25_degree_virtual.region_job import (
     NoaaGefsAnalysis025DegreeVirtualRegionJob,
@@ -414,6 +415,50 @@ def test_operational_update_jobs_single_polling_job(
     times = template_ds.to_dataset().get_index("time")
     # An 18h window of 3-hourly steps.
     assert job.region == slice(len(times) - 6, len(times))
+
+
+def test_operational_update_rejections_do_not_trip_backfill_breaker(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    now = pd.Timestamp("2024-06-02T00:00")
+    jobs, _template_ds = (
+        NoaaGefsAnalysis025DegreeVirtualRegionJob.operational_update_jobs(
+            primary_store=Mock(),
+            tmp_store=Path("unused-tmp.zarr"),
+            get_template_fn=TEMPLATE_CONFIG.get_template,
+            append_dim="time",
+            all_data_vars=TEMPLATE_CONFIG.data_vars,
+            reformat_job_name="test",
+            job_fire_time=now,
+        )
+    )
+    (job,) = jobs
+    assert isinstance(job, NoaaGefsAnalysis025DegreeVirtualRegionJob)
+    remaining = job.source_file_coords()
+    assert len(remaining) == 9
+
+    def discover_first_two(
+        self: NoaaGefsAnalysis025DegreeVirtualRegionJob,
+        pending: list[NoaaGefsAnalysis025DegreeVirtualSourceFileCoord],
+    ) -> list[tuple[NoaaGefsAnalysis025DegreeVirtualSourceFileCoord, int]]:
+        return [(coord, 100) for coord in pending[:2]]
+
+    def reject_file(
+        self: NoaaGefsAnalysis025DegreeVirtualRegionJob,
+        coord: NoaaGefsAnalysis025DegreeVirtualSourceFileCoord,
+        file_size: int,
+    ) -> list[VirtualRef]:
+        del self, coord, file_size
+        raise SourceFileRejectedError("published bytes are incomplete")
+
+    monkeypatch.setattr(type(job), "discover_available", discover_first_two)
+    monkeypatch.setattr(type(job), "file_refs", reject_file)
+    job = job.model_copy(update={"poll_deadline": pd.Timestamp.now()})
+
+    with caplog.at_level("ERROR"):
+        assert list(job.process_virtual_refs(remaining)) == []
+
+    assert "Rejected 2 of 9 planned source files" in caplog.text
 
 
 def gate_coords(

@@ -50,6 +50,10 @@ class SourceFileRejectedError(Exception):
     """A source file whose published contents are unsafe to reference."""
 
 
+class SystemicSourceRejectionsError(RuntimeError):
+    """A backfill worker rejected an implausibly large source population."""
+
+
 class _FileRefsResult(NamedTuple):
     refs: list[VirtualRef]
     rejection: SourceFileRejectedError | None = None
@@ -98,8 +102,8 @@ class VirtualRegionJob(
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
     download_concurrency: ClassVar[int] = 64
 
-    # One isolated rejection is plausibly a bad source file. A burst indicates a
-    # systemic source failure and must stop the worker.
+    # One isolated rejection is plausibly a bad source file. A backfill burst marks
+    # the completed worker run failed after its good refs are committed.
     source_rejection_tolerance: ClassVar[int] = 1
     source_rejection_max_fraction: ClassVar[float] = 0.1
     source_rejection_max_count: ClassVar[int] = 20
@@ -259,14 +263,15 @@ class VirtualRegionJob(
         a backfill sweeps once and exits, an update polls until everything is ingested
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
         pairs — never split a file, never yield empty. SourceFileRejectedError drops
-        one file with a WARNING detail and per-run ERROR summary; a burst fails the
-        worker. Source-agnostic: it only asks discover_available which coords are ready.
-        Override only for a different batching policy. See "The write loop" in
-        docs/virtual_datasets.md.
+        one file with a WARNING detail and per-run ERROR summary. A backfill burst is
+        reported only after every good batch has been yielded; update mode relies on
+        its completeness validator instead. Source-agnostic: it only asks
+        discover_available which coords are ready. Override only for a different
+        batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         yield from self._process_virtual_ref_groups([remaining], len(remaining))
 
-    def _process_virtual_ref_groups(
+    def _process_virtual_ref_groups(  # noqa: PLR0912
         self,
         groups: Sequence[Sequence[SOURCE_FILE_COORD]],
         planned: int,
@@ -298,9 +303,6 @@ class VirtualRegionJob(
                                     f"Rejecting {coord.get_url()}: {result.rejection}"
                                 )
                                 rejections.append((coord, result.rejection))
-                            self._raise_if_source_rejections_are_systemic(
-                                planned, rejections
-                            )
                             batch = [
                                 (coord, result.refs)
                                 for coord, result in zip(
@@ -351,13 +353,15 @@ class VirtualRegionJob(
                             )
         finally:
             self._log_source_rejection_summary(planned, attempted, rejections)
+        if self.processing_mode == "backfill":
+            self._raise_if_source_rejections_are_systemic(planned, rejections)
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
     ) -> _FileRefsResult:
         try:
             refs = self.file_refs(coord, file_size)
-            assert refs, "file_refs returned no references"
+            assert refs, f"file_refs returned no references for {coord.get_url()}"
             return _FileRefsResult(refs)
         except SourceFileRejectedError as error:
             return _FileRefsResult([], error)
@@ -368,14 +372,16 @@ class VirtualRegionJob(
         rejections: Sequence[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]],
     ) -> None:
         rejected = len(rejections)
+        if rejected <= self.source_rejection_tolerance:
+            return
         fraction = rejected / planned
-        if rejected <= self.source_rejection_tolerance or (
+        if (
             fraction < self.source_rejection_max_fraction
             and rejected <= self.source_rejection_max_count
         ):
             return
         first_coord, first_error = rejections[0]
-        raise RuntimeError(
+        raise SystemicSourceRejectionsError(
             f"Rejected {rejected} of {planned} planned source files ({fraction:.1%}): "
             f"systemic source failure; first: {first_coord.get_url()}: {first_error}"
         )
@@ -388,11 +394,11 @@ class VirtualRegionJob(
     ) -> None:
         if not rejections:
             return
-        counts = Counter(type(error).__name__ for _, error in rejections)
+        counts = Counter(str(error) for _, error in rejections)
         first_coord, first_error = rejections[0]
         log.error(
             f"Rejected {len(rejections)} of {planned} planned source files after "
-            f"attempting {attempted}; rejection types: {dict(sorted(counts.items()))}; "
+            f"attempting {attempted}; reasons: {dict(sorted(counts.items()))}; "
             f"first: {first_coord.get_url()}: {first_error}"
         )
 
@@ -414,7 +420,9 @@ class VirtualRegionJob(
         A backfill worker's generator yields a single batch (one commit for the
         whole worker), an update job's generator polls and commits per tick.
         Always returns an empty dict: virtual refs live in the icechunk manifest,
-        so there is nothing to thread back to finalize.
+        so there is nothing to thread back to finalize. A systemic source-rejection
+        error is raised only after all good refs have committed; the dataset coordinator
+        defers that error until every worker has reported and finalization completes.
         """
         assert worker_jobs, "process_worker_jobs requires at least one job"
         assert all(isinstance(job, VirtualRegionJob) for job in worker_jobs)
@@ -509,23 +517,14 @@ class VirtualRegionJob(
     ) -> None:
         """A file's refs must cover the chunk filter_already_present probes
         (representative_var at the file's representative_probe_loc)."""
-        error = self._probe_chunk_coverage_error(coord, file_refs)
-        assert error is None, error
-
-    def _probe_chunk_coverage_error(
-        self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
-    ) -> str | None:
-        if not file_refs:
-            return f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
         probe_loc = self.representative_probe_loc(coord, rep)
         probe = self.chunk_key(probe_loc, rep)
-        if any(
+        covered = any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
-        ):
-            return None
-        return (
+        )
+        assert covered, (
             f"refs for {coord} do not cover representative chunk "
             f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
             "this file forever. Override representative_var or "

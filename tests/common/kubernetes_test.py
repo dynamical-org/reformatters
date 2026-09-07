@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
+    SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE,
     CronJob,
     Job,
     ReformatCronJob,
@@ -52,6 +53,14 @@ def test_as_kubernetes_object_comprehensive() -> None:
         "parallelism": 2,
         "podFailurePolicy": {
             "rules": [
+                {
+                    "action": "FailIndex",
+                    "onExitCodes": {
+                        "containerName": "worker",
+                        "operator": "In",
+                        "values": [SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE],
+                    },
+                },
                 {
                     "action": "Ignore",
                     "onPodConditions": [{"type": "DisruptionTarget", "status": "True"}],

@@ -141,8 +141,9 @@ class ExampleVirtualRegionJob(
         at the whole file - and return one VirtualRef per (output cell, variable). The
         chunk index is resolved centrally later, so refs are in coordinate-label space:
         give each `out_loc` (the cell it fills) and the source byte range. Raise
-        SourceFileRejectedError to drop an unsafe file with an ERROR log and rejection
-        accounting. Returning no refs or raising any other exception fails the worker.
+        SourceFileRejectedError to drop an unsafe file with a WARNING log and rejection
+        accounting; the run also emits an ERROR summary. Returning no refs or raising
+        any other exception fails the worker.
         `file_size` is what discover_available reported - use it to supply a final
         message's missing end byte.
         """

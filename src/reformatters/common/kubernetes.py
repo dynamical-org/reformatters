@@ -18,6 +18,7 @@ from reformatters.common.types import Timestamp
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
+SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE = 42
 
 
 class Job(pydantic.BaseModel):
@@ -75,6 +76,14 @@ class Job(pydantic.BaseModel):
                 "parallelism": self.parallelism,
                 "podFailurePolicy": {
                     "rules": [
+                        {
+                            "action": "FailIndex",
+                            "onExitCodes": {
+                                "containerName": "worker",
+                                "operator": "In",
+                                "values": [SYSTEMIC_SOURCE_REJECTIONS_EXIT_CODE],
+                            },
+                        },
                         {
                             "action": "Ignore",
                             "onPodConditions": [

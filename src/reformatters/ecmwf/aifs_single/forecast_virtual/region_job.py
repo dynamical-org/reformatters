@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import icechunk
 import pandas as pd
@@ -32,6 +32,15 @@ from .template_config import (
 
 SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 SOURCE_REGION = "eu-central-1"
+
+
+def _exact_index_integer(value: Any) -> int:  # noqa: ANN401
+    if isinstance(value, bool):
+        raise ValueError("boolean is not an integer index field")
+    parsed = int(value)
+    if parsed != value:
+        raise ValueError(f"non-integral index field {value!r}")
+    return parsed
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -140,26 +149,36 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
             try:
                 index_df = parse_index_file(index_path, ensemble=False)
                 entries = index_df.reset_index()
+                columns = tuple(
+                    entries[name]
+                    for name in (
+                        "param",
+                        "levtype",
+                        "levelist",
+                        "_offset",
+                        "_length",
+                    )
+                )
+            except (KeyError, OverflowError, TypeError, ValueError) as error:
+                raise SourceFileRejectedError(
+                    "empty or unparseable GRIB index"
+                ) from error
+            try:
                 index_rows = [
                     (
                         str(param),
                         str(levtype),
-                        None if pd.isna(levelist) else int(levelist),
-                        int(raw_offset),
-                        int(raw_length),
+                        None if pd.isna(levelist) else _exact_index_integer(levelist),
+                        _exact_index_integer(raw_offset),
+                        _exact_index_integer(raw_length),
                     )
                     for param, levtype, levelist, raw_offset, raw_length in zip(
-                        entries["param"],
-                        entries["levtype"],
-                        entries["levelist"],
-                        entries["_offset"],
-                        entries["_length"],
-                        strict=True,
+                        *columns, strict=True
                     )
                 ]
-            except (KeyError, OverflowError, TypeError, ValueError) as error:
+            except (OverflowError, TypeError, ValueError) as error:
                 raise SourceFileRejectedError(
-                    "empty or unparseable GRIB index"
+                    "invalid GRIB index row fields"
                 ) from error
         finally:
             index_path.unlink()
