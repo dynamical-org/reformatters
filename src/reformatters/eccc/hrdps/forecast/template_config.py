@@ -18,6 +18,7 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.deaccumulation import (
+    DEFAULT_EXPECTED_CLAMP_FRACTION,
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
 )
@@ -57,7 +58,7 @@ class EcccHrdpsInternalAttrs(BaseInternalAttrs):
     deaccumulation_invalid_below_threshold_rate: float = (
         PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD
     )
-    deaccumulation_expected_clamp_fraction: float = 0.05
+    deaccumulation_expected_clamp_fraction: float = DEFAULT_EXPECTED_CLAMP_FRACTION
 
 
 class EcccHrdpsDataVar(DataVar[EcccHrdpsInternalAttrs]):

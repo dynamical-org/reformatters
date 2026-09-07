@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
+from reformatters.common.deaccumulation import DEFAULT_EXPECTED_CLAMP_FRACTION
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.types import Dim, Timestamp
 from reformatters.noaa.models import NoaaInternalAttrs
@@ -41,6 +42,7 @@ GEFS_B22_TRANSITION_DATE = pd.Timestamp("2022-10-18T12:00")
 class NoaaGefsInternalAttrs(NoaaInternalAttrs):
     gefs_file_type: GEFSFileType
     available_from: Timestamp | None = None
+    deaccumulation_expected_clamp_fraction: float = DEFAULT_EXPECTED_CLAMP_FRACTION
 
 
 class NoaaGefsDataVar(DataVar[NoaaGefsInternalAttrs]):

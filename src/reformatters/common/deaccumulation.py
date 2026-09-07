@@ -19,6 +19,8 @@ RADIATION_INVALID_BELOW_THRESHOLD = -50.0  # W/m^2 aka J/m^2/s
 # mismatched source field, which deaccumulates to thousands of W/m^2, goes beyond this.
 DIRECT_RADIATION_INVALID_BELOW_THRESHOLD = -1000.0
 
+DEFAULT_EXPECTED_CLAMP_FRACTION = 0.05
+
 # How the input values along `dim` should be interpreted:
 #   - "accumulated": values are cumulative totals (e.g. J m-2 since forecast start).
 #     Step rate = (A_t - A_{t-1}) / dt.
@@ -42,7 +44,7 @@ def deaccumulate_to_rates_inplace(
     skip_step: Array1D[np.bool] | None = None,
     invalid_below_threshold_rate: float = PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     expected_invalid_fraction: float = 0.0,
-    expected_clamp_fraction: float = 0.05,
+    expected_clamp_fraction: float = DEFAULT_EXPECTED_CLAMP_FRACTION,
     accumulation_type: AccumulationType = "accumulated",
 ) -> xr.DataArray:
     """
