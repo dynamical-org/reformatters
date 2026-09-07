@@ -106,15 +106,14 @@ class NoaaVirtualRegionJob(
         ends = [*starts[1:], file_size]
 
         location = coord.get_url()
-        # Bounds alone cannot spot a stale index; this checks its first message only.
-        declared_length = self.grib_message_length_at(coord, starts[0])
-        if declared_length != ends[0] - starts[0]:
-            found = (
-                declared_length if declared_length is not None else "no GRIB message"
-            )
+        # A message that changed size shifts every offset after it, so the last entry is
+        # where any staleness shows: bounds alone cannot see it. Not an equality against
+        # the file end - a healthy index may omit trailing messages the object still has.
+        declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
+        if declared_length is None or declared_length > file_size - starts[-1]:
             log.error(
-                f"Skipping {location}: the index puts a {ends[0] - starts[0]} byte "
-                f"message at offset {starts[0]} but the data file has {found} there; "
+                f"Skipping {location}: the index's last offset {starts[-1]} does not "
+                f"begin a GRIB message that fits the {file_size}-byte data file; "
                 f"stale or mismatched index"
             )
             return []
@@ -167,18 +166,21 @@ class NoaaVirtualRegionJob(
         """
 
     def grib_message_length_at(
-        self, coord: NOAA_VIRTUAL_COORD, offset: int
+        self, coord: NOAA_VIRTUAL_COORD, offset: int, file_size: int
     ) -> int | None:
-        """The message length the data file declares at `offset`, read from the object
-        itself and so independent of the index, or None if no GRIB message starts there.
+        """The edition 2 message length the data file declares at `offset`, read from the
+        object itself and so independent of the index, or None if no such message starts
+        there. A stale index can put `offset` past the end, which a ranged GET rejects.
         """
+        if offset + GRIB_SECTION_0_BYTES > file_size:
+            return None
         header = s3_read_bytes(
             coord.get_url(),
             region=self.source_bucket_region,
             start=offset,
             end=offset + GRIB_SECTION_0_BYTES,
         )
-        if len(header) < GRIB_SECTION_0_BYTES or header[:4] != b"GRIB":
+        if header[:4] != b"GRIB" or header[7] != 2:
             return None
         (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
         return length

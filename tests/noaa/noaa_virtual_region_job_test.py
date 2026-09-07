@@ -315,14 +315,73 @@ def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
     # longer message boundaries but are still inside the file, so the ranges alone
     # cannot condemn it: refs built from them exist and do not decode.
     fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    # The last entry is at 3000 in a 9000-byte file, so a message declaring more than
+    # the 6000 bytes that remain cannot be the one the index describes.
     monkeypatch.setattr(
         shared_region_job_module,
         "s3_read_bytes",
-        lambda url, **kwargs: grib_section_0(400),  # the index implies 500
+        lambda url, **kwargs: grib_section_0(7000),
     )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
     assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_index_whose_middle_message_was_resized(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The case a first-entry check cannot see: message 1 is untouched, so its length still
+    # agrees, but a later message changed size and shifted every offset after it. The
+    # index's last offset then lands mid-message, where there is no GRIB magic.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, *, region, start, end: (
+            grib_section_0(500) if start == 0 else bytes(16)
+        ),
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+
+
+def test_file_refs_skips_index_whose_last_offset_is_past_the_file_end(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A stale index can name a last offset beyond the object, where a ranged GET would
+    # 416. The guard must reject without reading rather than raise into the pool.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+
+    def must_not_read(url: str, **kwargs: object) -> bytes:
+        raise AssertionError("read attempted past the end of the file")
+
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", must_not_read)
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert job.file_refs(coord("sfc", data_vars), file_size=3005) == []
+
+
+def test_file_refs_accepts_an_index_that_omits_trailing_messages(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Real early-HRRR indexes list fewer messages than the object holds, so the last
+    # entry's message ends well before EOF. Requiring it to end AT the file end rejects
+    # 7 of 845 healthy real objects, so the guard only requires that it fit.
+    fake_index(monkeypatch, tmp_path, _SFC_INDEX)
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda url, **kwargs: grib_section_0(500),  # 500 of the 6000 bytes remaining
+    )
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    assert [
+        r.data_var.name for r in job.file_refs(coord("sfc", data_vars), file_size=9000)
+    ] == ["temperature_2m"]
 
 
 def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(

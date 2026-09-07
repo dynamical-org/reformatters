@@ -45,10 +45,10 @@ def stub_grib_source_file_reads(
     a fixture written once at the download path is consumed by the first call and every
     later call in the same run sees nothing.
 
-    The synthesized GRIB header agrees with the index, so `file_refs` reaches its
-    message matching; a test of the stale-index guard stubs `s3_read_bytes` itself.
-    `data_file_size` supplies the first message's length for a single-message index,
-    whose end byte is the end of the data file rather than the next message's start.
+    The synthesized GRIB header agrees with the index at whichever offset is read, so
+    `file_refs` reaches its message matching; a test of the stale-index guard stubs
+    `s3_read_bytes` itself. `data_file_size` makes the final entry's declared length
+    exact, where the index alone cannot imply it.
     """
 
     def download(url: str, dataset_id: str, **kwargs: object) -> Path:
@@ -60,18 +60,23 @@ def stub_grib_source_file_reads(
             path.write_text(index)
         return path
 
-    def read_bytes(url: str, **kwargs: object) -> bytes:
+    def read_bytes(url: str, *, start: int = 0, **kwargs: object) -> bytes:
         # Called with the data file's url, while make_index is keyed on the index's.
         index = make_index(url + ".idx")
         text = index.read_text() if isinstance(index, Path) else index
         starts = [int(line.split(":")[1]) for line in text.splitlines() if line]
-        if len(starts) > 1:
-            length = starts[1] - starts[0]
+        if start not in starts:
+            return bytes(GRIB_SECTION_0_BYTES)  # not a message boundary: no magic
+        position = starts.index(start)
+        if position + 1 < len(starts):
+            length = starts[position + 1] - start
+        elif data_file_size is not None:
+            length = data_file_size - start
         else:
-            assert data_file_size is not None, (
-                "A single-message index needs data_file_size to imply a message length"
-            )
-            length = data_file_size - starts[0]
+            # The guard only requires the declared message to fit the remaining bytes,
+            # and the caller's file_size is unknown here, so declare the smallest that
+            # always fits. A test about the guard itself stubs s3_read_bytes instead.
+            length = 1
         return grib_section_0(length)
 
     monkeypatch.setattr(module, "s3_download_to_disk", download)
