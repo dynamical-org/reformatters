@@ -337,11 +337,11 @@ def test_cron_job_names_fit_the_kubernetes_limit(
     dataset: NoaaGefsForecast35Day05DegreeVirtualDataset,
 ) -> None:
     """The dataset id plus "-validate" exceeds the 52 character limit, so the names
-    abbreviate the resolution. Constructing the CronJobs at all is the check -- the
-    field validator rejects a longer name -- but pin the abbreviation so it stays
+    drop "-degree". Constructing the CronJobs at all is the check -- the field
+    validator rejects a longer name -- but pin the abbreviation so it stays
     recognizable."""
     for cron_job in dataset.operational_kubernetes_resources("test-image-tag"):
-        assert cron_job.name.startswith("noaa-gefs-forecast-35-day-0p5-virtual-")
+        assert cron_job.name.startswith("noaa-gefs-forecast-35-day-0-5-virtual-")
         assert len(cron_job.name) <= 52
         assert cron_job.dataset_id == dataset.dataset_id
 
@@ -367,7 +367,7 @@ def test_validators(
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=9, minutes=55)
+    assert current_data.max_delay == timedelta(hours=9, minutes=50)
     assert (
         stalled_cycles_before_alerting(
             current_data.max_delay,
@@ -388,27 +388,23 @@ def test_validators(
     assert completeness.exclude_vars == ()
     # The leading tier covers the newest init, whose 840 hour extension the source is
     # still publishing; every older init must be whole.
-    assert completeness.min_present_fraction == (0.55, 1.0)
+    assert completeness.min_present_fraction == (0.57, 1.0)
     # 181 lead times of 31 members, in both the a and b products.
     files_per_lead_time = 31 * 2
     expected_files_per_init = 181 * files_per_lead_time
     allowed_missing = max(
         missing
         for missing in range(expected_files_per_init)
-        if (expected_files_per_init - missing) / expected_files_per_init >= 0.55
+        if (expected_files_per_init - missing) / expected_files_per_init >= 0.57
     )
     # The newest init may be missing its whole extension past 384 hours, which is what
     # it is missing when validation fires: 76 of its 181 lead times.
     extension_files = 76 * files_per_lead_time
     assert extension_files <= allowed_missing
-    # What is left over absorbs one member's remaining lead times but not two, so a
-    # second member absent from the compact first stage fails while its init is newest.
+    # What is left over is under one member's share of the compact first stage, so a
+    # member absent from that stage fails even while its init is newest.
     per_member_first_stage = 105 * 2
-    assert (
-        extension_files + per_member_first_stage
-        <= allowed_missing
-        < extension_files + 2 * per_member_first_stage
-    )
+    assert allowed_missing < extension_files + per_member_first_stage
 
     decode_health = next(
         v for v in validators if isinstance(v, validation.CheckVirtualDecodeHealth)
