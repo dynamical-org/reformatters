@@ -68,6 +68,10 @@ name: 'Manual: Create Job from CronJob'
         - noaa-ndvi-cdr-analysis-validate
         - u-arizona-swann-analysis-update
         - u-arizona-swann-analysis-validate
+        - ucsb-chc-chirps-analysis-final-update
+        - ucsb-chc-chirps-analysis-final-validate
+        - ucsb-chc-chirps-analysis-preliminary-update
+        - ucsb-chc-chirps-analysis-preliminary-validate
 concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
