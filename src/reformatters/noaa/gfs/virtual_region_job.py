@@ -113,8 +113,7 @@ _REPRESENTATIVE_VARS: dict[NoaaGfsFileType, tuple[str, ...]] = {
 
 # A vertical level each product publishes for every variable of the group it carries.
 # The products split every vertical coordinate, so a group's first level is a chunk the
-# other product never fills and probing it would re-ingest that file forever. pgrb2b's
-# 125 hPa level is present in every carried pressure-level variable's inventory.
+# other product never fills and probing it would re-ingest that file forever.
 _PROBE_VERTICAL_LEVEL: dict[Dim, dict[NoaaGfsFileType, float]] = {
     "pressure_level": {"pgrb2": 1000.0, "pgrb2b": 125.0},
     "height_above_mean_sea_level": {"pgrb2": 1829.0, "pgrb2b": 305.0},
