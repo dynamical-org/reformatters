@@ -13,11 +13,7 @@ class NoaaGefsForecast35Day05DegreeVirtualTemplateConfig(
     NoaaGefsForecastABVirtualTemplateConfig
 ):
     """Virtual GEFS 35 day forecast: every 0.5 degree pgrb2a and pgrb2b message of all
-    31 ensemble members, out to the 840 hour lead only the 00z cycle reaches.
-
-    Only 00z runs that far, so the init axis is daily where the 16 day dataset's is 6
-    hourly, and every init this dataset serves is also served there through 384 hours.
-    """
+    31 ensemble members, out to the 840 hour lead only the 00z cycle reaches."""
 
     forecast_length: Timedelta = GEFS_EXTENSION_MAX
     append_dim_frequency: Timedelta = pd.Timedelta("24h")

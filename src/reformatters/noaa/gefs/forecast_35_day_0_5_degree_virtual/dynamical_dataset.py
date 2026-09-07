@@ -51,11 +51,8 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
-        # A cycle publishes in two stages: the lead times through 384 hours land between
-        # ~init+3h46m and ~init+6h43m, then the 840 hour extension arrives in bursts
-        # until ~init+28h05m. Fire just before the first stage and poll through it; the
-        # deadline also clears the previous cycle's last extension files, and the rest
-        # of a cycle's extension is swept in one batch by the fire a day later.
+        # A run publishes ~init+3h46m through ~init+28h05m.
+        # Fire just before the first files become available and stop 30m after expected completion.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="45 3 * * *",
@@ -73,8 +70,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
+            # The update's fire plus its pod_active_deadline
             schedule="55 9 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -89,14 +85,8 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A cycle that published nothing is caught here rather than by the
-            # completeness check below, which skips append dim positions the store
-            # does not reach. Inits are a day apart, so tolerating one would leave a
-            # whole day unreported: a cycle is due the moment validation follows it.
             validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=50)),
-            # The newest init holds only its lead times through 384 hours, 105 of 181,
-            # when validation fires; the leading tier is that share less a margin. Every
-            # older init has its whole 840 hours.
+            # 00z has published only its leads through 384h, 105 of 181, when validation fires.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.57, 1.0)
             ),
