@@ -128,8 +128,7 @@ def parallel_setup(
 def wait_for_workers(
     store_factory: StoreFactory, reformat_job_name: str, workers_total: int
 ) -> None:
-    # Poll until all workers write their results file. Backfills can have
-    # many thousands of workers, so count (cheap ls) rather than read.
+    # Poll result filenames for every worker index without reading file contents.
     # Rely on kubernetes pod_active_deadline for timeout.
     if workers_total <= 1:
         return
