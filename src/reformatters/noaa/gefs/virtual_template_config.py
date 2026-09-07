@@ -1401,6 +1401,11 @@ def _a_b_root_data_vars(
             long_name="Haines Index",
             units="1",
             comment="Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+            flag_values=(2, 3, 4, 5, 6),
+            flag_meanings=(
+                "very_low_potential very_low_potential low_potential "
+                "moderate_potential high_potential"
+            ),
         ),
         var(
             "pressure_reduced_to_mean_sea_level_eta_model",
