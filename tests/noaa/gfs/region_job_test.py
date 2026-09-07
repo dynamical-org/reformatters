@@ -36,7 +36,7 @@ def test_source_file_coord_get_url() -> None:
         lead_time=pd.Timedelta(hours=0),
         data_vars=NoaaGfsForecastTemplateConfig().data_vars,
     )
-    expected = "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20000101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+    expected = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20000101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
     assert coord.get_url() == expected
 
 
@@ -47,7 +47,7 @@ def test_source_file_coord_get_url_with_lead_time() -> None:
         lead_time=pd.Timedelta(hours=120),
         data_vars=NoaaGfsForecastTemplateConfig().data_vars[:1],
     )
-    expected = "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20250115/12/atmos/gfs.t12z.pgrb2.0p25.f120"
+    expected = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250115/12/atmos/gfs.t12z.pgrb2.0p25.f120"
     assert coord.get_url() == expected
 
 
@@ -196,11 +196,11 @@ def test_source_file_coord_get_url_nomads() -> None:
     )
     assert (
         coord.get_url()
-        == "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
     )
     assert (
         coord.get_url(source="s3")
-        == "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/12/atmos/gfs.t12z.pgrb2.0p25.f024"
     )
     assert (
         coord.get_url(source="nomads")
@@ -221,7 +221,7 @@ def test_source_file_coord_get_idx_url_nomads() -> None:
     )
     assert (
         coord.get_idx_url(source="s3")
-        == "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
+        == "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20250615/06/atmos/gfs.t06z.pgrb2.0p25.f003.idx"
     )
 
 
