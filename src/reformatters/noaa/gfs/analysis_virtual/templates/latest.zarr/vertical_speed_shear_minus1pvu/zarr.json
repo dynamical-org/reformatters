@@ -37,7 +37,7 @@
     "short_name": "vwsh",
     "standard_name": "wind_speed_shear",
     "units": "s-1",
-    "comment": "NaN where this potential vorticity surface does not exist in the column.",
+    "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

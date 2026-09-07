@@ -2574,7 +2574,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2627,7 +2627,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2680,7 +2680,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2733,7 +2733,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2944,7 +2944,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2997,7 +2997,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -3050,7 +3050,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -3103,7 +3103,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -5876,7 +5876,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -5929,7 +5929,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -5982,7 +5982,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -6035,7 +6035,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7484,7 +7484,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7537,7 +7537,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7590,7 +7590,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7643,7 +7643,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9975,7 +9975,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10324,7 +10324,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10383,7 +10383,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10500,7 +10500,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10849,7 +10849,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10908,7 +10908,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10967,7 +10967,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11026,7 +11026,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11887,7 +11887,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11940,7 +11940,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11993,7 +11993,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12046,7 +12046,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12099,7 +12099,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12152,7 +12152,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12205,7 +12205,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12258,7 +12258,7 @@
           "short_name": "vwsh",
           "standard_name": "wind_speed_shear",
           "units": "s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -12838,7 +12838,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13203,7 +13203,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13256,7 +13256,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13361,7 +13361,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13830,7 +13830,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13883,7 +13883,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13936,7 +13936,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13989,7 +13989,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14146,7 +14146,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14511,7 +14511,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14564,7 +14564,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14669,7 +14669,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15138,7 +15138,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15191,7 +15191,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15244,7 +15244,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15297,7 +15297,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "NaN where this potential vorticity surface does not exist in the column.",
+          "comment": "NaN where this potential vorticity surface does not exist in the column; positive potential vorticity surfaces are largely absent in the southern hemisphere and negative potential vorticity surfaces in the northern hemisphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
