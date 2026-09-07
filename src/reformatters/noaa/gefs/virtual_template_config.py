@@ -539,7 +539,7 @@ class NoaaGefsForecastABVirtualTemplateConfig(NoaaGefsForecastVirtualTemplateCon
     grid they publish. A subclass declares forecast_length, the init cadence its
     forecast length is published at, and dataset_attributes."""
 
-    source_file_types: frozenset[GEFSSourceFileType] = _A_AND_B_FILES
+    source_file_types: tuple[GEFSSourceFileType, ...] = ("a", "b")
 
     dims: Dims = {
         ROOT: ("init_time", "ensemble_member", "lead_time", "latitude", "longitude"),
