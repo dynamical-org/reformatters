@@ -103,21 +103,19 @@ class NoaaGfsVirtualSourceFileCoord(
         return f"s3://{NODD_BUCKET}/" + url.removeprefix(NODD_HTTPS_PREFIX)
 
 
-# The variables a source file's ingestion is probed by, in preference order. Each is
-# published in every era of the archive and carried only by its own product. A coord
-# holding only the variables without hour 0 values falls through to the second entry.
+# The variables a source file's ingestion is probed by, in preference order. Each probe
+# cell is published in every era of the archive and carried only by its own product. A
+# coord holding only the variables without hour 0 values falls through to the second.
 _REPRESENTATIVE_VARS: dict[NoaaGfsFileType, tuple[str, ...]] = {
     "pgrb2": ("temperature_2m", "total_precipitation_surface"),
-    "pgrb2b": ("geopotential_height_0p5pvu", "uv_b_downward_solar_flux_surface"),
+    "pgrb2b": ("geopotential_height", "uv_b_downward_solar_flux_surface"),
 }
 
 # A vertical level each product publishes for every variable of the group it carries.
 # The products split every vertical coordinate, so a group's first level is a chunk the
-# other product never fills and probing it would re-ingest that file forever. One
-# constant per (group, product) holds because each product's level inventory is uniform
-# across the group's elements.
+# other product never fills and probing it would re-ingest that file forever.
 _PROBE_VERTICAL_LEVEL: dict[Dim, dict[NoaaGfsFileType, float]] = {
-    "pressure_level": {"pgrb2": 1000.0, "pgrb2b": 875.0},
+    "pressure_level": {"pgrb2": 1000.0, "pgrb2b": 125.0},
     "height_above_mean_sea_level": {"pgrb2": 1829.0, "pgrb2b": 305.0},
 }
 
@@ -143,7 +141,8 @@ class NoaaGfsVirtualRegionJob(
         return (element, level) not in PGRB2_PREFERRED_MESSAGES
 
     def representative_var(self, coord: GFS_VIRTUAL_COORD) -> NoaaDataVar:
-        """A variable this file fills, preferring one whose chunk needs no level pick."""
+        """A variable this file fills, preferring product-specific probes published in
+        every archive era."""
         by_name = {var.name: var for var in coord.data_vars}
         candidates = [
             *(
