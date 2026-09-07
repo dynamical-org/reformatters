@@ -151,6 +151,9 @@ def test_consistent_truncation_is_an_observation_not_a_rejection(
 
 def test_consistent_truncation_reports_a_file_that_yields_no_refs(
     template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     data_vars = [get_var("temperature_2m")]
     truncated_coord = coord("sfc", data_vars, pd.Timedelta("1h")).model_copy(
@@ -160,28 +163,57 @@ def test_consistent_truncation_reports_a_file_that_yields_no_refs(
         update={"init_time": pd.Timestamp("2016-08-05T11:00")}
     )
     job = make_job(template_ds, data_vars)
-    refs = [
-        VirtualRef(
-            data_var=data_vars[0],
-            out_loc=healthy_coord.out_loc(),
-            location=healthy_coord.get_url(),
-            offset=0,
-            length=1,
-        )
-    ]
-    job._index_line_counts[truncated_coord.get_url()] = 23
-    job._index_line_counts[healthy_coord.get_url()] = 102
-
-    anomalies = job.source_file_anomalies(
-        [
-            (truncated_coord, 17_301_504, []),
-            (healthy_coord, 85_000_000, refs),
-        ]
+    truncated_index = "".join(
+        f"{row}:{(row - 1) * 1000}:d=2016080512:REFC:entire atmosphere:1 hour fcst:\n"
+        for row in range(1, 24)
+    )
+    healthy_index = "1:0:d=2016080511:TMP:2 m above ground:1 hour fcst:\n" + "".join(
+        f"{row}:{(row - 1) * 1000}:d=2016080511:REFC:entire atmosphere:1 hour fcst:\n"
+        for row in range(2, 103)
+    )
+    indexes = {
+        truncated_coord.get_index_url(): truncated_index,
+        healthy_coord.get_index_url(): healthy_index,
+    }
+    sizes = {
+        truncated_coord.get_url(): 17_301_504,
+        healthy_coord.get_url(): 85_000_000,
+    }
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda url: indexes[url],
     )
 
-    assert len(anomalies) == 1
-    assert anomalies[0].url == truncated_coord.get_url()
-    assert "file yielded no refs" in anomalies[0].reason
+    def discover_available(
+        self: NoaaHrrrForecast48HourVirtualRegionJob,
+        pending: list[NoaaHrrrForecastVirtualSourceFileCoord],
+    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
+        assert self is job
+        return [
+            (source_coord, sizes[source_coord.get_url()]) for source_coord in pending
+        ]
+
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourVirtualRegionJob,
+        "discover_available",
+        discover_available,
+    )
+
+    with caplog.at_level("ERROR"):
+        batches = list(job.process_virtual_refs([truncated_coord, healthy_coord]))
+
+    assert job._index_line_counts == {
+        truncated_coord.get_url(): 23,
+        healthy_coord.get_url(): 102,
+    }
+    assert [[source_coord for source_coord, _ in batch] for batch in batches] == [
+        [healthy_coord]
+    ]
+    assert f"Detected anomalous source file {truncated_coord.get_url()}" in caplog.text
+    assert "file yielded no refs" in caplog.text
+    assert "Detected 1 anomalous source file during this run" in caplog.text
 
 
 @pytest.mark.parametrize(

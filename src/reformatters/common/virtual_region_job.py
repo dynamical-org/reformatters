@@ -212,7 +212,9 @@ class VirtualRegionJob(
             tuple[SOURCE_FILE_COORD, int, Sequence[VirtualRef]]
         ],
     ) -> Sequence[SourceFileAnomaly]:
-        """Report suspicious source files observed while building refs."""
+        """Report suspicious files for this tick; cross-tick implementations retain
+        their own history and must not re-report files flagged in earlier ticks.
+        """
         return ()
 
     def filter_already_present(
@@ -287,7 +289,6 @@ class VirtualRegionJob(
                                 f"{anomaly.reason}"
                             )
                         anomalies.extend(new_anomalies)
-                        # Drop files that yielded no refs (skipped as unreadable).
                         batch = [
                             (coord, refs)
                             for coord, refs in zip(coords, refs_per_file, strict=True)
