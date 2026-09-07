@@ -170,10 +170,10 @@ def test_which_variables_hour_0_drops(
     )
 
 
-def test_representative_var_is_carried_only_by_its_own_product(
+def test_representative_probe_is_filled_only_by_its_own_product(
     template_ds: xr.DataTree,
 ) -> None:
-    """A probe on a variable the file does not fill would never be marked ingested."""
+    """A probe on a cell the file does not fill would never be marked ingested."""
     job = make_job(template_ds, TEMPLATE_CONFIG.data_vars)
     coords = coords_for(
         template_ds,
@@ -189,16 +189,19 @@ def test_representative_var_is_carried_only_by_its_own_product(
     assert picked == {
         ("pgrb2", pd.Timedelta(0)): "temperature_2m",
         ("pgrb2", pd.Timedelta("9h")): "temperature_2m",
-        ("pgrb2b", pd.Timedelta(0)): "geopotential_height_0p5pvu",
-        ("pgrb2b", pd.Timedelta("9h")): "geopotential_height_0p5pvu",
+        ("pgrb2b", pd.Timedelta(0)): "geopotential_height",
+        ("pgrb2b", pd.Timedelta("9h")): "geopotential_height",
     }
     for coord in coords:
         var = job.representative_var(coord)
         assert var in coord.data_vars
-        assert dict(job.representative_probe_loc(coord, var)) == {
+        expected_loc = {
             "init_time": coord.init_time,
             "lead_time": coord.lead_time,
         }
+        if coord.file_type == "pgrb2b":
+            expected_loc["pressure_level"] = 125.0
+        assert dict(job.representative_probe_loc(coord, var)) == expected_loc
 
 
 def test_operational_update_jobs_single_polling_job(
@@ -471,7 +474,7 @@ def test_a_job_filtered_to_a_pressure_level_variable_probes_a_level_it_fills(
     levels = {dict(ref.out_loc)["pressure_level"] for ref in refs}
     assert len(levels) == (41 if file_type == "pgrb2" else 16)
     assert dict(job.representative_probe_loc(coord, var))["pressure_level"] == (
-        1000.0 if file_type == "pgrb2" else 875.0
+        1000.0 if file_type == "pgrb2" else 125.0
     )
     job._assert_probe_chunk_covered(coord, refs)
 

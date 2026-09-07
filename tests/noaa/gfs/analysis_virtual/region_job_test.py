@@ -149,10 +149,10 @@ def test_which_instant_variables_lack_hour_0_values() -> None:
     assert all(get_var(name).has_hour_0_values() for name in present_at_hour_0)
 
 
-def test_representative_var_is_carried_only_by_its_own_product(
+def test_representative_probe_is_filled_only_by_its_own_product(
     template_ds: xr.DataTree,
 ) -> None:
-    """A probe on a variable the file does not fill would never be marked ingested."""
+    """A probe on a cell the file does not fill would never be marked ingested."""
     data_vars = TEMPLATE_CONFIG.data_vars
     coords = coords_for_times(
         template_ds, data_vars, [pd.Timestamp("2021-05-03T12:00")]
@@ -168,15 +168,16 @@ def test_representative_var_is_carried_only_by_its_own_product(
     assert picked == {
         ("pgrb2", True): "temperature_2m",
         ("pgrb2", False): "total_precipitation_surface",
-        ("pgrb2b", True): "geopotential_height_0p5pvu",
+        ("pgrb2b", True): "geopotential_height",
         ("pgrb2b", False): "uv_b_downward_solar_flux_surface",
     }
     for coord in coords:
         var = job.representative_var(coord)
         assert var in coord.data_vars
-        assert dict(job.representative_probe_loc(coord, var)) == {
-            "time": coord.valid_time()
-        }
+        expected_loc = {"time": coord.valid_time()}
+        if coord.file_type == "pgrb2b" and var.name == "geopotential_height":
+            expected_loc["pressure_level"] = 125.0
+        assert dict(job.representative_probe_loc(coord, var)) == expected_loc
 
 
 def test_operational_update_jobs_single_polling_job(
