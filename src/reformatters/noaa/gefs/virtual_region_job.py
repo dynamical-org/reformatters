@@ -85,13 +85,12 @@ class NoaaGefsVirtualRegionJob(
         )
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
-        """Probe file presence through a variable the archive published in every era,
-        preferring a root one -- the products partition each vertical group's levels, so
-        a group variable's probe cell can be a level this file never carries -- and an
-        instant one, so the probe lands where data exists at every step."""
+        """Return a variable suitable for probing whether the source file is available."""
         candidates = [
             var for var in coord.data_vars if var.internal_attrs.available_from is None
         ] or list(coord.data_vars)  # a run of only later-era vars must probe one
+        # Root variables avoid levels absent from one product; instant variables exist
+        # at every lead time.
         return min(
             candidates,
             key=lambda var: (var.group is not ROOT, var.attrs.step_type != "instant"),

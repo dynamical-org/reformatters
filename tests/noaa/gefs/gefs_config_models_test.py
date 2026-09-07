@@ -2,6 +2,8 @@
 
 import numpy as np
 import pandas as pd
+import pytest
+from pydantic import ValidationError
 
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.noaa.gefs.gefs_config_models import (
@@ -14,6 +16,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     GEFSFileType,
     NoaaGefsDataVar,
     NoaaGefsInternalAttrs,
+    NoaaGefsVirtualInternalAttrs,
 )
 
 
@@ -41,6 +44,18 @@ def _make_gefs_var(gefs_file_type: GEFSFileType) -> NoaaGefsDataVar:
             gefs_file_type=gefs_file_type,
         ),
     )
+
+
+def test_virtual_variable_requires_a_source_file_type() -> None:
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        NoaaGefsVirtualInternalAttrs(
+            keep_mantissa_bits="no-rounding",
+            grib_element="TMP",
+            grib_description="Temperature",
+            grib_index_level="2 m above ground",
+            index_position=1,
+            source_file_types=frozenset(),
+        )
 
 
 def _make_ensemble_coord(

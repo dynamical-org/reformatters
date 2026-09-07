@@ -51,10 +51,8 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
-        # The whole run publishes in one burst: the first file lands ~init+3h46m and the
-        # last member's f384 ~init+7h11m. Fire just before the burst starts and poll
-        # through it; the deadline clears the observed end by over half an hour and
-        # still ends well before the next cycle's fire.
+        # A run publishes ~init+3h46m through ~init+7h11m.
+        # Fire just before the first files become available and stop 30m after expected completion.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="45 3,9,15,21 * * *",
@@ -70,8 +68,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
+            # The update's fire plus its pod_active_deadline
             schedule="55 7,13,19,1 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
@@ -86,12 +83,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A cycle that published nothing is caught here rather than by the
-            # completeness check below, which skips append dim positions the store
-            # does not reach.
             validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=50)),
-            # The whole run publishes before validation fires, so every init the store
-            # reached must be whole.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

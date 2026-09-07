@@ -1,9 +1,10 @@
 from collections.abc import Mapping, Sequence
-from typing import Any, Final, Literal, assert_never
+from typing import Annotated, Any, Final, Literal, assert_never
 from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
+from pydantic import Field
 
 from reformatters.common.config_models import DataVar, EnsembleStatistic
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
@@ -52,7 +53,7 @@ class NoaaGefsVirtualInternalAttrs(NoaaInternalAttrs):
     lead-time-dependent GEFSFileType the materialized datasets resolve per coord. More
     than one where the products partition the variable's levels between them."""
 
-    source_file_types: frozenset[GEFSSourceFileType]
+    source_file_types: Annotated[frozenset[GEFSSourceFileType], Field(min_length=1)]
     available_from: Timestamp | None = None
 
 
