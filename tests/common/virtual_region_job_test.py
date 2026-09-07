@@ -12,7 +12,7 @@ expansion without the decode-only codec ever being invoked.
 import asyncio
 import json
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from datetime import timedelta
 from itertools import batched, count
 from pathlib import Path
@@ -57,6 +57,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
+    SourceFileAnomaly,
     VirtualRef,
     VirtualRegionJob,
     _exists_many,
@@ -2260,6 +2261,79 @@ def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
     ingested = [coord for batch in batches for coord, _ in batch]
     assert {coord.lead_time for coord in ingested} == {LEAD_TIMES[0]}
     assert len(ingested) == 4  # 4 inits x lead 0
+
+
+class _AnomalousSourceJob(VirtualTestRegionJob):
+    process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+    def discover_available(
+        self, pending: list[VirtualTestSourceFileCoord]
+    ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+        return [(coord, BLOCK_NBYTES) for coord in pending]
+
+    def file_refs(
+        self, coord: VirtualTestSourceFileCoord, file_size: int
+    ) -> list[VirtualRef]:
+        return [
+            VirtualRef(
+                data_var=self.data_vars[0],
+                out_loc=coord.out_loc(),
+                location=self.messages_url,
+                offset=0,
+                length=file_size,
+            )
+        ]
+
+    def source_file_anomalies(
+        self,
+        source_files: Sequence[
+            tuple[VirtualTestSourceFileCoord, int, Sequence[VirtualRef]]
+        ],
+    ) -> Sequence[SourceFileAnomaly]:
+        return [SourceFileAnomaly(source_files[0][0].get_url(), "short source")]
+
+
+def test_source_anomaly_is_logged_and_refs_are_accepted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job = _AnomalousSourceJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(2),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+
+    with caplog.at_level("ERROR"):
+        batches = list(job.process_virtual_refs(job.source_file_coords()))
+
+    assert len([coord for batch in batches for coord, _ in batch]) == 4
+    assert "Accepting refs from anomalous source file" in caplog.text
+    assert "Accepted refs from 1 anomalous source file during this run" in caplog.text
+
+
+def test_source_anomaly_summary_is_logged_when_consumer_stops(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job = _AnomalousSourceJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(2),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+
+    batches = cast(
+        "Generator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]",
+        job.process_virtual_refs(job.source_file_coords()),
+    )
+    with caplog.at_level("ERROR"):
+        next(batches)
+        batches.close()
+
+    assert "Accepted refs from 1 anomalous source file during this run" in caplog.text
 
 
 class _NothingPublishedJob(VirtualTestRegionJob):

@@ -45,6 +45,13 @@ class VirtualRef(NamedTuple):
     etag_checksum: str | None = None
 
 
+class SourceFileAnomaly(NamedTuple):
+    """A suspicious source file whose usable refs are still accepted."""
+
+    url: str
+    reason: str
+
+
 class VirtualRegionJob(
     RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
 ):
@@ -199,6 +206,15 @@ class VirtualRegionJob(
                 loc[dim] = template_var.get_index(dim)[0]
         return loc
 
+    def source_file_anomalies(
+        self,
+        source_files: Sequence[  # noqa: ARG002 - subclasses inspect source files
+            tuple[SOURCE_FILE_COORD, int, Sequence[VirtualRef]]
+        ],
+    ) -> Sequence[SourceFileAnomaly]:
+        """Report suspicious source files whose refs should still be accepted."""
+        return ()
+
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -249,55 +265,82 @@ class VirtualRegionJob(
         """
         pending = list(remaining)
         last_log = time.monotonic()
-        with ThreadPoolExecutor(self.download_concurrency) as pool:
-            while pending:
-                tick_start = time.monotonic()
-                available = self.discover_available(pending)
-                discover_s = time.monotonic() - tick_start
-                if available:
-                    coords, sizes = zip(*available, strict=True)
-                    build_start = time.monotonic()
-                    refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
-                    # Drop files that yielded no refs (skipped as unreadable).
-                    batch = [
-                        (coord, refs)
-                        for coord, refs in zip(coords, refs_per_file, strict=True)
-                        if refs
-                    ]
-                    build_s = time.monotonic() - build_start
-                    ready = {id(coord) for coord in coords}
-                    pending = [coord for coord in pending if id(coord) not in ready]
-                    skipped = len(coords) - len(batch)
-                    log.info(
-                        f"Ingesting {len(batch)} files"
-                        f"{f' ({skipped} skipped)' if skipped else ''}, "
-                        f"{len(pending)} still pending "
-                        f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
-                    )
-                    last_log = time.monotonic()
-                    if batch:
-                        yield batch
-                if self.processing_mode == "backfill":
-                    if pending:
-                        log.info(
-                            f"{len(pending)} source files not present, skipping "
-                            f"(first: {pending[0].get_url()})"
+        anomalies: list[SourceFileAnomaly] = []
+        try:
+            with ThreadPoolExecutor(self.download_concurrency) as pool:
+                while pending:
+                    tick_start = time.monotonic()
+                    available = self.discover_available(pending)
+                    discover_s = time.monotonic() - tick_start
+                    if available:
+                        coords, sizes = zip(*available, strict=True)
+                        build_start = time.monotonic()
+                        refs_per_file = list(
+                            pool.map(self._file_refs_or_skip, coords, sizes)
                         )
-                    return
-                if pending:
-                    if pd.Timestamp.now() >= self.poll_deadline:
-                        log.info(
-                            f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet published, leaving them to the next update "
-                            f"(first: {pending[0].get_url()})"
+                        new_anomalies = self.source_file_anomalies(
+                            list(zip(coords, sizes, refs_per_file, strict=True))
                         )
-                        return
-                    # Break the silence under the 350s network idle timeout.
-                    if time.monotonic() - last_log >= 4 * 60:
-                        log.info(f"Waiting on {len(pending)} source files")
+                        for anomaly in new_anomalies:
+                            log.error(
+                                f"Accepting refs from anomalous source file "
+                                f"{anomaly.url}: {anomaly.reason}"
+                            )
+                        anomalies.extend(new_anomalies)
+                        # Drop files that yielded no refs (skipped as unreadable).
+                        batch = [
+                            (coord, refs)
+                            for coord, refs in zip(coords, refs_per_file, strict=True)
+                            if refs
+                        ]
+                        build_s = time.monotonic() - build_start
+                        ready = {id(coord) for coord in coords}
+                        pending = [coord for coord in pending if id(coord) not in ready]
+                        skipped = len(coords) - len(batch)
+                        log.info(
+                            f"Ingesting {len(batch)} files"
+                            f"{f' ({skipped} skipped)' if skipped else ''}, "
+                            f"{len(pending)} still pending "
+                            f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
+                        )
                         last_log = time.monotonic()
-                    elapsed = time.monotonic() - tick_start
-                    time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
+                        if batch:
+                            yield batch
+                    if self.processing_mode == "backfill":
+                        if pending:
+                            log.info(
+                                f"{len(pending)} source files not present, skipping "
+                                f"(first: {pending[0].get_url()})"
+                            )
+                        return
+                    if pending:
+                        if pd.Timestamp.now() >= self.poll_deadline:
+                            log.info(
+                                f"Poll deadline reached with {len(pending)} source "
+                                f"files not yet published, leaving them to the next "
+                                f"update (first: {pending[0].get_url()})"
+                            )
+                            return
+                        # Break the silence under the 350s network idle timeout.
+                        if time.monotonic() - last_log >= 4 * 60:
+                            log.info(f"Waiting on {len(pending)} source files")
+                            last_log = time.monotonic()
+                        elapsed = time.monotonic() - tick_start
+                        time.sleep(
+                            max(0.0, self.tick_interval.total_seconds() - elapsed)
+                        )
+        finally:
+            self._log_source_file_anomaly_summary(anomalies)
+
+    def _log_source_file_anomaly_summary(
+        self, anomalies: Sequence[SourceFileAnomaly]
+    ) -> None:
+        if anomalies:
+            noun = "file" if len(anomalies) == 1 else "files"
+            log.error(
+                f"Accepted refs from {len(anomalies)} anomalous source {noun} "
+                f"during this run (first: {anomalies[0].url})"
+            )
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
