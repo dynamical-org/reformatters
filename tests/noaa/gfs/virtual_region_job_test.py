@@ -459,7 +459,7 @@ def test_the_respelled_element_still_selects_the_same_grib_parameter(
         raw = httpx.get(
             ref.location.replace(
                 "s3://noaa-gfs-bdp-pds/",
-                "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/",
+                "https://noaa-gfs-bdp-pds.s3.amazonaws.com/",
             ),
             headers={"Range": f"bytes={ref.offset}-{ref.offset + ref.length - 1}"},
             timeout=60,
