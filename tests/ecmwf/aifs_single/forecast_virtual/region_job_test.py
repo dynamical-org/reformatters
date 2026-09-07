@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.virtual_region_job import SourceFileRejectedError
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     region_job as region_job_module,
 )
@@ -251,8 +252,8 @@ def test_file_refs_skips_stale_index_past_eof(
     _fake_index(monkeypatch, tmp_path, _index_line("2t", "sfc", 500, 1000))
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
-    # File truncated below the matched message's end byte -> stale/mismatched -> skip.
-    assert job.file_refs(_coord(data_vars), file_size=1200) == []
+    with pytest.raises(SourceFileRejectedError, match="stale or mismatched"):
+        job.file_refs(_coord(data_vars), file_size=1200)
 
 
 # --- discover_available ---

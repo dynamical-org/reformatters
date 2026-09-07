@@ -4,11 +4,15 @@ from typing import Any, ClassVar, Generic, TypeVar
 
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
-from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    AmbiguousSourceFileRejectedError,
+    SourceFileRejectedError,
+    VirtualRef,
+    VirtualRegionJob,
+)
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
@@ -17,8 +21,6 @@ from reformatters.noaa.noaa_grib_index import (
     grib_index_window_str,
     parse_grib_index_lines,
 )
-
-log = get_logger(__name__)
 
 # GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
 # total length as a big endian u64.
@@ -92,13 +94,17 @@ class NoaaVirtualRegionJob(
             coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
         )
         try:
-            index_lines = parse_grib_index_lines(index_path)
+            try:
+                index_lines = parse_grib_index_lines(index_path)
+            except (IndexError, UnicodeError, ValueError) as error:
+                raise SourceFileRejectedError(
+                    "empty or unparseable GRIB index"
+                ) from error
         finally:
             index_path.unlink()
 
         if not index_lines:
-            log.warning(f"Skipping {coord.get_url()}: empty or unparseable grib index")
-            return []
+            raise SourceFileRejectedError("empty or unparseable GRIB index")
 
         lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
         # Each message's end byte is the next message's start; the last is the file end.
@@ -111,12 +117,11 @@ class NoaaVirtualRegionJob(
         # the file end - a healthy index may omit trailing messages the object still has.
         declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
         if declared_length is None or declared_length > file_size - starts[-1]:
-            log.error(
-                f"Skipping {location}: the index's last offset {starts[-1]} does not "
+            raise SourceFileRejectedError(
+                f"the index's last offset {starts[-1]} does not "
                 f"begin a GRIB message that fits the {file_size}-byte data file; "
                 f"stale or mismatched index"
             )
-            return []
 
         out_loc_base = dict(coord.out_loc())
         refs = []
@@ -126,11 +131,10 @@ class NoaaVirtualRegionJob(
             # Checked for every message, matched or not: the whole file is discarded,
             # so a corrupt range anywhere in the index condemns all of it.
             if end > file_size or end <= start:
-                log.error(
-                    f"Skipping {location}: index byte ranges fall outside the "
+                raise SourceFileRejectedError(
+                    f"index byte ranges fall outside the "
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
-                return []
             if not self.owns_index_message(coord, element, level):
                 continue
             matches = lookup.get((element, level, window))
@@ -157,6 +161,12 @@ class NoaaVirtualRegionJob(
         self._check_refs_complete(coord, refs)
         return refs
 
+    def source_file_rejection(
+        self, coord: NOAA_VIRTUAL_COORD, file_refs: Sequence[VirtualRef]
+    ) -> AmbiguousSourceFileRejectedError | None:
+        error = self._probe_chunk_coverage_error(coord, file_refs)
+        return AmbiguousSourceFileRejectedError(error) if error is not None else None
+
     def _check_refs_complete(
         self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
     ) -> None:
@@ -180,7 +190,11 @@ class NoaaVirtualRegionJob(
             start=offset,
             end=offset + GRIB_SECTION_0_BYTES,
         )
-        if header[:4] != b"GRIB" or header[7] != 2:
+        if (
+            len(header) != GRIB_SECTION_0_BYTES
+            or header[:4] != b"GRIB"
+            or header[7] != 2
+        ):
             return None
         (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
         return length

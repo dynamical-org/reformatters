@@ -45,6 +45,19 @@ class VirtualRef(NamedTuple):
     etag_checksum: str | None = None
 
 
+class SourceFileRejectedError(Exception):
+    """A source file whose published contents are unsafe to reference."""
+
+
+class AmbiguousSourceFileRejectedError(SourceFileRejectedError):
+    """A rejection that can also indicate a bug in the ref-building configuration."""
+
+
+class _FileRefsResult(NamedTuple):
+    refs: list[VirtualRef]
+    rejection: SourceFileRejectedError | None = None
+
+
 class VirtualRegionJob(
     RegionJob[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
 ):
@@ -87,6 +100,11 @@ class VirtualRegionJob(
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("1s")
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
     download_concurrency: ClassVar[int] = 64
+
+    # One isolated rejection is plausibly a bad source file. A burst indicates a
+    # systemic source or ref-building failure and must stop the worker.
+    source_rejection_tolerance: ClassVar[int] = 1
+    source_rejection_max_fraction: ClassVar[float] = 0.1
 
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
@@ -133,19 +151,18 @@ class VirtualRegionJob(
         return [job], template_ds
 
     def file_refs(self, coord: SOURCE_FILE_COORD, file_size: int) -> list[VirtualRef]:
-        """Build every virtual ref a single source file contributes (or [] to skip it).
+        """Build every virtual ref a single source file contributes.
 
         Resolve each message's byte range however the source allows — parse a sidecar
         index (`coord.get_index_url()`), scan the data file, or (one message per file)
         point at the whole file — and return a VirtualRef per (out cell, variable) in
         coordinate-label space; the chunk index is resolved centrally later (see
-        _emit_refs). Return [] to drop an unreadable or stale file. `file_size` is
-        whatever discover_available reported (a listed size, a Content-Length), e.g.
-        to supply the missing final end byte of an index that omits it.
+        _emit_refs). Raise SourceFileRejectedError to drop an unsafe file; returning no
+        refs or raising any other exception fails the worker. `file_size` is whatever
+        discover_available reported (a listed size, a Content-Length), e.g. to supply
+        the missing final end byte of an index that omits it.
         """
-        raise NotImplementedError(
-            "Return the VirtualRefs for one source file, or [] to skip it."
-        )
+        raise NotImplementedError("Return the VirtualRefs for one source file.")
 
     def discover_available(
         self, pending: list[SOURCE_FILE_COORD]
@@ -199,6 +216,14 @@ class VirtualRegionJob(
                 loc[dim] = template_var.get_index(dim)[0]
         return loc
 
+    def source_file_rejection(
+        self,
+        coord: SOURCE_FILE_COORD,  # noqa: ARG002 - subclasses inspect the source coord
+        file_refs: Sequence[VirtualRef],  # noqa: ARG002 - subclasses inspect the refs
+    ) -> SourceFileRejectedError | None:
+        """Return why a source file must be discarded, or None to accept its refs."""
+        return None
+
     def filter_already_present(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
@@ -243,12 +268,15 @@ class VirtualRegionJob(
         One yield per tick contains every file that became available since the last:
         a backfill sweeps once and exits, an update polls until everything is ingested
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
-        pairs — never split a file, never yield empty. Source-agnostic: it only asks
-        discover_available which coords are ready. Override only for a different
-        batching policy. See "The write loop" in docs/virtual_datasets.md.
+        pairs — never split a file, never yield empty. SourceFileRejectedError drops
+        one file at ERROR; a burst fails the worker. Source-agnostic: it only asks
+        discover_available which coords are ready. Override only for a different batching
+        policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
         last_log = time.monotonic()
+        attempted = 0
+        rejections: list[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]] = []
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 tick_start = time.monotonic()
@@ -257,12 +285,21 @@ class VirtualRegionJob(
                 if available:
                     coords, sizes = zip(*available, strict=True)
                     build_start = time.monotonic()
-                    refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
+                    build_results = list(
+                        pool.map(self._file_refs_or_skip, coords, sizes)
+                    )
+                    attempted += len(coords)
+                    for coord, result in zip(coords, build_results, strict=True):
+                        if result.rejection is None:
+                            continue
+                        log.error(f"Skipping {coord.get_url()}: {result.rejection}")
+                        rejections.append((coord, result.rejection))
+                    self._raise_if_source_rejections_are_systemic(attempted, rejections)
                     # Drop files that yielded no refs (skipped as unreadable).
                     batch = [
-                        (coord, refs)
-                        for coord, refs in zip(coords, refs_per_file, strict=True)
-                        if refs
+                        (coord, result.refs)
+                        for coord, result in zip(coords, build_results, strict=True)
+                        if result.refs
                     ]
                     build_s = time.monotonic() - build_start
                     ready = {id(coord) for coord in coords}
@@ -301,16 +338,39 @@ class VirtualRegionJob(
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
-    ) -> list[VirtualRef]:
-        # Skip a file we can't build refs for rather than sink the job; AssertionError
-        # is our own invariant, so let it propagate.
+    ) -> _FileRefsResult:
         try:
-            return self.file_refs(coord, file_size)
-        except AssertionError:
-            raise
-        except Exception:
-            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
-            return []
+            refs = self.file_refs(coord, file_size)
+            rejection = self.source_file_rejection(coord, refs)
+            assert refs or rejection is not None, (
+                "file_refs returned no references without rejecting the source file"
+            )
+            return _FileRefsResult([] if rejection is not None else refs, rejection)
+        except SourceFileRejectedError as error:
+            return _FileRefsResult([], error)
+
+    def _raise_if_source_rejections_are_systemic(
+        self,
+        attempted: int,
+        rejections: Sequence[tuple[SOURCE_FILE_COORD, SourceFileRejectedError]],
+    ) -> None:
+        rejected = len(rejections)
+        fraction = rejected / attempted
+        if (
+            rejected <= self.source_rejection_tolerance
+            or fraction < self.source_rejection_max_fraction
+        ):
+            return
+        first_coord, first_error = rejections[0]
+        ambiguous = sum(
+            isinstance(error, AmbiguousSourceFileRejectedError)
+            for _, error in rejections
+        )
+        raise RuntimeError(
+            f"Rejected {rejected} of {attempted} source files ({fraction:.1%}; "
+            f"{ambiguous} ambiguous): systemic source or ref-building failure; first: "
+            f"{first_coord.get_url()}: {first_error}"
+        )
 
     @classmethod
     def process_worker_jobs(
@@ -425,14 +485,23 @@ class VirtualRegionJob(
     ) -> None:
         """A file's refs must cover the chunk filter_already_present probes
         (representative_var at the file's representative_probe_loc)."""
-        assert file_refs, f"empty refs for source file {coord}"
+        error = self._probe_chunk_coverage_error(coord, file_refs)
+        assert error is None, error
+
+    def _probe_chunk_coverage_error(
+        self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
+    ) -> str | None:
+        if not file_refs:
+            return f"empty refs for source file {coord}"
         rep = self.representative_var(coord)
         probe_loc = self.representative_probe_loc(coord, rep)
         probe = self.chunk_key(probe_loc, rep)
-        assert any(
+        if any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
-        ), (
+        ):
+            return None
+        return (
             f"refs for {coord} do not cover representative chunk "
             f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
             "this file forever. Override representative_var or "

@@ -134,15 +134,17 @@ class ExampleVirtualRegionJob(
     def file_refs(
         self, coord: ExampleVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
-        """Every virtual ref a single source file contributes (or [] to skip it).
+        """Every virtual ref a single source file contributes.
 
         Resolve each message's byte range - parse the `.idx` sidecar
         (`coord.get_index_url()`), scan the data file, or, for one-message files, point
         at the whole file - and return one VirtualRef per (output cell, variable). The
         chunk index is resolved centrally later, so refs are in coordinate-label space:
-        give each `out_loc` (the cell it fills) and the source byte range. Return [] to
-        drop an unreadable or stale file. `file_size` is what discover_available
-        reported - use it to supply a final message's missing end byte.
+        give each `out_loc` (the cell it fills) and the source byte range. Raise
+        SourceFileRejectedError to drop an unsafe file with an ERROR log and rejection
+        accounting. Returning no refs or raising any other exception fails the worker.
+        `file_size` is what discover_available reported - use it to supply a final
+        message's missing end byte.
         """
         # index_path = s3_download_to_disk(
         #     coord.get_index_url(), self.dataset_id, region=_SOURCE_REGION

@@ -7,14 +7,17 @@ import xarray as xr
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.download import s3_download_to_disk, s3_store
-from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
     InitLeadSourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    SourceFileRejectedError,
+    VirtualRef,
+    VirtualRegionJob,
+)
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
@@ -26,8 +29,6 @@ from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 from .template_config import (
     EcmwfAifsSingleVirtualDataVar,
 )
-
-log = get_logger(__name__)
 
 SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 SOURCE_REGION = "eu-central-1"
@@ -158,13 +159,11 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
             if not matches:
                 continue
             offset, length = int(raw_offset), int(raw_length)
-            # Byte ranges past the data file mean a stale/mismatched index; skip it.
             if length <= 0 or offset + length > file_size:
-                log.warning(
-                    f"Skipping {location}: index byte range falls outside the "
+                raise SourceFileRejectedError(
+                    f"index byte range falls outside the "
                     f"{file_size}-byte data file; stale or mismatched index"
                 )
-                return []
             for var, level_label in matches:
                 refs.append(
                     VirtualRef(

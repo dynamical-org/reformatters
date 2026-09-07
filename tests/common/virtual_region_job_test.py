@@ -57,6 +57,8 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
+    AmbiguousSourceFileRejectedError,
+    SourceFileRejectedError,
     VirtualRef,
     VirtualRegionJob,
     _exists_many,
@@ -2260,6 +2262,194 @@ def test_update_stops_polling_at_poll_deadline(tmp_path: Path) -> None:
     ingested = [coord for batch in batches for coord, _ in batch]
     assert {coord.lead_time for coord in ingested} == {LEAD_TIMES[0]}
     assert len(ingested) == 4  # 4 inits x lead 0
+
+
+def _ref_for(
+    job: VirtualTestRegionJob, coord: VirtualTestSourceFileCoord
+) -> VirtualRef:
+    return VirtualRef(
+        data_var=job.data_vars[0],
+        out_loc=coord.out_loc(),
+        location=job.messages_url,
+        offset=0,
+        length=BLOCK_NBYTES,
+    )
+
+
+class _BaseRefLoopJob(VirtualTestRegionJob):
+    process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+    def discover_available(
+        self, pending: list[VirtualTestSourceFileCoord]
+    ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+        return [(coord, BLOCK_NBYTES) for coord in pending]
+
+
+def test_source_file_rejection_discards_one_file_at_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class OneRejectedJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            if coord == self.source_file_coords()[0]:
+                raise SourceFileRejectedError("published bytes are incomplete")
+            return [_ref_for(self, coord)]
+
+    job = OneRejectedJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    with caplog.at_level("ERROR"):
+        batches = list(job.process_virtual_refs(job.source_file_coords()))
+
+    assert sum(len(batch) for batch in batches) == 7
+    assert "published bytes are incomplete" in caplog.text
+
+
+def test_high_source_file_rejection_rate_is_fatal() -> None:
+    class SystemicSourceFailureJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,  # noqa: ARG002
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            raise SourceFileRejectedError("published bytes are incomplete")
+
+    job = SystemicSourceFailureJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    with pytest.raises(RuntimeError, match=r"Rejected 8 of 8.*0 ambiguous"):
+        list(job.process_virtual_refs(job.source_file_coords()))
+
+
+def test_untyped_ref_building_exception_remains_fatal() -> None:
+    class BrokenJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,  # noqa: ARG002
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            raise ValueError("our ref-building bug")
+
+    job = BrokenJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(1),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    with pytest.raises(ValueError, match="our ref-building bug"):
+        list(job.process_virtual_refs(job.source_file_coords()))
+
+
+def test_empty_ref_result_remains_fatal() -> None:
+    class EmptyJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,  # noqa: ARG002
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            return []
+
+    job = EmptyJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(1),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+
+    with pytest.raises(AssertionError, match="without rejecting the source file"):
+        list(job.process_virtual_refs(job.source_file_coords()))
+
+
+def test_one_ambiguous_rejection_is_tolerated() -> None:
+    class OneAmbiguousJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            if coord == self.source_file_coords()[0]:
+                raise AmbiguousSourceFileRejectedError("representative chunk absent")
+            return [_ref_for(self, coord)]
+
+    job = OneAmbiguousJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    batches = list(job.process_virtual_refs(job.source_file_coords()))
+
+    assert sum(len(batch) for batch in batches) == 7
+
+
+def test_low_ambiguous_rejection_rate_is_tolerated() -> None:
+    class TwoAmbiguousJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            if coord in self.source_file_coords()[:2]:
+                raise AmbiguousSourceFileRejectedError("representative chunk absent")
+            return [_ref_for(self, coord)]
+
+    job = TwoAmbiguousJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(11),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 11),
+        reformat_job_name="test",
+    )
+
+    batches = list(job.process_virtual_refs(job.source_file_coords()))
+
+    assert sum(len(batch) for batch in batches) == 20
+
+
+def test_high_ambiguous_rejection_rate_is_fatal() -> None:
+    class SystemicallyBrokenJob(_BaseRefLoopJob):
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,  # noqa: ARG002
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            raise AmbiguousSourceFileRejectedError("representative chunk absent")
+
+    job = SystemicallyBrokenJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=_create_template_ds(4),
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, 4),
+        reformat_job_name="test",
+    )
+
+    with pytest.raises(RuntimeError, match=r"Rejected 8 of 8.*8 ambiguous"):
+        list(job.process_virtual_refs(job.source_file_coords()))
 
 
 class _NothingPublishedJob(VirtualTestRegionJob):

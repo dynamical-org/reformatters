@@ -13,6 +13,11 @@ import xarray as xr
 from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.virtual_region_job import (
+    AmbiguousSourceFileRejectedError,
+    SourceFileRejectedError,
+    VirtualRef,
+)
 from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.region_job import (
     NoaaHrrrForecast48HourVirtualRegionJob,
@@ -210,7 +215,8 @@ def test_file_refs_skips_index_whose_bad_range_is_on_an_unmatched_message(
     data_vars = [get_var("temperature_2m")]  # REFC is not requested
     job = make_job(template_ds, data_vars)
     # REFC starts at the last byte, so its range is empty; TMP's range is fine.
-    assert job.file_refs(coord("sfc", data_vars), file_size=1000) == []
+    with pytest.raises(SourceFileRejectedError, match="stale or mismatched"):
+        job.file_refs(coord("sfc", data_vars), file_size=1000)
 
 
 def test_file_refs_matches_element_alternative_spellings(
@@ -262,6 +268,49 @@ def test_file_refs_lead_0_instant_uses_anl_window(
     assert [r.data_var.name for r in refs] == ["temperature_2m"]
 
 
+def test_missing_representative_chunk_is_an_ambiguous_source_rejection(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:REFC:entire atmosphere:6 hour fcst:\n",
+        data_file_size=1000,
+    )
+    data_vars = [get_var("temperature_2m")]
+    file_coord = coord("sfc", data_vars)
+    job = make_job(template_ds, data_vars)
+    refs = job.file_refs(file_coord, file_size=1000)
+
+    rejection = job.source_file_rejection(file_coord, refs)
+
+    assert isinstance(rejection, AmbiguousSourceFileRejectedError)
+    assert "empty refs" in str(rejection)
+
+
+def test_internal_probe_assertion_remains_fatal(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    file_coord = coord("sfc", data_vars)
+    job = make_job(template_ds, data_vars)
+
+    def broken_representative_var(*args: object) -> NoaaHrrrDataVar:
+        raise AssertionError("our representative bug")
+
+    monkeypatch.setattr(type(job), "representative_var", broken_representative_var)
+    ref = VirtualRef(
+        data_var=data_vars[0],
+        out_loc=file_coord.out_loc(),
+        location=file_coord.get_url(),
+        offset=0,
+        length=1,
+    )
+
+    with pytest.raises(AssertionError, match="our representative bug"):
+        job.source_file_rejection(file_coord, [ref])
+
+
 def test_file_refs_skips_index_with_non_increasing_offsets(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -273,7 +322,8 @@ def test_file_refs_skips_index_with_non_increasing_offsets(
     )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="byte ranges"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 def test_file_refs_skips_index_reaching_past_the_data_file(
@@ -282,7 +332,8 @@ def test_file_refs_skips_index_reaching_past_the_data_file(
     fake_index(monkeypatch, tmp_path, _SFC_INDEX)
     data_vars = [get_var("temperature_2m")]  # index says bytes 500..1500
     job = make_job(template_ds, data_vars)
-    assert job.file_refs(coord("sfc", data_vars), file_size=1200) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=1200)
 
 
 def test_stubbed_source_file_reads_are_all_keyed_on_the_index_url(
@@ -324,7 +375,8 @@ def test_file_refs_skips_index_whose_offsets_drifted_but_stayed_in_bounds(
     )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 def test_file_refs_skips_index_whose_middle_message_was_resized(
@@ -344,7 +396,8 @@ def test_file_refs_skips_index_whose_middle_message_was_resized(
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
 
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 def test_file_refs_skips_index_whose_last_offset_is_past_the_file_end(
@@ -361,7 +414,8 @@ def test_file_refs_skips_index_whose_last_offset_is_past_the_file_end(
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
 
-    assert job.file_refs(coord("sfc", data_vars), file_size=3005) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=3005)
 
 
 def test_file_refs_accepts_an_index_that_omits_trailing_messages(
@@ -407,7 +461,8 @@ def test_file_refs_skips_index_whose_offsets_are_uniformly_shifted(
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
 
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
@@ -424,7 +479,8 @@ def test_file_refs_skips_an_object_too_short_to_hold_a_grib_header(
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
 
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="last offset"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 def test_file_refs_skips_empty_index(
@@ -433,7 +489,19 @@ def test_file_refs_skips_empty_index(
     fake_index(monkeypatch, tmp_path, "")
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars)
-    assert job.file_refs(coord("sfc", data_vars), file_size=9000) == []
+    with pytest.raises(SourceFileRejectedError, match="unparseable"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
+
+
+def test_file_refs_rejects_malformed_index(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake_index(monkeypatch, tmp_path, "not:a:NOAA:index\n")
+    data_vars = [get_var("temperature_2m")]
+    job = make_job(template_ds, data_vars)
+
+    with pytest.raises(SourceFileRejectedError, match="unparseable"):
+        job.file_refs(coord("sfc", data_vars), file_size=9000)
 
 
 # --- Chunk indices the production HRRR virtual datasets resolve ---
