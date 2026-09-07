@@ -59,7 +59,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
             pod_active_deadline=timedelta(hours=4),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="4",
+            cpu="3.5",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
