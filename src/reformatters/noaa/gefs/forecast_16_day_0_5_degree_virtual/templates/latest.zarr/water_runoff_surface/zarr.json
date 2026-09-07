@@ -41,7 +41,7 @@
     "short_name": "watr",
     "standard_name": "runoff_amount",
     "units": "kg m-2",
-    "comment": "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). Subtracting the value at an earlier lead time with the same window start gives the exact total between those two lead times. NaN over water.",
+    "comment": "Total accumulated in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over water.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
