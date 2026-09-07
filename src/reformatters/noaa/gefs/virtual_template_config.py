@@ -534,7 +534,11 @@ def _s_file_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=(
+                "NaN over water. Values are near 1 over permanent land ice, where they "
+                "are placeholders rather than soil moisture measurements. Mask values >= "
+                "0.9."
+            ),
         ),
         var(
             "snow_water_equivalent_surface",
@@ -819,6 +823,10 @@ def _s_file_data_vars(
             short_name="hlcy",
             long_name="Storm relative helicity",
             units="m2 s-2",
+            comment=(
+                "Uses a right-moving storm motion in both hemispheres, so southern "
+                "hemisphere values are positive-mean rather than mirrored."
+            ),
         ),
         var(
             "convective_available_potential_energy_180_0mb",
