@@ -19,7 +19,7 @@ def test_source_file_coord_get_url() -> None:
         lead_time=pd.Timedelta(hours=0),
         data_vars=NoaaGfsForecastTemplateConfig().data_vars,
     )
-    expected = "https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20000101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
+    expected = "https://noaa-gfs-bdp-pds.s3.us-east-1.amazonaws.com/gfs.20000101/00/atmos/gfs.t00z.pgrb2.0p25.f000"
     assert coord.get_url() == expected
 
 

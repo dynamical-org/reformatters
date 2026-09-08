@@ -8,15 +8,19 @@ import xarray as xr
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.region_job import DownloadSource, NoaaHrrrSourceFileCoord
+from reformatters.noaa.hrrr.region_job import (
+    NODD_BUCKET,
+    NODD_BUCKET_REGION,
+    NODD_HTTPS_PREFIX,
+    DownloadSource,
+    NoaaHrrrSourceFileCoord,
+)
 from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
 
-S3_LOCATION_PREFIX = "s3://noaa-hrrr-bdp-pds/"
-S3_BUCKET_REGION = "us-east-1"
-_S3_HTTPS_PREFIX = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
+S3_LOCATION_PREFIX = f"s3://{NODD_BUCKET}/"
 
 # These uploads ended mid-file: the data file and its .idx stop after a handful of
 # messages. Treated as never published, like the hours the archive is missing entirely.
@@ -31,7 +35,7 @@ def hrrr_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...
     pydantic defaults."""
     return (
         icechunk.VirtualChunkContainer(
-            S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_BUCKET_REGION)
+            S3_LOCATION_PREFIX, icechunk.s3_store(region=NODD_BUCKET_REGION)
         ),
     )
 
@@ -44,8 +48,8 @@ class NoaaHrrrVirtualSourceFileCoord(
     def get_url(self, source: DownloadSource = "s3") -> str:
         """The s3:// source location refs point at, matching the virtual chunk container."""
         url = super().get_url(source=source)
-        assert url.startswith(_S3_HTTPS_PREFIX), url
-        return S3_LOCATION_PREFIX + url.removeprefix(_S3_HTTPS_PREFIX)
+        assert url.startswith(NODD_HTTPS_PREFIX), url
+        return S3_LOCATION_PREFIX + url.removeprefix(NODD_HTTPS_PREFIX)
 
 
 HRRR_VIRTUAL_COORD = TypeVar("HRRR_VIRTUAL_COORD", bound=NoaaHrrrVirtualSourceFileCoord)
@@ -58,7 +62,7 @@ class NoaaHrrrVirtualRegionJob(
     """The HRRR NODD bucket, minus the truncated uploads treated as never published."""
 
     source_location_prefix: ClassVar[str] = S3_LOCATION_PREFIX
-    source_bucket_region: ClassVar[str] = S3_BUCKET_REGION
+    source_bucket_region: ClassVar[str] = NODD_BUCKET_REGION
 
     def discover_available(
         self, pending: list[HRRR_VIRTUAL_COORD]

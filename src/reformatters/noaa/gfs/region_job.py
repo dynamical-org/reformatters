@@ -44,7 +44,7 @@ type DownloadSource = Literal["s3", "nomads"]
 
 NODD_BUCKET = "noaa-gfs-bdp-pds"
 NODD_BUCKET_REGION = "us-east-1"
-NODD_HTTPS_PREFIX = f"https://{NODD_BUCKET}.s3.amazonaws.com/"
+NODD_HTTPS_PREFIX = f"https://{NODD_BUCKET}.s3.{NODD_BUCKET_REGION}.amazonaws.com/"
 
 # GFS publishes each cycle as two GRIB files: pgrb2 carries the widely used fields and
 # pgrb2b the remainder, on isobaric levels interleaved with pgrb2's from 125 to 875 hPa.
