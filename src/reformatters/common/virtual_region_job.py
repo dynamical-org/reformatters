@@ -252,6 +252,25 @@ class VirtualRegionJob(
         present = _exists_many(store, [key for _, key in keyed if key is not None])
         return [coord for coord, key in keyed if key is None or not present[key]]
 
+    def committed(
+        self,
+        batch: Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]],  # noqa: ARG002 - overrides act on it
+    ) -> Sequence[SOURCE_FILE_COORD]:
+        """Called once `batch`'s commit has landed on the primary and every replica;
+        returns coords to add to the pending work, e.g. a re-ingest of the same file
+        from a more durable source. Never reached for a batch whose commit failed.
+        Default: none.
+        """
+        return ()
+
+    def unfinished_work(self, store: IcechunkStore) -> list[SOURCE_FILE_COORD]:
+        """The source files this job still has to write, derived from `store`'s
+        manifest. Default: the candidates whose representative chunk is absent.
+        Override to add work the manifest probe cannot see (an ingested file whose
+        refs must be rewritten), keeping each file listed once.
+        """
+        return self.filter_already_present(self.source_file_coords(), store)
+
     # ----- Common write-loop machinery: subclasses do not implement these -----
 
     def process_virtual_refs(
@@ -263,9 +282,10 @@ class VirtualRegionJob(
         One yield per tick contains every file that became available since the last:
         a backfill sweeps once and exits, an update polls until everything is ingested
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
-        pairs — never split a file, never yield empty. Source-agnostic: it only asks
-        discover_available which coords are ready. Override only for a different
-        batching policy. See "The write loop" in docs/virtual_datasets.md.
+        pairs — never split a file, never yield empty. After each yield's commit the
+        `committed` hook may add follow-up coords to the pending work. Source-agnostic:
+        it only asks discover_available which coords are ready. Override only for a
+        different batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
         last_log = time.monotonic()
@@ -297,6 +317,7 @@ class VirtualRegionJob(
                     last_log = time.monotonic()
                     if batch:
                         yield batch
+                        pending.extend(self.committed(batch))
                 if self.processing_mode == "backfill":
                     if pending:
                         log.info(
@@ -367,9 +388,7 @@ class VirtualRegionJob(
             for coord in (
                 job.source_file_coords()
                 if overwrite_chunks
-                else job.filter_already_present(
-                    job.source_file_coords(), readonly_store
-                )
+                else job.unfinished_work(readonly_store)
             )
         ]
         # An all-already-present worker writes nothing; an empty icechunk commit

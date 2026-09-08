@@ -1,6 +1,8 @@
 import re
+import subprocess
 from collections.abc import Sequence
 from os import PathLike
+from pathlib import Path
 
 import pandas as pd
 
@@ -132,3 +134,33 @@ def grib_message_byte_ranges_from_index(
         )
 
     return starts, ends
+
+
+def scan_grib_message_offsets(path: PathLike[str]) -> list[int]:
+    offsets: list[int] = []
+    with open(path, "rb") as stream:
+        size = stream.seek(0, 2)
+        offset = 0
+        while offset < size:
+            stream.seek(offset)
+            header = stream.read(16)
+            if len(header) != 16 or header[:4] != b"GRIB" or header[7] != 2:
+                raise ValueError(f"Invalid GRIB2 header at {offset}")
+            length = int.from_bytes(header[8:16], "big")
+            if length < 20 or offset + length > size:
+                raise ValueError(f"Invalid GRIB2 length at {offset}")
+            stream.seek(offset + length - 4)
+            if stream.read(4) != b"7777":
+                raise ValueError(f"Invalid GRIB2 terminator at {offset}")
+            offsets.append(offset)
+            offset += length
+    return offsets
+
+
+def write_grib_index(grib_path: Path, index_path: Path) -> None:
+    result = subprocess.run(  # noqa: S603
+        ["wgrib2", str(grib_path), "-s"],  # noqa: S607
+        check=True,
+        capture_output=True,
+    )
+    index_path.write_bytes(result.stdout)

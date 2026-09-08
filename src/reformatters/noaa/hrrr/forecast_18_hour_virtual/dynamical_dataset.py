@@ -11,12 +11,15 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.nomads_cache import CheckNomadsCacheRepointed
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
-    hrrr_virtual_chunk_containers,
 )
 
-from .region_job import NoaaHrrrForecast18HourVirtualRegionJob
+from .region_job import (
+    NoaaHrrrForecast18HourVirtualRegionJob,
+    hrrr_18_hour_virtual_chunk_containers,
+)
 from .template_config import NoaaHrrrForecast18HourVirtualTemplateConfig
 
 
@@ -32,7 +35,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
-            containers=hrrr_virtual_chunk_containers(),
+            containers=hrrr_18_hour_virtual_chunk_containers(),
             # Scale the 48-hour product's splits by 2.5 to keep full manifest
             # byte sizes comparable across the two forecast lengths.
             manifest_split=manifest_append_dim_split(
@@ -86,4 +89,5 @@ class NoaaHrrrForecast18HourVirtualDataset(
                 min_present_fraction=(0.05, 1.0)
             ),
             validation.CheckVirtualDecodeHealth(),
+            CheckNomadsCacheRepointed(),
         )

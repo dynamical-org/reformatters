@@ -7,7 +7,7 @@ import xarray as xr
 
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar, NoaaHrrrFileType
 from reformatters.noaa.hrrr.region_job import (
     NODD_BUCKET,
     NODD_BUCKET_REGION,
@@ -85,6 +85,10 @@ class NoaaHrrrForecastVirtualRegionJob(
     """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
     subclass declares operational_update_window."""
 
+    source_file_coord_class: ClassVar[type[NoaaHrrrForecastVirtualSourceFileCoord]] = (
+        NoaaHrrrForecastVirtualSourceFileCoord
+    )
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -93,28 +97,42 @@ class NoaaHrrrForecastVirtualRegionJob(
         init_times = pd.to_datetime(processing_region_ds["init_time"].values)
         lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
         file_types = sorted({v.internal_attrs.hrrr_file_type for v in data_var_group})
+        return [
+            coord
+            for init_time in init_times
+            for lead_time in lead_times
+            for file_type in file_types
+            if (
+                coord := self.source_file_coord(
+                    init_time, lead_time, file_type, data_var_group
+                )
+            )
+            is not None
+        ]
 
-        coords = []
-        for init_time in init_times:
-            for lead_time in lead_times:
-                for file_type in file_types:
-                    # Accumulated/categorical vars have no valid hour-0 data, so drop
-                    # them at lead 0 (keeps the completeness validator consistent).
-                    vars_in_file = [
-                        var
-                        for var in data_var_group
-                        if var.internal_attrs.hrrr_file_type == file_type
-                        and (lead_time > pd.Timedelta(0) or var.has_hour_0_values())
-                    ]
-                    if not vars_in_file:
-                        continue
-                    coords.append(
-                        NoaaHrrrForecastVirtualSourceFileCoord(
-                            init_time=init_time,
-                            lead_time=lead_time,
-                            domain="conus",
-                            file_type=file_type,
-                            data_vars=vars_in_file,
-                        )
-                    )
-        return coords
+    def source_file_coord(
+        self,
+        init_time: pd.Timestamp,
+        lead_time: pd.Timedelta,
+        file_type: NoaaHrrrFileType,
+        data_var_group: Sequence[NoaaHrrrDataVar],
+    ) -> NoaaHrrrForecastVirtualSourceFileCoord | None:
+        """The coord for one file and the variables it supplies, or None when none of
+        `data_var_group` has data in it. Accumulated/categorical vars have no valid
+        hour-0 data, so they are dropped at lead 0 (keeps the completeness validator
+        consistent)."""
+        vars_in_file = [
+            var
+            for var in data_var_group
+            if var.internal_attrs.hrrr_file_type == file_type
+            and (lead_time > pd.Timedelta(0) or var.has_hour_0_values())
+        ]
+        if not vars_in_file:
+            return None
+        return self.source_file_coord_class(
+            init_time=init_time,
+            lead_time=lead_time,
+            domain="conus",
+            file_type=file_type,
+            data_vars=vars_in_file,
+        )

@@ -50,3 +50,24 @@ def test_operational_update_jobs_cover_six_hourly_cycles(
     assert job.processing_mode == "update"
     init_times = template_ds.to_dataset().get_index("init_time")
     assert job.region == slice(len(init_times) - 6, len(init_times))
+
+
+def test_generate_source_file_coords_uses_the_declared_coord_class() -> None:
+    class RoutedCoord(NoaaHrrrForecastVirtualSourceFileCoord):
+        pass
+
+    class RoutedJob(NoaaHrrrForecast18HourVirtualRegionJob):
+        source_file_coord_class = RoutedCoord
+
+    template_ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2018-07-13T13:00"))
+    job = RoutedJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=TEMPLATE_CONFIG.data_vars[:2],
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    coords = job.generate_source_file_coords(job._processing_region_ds(), job.data_vars)
+    assert coords
+    assert all(type(coord) is RoutedCoord for coord in coords)
