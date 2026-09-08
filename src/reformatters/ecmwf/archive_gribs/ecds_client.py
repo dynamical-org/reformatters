@@ -26,9 +26,17 @@ log = get_logger(__name__)
 
 ECDS_API_URL: Final[str] = "https://ecds.ecmwf.int/api"
 S2S_FORECASTS_PROCESS: Final[str] = "s2s-forecasts"
-TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
+ECDS_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
     {"failed", "rejected", "dismissed", "cancelled"}
 )
+# Assigned by this client, not ECDS: the job or its result is gone from ECDS, or
+# polling gave up on it. Either way the job is never resumed, only replaced.
+EXPIRED_STATUS: Final[str] = "expired"
+ABANDONED_STATUS: Final[str] = "abandoned"
+TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = ECDS_FAILURE_STATUSES | {
+    EXPIRED_STATUS,
+    ABANDONED_STATUS,
+}
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60
 DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
 MAXIMUM_POLL_BACKOFF_EXPONENT: Final[int] = 6
@@ -37,7 +45,7 @@ RESUBMIT_BUDGET_SECONDS: Final[float] = 3600
 
 
 class EcdsJobFailedError(Exception):
-    """ECDS ran the job and ended it in a terminal failure status."""
+    """The job ended in a terminal status: ECDS failed it, or its result is gone."""
 
 
 @dataclass
@@ -160,33 +168,49 @@ class EcdsRequest:
         ECDS result expires without a published SLA, so a second download of the same
         result may be impossible.
 
-        A job ECDS fails is submitted again after `resubmit_wait_seconds`, doubling each
-        time. No job is submitted once `resubmit_budget_seconds` have passed since this
-        call began; the failure is raised as `EcdsJobFailedError` instead.
+        A job ECDS fails, or no longer holds, is submitted again after
+        `resubmit_wait_seconds`, doubling each time. No job is submitted once
+        `resubmit_budget_seconds` have passed since this call began; the failure is
+        raised as `EcdsJobFailedError` instead. A job still incomplete after
+        `maximum_polls` is abandoned and replaced once; a second such job raises
+        `TimeoutError`.
         """
         state = self.state_store.read_if_exists()
         if state is None or state.payload != dict(payload):
-            self.submit(payload)
+            self._submit_replacing(payload, target)
         elif _downloaded_blob_is_intact(state, target):
             log.info("Reusing the %s already downloaded for this request", target)
             return target
         elif state.status in TERMINAL_FAILURE_STATUSES:
-            self.submit(payload)
+            self._submit_replacing(payload, target)
         deadline = time.monotonic() + resubmit_budget_seconds
         wait_seconds = resubmit_wait_seconds
+        replaced_after_timeout = False
         while True:
             try:
                 _, result_url = self.poll_until_complete(poll_seconds, maximum_polls)
-                break
+                self.download(target, result_url)
+                return target
             except EcdsJobFailedError as e:
                 if time.monotonic() + wait_seconds >= deadline:
                     raise
                 log.warning("%s; submitting it again in %.0f s", e, wait_seconds)
                 time.sleep(wait_seconds)
-                self.submit(payload)
+                self._submit_replacing(payload, target)
                 wait_seconds *= 2
-        self.download(target, result_url)
-        return target
+            except TimeoutError as e:
+                if replaced_after_timeout:
+                    raise
+                replaced_after_timeout = True
+                log.warning("%s; submitting it again", e)
+                self._submit_replacing(payload, target)
+
+    def _submit_replacing(
+        self, payload: Mapping[str, Any], target: Path
+    ) -> RequestState:
+        """Submit a job for `target`, discarding any partial download of an earlier job's result."""
+        _partial_path(target).unlink(missing_ok=True)
+        return self.submit(payload)
 
     def submit(self, payload: Mapping[str, Any]) -> RequestState:
         assert self.session.headers.get("PRIVATE-TOKEN"), (
@@ -217,6 +241,8 @@ class EcdsRequest:
     def poll_once(self) -> tuple[RequestState, str | None]:
         state = self.state_store.read()
         response = self.session.get(state.status_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        if response.status_code == requests.codes.not_found:
+            return self._expire(state, f"job {state.status_url}"), None
         response.raise_for_status()
         body = response.json()
         status = body.get("status") or body.get("state")
@@ -242,12 +268,21 @@ class EcdsRequest:
             results_response = self.session.get(
                 results_url, timeout=REQUEST_TIMEOUT_SECONDS
             )
+            if results_response.status_code == requests.codes.not_found:
+                return self._expire(state, f"results {results_url}"), None
             results_response.raise_for_status()
             result_url = _result_url(results_response.json())
         if result_url is not None:
             state.result_url = result_url
         self.state_store.write(state)
         return state, result_url
+
+    def _expire(self, state: RequestState, what: str) -> RequestState:
+        """Record that ECDS no longer holds the job or its result."""
+        state.status = EXPIRED_STATUS
+        state.errors.append(f"404 Not Found: {what}")
+        self.state_store.write(state)
+        return state
 
     def poll_until_complete(
         self, poll_seconds: float, maximum_polls: int
@@ -282,8 +317,12 @@ class EcdsRequest:
             if state.status == "successful" and result_url is not None:
                 return state, result_url
             _sleep_bounded(poll_seconds, deadline)
+        state = self.state_store.read()
+        state.status = ABANDONED_STATUS
+        self.state_store.write(state)
         raise TimeoutError(
-            f"ECDS job did not complete within {maximum_polls} polls of {poll_seconds}s"
+            f"ECDS job {state.request_id} did not complete within {maximum_polls} "
+            f"polls of {poll_seconds}s"
         )
 
     def download(self, target: Path, result_url: str | None = None) -> RequestState:
@@ -293,7 +332,7 @@ class EcdsRequest:
             "Poll the request to completion before downloading"
         )
         target.parent.mkdir(parents=True, exist_ok=True)
-        partial_path = target.with_suffix(f"{target.suffix}.partial")
+        partial_path = _partial_path(target)
         existing_bytes = partial_path.stat().st_size if partial_path.exists() else 0
         headers = {"Range": f"bytes={existing_bytes}-"} if existing_bytes else {}
         started = time.monotonic()
@@ -306,6 +345,14 @@ class EcdsRequest:
             response.close()
             response = self.session.get(
                 result_url, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
+            )
+        if response.status_code == requests.codes.not_found:
+            # The signed URL is left out of the record: it is a credential.
+            response.close()
+            self._expire(state, "result download")
+            raise EcdsJobFailedError(
+                f"ECDS job {state.request_id} ended with status {EXPIRED_STATUS}: "
+                "its result is no longer downloadable"
             )
         response.raise_for_status()
         # A server that ignores the Range header replies 200 with the whole body,
@@ -356,6 +403,10 @@ def _downloaded_blob_is_intact(state: RequestState, target: Path) -> bool:
         )
         return False
     return True
+
+
+def _partial_path(target: Path) -> Path:
+    return target.with_suffix(f"{target.suffix}.partial")
 
 
 def _sleep_bounded(seconds: float, deadline: float) -> None:

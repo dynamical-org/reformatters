@@ -538,3 +538,200 @@ def test_constraints_and_costing_post_to_the_unauthenticated_endpoints() -> None
     assert session.post.call_args.args[0].endswith(
         "/retrieve/v1/processes/s2s-forecasts/costing"
     )
+
+
+def test_a_job_whose_results_are_gone_is_submitted_again(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    """ECDS purges a finished job's result; a resumed job whose result has expired must be replaced, not polled."""
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("job-1", payload, "now", "status"))
+    session = session_mock()
+    session.post.return_value = response({"jobID": "job-2"})
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    session.get.side_effect = [
+        response(
+            {"status": "successful", "links": [{"rel": "results", "href": "results"}]}
+        ),
+        response({"title": "Not Found"}, status_code=404),
+        response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
+        download_response,
+    ]
+
+    EcdsRequest(state_store, session=session).retrieve(
+        payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
+    )
+
+    assert clock.sleeps == [60]
+    session.post.assert_called_once()
+    assert state_store.read().request_id == "job-2"
+    assert (tmp_path / "blob.grib2").exists()
+
+
+def test_a_job_ecds_no_longer_knows_is_submitted_again(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("job-1", payload, "now", "status"))
+    session = session_mock()
+    session.post.return_value = response({"jobID": "job-2"})
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    session.get.side_effect = [
+        response({"title": "Not Found"}, status_code=404),
+        response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
+        download_response,
+    ]
+
+    EcdsRequest(state_store, session=session).retrieve(
+        payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
+    )
+
+    session.post.assert_called_once()
+    assert state_store.read().request_id == "job-2"
+
+
+def test_an_expired_job_is_recorded_as_terminal(tmp_path: Path) -> None:
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("job-1", {}, "now", "status"))
+    session = session_mock()
+    session.get.return_value = response({"title": "Not Found"}, status_code=404)
+
+    with pytest.raises(EcdsJobFailedError, match="job-1 ended with status expired"):
+        EcdsRequest(state_store, session=session).poll_until_complete(30, 240)
+
+    state = state_store.read()
+    assert state.status == "expired"
+    assert "404" in state.errors[-1]
+
+
+def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    session = session_mock()
+    session.post.side_effect = [
+        response({"jobID": "job-1"}),
+        response({"jobID": "job-2"}),
+    ]
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    running = response({"status": "running"})
+    session.get.side_effect = [running] * 240 + [
+        response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
+        download_response,
+    ]
+
+    EcdsRequest(state_store, session=session).retrieve(
+        payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=240
+    )
+
+    assert clock.now >= 30 * 240
+    assert session.post.call_count == 2
+    assert state_store.read().request_id == "job-2"
+    assert (tmp_path / "blob.grib2").exists()
+
+
+def test_retrieve_gives_up_after_the_replacement_job_also_exhausts_polling(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    session = session_mock()
+    session.post.side_effect = [response({"jobID": f"job-{n}"}) for n in range(1, 6)]
+    session.get.return_value = response({"status": "running"})
+
+    with pytest.raises(TimeoutError, match="did not complete within 3 polls"):
+        EcdsRequest(state_store, session=session).retrieve(
+            payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=3
+        )
+
+    assert session.post.call_count == 2
+    assert state_store.read().status == "abandoned"
+
+    session.post.reset_mock()
+    with pytest.raises(TimeoutError):
+        EcdsRequest(state_store, session=session).retrieve(
+            payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=3
+        )
+
+    assert session.post.call_args_list[0].kwargs["json"] == {"inputs": payload}
+
+
+def test_a_replacement_job_does_not_resume_the_abandoned_jobs_partial_download(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    target = tmp_path / "blob.grib2"
+    target.with_suffix(".grib2.partial").write_bytes(b"bytes of job-1")
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("job-1", payload, "now", "status", status="failed"))
+    session = session_mock()
+    session.post.return_value = response({"jobID": "job-2"})
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    session.get.side_effect = [
+        response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
+        download_response,
+    ]
+
+    EcdsRequest(state_store, session=session).retrieve(payload, target, poll_seconds=0)
+
+    assert session.get.call_args.kwargs["headers"] == {}
+    assert target.read_bytes() == grib_message()
+
+
+def test_a_result_that_is_gone_at_download_time_is_submitted_again(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    state_store.write(RequestState("job-1", payload, "now", "status"))
+    session = session_mock()
+    session.post.return_value = response({"jobID": "job-2"})
+    successful = response(
+        {"status": "successful", "asset": {"value": {"href": "blob"}}}
+    )
+    gone = response({}, status_code=404)
+    download_response = response({})
+    download_response.iter_content.return_value = [grib_message()]
+    session.get.side_effect = [successful, gone, successful, download_response]
+
+    EcdsRequest(state_store, session=session).retrieve(
+        payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
+    )
+
+    gone.close.assert_called_once_with()
+    assert clock.sleeps == [60]
+    assert state_store.read().request_id == "job-2"
+    assert (tmp_path / "blob.grib2").read_bytes() == grib_message()
+
+
+def test_a_result_that_keeps_disappearing_exhausts_the_budget(
+    tmp_path: Path, clock: FakeClock
+) -> None:
+    payload = {"variable": ["total_precipitation"]}
+    state_store = StateStore(tmp_path / "state.json")
+    session = session_mock()
+    session.post.side_effect = [response({"jobID": f"job-{n}"}) for n in range(1, 10)]
+    successful = response(
+        {"status": "successful", "asset": {"value": {"href": "blob"}}}
+    )
+    session.get.side_effect = [successful, response({}, status_code=404)] * 9
+
+    with pytest.raises(EcdsJobFailedError, match="job-4 ended with status expired"):
+        EcdsRequest(state_store, session=session).retrieve(
+            payload,
+            tmp_path / "blob.grib2",
+            poll_seconds=0,
+            resubmit_wait_seconds=10,
+            resubmit_budget_seconds=100,
+        )
+
+    assert clock.sleeps == [10, 20, 40]
+    assert state_store.read().status == "expired"
+    assert not any("blob" in error for error in state_store.read().errors)
