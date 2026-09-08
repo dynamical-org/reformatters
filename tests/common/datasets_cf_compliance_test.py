@@ -539,9 +539,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "momentum_flux_v_component_surface",
     "northward_gravity_wave_surface_stress",
     "potential_evaporation_rate_surface",
-    # CF's atmosphere_mass_content_of_water_vapor is the whole column; there is no
-    # CF name for water vapour integrated over a layer.
-    "precipitable_water_30_0mb",
     "rain_mixing_ratio_model_level_1",
     "snow_mixing_ratio_model_level_1",
     # CF's soil_type is a flag variable; GFS interpolates the STATSGO class numbers, so
@@ -941,7 +938,8 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # GRIB's PWAT, and so ECMWF's pwat, names both the column total and the water
     # vapour in a single layer. The 0.5 degree GEFS datasets publish both, at
     # "entire atmosphere" and at "30-0 mb above ground", so those two datasets carry
-    # the two meanings and only the column form has a CF name.
+    # the two meanings under one short and long name and take CF's two different
+    # standard names.
     ("pwat", "standard_name", "noaa-gefs-forecast-16-day-0-5-degree-virtual"),
     ("pwat", "standard_name", "noaa-gefs-forecast-35-day-0-5-degree-virtual"),
     (
