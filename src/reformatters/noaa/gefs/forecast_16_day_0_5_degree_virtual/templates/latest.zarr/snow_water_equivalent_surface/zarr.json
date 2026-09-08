@@ -28,6 +28,12 @@
   "fill_value": "NaN",
   "codecs": [
     {
+      "name": "scale_offset",
+      "configuration": {
+        "scale": 1000.0
+      }
+    },
+    {
       "name": "gribberish",
       "configuration": {
         "var": "WEASD",

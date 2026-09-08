@@ -41,6 +41,7 @@
     "short_name": "v",
     "standard_name": "northward_wind",
     "units": "m s-1",
+    "comment": "The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

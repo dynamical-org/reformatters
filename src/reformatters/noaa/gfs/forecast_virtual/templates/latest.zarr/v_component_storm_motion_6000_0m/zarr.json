@@ -38,6 +38,7 @@
     "long_name": "V-component storm motion",
     "short_name": "vstm",
     "units": "m s-1",
+    "comment": "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not the mean wind itself.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -36,7 +36,7 @@
     "long_name": "Haines Index",
     "short_name": "hindex",
     "units": "1",
-    "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+    "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN over open water and over high terrain such as Antarctica and Tibet; sea ice is populated.",
     "step_type": "instant",
     "flag_values": [
       2,

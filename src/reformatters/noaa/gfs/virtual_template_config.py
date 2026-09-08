@@ -53,6 +53,24 @@ _CELSIUS_ELEMENTS = frozenset(
 # ScaleOffset decodes on read as value / scale + offset (see zarr.codecs.ScaleOffset).
 # Scale WEASD from mm to CF lwe_thickness_of_surface_snow_amount's metres.
 _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
+
+_MAX_WIND_SEARCH_LAYER = (
+    "The source finds this level by searching a bounded layer rather than the "
+    "whole column, so the column wind maximum can lie above it."
+)
+
+_PRESSURE_DIFFERENCE_LAYER = (
+    "The {layer} in the name are pressure differences from the surface, not "
+    "isobaric levels, so this layer sits just above the ground rather than in "
+    "the upper troposphere."
+)
+
+_CONVECTIVE_INHIBITION = (
+    "Negative where there is inhibition and at or near zero where there is "
+    "none, so distinguish the two with a tolerance rather than an exact "
+    "comparison."
+)
+
 # Scale TOZNE from Dobson units to metres; 1 DU is 1e-5 m.
 _DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
 
@@ -393,6 +411,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
+            comment=(
+                "The model's standard mean sea level reduction, an alternative to "
+                "pressure_reduced_to_mean_sea_level_eta_model in this dataset."
+            ),
         ),
         root_var(
             "composite_reflectivity",
@@ -426,6 +448,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=(
+                "The mean wind through the depth of the planetary boundary layer, not "
+                "the wind at its top."
+            ),
         ),
         root_var(
             "wind_v_planetary_boundary_layer",
@@ -435,6 +461,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=(
+                "The mean wind through the depth of the planetary boundary layer, not "
+                "the wind at its top."
+            ),
         ),
         root_var(
             "ventilation_rate_planetary_boundary_layer",
@@ -467,8 +497,8 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "Fire-weather index of lower-atmosphere stability and dryness, an "
                 "ordinal value from 2 (very low potential) to 6 (high potential) for "
-                "large plume-dominated fire growth. NaN on about 60% of the grid, "
-                "chiefly over ocean."
+                "large plume-dominated fire growth. NaN over open water and over high "
+                "terrain such as Antarctica and Tibet; sea ice is populated."
             ),
             flag_values=(2, 3, 4, 5, 6),
             flag_meanings=(
@@ -782,6 +812,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="aptmp",
             long_name="Apparent temperature",
             units="degree_Celsius",
+            comment=(
+                "Equal to temperature_2m in mild conditions, wind chill when colder and "
+                "heat index when hotter, so the distribution is discontinuous at the "
+                "switchovers rather than corrupt."
+            ),
         ),
         root_var(
             "maximum_temperature_2m",
@@ -1223,6 +1258,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "precipitable_water_atmosphere",
@@ -1379,7 +1415,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no low cloud in the column, and "
             "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
@@ -1391,7 +1426,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no middle cloud in the column, and "
             "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
@@ -1403,7 +1437,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no high cloud in the column, and "
             "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
@@ -1430,7 +1463,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no low cloud in the column, and "
             "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
@@ -1442,7 +1474,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no middle cloud in the column, and "
             "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
@@ -1454,7 +1485,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no high cloud in the column, and "
             "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
@@ -1466,7 +1496,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no low cloud in the column, and "
             "at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
@@ -1478,7 +1507,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no middle cloud in the column, and "
             "at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
@@ -1490,7 +1518,6 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no high cloud in the column, and "
             "at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
@@ -1602,6 +1629,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="ustm",
             long_name="U-component storm motion",
             units="m s-1",
+            comment=(
+                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
+            ),
         ),
         root_var(
             "v_component_storm_motion_6000_0m",
@@ -1610,6 +1642,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="vstm",
             long_name="V-component storm motion",
             units="m s-1",
+            comment=(
+                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
+            ),
         ),
         root_var(
             "pressure_tropopause",
@@ -1649,7 +1686,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature",
+            standard_name="tropopause_air_temperature",
         ),
         root_var(
             "wind_u_tropopause",
@@ -1686,6 +1723,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         root_var(
             "icao_standard_atmosphere_reference_height_max_wind",
@@ -1697,7 +1735,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "Pressure altitude: the ICAO Standard Atmosphere height for this "
                 "level's pressure, not its actual height, which geopotential_height_max_wind "
-                "carries."
+                f"carries. {_MAX_WIND_SEARCH_LAYER}"
             ),
         ),
         root_var(
@@ -1708,6 +1746,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         root_var(
             "wind_u_max_wind",
@@ -1717,6 +1756,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         root_var(
             "wind_v_max_wind",
@@ -1726,6 +1766,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         root_var(
             "temperature_max_wind",
@@ -1735,6 +1776,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         root_var(
             "wind_u_20m",
@@ -1999,6 +2041,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "planetary_boundary_layer_height_surface",
@@ -2116,6 +2159,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "convective_available_potential_energy_255_0mb",
@@ -2134,6 +2178,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "pressure_of_lifted_parcel_level_255_0mb",
@@ -2389,6 +2434,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         root_var(
             "relative_humidity_60_30mb",
@@ -2398,6 +2444,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         root_var(
             "specific_humidity_60_30mb",
@@ -2407,6 +2454,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         root_var(
             "wind_u_60_30mb",
@@ -2416,6 +2464,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         root_var(
             "wind_v_60_30mb",
@@ -2425,6 +2474,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         root_var(
             "temperature_90_60mb",
@@ -2434,6 +2484,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         root_var(
             "relative_humidity_90_60mb",
@@ -2443,6 +2494,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         root_var(
             "specific_humidity_90_60mb",
@@ -2452,6 +2504,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         root_var(
             "wind_u_90_60mb",
@@ -2461,6 +2514,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         root_var(
             "wind_v_90_60mb",
@@ -2470,6 +2524,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         root_var(
             "temperature_120_90mb",
@@ -2479,6 +2534,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         root_var(
             "relative_humidity_120_90mb",
@@ -2488,6 +2544,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         root_var(
             "specific_humidity_120_90mb",
@@ -2497,6 +2554,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         root_var(
             "wind_u_120_90mb",
@@ -2506,6 +2564,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         root_var(
             "wind_v_120_90mb",
@@ -2515,6 +2574,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         root_var(
             "temperature_150_120mb",
@@ -2524,6 +2584,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         root_var(
             "relative_humidity_150_120mb",
@@ -2533,6 +2594,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         root_var(
             "specific_humidity_150_120mb",
@@ -2542,6 +2604,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         root_var(
             "wind_u_150_120mb",
@@ -2551,6 +2614,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         root_var(
             "wind_v_150_120mb",
@@ -2560,6 +2624,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         root_var(
             "temperature_180_150mb",
@@ -2569,6 +2634,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         root_var(
             "relative_humidity_180_150mb",
@@ -2578,6 +2644,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         root_var(
             "specific_humidity_180_150mb",
@@ -2587,6 +2654,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         root_var(
             "wind_u_180_150mb",
@@ -2596,6 +2664,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         root_var(
             "wind_v_180_150mb",
@@ -2605,6 +2674,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         root_var(
             "wind_u_0p5pvu",

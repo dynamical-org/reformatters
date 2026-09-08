@@ -42,6 +42,7 @@
     "long_name": "Icing severity",
     "short_name": "ICSEV",
     "units": "1",
+    "comment": "Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
     "step_type": "instant",
     "flag_values": [
       0,

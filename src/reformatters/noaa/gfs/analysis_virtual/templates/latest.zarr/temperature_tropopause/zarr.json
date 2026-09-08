@@ -41,7 +41,7 @@
   "attributes": {
     "long_name": "Temperature",
     "short_name": "t",
-    "standard_name": "air_temperature",
+    "standard_name": "tropopause_air_temperature",
     "units": "degree_Celsius",
     "step_type": "instant",
     "coordinates": "spatial_ref",

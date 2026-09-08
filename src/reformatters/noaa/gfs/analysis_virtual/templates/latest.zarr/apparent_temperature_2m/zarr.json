@@ -42,6 +42,7 @@
     "long_name": "Apparent temperature",
     "short_name": "aptmp",
     "units": "degree_Celsius",
+    "comment": "Equal to temperature_2m in mild conditions, wind chill when colder and heat index when hotter, so the distribution is discontinuous at the switchovers rather than corrupt.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
