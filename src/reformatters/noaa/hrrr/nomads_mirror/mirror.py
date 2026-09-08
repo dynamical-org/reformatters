@@ -117,6 +117,12 @@ def mirror_init_time(
                     if unpublished:
                         missing.append(coord)
                     continue
+                if pd.Timestamp.now("UTC") >= deadline:
+                    # A transfer that ran past the deadline is left to NODD; the
+                    # in-flight request itself is bounded only by the client's
+                    # read-idle timeout, not by this deadline.
+                    path.unlink()
+                    return result
                 count = _validate_and_upload(
                     path,
                     cache,

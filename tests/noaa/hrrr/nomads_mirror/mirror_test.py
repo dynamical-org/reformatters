@@ -241,3 +241,38 @@ def test_mirror_never_grants_more_than_the_operational_retry_budget(
     )
     assert budgets
     assert max(budgets) <= mirror.DOWNLOAD_RETRY_TIMEOUT_SECONDS
+
+
+def test_a_transfer_that_finishes_past_the_deadline_is_left_to_nodd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    uploaded: list[str] = []
+    monkeypatch.setattr(
+        mirror.obstore, "put", lambda store, key, data: uploaded.append(key)
+    )
+    monkeypatch.setattr(mirror.time, "sleep", lambda _s: None)
+    start = pd.Timestamp("2026-09-08T20:40Z")
+    clock = count()
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda cls, *a, **k: start + pd.Timedelta(minutes=4 * next(clock))),
+    )
+
+    def download(url: str, retry_timeout: float) -> Path:
+        copy = tmp_path / "late.grib2"
+        copy.write_bytes(FIXTURE.read_bytes())
+        return copy
+
+    result = mirror.mirror_init_time(
+        INIT,
+        obstore.store.LocalStore(tmp_path / "cache", mkdir=True),
+        deadline=start + timedelta(minutes=3),
+        lead_hours={"sfc": [0]},
+        poll_interval=timedelta(0),
+        stop_margin=timedelta(minutes=0),
+        download=download,
+    )
+    assert uploaded == []
+    assert result.mirrored == []
+    assert not (tmp_path / "late.grib2").exists()

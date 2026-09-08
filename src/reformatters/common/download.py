@@ -257,7 +257,7 @@ def _httpx_get_with_retry(
             rate_limiter.wait()
 
         # The waits above count against the budget too.
-        if attempt > 0 and time.monotonic() - start_time > retry_timeout:
+        if time.monotonic() - start_time > retry_timeout:
             break
 
         try:
@@ -280,7 +280,8 @@ def _httpx_get_with_retry(
             f"Retryable status {response.status_code} on attempt {attempt + 1} for {url}"
         )
 
-    assert last_exception is not None
+    if last_exception is None:
+        raise TimeoutError(f"retry budget of {retry_timeout:.0f}s spent before {url}")
     raise last_exception
 
 
