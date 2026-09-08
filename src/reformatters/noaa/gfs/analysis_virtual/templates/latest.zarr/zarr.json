@@ -428,7 +428,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
           "step_type": "avg",
@@ -481,7 +480,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
           "step_type": "avg",
@@ -696,7 +694,6 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
           "step_type": "avg",
