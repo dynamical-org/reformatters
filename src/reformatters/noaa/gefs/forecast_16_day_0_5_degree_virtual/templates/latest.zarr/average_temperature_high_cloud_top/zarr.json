@@ -45,7 +45,6 @@
   "attributes": {
     "long_name": "Temperature",
     "short_name": "t",
-    "standard_name": "air_temperature_at_cloud_top",
     "units": "degree_Celsius",
     "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
     "step_type": "avg",

@@ -509,13 +509,19 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # U-GWD and V-GWD gravity wave stresses whose sign is opposite CF's
     # atmosphere_*ward_stress_due_to_gravity_wave_drag.
     "apparent_temperature_2m",
-    # CF's air_pressure_at_cloud_base and air_pressure_at_cloud_top mean the base
-    # of the lowest and the top of the highest cloud in the column, so only the
-    # low-bottom and high-top variables of each family can carry them.
+    # CF's air_pressure_at_cloud_base and air_pressure_at_cloud_top mean the base of
+    # the lowest and the top of the highest cloud in the whole column, which none of
+    # these fixed low, middle and high band products is: the convective cloud base
+    # this catalog also publishes lies below the low band's base on a majority of
+    # overlapping cells. CF qualifies cloud base and top by cloud class and by
+    # instrument but not by pressure band, so these carry no standard name.
     "average_pressure_high_cloud_bottom",
+    "average_pressure_high_cloud_top",
+    "average_pressure_low_cloud_bottom",
     "average_pressure_low_cloud_top",
     "average_pressure_middle_cloud_bottom",
     "average_pressure_middle_cloud_top",
+    "average_temperature_high_cloud_top",
     "average_temperature_low_cloud_top",
     "average_temperature_middle_cloud_top",
     "clear_sky_uv_b_downward_solar_flux_surface",
@@ -569,8 +575,6 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     ("cloud_ice_mixing_ratio", "kg kg-1"),
     ("cloud_liquid_water_mixing_ratio", "kg kg-1"),
     ("sea_surface_temperature", "degree_Celsius"),
-    # GFS reports cloud top temperature in the Celsius its other temperatures use.
-    ("air_temperature_at_cloud_top", "degree_Celsius"),
     # GFS ozone carries GRIB's kg kg-1; CF canonical for a mass fraction is "1".
     ("mass_fraction_of_ozone_in_air", "kg kg-1"),
     # GFS albedo carries GRIB's percent; CF canonical is a 0-1 fraction.

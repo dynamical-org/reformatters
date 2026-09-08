@@ -2025,7 +2025,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         var(
@@ -2103,7 +2102,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         var(
@@ -2137,7 +2135,6 @@ def _a_b_root_data_vars(
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         var(
