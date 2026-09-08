@@ -50,8 +50,11 @@ class FakeStoreFactory:
         matching = {k: v for k, v in files.items() if k.startswith(f"{prefix}/")}
         return [matching[k] for k in sorted(matching)]
 
-    def count_coordination_files(self, job_name: str, prefix: str) -> int:
-        return len(self.read_all_coordination_files(job_name, prefix))
+    def list_coordination_files(self, job_name: str, prefix: str) -> list[str]:
+        files = self.files.get(job_name, {})
+        return sorted(
+            key.rsplit("/", 1)[-1] for key in files if key.startswith(f"{prefix}/")
+        )
 
     def clear_coordination_files(self, job_name: str) -> None:
         self.files.pop(job_name, None)
@@ -425,7 +428,7 @@ class TestWaitForWorkers:
         pc.wait_for_workers(factory, "job", workers_total=1)  # ty: ignore[invalid-argument-type]
 
     def test_polls_until_all_results_present(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         factory = FakeStoreFactory()
         factory.write_coordination_file("job", "results/worker-0.json", b"x")
@@ -439,10 +442,41 @@ class TestWaitForWorkers:
 
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
 
-        pc.wait_for_workers(factory, "job", workers_total=3)  # ty: ignore[invalid-argument-type]
+        with caplog.at_level(logging.INFO):
+            pc.wait_for_workers(factory, "job", workers_total=3)  # ty: ignore[invalid-argument-type]
 
         # Started with 1 file, needs 3 → 2 polls.
         assert sleep_calls == [10, 10]
+        assert "Waiting for 2 of 3 workers" in caplog.text
+        assert "missing worker indexes: [1, 2]" in caplog.text
+
+    def test_missing_worker_log_caps_indexes(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # More workers than the 50-index cap, so the logged list is really cut.
+        workers_total = 60
+        factory = FakeStoreFactory()
+
+        def fake_sleep(_: float) -> None:
+            for worker_index in range(workers_total):
+                factory.write_coordination_file(
+                    "job", f"results/worker-{worker_index}.json", b"x"
+                )
+
+        monkeypatch.setattr(pc.time, "sleep", fake_sleep)
+
+        with caplog.at_level(logging.INFO):
+            pc.wait_for_workers(factory, "job", workers_total=workers_total)  # ty: ignore[invalid-argument-type]
+
+        # Exactly one poll logs, since fake_sleep completes every worker.
+        (message,) = [m for m in caplog.messages if "missing worker indexes" in m]
+        # The count reports all 60 missing while the list stops at 50 — asserting
+        # both is what pins the cap. Match on the message, not caplog.text, whose
+        # "file.py:lineno" prefix can itself contain the digits under test.
+        assert f"Waiting for {workers_total} of {workers_total} workers" in message
+        assert f"missing worker indexes: {list(range(50))}" in message
+        # Index 50 is the first past the cap and must not be logged.
+        assert "50" not in message
 
 
 class TestCollectResults:
