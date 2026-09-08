@@ -43,7 +43,7 @@ def test_source_file_coord_get_url(
         file_type="sfc",
         data_vars=template_config.data_vars,
     )
-    expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2"
+    expected = "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2"
     assert coord.get_url() == expected
 
 
@@ -58,7 +58,7 @@ def test_source_file_coord_get_url_different_lead_time(
         file_type="prs",
         data_vars=template_config.data_vars,
     )
-    expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfprsf24.grib2"
+    expected = "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfprsf24.grib2"
     assert coord.get_url() == expected
 
 
@@ -73,7 +73,7 @@ def test_source_file_coord_get_idx_url(
         file_type="sfc",
         data_vars=template_config.data_vars,
     )
-    expected = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf06.grib2.idx"
+    expected = "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf06.grib2.idx"
     assert coord.get_idx_url() == expected
 
 
@@ -179,13 +179,13 @@ def test_region_job_download_file(
 
     assert mock_http_download_to_disk.call_count == 2
     assert mock_http_download_to_disk.call_args_list[0].args == (
-        "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+        "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
         "test-dataset-hrrr",
     )
     assert mock_http_download_to_disk.call_args_list[0].kwargs == {"disk_cache": True}
 
     assert mock_http_download_to_disk.call_args_list[1].args == (
-        "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2",
+        "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t00z.wrfsfcf00.grib2",
         "test-dataset-hrrr",
     )
     assert mock_http_download_to_disk.call_args_list[1].kwargs == {
@@ -511,11 +511,11 @@ def test_source_file_coord_get_url_nomads(
     )
     assert (
         coord.get_url()
-        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+        == "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
     )
     assert (
         coord.get_url(source="s3")
-        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
+        == "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t12z.wrfsfcf06.grib2"
     )
     assert (
         coord.get_url(source="nomads")
@@ -540,7 +540,7 @@ def test_source_file_coord_get_idx_url_nomads(
     )
     assert (
         coord.get_idx_url(source="s3")
-        == "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
+        == "https://noaa-hrrr-bdp-pds.s3.us-east-1.amazonaws.com/hrrr.20240229/conus/hrrr.t06z.wrfsfcf03.grib2.idx"
     )
 
 

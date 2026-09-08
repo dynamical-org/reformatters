@@ -43,6 +43,10 @@ log = get_logger(__name__)
 
 type DownloadSource = Literal["s3", "nomads"]
 
+NODD_BUCKET = "noaa-hrrr-bdp-pds"
+NODD_BUCKET_REGION = "us-east-1"
+NODD_HTTPS_PREFIX = f"https://{NODD_BUCKET}.s3.{NODD_BUCKET_REGION}.amazonaws.com/"
+
 
 class NoaaHrrrSourceFileCoord(InitLeadSourceFileCoord):
     """Source file coordinate for HRRR forecast data."""
@@ -59,13 +63,13 @@ class NoaaHrrrSourceFileCoord(InitLeadSourceFileCoord):
         path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
         match source:
             case "nomads":
-                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
+                base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/"
             case "s3":
-                base = "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
+                base = NODD_HTTPS_PREFIX
             case _ as unreachable:
                 assert_never(unreachable)
 
-        return f"{base}/{path}"
+        return f"{base}{path}"
 
     def get_idx_url(self, source: DownloadSource = "s3") -> str:
         """Return the URL for the GRIB index file."""

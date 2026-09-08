@@ -44,7 +44,6 @@ type DownloadSource = Literal["s3", "nomads"]
 
 NODD_BUCKET = "noaa-gfs-bdp-pds"
 NODD_BUCKET_REGION = "us-east-1"
-# The region specific endpoint; the global one adds a redirect to every request.
 NODD_HTTPS_PREFIX = f"https://{NODD_BUCKET}.s3.{NODD_BUCKET_REGION}.amazonaws.com/"
 
 # GFS publishes each cycle as two GRIB files: pgrb2 carries the widely used fields and
