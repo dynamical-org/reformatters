@@ -83,27 +83,28 @@ def mirror_init_time(
     invalid_attempts: dict[str, int] = {}
     previous_counts: dict[NoaaHrrrFileType, int] = {}
     poll = 0
+    look_ahead = 0
     while any(pending.values()) and pd.Timestamp.now("UTC") < deadline - stop_margin:
         started = time.monotonic()
         poll += 1
+        frontier_poll = poll % frontier_probe_every == 0
+        if frontier_poll:
+            look_ahead += frontier_width
         for file_type, coords in pending.items():
             missing: list[NoaaHrrrSourceFileCoord] = []
             attempts = (
-                coords[: 1 + frontier_width]
-                if poll % frontier_probe_every == 0
+                frontier_attempts(coords, look_ahead, frontier_width)
+                if frontier_poll
                 else coords[:1]
             )
             for coord in attempts:
                 if pd.Timestamp.now("UTC") >= deadline - stop_margin:
                     return result
                 key = cache_key(coord)
-                try:
-                    path = download(coord.get_url(source="nomads"))
-                except Exception as exc:  # noqa: BLE001
-                    if is_not_found(exc):
+                path, unpublished = _download_published(coord, download)
+                if path is None:
+                    if unpublished:
                         missing.append(coord)
-                        continue
-                    log.warning(f"Download failed for {key}: {exc}")
                     continue
                 count = _validate_and_upload(
                     path,
@@ -113,29 +114,64 @@ def mirror_init_time(
                     build_index,
                     started,
                 )
-                if count is not None:
-                    previous_counts[file_type] = count
-                    coords.remove(coord)
-                    result.mirrored.append(key)
-                    if missing:
-                        for lower in coords[:]:
-                            if lower.lead_time < coord.lead_time:
-                                coords.remove(lower)
-                                result.skipped.append(cache_key(lower))
-                                log.warning(
-                                    f"Skipping unpublished frontier {cache_key(lower)}"
-                                )
-                        missing.clear()
+                if count is None:
+                    invalid_attempts[key] = invalid_attempts.get(key, 0) + 1
+                    if invalid_attempts[key] >= max_invalid_attempts:
+                        coords.remove(coord)
+                        result.skipped.append(key)
                     continue
-                invalid_attempts[key] = invalid_attempts.get(key, 0) + 1
-                if invalid_attempts[key] >= max_invalid_attempts:
-                    coords.remove(coord)
-                    result.skipped.append(key)
+                previous_counts[file_type] = count
+                coords.remove(coord)
+                result.mirrored.append(key)
+                look_ahead = 0
+                if missing:
+                    _skip_lower_unpublished(coords, coord, result)
+                    missing.clear()
         if any(pending.values()):
             time.sleep(
                 max(0, poll_interval.total_seconds() - (time.monotonic() - started))
             )
     return result
+
+
+def _skip_lower_unpublished(
+    coords: list[NoaaHrrrSourceFileCoord],
+    published: NoaaHrrrSourceFileCoord,
+    result: MirrorResult,
+) -> None:
+    """Leave to NODD every pending lead below one NOMADS has published past."""
+    for lower in [c for c in coords if c.lead_time < published.lead_time]:
+        coords.remove(lower)
+        result.skipped.append(cache_key(lower))
+        log.warning(f"Skipping unpublished frontier {cache_key(lower)}")
+
+
+def _download_published(
+    coord: NoaaHrrrSourceFileCoord, download: Callable[[str], Path]
+) -> tuple[Path | None, bool]:
+    """(downloaded file or None, whether NOMADS answered that it has no such file).
+    A failed request is (None, False): the downloader has already retried, and the
+    next poll tries again."""
+    try:
+        return download(coord.get_url(source="nomads")), False
+    except Exception as exc:  # noqa: BLE001
+        if is_not_found(exc):
+            return None, True
+        log.warning(f"Download failed for {cache_key(coord)}: {exc}")
+        return None, False
+
+
+def frontier_attempts[T](pending: Sequence[T], look_ahead: int, width: int) -> list[T]:
+    """The lowest pending lead plus a `width`-wide window that walks up the list as
+    `look_ahead` grows, wrapping to the front, so a run of unpublished leads longer
+    than `width` is eventually passed."""
+    if not pending:
+        return []
+    later = pending[1:]
+    if not later:
+        return [pending[0]]
+    start = (look_ahead - width) % len(later)
+    return [pending[0], *later[start : start + width]]
 
 
 def _validate_and_upload(

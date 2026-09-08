@@ -93,8 +93,10 @@ class NoaaHrrrForecast18HourVirtualSourceFileCoord(
             return NOMADS_CACHE_LOCATION_PREFIX + url.removeprefix(S3_LOCATION_PREFIX)
         return url
 
-    def file_key(self) -> tuple[pd.Timestamp, pd.Timedelta, NoaaHrrrFileType]:
-        return (self.init_time, self.lead_time, self.file_type)
+    def file_key(
+        self,
+    ) -> tuple[pd.Timestamp, pd.Timedelta, NoaaHrrrDomain, NoaaHrrrFileType]:
+        return (self.init_time, self.lead_time, self.domain, self.file_type)
 
     def repoint_twin(self) -> NoaaHrrrForecast18HourVirtualSourceFileCoord:
         return NoaaHrrrForecast18HourVirtualSourceFileCoord(
@@ -119,6 +121,11 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     # Rollback knob: False stops selecting the cache for new files while repoints,
     # markers and the container registration keep working.
     cache_first: ClassVar[bool] = True
+    # Repoint twins wait on NODD for minutes to days; probing them every tick would
+    # list every old date's NODD prefix each second ahead of the current init's files.
+    repoint_probe_every: ClassVar[int] = 60
+
+    _ticks: int = pydantic.PrivateAttr(default=0)
 
     def source_region(self, coord: NoaaHrrrForecastVirtualSourceFileCoord) -> str:
         return (
@@ -139,13 +146,19 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
         if self.processing_mode != "update":
             return super().unfinished_work(store)
         candidates = [_routed(coord) for coord in self.source_file_coords()]
-        unrepointed = set(unrepointed_data_files(list_cache(self.cache_store())))
+        try:
+            unrepointed = set(unrepointed_data_files(list_cache(self.cache_store())))
+        except Exception:
+            log.exception(
+                "Cannot list the NOMADS cache; repoints wait for a later fire"
+            )
+            unrepointed = set()
         known = {coord.file_key() for coord in candidates}
         for key in unrepointed:
             parsed = parse_cache_key(key)
             assert parsed is not None
             init_time, lead_time, file_type = parsed
-            if (init_time, lead_time, file_type) in known:
+            if (init_time, lead_time, "conus", file_type) in known:
                 continue
             coord = self.source_file_coord(
                 init_time, lead_time, file_type, self.data_vars
@@ -166,29 +179,41 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
         if self.processing_mode != "update" or not self.cache_first:
             return super().discover_available(pending)
+        self._ticks += 1
         routed = [_routed(coord) for coord in pending]
+        probe_twins = self._ticks % self.repoint_probe_every == 1
         cache_candidates = [
             coord for coord in routed if not (coord.repoint or coord.cache_rejected)
         ]
         for coord in cache_candidates:
             coord.route_to("cache")
         found: list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]] = []
-        for coord, size in discover_available_by_obstore_listing(
-            cache_candidates,
-            store=self.cache_store(),
-            location_prefix=NOMADS_CACHE_LOCATION_PREFIX,
-            require_index=True,
-        ):
-            if self._cache_index_covers(coord):
-                found.append((coord, size))
-            else:
-                coord.reject_cache()
-                log.warning(
-                    f"Cache index for {cache_key(coord)} does not cover every variable "
-                    "the file supplies; waiting for NODD"
-                )
+        try:
+            in_cache = discover_available_by_obstore_listing(
+                cache_candidates,
+                store=self.cache_store(),
+                location_prefix=NOMADS_CACHE_LOCATION_PREFIX,
+                require_index=True,
+            )
+            for coord, size in in_cache:
+                if self._cache_index_covers(coord):
+                    found.append((coord, size))
+                else:
+                    coord.reject_cache()
+                    log.warning(
+                        f"Cache index for {cache_key(coord)} does not cover every "
+                        "variable the file supplies; waiting for NODD"
+                    )
+        except Exception:
+            # The cache is an accelerator; NODD stays the floor when it is unreachable.
+            log.exception("Cannot read the NOMADS cache this tick; using NODD only")
+            found = []
         found_ids = {id(coord) for coord, _ in found}
-        rest = [coord for coord in routed if id(coord) not in found_ids]
+        rest = [
+            coord
+            for coord in routed
+            if id(coord) not in found_ids and (probe_twins or not coord.repoint)
+        ]
         for coord in rest:
             coord.route_to("nodd")
         nodd_pending: list[NoaaHrrrForecastVirtualSourceFileCoord] = list(rest)

@@ -88,11 +88,17 @@ def unrepointed_data_files(listing: Mapping[str, datetime]) -> list[str]:
 
 
 def mark_repointed(key: str, store: obstore.store.ObjectStore) -> None:
-    """Record that main's refs for the cached data file `key` point at NODD: write the
-    marker and tag the file and its index so the bucket lifecycle may expire them."""
-    obstore.put(store, key + REPOINTED_MARKER_SUFFIX, b"")
-    if isinstance(store, obstore.store.S3Store):
+    """Record that main's refs for the cached data file `key` point at NODD: tag the
+    file and its index so the bucket lifecycle may expire them, then write the marker
+    (tagged too, so it expires alongside). The marker is last: a run that dies between
+    the two leaves an unmarked file, which the next fire repoints and marks again.
+    """
+    is_s3 = isinstance(store, obstore.store.S3Store)
+    if is_s3:
         _tag_repointed([key, key + ".idx"])
+    obstore.put(
+        store, key + REPOINTED_MARKER_SUFFIX, b"", tags=REPOINTED_TAG if is_s3 else None
+    )
 
 
 def _tag_repointed(keys: Sequence[str]) -> None:

@@ -486,6 +486,7 @@ def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
     monkeypatch.setattr(region_job_module, "s3_download_to_disk", download)
     monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
     monkeypatch.setattr(TwoSourceJob, "tick_interval", pd.Timedelta("0s"))
+    monkeypatch.setattr(TwoSourceJob, "repoint_probe_every", 2)
 
     job = TwoSourceJob(
         tmp_store=Path("unused-tmp.zarr"),
@@ -518,4 +519,67 @@ def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
     assert nodd_url in head_locations
     assert cache_url not in head_locations
     assert (cache_dir / (cache_key(coord) + REPOINTED_MARKER_SUFFIX)).exists()
-    assert TwoSourceJob.ticks == 2
+    # Tick 1 ingested from the cache, tick 2 published NODD, tick 3 (the next twin
+    # probe) repointed.
+    assert TwoSourceJob.ticks == 3
+
+
+def test_repoint_twins_are_probed_on_a_slower_cadence_than_new_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    monkeypatch.setattr(type(job), "repoint_probe_every", 3)
+    twin = routed_coord([get_var("composite_reflectivity")]).repoint_twin()
+    fresh = routed_coord([get_var("composite_reflectivity")], pd.Timedelta("1h"))
+    probed: list[list[pd.Timedelta]] = []
+
+    def discover(
+        self: NoaaHrrrForecastVirtualRegionJob,
+        pending: list[NoaaHrrrForecastVirtualSourceFileCoord],
+    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
+        probed.append([c.lead_time for c in pending])
+        return []
+
+    monkeypatch.setattr(NoaaHrrrVirtualRegionJob, "discover_available", discover)
+    for _ in range(4):
+        job.discover_available([twin, fresh])
+    # Tick 1 and tick 4 (every third) include the twin; every tick has the fresh file.
+    assert probed == [
+        [LEAD_0, pd.Timedelta("1h")],
+        [pd.Timedelta("1h")],
+        [pd.Timedelta("1h")],
+        [LEAD_0, pd.Timedelta("1h")],
+    ]
+
+
+def test_an_unreachable_cache_leaves_nodd_as_the_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    coord = routed(job.source_file_coords()[0])
+
+    def broken_store(
+        self: NoaaHrrrForecast18HourVirtualRegionJob,
+    ) -> obstore.store.ObjectStore:
+        raise RuntimeError("cache bucket unreachable")
+
+    monkeypatch.setattr(type(job), "cache_store", broken_store)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        _nodd_listing({(coord.init_time, coord.lead_time, "sfc")}),
+    )
+    assert job.discover_available([coord]) == [(coord, 16)]
+    assert coord.bucket == "nodd"
+
+    absent = {coord.file_key()}
+    monkeypatch.setattr(
+        NoaaHrrrForecast18HourVirtualRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [
+            c for c in candidates if routed(c).file_key() in absent
+        ],
+    )
+    work = job.unfinished_work(Mock())
+    assert [routed(c).file_key() for c in work] == [coord.file_key()]
+    assert not any(routed(c).repoint for c in work)

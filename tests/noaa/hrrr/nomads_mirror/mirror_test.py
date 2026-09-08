@@ -158,3 +158,14 @@ def test_download_from_nomads(monkeypatch: pytest.MonkeyPatch) -> None:
         rate_limiter=mirror.nomads_rate_limiter,
         retry_status_codes=mirror.NOMADS_RETRY_STATUS_CODES,
     )
+
+
+def test_frontier_attempts_walk_past_a_run_of_unpublished_leads() -> None:
+    pending = [5, 6, 7, 8, 9]
+    # First frontier poll: the lowest plus the two after it.
+    assert mirror.frontier_attempts(pending, look_ahead=2, width=2) == [5, 6, 7]
+    # Later polls walk the window up, then wrap to the front.
+    assert mirror.frontier_attempts(pending, look_ahead=4, width=2) == [5, 8, 9]
+    assert mirror.frontier_attempts(pending, look_ahead=6, width=2) == [5, 6, 7]
+    assert mirror.frontier_attempts([5], look_ahead=2, width=2) == [5]
+    assert mirror.frontier_attempts([], look_ahead=2, width=2) == []

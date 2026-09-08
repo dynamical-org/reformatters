@@ -5,9 +5,11 @@ from unittest.mock import Mock
 
 import obstore.store
 import pandas as pd
+import pytest
 import xarray as xr
 
 from reformatters.common.validation import ValidationContext
+from reformatters.noaa.hrrr import nomads_cache
 from reformatters.noaa.hrrr.nomads_cache import (
     REPOINTED_MARKER_SUFFIX,
     CheckNomadsCacheRepointed,
@@ -98,3 +100,18 @@ def test_check_fails_on_an_old_file_nodd_never_published(tmp_path: Path) -> None
     result = _check(tmp_path).check(_context())
     assert not result.passed
     assert KEY in result.message
+
+
+def test_mark_repointed_tags_before_it_writes_the_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failing_tag(keys: list[str]) -> None:
+        raise RuntimeError("tagging denied")
+
+    monkeypatch.setattr(nomads_cache, "_tag_repointed", failing_tag)
+    store = obstore.store.S3Store(
+        "unused-bucket", region="us-west-2", skip_signature=True
+    )
+    with pytest.raises(RuntimeError, match="tagging denied"):
+        mark_repointed(KEY, store)
+    assert not list(tmp_path.iterdir())
