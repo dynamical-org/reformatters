@@ -2,7 +2,7 @@ import asyncio
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from functools import cached_property
+from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
@@ -187,22 +187,25 @@ class VirtualRegionJob(
     @cached_property
     def _multi_chunk_dim_first_labels(
         self,
-    ) -> Mapping[str, Mapping[Dim, CoordinateValue]]:
-        """Per variable path, the first label along each of its multi-chunk dims.
+    ) -> Callable[[str], Mapping[Dim, CoordinateValue]]:
+        """The first label along each multi-chunk dim of a variable, by variable path.
 
-        Resolved once per job: a job probes thousands of coords against a handful of
-        variables, and repeating these DataTree lookups per coord dominates probe CPU.
+        Memoized for the life of the job: a job probes thousands of coords against a
+        handful of variables, and repeating this DataTree lookup per coord dominates
+        probe CPU.
         """
-        labels: dict[str, Mapping[Dim, CoordinateValue]] = {}
-        for var in self.data_vars:
-            template_var = self.template_ds[var.path]
+
+        @cache
+        def first_labels(var_path: str) -> Mapping[Dim, CoordinateValue]:
+            template_var = self.template_ds[var_path]
             chunks = tuple(template_var.encoding["chunks"])
-            labels[var.path] = {
+            return {
                 (dim := cast("Dim", str(dim_name))): template_var.get_index(dim)[0]
                 for dim_name, chunk_size in zip(template_var.dims, chunks, strict=True)
                 if chunk_size < int(template_var.sizes[str(dim_name)])
             }
-        return labels
+
+        return first_labels
 
     def representative_probe_loc(
         self, coord: SOURCE_FILE_COORD, var: DataVar[Any]
@@ -211,7 +214,7 @@ class VirtualRegionJob(
         out_loc plus the first label along each multi-chunk dim of `var` that out_loc
         leaves unpinned. Override when a file covers only part of such a dim.
         """
-        return {**self._multi_chunk_dim_first_labels[var.path], **coord.out_loc()}
+        return {**self._multi_chunk_dim_first_labels(var.path), **coord.out_loc()}
 
     def filter_already_present(
         self,
