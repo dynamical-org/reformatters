@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 import requests
@@ -653,13 +653,18 @@ def test_retrieve_gives_up_after_the_replacement_job_also_exhausts_polling(
     assert session.post.call_count == 2
     assert state_store.read().status == "abandoned"
 
-    session.post.reset_mock()
+    session.reset_mock()
     with pytest.raises(TimeoutError):
         EcdsRequest(state_store, session=session).retrieve(
             payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=3
         )
 
-    assert session.post.call_args_list[0].kwargs["json"] == {"inputs": payload}
+    # An abandoned job is replaced before any poll, not resumed for another budget.
+    assert session.mock_calls[0] == call.post(
+        "https://ecds.ecmwf.int/api/retrieve/v1/processes/s2s-forecasts/execution",
+        json={"inputs": payload},
+        timeout=60,
+    )
 
 
 def test_a_replacement_job_does_not_resume_the_abandoned_jobs_partial_download(
