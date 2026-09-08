@@ -2,6 +2,7 @@ import asyncio
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from functools import cache, cached_property
 from itertools import groupby
 from pathlib import Path
 from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
@@ -183,6 +184,29 @@ class VirtualRegionJob(
             file_vars[0],
         )
 
+    @cached_property
+    def _multi_chunk_dim_first_labels(
+        self,
+    ) -> Callable[[str], Mapping[Dim, CoordinateValue]]:
+        """The first label along each multi-chunk dim of a variable, by variable path.
+
+        Memoized for the life of the job: a job probes thousands of coords against a
+        handful of variables, and repeating this DataTree lookup per coord dominates
+        probe CPU.
+        """
+
+        @cache
+        def first_labels(var_path: str) -> Mapping[Dim, CoordinateValue]:
+            template_var = self.template_ds[var_path]
+            chunks = tuple(template_var.encoding["chunks"])
+            return {
+                (dim := cast("Dim", str(dim_name))): template_var.get_index(dim)[0]
+                for dim_name, chunk_size in zip(template_var.dims, chunks, strict=True)
+                if chunk_size < int(template_var.sizes[str(dim_name)])
+            }
+
+        return first_labels
+
     def representative_probe_loc(
         self, coord: SOURCE_FILE_COORD, var: DataVar[Any]
     ) -> Mapping[Dim, CoordinateValue]:
@@ -190,14 +214,7 @@ class VirtualRegionJob(
         out_loc plus the first label along each multi-chunk dim of `var` that out_loc
         leaves unpinned. Override when a file covers only part of such a dim.
         """
-        loc = dict(coord.out_loc())
-        template_var = self.template_ds[var.path]
-        chunks = tuple(template_var.encoding["chunks"])
-        for dim_name, chunk_size in zip(template_var.dims, chunks, strict=True):
-            dim = cast("Dim", str(dim_name))
-            if dim not in loc and chunk_size < int(template_var.sizes[dim]):
-                loc[dim] = template_var.get_index(dim)[0]
-        return loc
+        return {**self._multi_chunk_dim_first_labels(var.path), **coord.out_loc()}
 
     def filter_already_present(
         self,
@@ -217,17 +234,19 @@ class VirtualRegionJob(
                 for coord, var in zip(candidates, rep_vars, strict=True)
             ]
         )
+        # Resolved per distinct variable, not per candidate: each group lookup is a
+        # zarr metadata read, and a job probes thousands of files against a handful
+        # of variables.
+        encode_key = {
+            var_path: _chunk_key_encoder(group, var_path)
+            for var_path in {var.path for var in rep_vars}
+        }
         keyed: list[tuple[SOURCE_FILE_COORD, str | None]] = []
         for coord, var, index in zip(candidates, rep_vars, indices, strict=True):
             if index is None:
                 keyed.append((coord, None))
                 continue
-            array = group[var.path]
-            assert isinstance(array, zarr.Array)
-            metadata = array.metadata
-            assert isinstance(metadata, ArrayV3Metadata)
-            key = f"{array.path}/{metadata.chunk_key_encoding.encode_chunk_key(index)}"
-            keyed.append((coord, key))
+            keyed.append((coord, encode_key[var.path](index)))
 
         present = _exists_many(store, [key for _, key in keyed if key is not None])
         return [coord for coord, key in keyed if key is None or not present[key]]
@@ -681,6 +700,19 @@ class _NoRegion:
 
 
 _NO_REGION: Final = _NoRegion()
+
+
+def _chunk_key_encoder(
+    group: zarr.Group, var_path: str
+) -> Callable[[tuple[int, ...]], str]:
+    """Map a chunk index of `var_path` to its store key."""
+    array = group[var_path]
+    assert isinstance(array, zarr.Array)
+    metadata = array.metadata
+    assert isinstance(metadata, ArrayV3Metadata)
+    return lambda index: (
+        f"{array.path}/{metadata.chunk_key_encoding.encode_chunk_key(index)}"
+    )
 
 
 def _exists_many(

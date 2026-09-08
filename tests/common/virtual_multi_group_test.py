@@ -704,6 +704,52 @@ class _PressureProbeRegionJob(MultiGroupRegionJob):
         return next(v for v in self.data_vars if v.group == "pressure_level")
 
 
+class _VariableProbeCoord(MultiGroupSourceFileCoord):
+    data_vars: Sequence[DataVar[BaseInternalAttrs]]
+
+    def out_loc(self) -> Mapping[Dim, CoordinateValue]:
+        return {"init_time": self.init_time, "lead_time": self.lead_time}
+
+
+def _memory_store_with_multi_group_arrays() -> tuple[
+    MemoryStore, zarr.Array, zarr.Array
+]:
+    store = MemoryStore()
+    group = zarr.open_group(store, mode="w")
+    root_array = group.create_array(
+        "temperature_2m",
+        shape=(2, N_LEADS, N_LAT, N_LON),
+        chunks=(1, 1, N_LAT, N_LON),
+        dtype="float64",
+    )
+    pressure_array = group.require_group("pressure_level").create_array(
+        "temperature",
+        shape=(2, N_LEADS, N_LAT, N_LON, N_LEVELS),
+        chunks=(1, 1, N_LAT, N_LON, 1),
+        dtype="float64",
+    )
+    return store, root_array, pressure_array
+
+
+def test_filter_already_present_uses_representative_of_multi_var_file() -> None:
+    template_ds = _create_template_ds(2)
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    coord = job.source_file_coords()[0]
+    store, root_array, pressure_array = _memory_store_with_multi_group_arrays()
+    pressure_array[0, 0, :, :, :] = 1.0
+    icechunk_store = cast("icechunk.IcechunkStore", store)
+
+    representative = job.representative_var(coord)
+    assert representative.path == "temperature_2m"
+    assert dict(job.representative_probe_loc(coord, representative)) == dict(
+        coord.out_loc()
+    )
+    assert job.filter_already_present([coord], icechunk_store) == [coord]
+
+    root_array[0, 0, :, :] = 1.0
+    assert job.filter_already_present([coord], icechunk_store) == []
+
+
 def test_filter_already_present_probes_group_array(tmp_path: Path) -> None:
     # A backfill over init 0 only writes pressure_level/temperature chunks for init 0.
     dataset = _make_dataset(tmp_path, n_inits=2)
@@ -746,6 +792,203 @@ def test_filter_already_present_probes_group_array(tmp_path: Path) -> None:
     assert present not in remaining  # already in the manifest
     assert absent in remaining  # not yet written
     assert out_of_coords in remaining  # not a position in the dataset
+
+
+def _three_way_temperature_fixture(
+    first_levels: tuple[int, int, int] = (10, 1, 1000),
+) -> tuple[xr.DataTree, list[DataVar[BaseInternalAttrs]], MemoryStore]:
+    init_times = pd.date_range(APPEND_DIM_START, periods=2, freq=APPEND_DIM_FREQ)
+    shared_coords = {
+        "init_time": ("init_time", init_times),
+        "lead_time": ("lead_time", LEAD_TIMES),
+        "latitude": ("latitude", np.arange(N_LAT, dtype="float64")),
+        "longitude": ("longitude", np.arange(N_LON, dtype="float64")),
+    }
+    groups = (
+        "height_above_mean_sea_level",
+        "model_level",
+        "pressure_level",
+    )
+    level_values = {
+        group: np.array([first_level, first_level + 1])
+        for group, first_level in zip(groups, first_levels, strict=True)
+    }
+    nodes: dict[str, xr.Dataset] = {"/": xr.Dataset(coords=shared_coords)}
+    data_vars: list[DataVar[BaseInternalAttrs]] = []
+    store = MemoryStore()
+    zarr_root = zarr.open_group(store, mode="w")
+    for group in groups:
+        dims = ("init_time", "lead_time", "latitude", "longitude", group)
+        shape = (2, N_LEADS, N_LAT, N_LON, 2)
+        chunks = (1, 1, N_LAT, N_LON, 1)
+        nodes[f"/{group}"] = xr.Dataset(
+            {
+                "temperature": xr.Variable(
+                    dims,
+                    dask.array.full(shape, np.nan, dtype="float64", chunks=-1),
+                    encoding={
+                        "dtype": "float64",
+                        "chunks": chunks,
+                        "fill_value": np.nan,
+                        "compressors": None,
+                        "filters": None,
+                    },
+                )
+            },
+            coords={**shared_coords, group: (group, level_values[group])},
+        )
+        data_vars.append(PressureDataVar(name="temperature", group=group))
+        zarr_root.require_group(group).create_array(
+            "temperature", shape=shape, chunks=chunks, dtype="float64"
+        )
+    return xr.DataTree.from_dict(nodes), data_vars, store
+
+
+def test_filter_already_present_memoizes_probe_locations_by_data_var_path() -> None:
+    template_ds, data_vars, store = _three_way_temperature_fixture()
+    job = MultiGroupRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+    coords = [
+        _VariableProbeCoord(
+            init_time=APPEND_DIM_START,
+            lead_time=LEAD_TIMES[0],
+            data_vars=[var],
+        )
+        for var in data_vars
+    ]
+    probe_locs = {
+        var.path: dict(job.representative_probe_loc(coord, var))
+        for coord, var in zip(coords, data_vars, strict=True)
+    }
+    assert probe_locs == {
+        "height_above_mean_sea_level/temperature": {
+            **dict(coords[0].out_loc()),
+            "height_above_mean_sea_level": 10,
+        },
+        "model_level/temperature": {
+            **dict(coords[1].out_loc()),
+            "model_level": 1,
+        },
+        "pressure_level/temperature": {
+            **dict(coords[2].out_loc()),
+            "pressure_level": 1000,
+        },
+    }
+
+    zarr_root = zarr.open_group(store, mode="r+")
+    height_array = zarr_root["height_above_mean_sea_level/temperature"]
+    assert isinstance(height_array, zarr.Array)
+    height_array[0, 0, :, :, :] = 1.0
+    candidates = [coords[2], coords[0], coords[1]]
+    remaining = job.filter_already_present(
+        candidates, cast("icechunk.IcechunkStore", store)
+    )
+
+    assert [job.representative_var(coord).path for coord in remaining] == [
+        "pressure_level/temperature",
+        "model_level/temperature",
+    ]
+
+
+def test_filter_already_present_accepts_var_outside_job_data_vars() -> None:
+    template_ds, data_vars, store = _three_way_temperature_fixture()
+    job = MultiGroupRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[data_vars[0]],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+    )
+    pressure_var = data_vars[2]
+    coord = _VariableProbeCoord(
+        init_time=APPEND_DIM_START,
+        lead_time=LEAD_TIMES[0],
+        data_vars=[pressure_var],
+    )
+    zarr_root = zarr.open_group(store, mode="r+")
+    pressure_array = zarr_root[pressure_var.path]
+    assert isinstance(pressure_array, zarr.Array)
+    pressure_array[0, 0, :, :, :] = 1.0
+
+    assert job.representative_var(coord).path == pressure_var.path
+    assert (
+        job.filter_already_present([coord], cast("icechunk.IcechunkStore", store)) == []
+    )
+
+
+def test_probe_label_cache_is_per_job_instance() -> None:
+    template_a, data_vars_a, _ = _three_way_temperature_fixture((10, 1, 1000))
+    template_b, data_vars_b, _ = _three_way_temperature_fixture((20, 2, 925))
+    jobs_and_vars = [
+        (
+            MultiGroupRegionJob(
+                tmp_store=Path("unused-tmp.zarr"),
+                template_ds=template,
+                data_vars=data_vars,
+                append_dim="init_time",
+                region=slice(0, 2),
+                reformat_job_name="test",
+            ),
+            data_vars[0],
+        )
+        for template, data_vars in (
+            (template_a, data_vars_a),
+            (template_b, data_vars_b),
+        )
+    ]
+    coord = MultiGroupSourceFileCoord(
+        init_time=APPEND_DIM_START, lead_time=LEAD_TIMES[0]
+    )
+
+    assert [
+        (
+            var.path,
+            job.representative_probe_loc(coord, var)["height_above_mean_sea_level"],
+        )
+        for job, var in jobs_and_vars
+    ] == [
+        ("height_above_mean_sea_level/temperature", 10),
+        ("height_above_mean_sea_level/temperature", 20),
+    ]
+
+
+def test_filter_does_not_resolve_probe_labels_for_unused_unindexed_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template_ds = _create_template_ds(2)
+    pressure_node = template_ds["pressure_level"]
+    assert isinstance(pressure_node, xr.DataTree)
+    pressure = pressure_node.to_dataset(inherit=False).drop_vars("pressure_level")
+    template_ds = xr.DataTree.from_dict(
+        {"/": template_ds.to_dataset(inherit=False), "/pressure_level": pressure}
+    )
+    pressure_var = template_ds["pressure_level/temperature"]
+    assert isinstance(pressure_var, xr.DataArray)
+    assert "pressure_level" not in pressure_var.indexes
+    assert list(pressure_var.get_index("pressure_level")) == list(range(N_LEVELS))
+
+    job = _make_region_job(template_ds, region=slice(0, 2))
+    coord = job.source_file_coords()[0]
+    store, _, _ = _memory_store_with_multi_group_arrays()
+    original_get_index = xr.DataArray.get_index
+    queried: list[tuple[Any, str]] = []
+
+    def record_get_index(self: xr.DataArray, key: str) -> pd.Index:
+        queried.append((self.name, key))
+        return original_get_index(self, key)
+
+    monkeypatch.setattr(xr.DataArray, "get_index", record_get_index)
+    assert job.filter_already_present(
+        [coord], cast("icechunk.IcechunkStore", store)
+    ) == [coord]
+    assert ("temperature", "pressure_level") not in queried
 
 
 def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:

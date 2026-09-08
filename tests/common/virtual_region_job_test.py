@@ -1089,6 +1089,28 @@ def test_filter_skips_already_present_refs(tmp_path: Path) -> None:
     assert job.filter_already_present(candidates, readonly) == []
 
 
+def test_filter_already_present_no_candidates(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    readonly = _primary_repo(dataset.store_factory).readonly_session("main").store
+
+    assert job.filter_already_present([], readonly) == []
+
+
+def test_filter_already_present_none_present_preserves_order(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 4))
+    source_coords = job.source_file_coords()
+    candidates = [source_coords[3], source_coords[0], source_coords[-1]]
+    readonly = _primary_repo(dataset.store_factory).readonly_session("main").store
+
+    assert job.filter_already_present(candidates, readonly) == candidates
+
+
 def test_overwrite_chunks_rewrites_already_present_refs(tmp_path: Path) -> None:
     """Without this, a variable whose refs all point at the wrong source file could
     never be corrected: its own stale refs mark every file as already done."""
