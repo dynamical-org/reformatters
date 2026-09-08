@@ -146,7 +146,7 @@ def wait_for_workers(
             return
         log.info(
             f"Waiting for {len(missing_workers)} of {workers_total} workers to "
-            f"complete; missing worker indexes: {missing_workers[:10]}"
+            f"complete; missing worker indexes: {missing_workers[:50]}"
         )
         time.sleep(10)
 
