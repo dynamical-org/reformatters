@@ -1035,7 +1035,10 @@ def _s_file_data_vars(
             units="m2 s-2",
             comment=(
                 "Uses a right-moving storm motion in both hemispheres, so southern "
-                "hemisphere values are positive-mean rather than mirrored."
+                "hemisphere values are positive-mean rather than mirrored. Some source "
+                "values reach magnitudes near 100,000 m2 s-2, far above the roughly "
+                "1,500 m2 s-2 physical ceiling for this quantity. Mask absolute values "
+                "above 2,000."
             ),
         ),
         var(
