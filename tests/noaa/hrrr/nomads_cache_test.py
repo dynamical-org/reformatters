@@ -115,3 +115,10 @@ def test_mark_repointed_tags_before_it_writes_the_marker(
     with pytest.raises(RuntimeError, match="tagging denied"):
         mark_repointed(KEY, store)
     assert not list(tmp_path.iterdir())
+
+
+def test_unrepointed_includes_a_leftover_after_partial_tagging(tmp_path: Path) -> None:
+    # The GRIB was tagged and expired; the index was not: still awaiting its tag.
+    _write(tmp_path, KEY + ".idx")
+    listing = list_cache(obstore.store.LocalStore(tmp_path))
+    assert unrepointed_data_files(listing) == [KEY]

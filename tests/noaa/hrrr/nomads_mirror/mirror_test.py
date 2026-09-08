@@ -208,3 +208,36 @@ def test_frontier_attempts_walk_past_a_run_of_unpublished_leads() -> None:
     assert mirror.frontier_attempts(pending, look_ahead=6, width=2) == [5, 6, 7]
     assert mirror.frontier_attempts([5], look_ahead=2, width=2) == [5]
     assert mirror.frontier_attempts([], look_ahead=2, width=2) == []
+
+
+def test_mirror_never_grants_more_than_the_operational_retry_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    budgets: list[float] = []
+
+    def download(url: str, retry_timeout: float) -> Path:
+        budgets.append(retry_timeout)
+        raise httpx.HTTPStatusError(
+            "404", request=httpx.Request("GET", url), response=httpx.Response(404)
+        )
+
+    monkeypatch.setattr(mirror.time, "sleep", lambda _s: None)
+    start = pd.Timestamp("2026-09-08T19:49Z")
+    clock = count()
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(
+            lambda cls, *a, **k: start + pd.Timedelta(minutes=10 * next(clock))
+        ),
+    )
+    mirror.mirror_init_time(
+        INIT,
+        obstore.store.LocalStore(tmp_path, mkdir=True),
+        deadline=start + timedelta(minutes=54),
+        lead_hours={"sfc": [0]},
+        poll_interval=timedelta(0),
+        download=download,
+    )
+    assert budgets
+    assert max(budgets) <= mirror.DOWNLOAD_RETRY_TIMEOUT_SECONDS

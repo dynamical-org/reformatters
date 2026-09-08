@@ -256,6 +256,10 @@ def _httpx_get_with_retry(
         if rate_limiter is not None:
             rate_limiter.wait()
 
+        # The waits above count against the budget too.
+        if attempt > 0 and time.monotonic() - start_time > retry_timeout:
+            break
+
         try:
             response = client.get(url, headers=headers)
         except httpx.TransportError as e:

@@ -8,7 +8,7 @@ import pydantic
 from icechunk.store import IcechunkStore
 
 from reformatters.common.logging import get_logger
-from reformatters.common.staging import is_staging_job_name
+from reformatters.common.staging import is_staging_run
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
@@ -144,7 +144,7 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     def _owns_cache(self) -> bool:
         """Only the production store repoints and marks cached files: a staging
         version writing markers would tell production its repair work was done."""
-        return self.processing_mode == "update" and not is_staging_job_name(
+        return self.processing_mode == "update" and not is_staging_run(
             self.reformat_job_name
         )
 
@@ -197,7 +197,8 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
             return super().discover_available(pending)
         self._ticks += 1
         routed = [_routed(coord) for coord in pending]
-        probe_twins = self._ticks % self.repoint_probe_every == 1
+        assert self.repoint_probe_every >= 1
+        probe_twins = (self._ticks - 1) % self.repoint_probe_every == 0
         cache_candidates = [
             coord for coord in routed if not (coord.repoint or coord.cache_rejected)
         ]

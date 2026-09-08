@@ -3,6 +3,7 @@
 same keys NODD uses. See "NOMADS cache" in docs/virtual_datasets.md.
 """
 
+import contextlib
 import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
@@ -77,13 +78,15 @@ def list_cache(store: obstore.store.ObjectStore) -> dict[str, datetime]:
 
 def unrepointed_data_files(listing: Mapping[str, datetime]) -> list[str]:
     """Keys of the cached data files whose index exists and whose repointed marker does
-    not: main may still reference these in the cache."""
+    not: main may still reference these in the cache, or (the file already expired
+    after a partial tagging) the index still awaits its tag. A file without an index
+    is the mirror's, mid-upload or abandoned, and never entered the store."""
     return sorted(
-        key
+        key.removesuffix(".idx")
         for key in listing
-        if parse_cache_key(key) is not None
-        and key + ".idx" in listing
-        and key + REPOINTED_MARKER_SUFFIX not in listing
+        if key.endswith(".idx")
+        and parse_cache_key(key.removesuffix(".idx")) is not None
+        and key.removesuffix(".idx") + REPOINTED_MARKER_SUFFIX not in listing
     )
 
 
@@ -91,7 +94,8 @@ def mark_repointed(key: str, store: obstore.store.ObjectStore) -> None:
     """Record that main's refs for the cached data file `key` point at NODD: tag the
     file and its index so the bucket lifecycle may expire them, then write the marker
     (tagged too, so it expires alongside). The marker is last: a run that dies between
-    the two leaves an unmarked file, which the next fire repoints and marks again.
+    the two leaves an unmarked file, which a later fire repoints and marks again as long
+    as any of its objects remains.
     """
     is_s3 = isinstance(store, obstore.store.S3Store)
     if is_s3:
@@ -109,7 +113,9 @@ def _tag_repointed(keys: Sequence[str]) -> None:
         client_kwargs={"region_name": NOMADS_CACHE_BUCKET_REGION},
     )
     for key in keys:
-        fs.put_tags(f"{NOMADS_CACHE_BUCKET}/{key}", dict(REPOINTED_TAG))
+        # An object the lifecycle already expired after a partial tagging is done.
+        with contextlib.suppress(FileNotFoundError):
+            fs.put_tags(f"{NOMADS_CACHE_BUCKET}/{key}", dict(REPOINTED_TAG))
 
 
 def _write_credentials() -> dict[str, str]:
@@ -134,7 +140,7 @@ class CheckNomadsCacheRepointed(Validator):
         stale = [
             key
             for key in unrepointed_data_files(listing)
-            if now - listing[key] > self.max_age
+            if now - listing.get(key, listing[key + ".idx"]) > self.max_age
         ]
         if stale:
             return ValidationResult(

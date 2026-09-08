@@ -22,6 +22,8 @@ from reformatters.noaa.noaa_grib_index import (
 from reformatters.noaa.noaa_utils import NOMADS_RETRY_STATUS_CODES, nomads_rate_limiter
 
 log = get_logger(__name__)
+# The per-file retry allowance; the time left before the deadline caps it further.
+DOWNLOAD_RETRY_TIMEOUT_SECONDS: Final = 300.0
 MIRRORED_LEAD_HOURS: Final[Mapping[NoaaHrrrFileType, Sequence[int]]] = {
     "sfc": tuple(range(19))
 }
@@ -106,7 +108,10 @@ def mirror_init_time(
                 path, unpublished = _download_published(
                     coord,
                     download,
-                    retry_timeout=remaining - stop_margin.total_seconds(),
+                    retry_timeout=min(
+                        DOWNLOAD_RETRY_TIMEOUT_SECONDS,
+                        remaining - stop_margin.total_seconds(),
+                    ),
                 )
                 if path is None:
                     if unpublished:

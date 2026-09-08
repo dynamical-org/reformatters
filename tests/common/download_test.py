@@ -657,3 +657,27 @@ def test_httpx_get_with_retry_raises_on_4xx() -> None:
         pytest.raises(httpx.HTTPStatusError),
     ):
         _httpx_get_with_retry("https://example.com/test")
+
+
+def test_httpx_get_with_retry_stops_when_the_budget_expires_during_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class Client:
+        def get(
+            self,
+            url: str,
+            headers: dict[str, str] | None = None,  # noqa: ARG002
+        ) -> httpx.Response:
+            calls.append(url)
+            return httpx.Response(503, request=httpx.Request("GET", url))
+
+    clock = iter([0.0, 0.0, 0.0, 5.0, 5.0, 5.0, 5.0])
+    monkeypatch.setattr(download_module, "_httpx_client", Client)
+    monkeypatch.setattr(download_module.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(download_module.time, "sleep", lambda _s: None)
+    with pytest.raises(httpx.HTTPStatusError):
+        download_module._httpx_get_with_retry("http://x/y", retry_timeout=1.0)
+    # The first attempt ran; the second was abandoned once the backoff crossed the budget.
+    assert calls == ["http://x/y"]

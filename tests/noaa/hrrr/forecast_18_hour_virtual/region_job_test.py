@@ -667,3 +667,29 @@ def test_unfinished_work_ignores_cache_files_outside_the_template(
         lambda self, candidates, store: [],
     )
     assert job.unfinished_work(Mock()) == []
+
+
+def test_a_manual_job_cloned_from_a_staging_cron_does_not_own_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    job = job.model_copy(update={"reformat_job_name": "manual-repair"})
+    monkeypatch.setenv("CRON_JOB_NAME", "stage-noaa-hrrr-forecast-18-v0-2-0-update")
+    assert not job._owns_cache()
+    monkeypatch.setenv("CRON_JOB_NAME", "noaa-hrrr-forecast-18-hour-virtual-update")
+    assert job._owns_cache()
+
+
+def test_repoint_twins_can_be_probed_every_tick(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    monkeypatch.setattr(type(job), "repoint_probe_every", 1)
+    twin = routed_coord([get_var("composite_reflectivity")]).repoint_twin()
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        _nodd_listing({(CACHED_INIT, LEAD_0, "sfc")}),
+    )
+    for _ in range(3):
+        assert job.discover_available([twin]) == [(twin, 16)]
