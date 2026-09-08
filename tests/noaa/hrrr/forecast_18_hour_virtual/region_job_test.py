@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 from itertools import count
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 from unittest.mock import Mock
 
 import obstore.store
@@ -9,9 +9,15 @@ import pandas as pd
 import pydantic
 import pytest
 
+from reformatters.common import template_utils
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.virtual_region_job import VirtualRef
+from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.hrrr.forecast_18_hour_virtual import (
     region_job as region_job_module,
+)
+from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
+    NoaaHrrrForecast18HourVirtualDataset,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
     NoaaHrrrForecast18HourVirtualRegionJob,
@@ -28,6 +34,7 @@ from reformatters.noaa.hrrr.nomads_cache import (
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.hrrr.virtual_region_job import (
+    S3_LOCATION_PREFIX,
     NoaaHrrrForecastVirtualRegionJob,
     NoaaHrrrForecastVirtualSourceFileCoord,
     NoaaHrrrVirtualRegionJob,
@@ -96,6 +103,7 @@ def test_generate_source_file_coords_uses_the_declared_coord_class() -> None:
 
 FIXTURES = Path(__file__).parents[2] / "fixtures"
 FIXTURE_INDEX = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2.idx"
+FIXTURE_GRIB = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2"
 CACHED_INIT = pd.Timestamp("2026-09-07T19:00")
 
 
@@ -399,3 +407,115 @@ def stub_cache_index_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
 
 
 _copy_counter = count()
+
+
+def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End to end against a local icechunk store: the file is ingested from the cache
+    the tick it appears there, its refs are rewritten from NODD the tick NODD has it,
+    and the cache object is then marked repointed."""
+    cache_dir, nodd_dir = tmp_path / "cache", tmp_path / "nodd"
+    dataset = NoaaHrrrForecast18HourVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path / "store"), format=DatasetFormat.ICECHUNK
+        )
+    )
+    original_get_template = dataset.template_config.get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: original_get_template(end_time).isel(lead_time=[0]),
+    )
+    template_ds = dataset.template_config.get_template(CACHED_INIT + pd.Timedelta("1h"))
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    (_, repo), *_ = dataset.store_factory.icechunk_repos(sort="primary-first")
+    position = int(
+        template_ds.to_dataset()
+        .get_index("init_time")
+        .get_indexer(pd.Index([CACHED_INIT]))[0]
+    )
+    data_vars = [get_var("composite_reflectivity")]
+    coord = routed_coord(data_vars)
+    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
+    (cache_dir / cache_key(coord)).write_bytes(FIXTURE_GRIB.read_bytes())
+
+    def publish_on_nodd() -> None:
+        target = nodd_dir / cache_key(coord)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(FIXTURE_GRIB.read_bytes())
+        target.with_name(target.name + ".idx").write_text(FIXTURE_INDEX.read_text())
+
+    class TwoSourceJob(NoaaHrrrForecast18HourVirtualRegionJob):
+        ticks: ClassVar[int] = 0
+
+        def cache_store(self) -> obstore.store.ObjectStore:
+            return obstore.store.LocalStore(cache_dir)
+
+        def cache_writer(self) -> obstore.store.ObjectStore:
+            return obstore.store.LocalStore(cache_dir)
+
+        def discover_available(
+            self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
+        ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
+            TwoSourceJob.ticks += 1
+            if TwoSourceJob.ticks == 2:
+                publish_on_nodd()
+            return super().discover_available(pending)
+
+    def local_dir(url: str) -> Path:
+        if url.startswith(NOMADS_CACHE_LOCATION_PREFIX):
+            return cache_dir / url.removeprefix(NOMADS_CACHE_LOCATION_PREFIX)
+        return nodd_dir / url.removeprefix(S3_LOCATION_PREFIX)
+
+    def download(url: str, dataset_id: str, **kwargs: object) -> Path:
+        copy = tmp_path / f"{next(_copy_counter)}.idx"
+        copy.write_bytes(local_dir(url).read_bytes())
+        return copy
+
+    def read_bytes(url: str, *, start: int, end: int, **kwargs: object) -> bytes:
+        return local_dir(url).read_bytes()[start:end]
+
+    nodd_dir.mkdir()
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_store",
+        lambda bucket_url, region, **kwargs: obstore.store.LocalStore(nodd_dir),
+    )
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", download)
+    monkeypatch.setattr(region_job_module, "s3_download_to_disk", download)
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
+    monkeypatch.setattr(TwoSourceJob, "tick_interval", pd.Timedelta("0s"))
+
+    job = TwoSourceJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(position, position + 1),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp.now() + pd.Timedelta("60s"),
+    )
+    snapshots_before = [s.id for s in repo.ancestry(branch="main")]
+    remaining = job.unfinished_work(repo.readonly_session("main").store)
+    assert [routed(c).file_key() for c in remaining] == [coord.file_key()]
+
+    job.process_virtual(repo, [], "main", remaining)
+
+    head, after_cache, *_ = [
+        s.id for s in repo.ancestry(branch="main") if s.id not in snapshots_before
+    ]
+    cache_url = NOMADS_CACHE_LOCATION_PREFIX + cache_key(coord)
+    nodd_url = S3_LOCATION_PREFIX + cache_key(coord)
+    assert (
+        cache_url
+        in repo.readonly_session(snapshot_id=after_cache).all_virtual_chunk_locations()
+    )
+    head_locations = repo.readonly_session(
+        snapshot_id=head
+    ).all_virtual_chunk_locations()
+    assert nodd_url in head_locations
+    assert cache_url not in head_locations
+    assert (cache_dir / (cache_key(coord) + REPOINTED_MARKER_SUFFIX)).exists()
+    assert TwoSourceJob.ticks == 2
