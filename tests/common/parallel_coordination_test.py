@@ -453,10 +453,12 @@ class TestWaitForWorkers:
     def test_missing_worker_log_caps_indexes(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        # More workers than the 50-index cap, so the logged list is really cut.
+        workers_total = 60
         factory = FakeStoreFactory()
 
         def fake_sleep(_: float) -> None:
-            for worker_index in range(12):
+            for worker_index in range(workers_total):
                 factory.write_coordination_file(
                     "job", f"results/worker-{worker_index}.json", b"x"
                 )
@@ -464,11 +466,17 @@ class TestWaitForWorkers:
         monkeypatch.setattr(pc.time, "sleep", fake_sleep)
 
         with caplog.at_level(logging.INFO):
-            pc.wait_for_workers(factory, "job", workers_total=12)  # ty: ignore[invalid-argument-type]
+            pc.wait_for_workers(factory, "job", workers_total=workers_total)  # ty: ignore[invalid-argument-type]
 
-        assert "Waiting for 12 of 12 workers" in caplog.text
-        assert "missing worker indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]" in caplog.text
-        assert "10, 11" not in caplog.text
+        # Exactly one poll logs, since fake_sleep completes every worker.
+        (message,) = [m for m in caplog.messages if "missing worker indexes" in m]
+        # The count reports all 60 missing while the list stops at 50 — asserting
+        # both is what pins the cap. Match on the message, not caplog.text, whose
+        # "file.py:lineno" prefix can itself contain the digits under test.
+        assert f"Waiting for {workers_total} of {workers_total} workers" in message
+        assert f"missing worker indexes: {list(range(50))}" in message
+        # Index 50 is the first past the cap and must not be logged.
+        assert "50" not in message
 
 
 class TestCollectResults:
