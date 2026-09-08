@@ -113,6 +113,7 @@
           "long_name": "Apparent temperature",
           "short_name": "aptmp",
           "units": "degree_Celsius",
+          "comment": "Equal to temperature_2m in mild conditions, wind chill when colder and heat index when hotter, so the distribution is discontinuous at the switchovers rather than corrupt.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -375,7 +376,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
           "step_type": "avg",
@@ -534,7 +534,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
           "step_type": "avg",
@@ -587,7 +586,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -640,7 +638,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -758,7 +755,6 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
           "step_type": "avg",
@@ -817,7 +813,6 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -1727,6 +1722,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1779,6 +1775,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1831,6 +1828,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1883,6 +1881,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -2892,6 +2891,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -3364,7 +3364,7 @@
           "long_name": "Haines Index",
           "short_name": "hindex",
           "units": "1",
-          "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+          "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN over open water and over high terrain such as Antarctica and Tibet; sea ice is populated.",
           "step_type": "instant",
           "flag_values": [
             2,
@@ -3945,7 +3945,7 @@
           "long_name": "ICAO Standard Atmosphere reference height",
           "short_name": "icaht",
           "units": "m",
-          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries.",
+          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries. The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7432,6 +7432,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -7749,6 +7750,7 @@
           "short_name": "prmsl",
           "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
+          "comment": "The model's standard mean sea level reduction, an alternative to pressure_reduced_to_mean_sea_level_eta_model in this dataset.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -8322,6 +8324,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -8374,6 +8377,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -8426,6 +8430,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -8582,6 +8587,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -8634,6 +8640,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9344,6 +9351,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9396,6 +9404,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9448,6 +9457,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9604,6 +9614,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9708,6 +9719,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10150,6 +10162,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10208,6 +10221,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10266,6 +10280,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10617,6 +10632,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10733,6 +10749,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -10791,6 +10808,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11141,7 +11159,7 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature",
+          "standard_name": "tropopause_air_temperature",
           "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "spatial_ref",
@@ -11415,6 +11433,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -11730,6 +11749,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13047,6 +13067,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13099,6 +13120,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13151,6 +13173,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13622,6 +13645,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13726,6 +13750,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -13778,6 +13803,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14042,6 +14068,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14355,6 +14382,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14407,6 +14435,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14459,6 +14488,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -14930,6 +14960,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15034,6 +15065,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15086,6 +15118,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -15350,6 +15383,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
           "step_type": "instant",
           "coordinates": "spatial_ref",
           "_FillValue": "AAAAAAAA+H8="

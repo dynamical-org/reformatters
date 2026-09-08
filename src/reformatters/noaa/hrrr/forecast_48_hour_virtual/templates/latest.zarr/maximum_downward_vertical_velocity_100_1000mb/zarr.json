@@ -38,6 +38,7 @@
     "long_name": "Maximum downward vertical velocity",
     "short_name": "maxdvv",
     "units": "m s-1",
+    "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

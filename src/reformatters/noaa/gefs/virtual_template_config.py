@@ -149,6 +149,7 @@ _VERTICAL_COORDS: dict[VerticalGroup, Coordinate] = {
 
 # ScaleOffset decodes as encoded / scale + offset.
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
+# GDAL labels TSOIL [C] although the source is Kelvin.
 _CELSIUS_ELEMENTS = frozenset({"TMP", "DPT", "TMAX", "TMIN", "TSOIL", "APTMP"})
 
 # WEASD decodes as kg m-2 of water; 1 kg m-2 = 0.001 m lwe, so scale=1000 yields the
@@ -158,6 +159,28 @@ _WATER_KG_M2_TO_M_LWE = ScaleOffset(offset=0.0, scale=1000.0).to_dict()
 _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
 # Scale TOZNE from Dobson units to metres; 1 DU is 1e-5 m.
 _DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
+
+_MAX_WIND_SEARCH_LAYER = (
+    "The source finds this level by searching a bounded layer rather than the "
+    "whole column, so the column wind maximum can lie above it, and often does "
+    "over the winter pole."
+)
+
+_PRESSURE_DIFFERENCE_LAYER = (
+    "The {} in the name are pressure differences from the surface, not isobaric "
+    "levels, so this layer sits just above the ground rather than in the upper "
+    "troposphere."
+)
+
+_CONVECTIVE_INHIBITION = (
+    "Negative by convention, and no inhibition reads as a small negative value "
+    "rather than exactly 0, so selecting cells equal to 0 finds nothing."
+)
+
+_SOIL_MOISTURE_LAND_ICE = (
+    "Values are near 1 over permanent land ice, where they are placeholders rather "
+    "than soil moisture measurements. Mask values >= 0.9."
+)
 
 # MSLET entered the s file at this cycle.
 MSLET_AVAILABLE_FROM = pd.Timestamp("2021-07-20T12:00")
@@ -733,8 +756,6 @@ def _s_file_data_vars(
             units="degree_Celsius",
             standard_name="soil_temperature",
             comment="NaN over water.",
-            # The source is Kelvin despite GDAL labelling this element [C].
-            filters=[_KELVIN_TO_CELSIUS],
         ),
         var(
             "volumetric_soil_moisture_0_10cm",
@@ -744,11 +765,7 @@ def _s_file_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment=(
-                "NaN over water. Values are near 1 over permanent land ice, where they "
-                "are placeholders rather than soil moisture measurements. Mask values >= "
-                "0.9."
-            ),
+            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "snow_water_equivalent_surface",
@@ -945,6 +962,7 @@ def _s_file_data_vars(
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         var(
             "precipitable_water_atmosphere",
@@ -1058,6 +1076,7 @@ def _s_file_data_vars(
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         var(
             "pressure_reduced_to_mean_sea_level",
@@ -1067,6 +1086,7 @@ def _s_file_data_vars(
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
+            comment="The model's standard mean sea level reduction, an alternative to pressure_reduced_to_mean_sea_level_eta_model in this dataset.",
         ),
     ]
 
@@ -1098,7 +1118,7 @@ def _a_b_root_data_vars(
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over water.",
         ),
         var(
             "volumetric_soil_moisture_0_10cm",
@@ -1109,7 +1129,7 @@ def _a_b_root_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "snow_water_equivalent_surface",
@@ -1120,6 +1140,7 @@ def _a_b_root_data_vars(
             long_name="Snow depth water equivalent",
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
+            filters=[_WATER_KG_M2_TO_M_LWE],
             comment="NaN over open water, available over land and sea ice.",
         ),
         var(
@@ -1381,6 +1402,7 @@ def _a_b_root_data_vars(
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         var(
             "pressure_reduced_to_mean_sea_level",
@@ -1391,6 +1413,7 @@ def _a_b_root_data_vars(
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
+            comment="The model's standard mean sea level reduction, one of this dataset's three mean-sea-level products alongside pressure_reduced_to_mean_sea_level_eta_model and pressure_mean_sea_level.",
         ),
         var(
             "pressure_mean_sea_level",
@@ -1423,6 +1446,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment="The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
         ),
         var(
             "wind_v_planetary_boundary_layer",
@@ -1433,6 +1457,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment="The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
         ),
         var(
             "ventilation_rate_planetary_boundary_layer",
@@ -1442,6 +1467,10 @@ def _a_b_root_data_vars(
             short_name="VRATE",
             long_name="Ventilation Rate",
             units="m2 s-1",
+            comment=(
+                "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a "
+                "small value rounded down rather than missing data."
+            ),
         ),
         var(
             "wind_gust_surface",
@@ -1471,7 +1500,7 @@ def _a_b_root_data_vars(
             short_name="hindex",
             long_name="Haines Index",
             units="1",
-            comment="Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+            comment="Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN over open water and over high terrain such as Antarctica and Tibet; sea ice is populated.",
             flag_values=(2, 3, 4, 5, 6),
             flag_meanings=(
                 "very_low_potential very_low_potential low_potential "
@@ -1507,7 +1536,7 @@ def _a_b_root_data_vars(
             short_name="soill",
             long_name="Liquid volumetric soil moisture (non-frozen)",
             units="1",
-            comment="Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water.",
+            comment=f"Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "soil_temperature_10_40cm",
@@ -1518,7 +1547,7 @@ def _a_b_root_data_vars(
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over water.",
         ),
         var(
             "volumetric_soil_moisture_10_40cm",
@@ -1529,7 +1558,7 @@ def _a_b_root_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "liquid_volumetric_soil_moisture_10_40cm",
@@ -1539,7 +1568,7 @@ def _a_b_root_data_vars(
             short_name="soill",
             long_name="Liquid volumetric soil moisture (non-frozen)",
             units="1",
-            comment="Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water.",
+            comment=f"Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "soil_temperature_40_100cm",
@@ -1550,7 +1579,7 @@ def _a_b_root_data_vars(
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over water.",
         ),
         var(
             "volumetric_soil_moisture_40_100cm",
@@ -1561,7 +1590,7 @@ def _a_b_root_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "liquid_volumetric_soil_moisture_40_100cm",
@@ -1571,7 +1600,7 @@ def _a_b_root_data_vars(
             short_name="soill",
             long_name="Liquid volumetric soil moisture (non-frozen)",
             units="1",
-            comment="Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water.",
+            comment=f"Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "soil_temperature_100_200cm",
@@ -1582,7 +1611,7 @@ def _a_b_root_data_vars(
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over water.",
         ),
         var(
             "volumetric_soil_moisture_100_200cm",
@@ -1593,7 +1622,7 @@ def _a_b_root_data_vars(
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="NaN over water.",
+            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "liquid_volumetric_soil_moisture_100_200cm",
@@ -1603,7 +1632,7 @@ def _a_b_root_data_vars(
             short_name="soill",
             long_name="Liquid volumetric soil moisture (non-frozen)",
             units="1",
-            comment="Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water.",
+            comment=f"Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
         ),
         var(
             "plant_canopy_surface_water_surface",
@@ -1667,6 +1696,7 @@ def _a_b_root_data_vars(
             short_name="aptmp",
             long_name="Apparent temperature",
             units="degree_Celsius",
+            comment="Equal to temperature_2m in mild conditions, wind chill when colder and heat index when hotter, so the distribution is discontinuous at the switchovers rather than corrupt.",
         ),
         var(
             "percent_frozen_precipitation_surface",
@@ -1860,6 +1890,8 @@ def _a_b_root_data_vars(
             long_name="Sunshine Duration",
             units="s",
             standard_name="duration_of_sunshine",
+            # The lead 0 record holds a partial window, not a zero-length one.
+            hour_0=False,
             comment="Sunshine accumulated over the preceding 1-6 hours, not an instantaneous value: the total restarts every 6 hours and so reaches at most 21600 s. The source index labels it instantaneous, which is why it carries no window step type.",
         ),
         var(
@@ -1891,6 +1923,7 @@ def _a_b_root_data_vars(
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         var(
             "cloud_water_atmosphere",
@@ -2004,7 +2037,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         var(
@@ -2016,7 +2048,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_base",
             comment="NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
         ),
         var(
@@ -2050,7 +2081,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         var(
@@ -2062,7 +2092,6 @@ def _a_b_root_data_vars(
             short_name="pres",
             long_name="Pressure",
             units="Pa",
-            standard_name="air_pressure_at_cloud_top",
             comment="NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         var(
@@ -2086,7 +2115,6 @@ def _a_b_root_data_vars(
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
         ),
         var(
@@ -2098,7 +2126,6 @@ def _a_b_root_data_vars(
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature_at_cloud_top",
             comment="NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
         ),
         var(
@@ -2154,7 +2181,10 @@ def _a_b_root_data_vars(
             short_name="duvb",
             long_name="UV-B downward solar flux",
             units="W m-2",
-            comment="Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+            comment=(
+                "The UV-B portion of the downward shortwave flux at the surface, "
+                "covering 263-345 nm."
+            ),
         ),
         var(
             "clear_sky_uv_b_downward_solar_flux_surface",
@@ -2165,7 +2195,10 @@ def _a_b_root_data_vars(
             short_name="cduvb",
             long_name="Clear sky UV-B downward solar flux",
             units="W m-2",
-            comment="Downward solar flux in the UV-B band (280-315 nm) at the surface computed with clouds removed.",
+            comment=(
+                "The UV-B portion of the downward shortwave flux at the surface, "
+                "covering 263-345 nm, computed with clouds removed."
+            ),
         ),
         var(
             "upward_short_wave_radiation_flux_top_of_atmosphere",
@@ -2202,6 +2235,7 @@ def _a_b_root_data_vars(
             short_name="ustm",
             long_name="U-component storm motion",
             units="m s-1",
+            comment="The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
         ),
         var(
             "v_component_storm_motion_6000_0m",
@@ -2211,6 +2245,7 @@ def _a_b_root_data_vars(
             short_name="vstm",
             long_name="V-component storm motion",
             units="m s-1",
+            comment="The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
         ),
         var(
             "pressure_tropopause",
@@ -2250,7 +2285,7 @@ def _a_b_root_data_vars(
             short_name="t",
             long_name="Temperature",
             units="degree_Celsius",
-            standard_name="air_temperature",
+            standard_name="tropopause_air_temperature",
         ),
         var(
             "wind_u_tropopause",
@@ -2291,6 +2326,7 @@ def _a_b_root_data_vars(
             long_name="Pressure",
             units="Pa",
             standard_name="air_pressure",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         var(
             "icao_standard_atmosphere_reference_height_max_wind",
@@ -2300,7 +2336,7 @@ def _a_b_root_data_vars(
             short_name="icaht",
             long_name="ICAO Standard Atmosphere reference height",
             units="m",
-            comment="Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries.",
+            comment=f"Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries. {_MAX_WIND_SEARCH_LAYER}",
         ),
         var(
             "geopotential_height_max_wind",
@@ -2311,6 +2347,7 @@ def _a_b_root_data_vars(
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         var(
             "wind_u_max_wind",
@@ -2321,6 +2358,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         var(
             "wind_v_max_wind",
@@ -2331,6 +2369,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         var(
             "temperature_max_wind",
@@ -2341,6 +2380,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_MAX_WIND_SEARCH_LAYER,
         ),
         var(
             "temperature_80m",
@@ -2532,7 +2572,10 @@ def _a_b_root_data_vars(
             short_name="pwat",
             long_name="Precipitable water",
             units="kg m-2",
-            standard_name="atmosphere_mass_content_of_water_vapor",
+            comment=(
+                "Integrated over the 30 mb layer above ground, not the whole column; "
+                "precipitable_water_atmosphere carries the column total."
+            ),
         ),
         var(
             "parcel_lifted_index_30_0mb",
@@ -2553,6 +2596,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
         ),
         var(
             "relative_humidity_60_30mb",
@@ -2563,6 +2607,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
         ),
         var(
             "specific_humidity_60_30mb",
@@ -2573,6 +2618,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
         ),
         var(
             "wind_u_60_30mb",
@@ -2583,6 +2629,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
         ),
         var(
             "wind_v_60_30mb",
@@ -2593,6 +2640,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
         ),
         var(
             "temperature_90_60mb",
@@ -2603,6 +2651,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
         ),
         var(
             "relative_humidity_90_60mb",
@@ -2613,6 +2662,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
         ),
         var(
             "specific_humidity_90_60mb",
@@ -2623,6 +2673,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
         ),
         var(
             "wind_u_90_60mb",
@@ -2633,6 +2684,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
         ),
         var(
             "wind_v_90_60mb",
@@ -2643,6 +2695,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
         ),
         var(
             "temperature_120_90mb",
@@ -2653,6 +2706,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
         ),
         var(
             "relative_humidity_120_90mb",
@@ -2663,6 +2717,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
         ),
         var(
             "specific_humidity_120_90mb",
@@ -2673,6 +2728,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
         ),
         var(
             "wind_u_120_90mb",
@@ -2683,6 +2739,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
         ),
         var(
             "wind_v_120_90mb",
@@ -2693,6 +2750,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
         ),
         var(
             "temperature_150_120mb",
@@ -2703,6 +2761,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
         ),
         var(
             "relative_humidity_150_120mb",
@@ -2713,6 +2772,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
         ),
         var(
             "specific_humidity_150_120mb",
@@ -2723,6 +2783,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
         ),
         var(
             "wind_u_150_120mb",
@@ -2733,6 +2794,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
         ),
         var(
             "wind_v_150_120mb",
@@ -2743,6 +2805,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
         ),
         var(
             "temperature_180_150mb",
@@ -2753,6 +2816,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
         ),
         var(
             "relative_humidity_180_150mb",
@@ -2763,6 +2827,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
         ),
         var(
             "specific_humidity_180_150mb",
@@ -2773,6 +2838,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
         ),
         var(
             "wind_u_180_150mb",
@@ -2783,6 +2849,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
         ),
         var(
             "wind_v_180_150mb",
@@ -2793,6 +2860,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
+            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
         ),
         var(
             "best_4_layer_lifted_index_surface",
@@ -2933,6 +3001,7 @@ def _a_b_root_data_vars(
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         var(
             "pressure_of_lifted_parcel_level_255_0mb",
@@ -3043,6 +3112,7 @@ def _a_b_root_data_vars(
             short_name="mntsf",
             long_name="Montgomery stream Function",
             units="m2 s-2",
+            comment="NaN where this isentropic surface lies below the ground.",
         ),
         var(
             "potential_vorticity_350k",
@@ -3855,6 +3925,7 @@ def _a_b_pressure_data_vars(
             units="1",
             flag_values=(0, 1, 2, 3, 4, 5),
             flag_meanings="none light moderate severe trace heavy",
+            comment="Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
         ),
     ]
 

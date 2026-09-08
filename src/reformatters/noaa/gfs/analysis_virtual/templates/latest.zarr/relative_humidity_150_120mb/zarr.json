@@ -37,6 +37,7 @@
     "short_name": "r",
     "standard_name": "relative_humidity",
     "units": "percent",
+    "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -125,6 +125,7 @@
           "long_name": "Apparent temperature",
           "short_name": "aptmp",
           "units": "degree_Celsius",
+          "comment": "Equal to temperature_2m in mild conditions, wind chill when colder and heat index when hotter, so the distribution is discontinuous at the switchovers rather than corrupt.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -417,7 +418,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no high cloud in the column, and at some cloud-field edges where average_high_cloud_cover is near zero.",
           "step_type": "avg",
@@ -594,7 +594,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
           "step_type": "avg",
@@ -653,7 +652,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_base",
           "units": "Pa",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -712,7 +710,6 @@
         "attributes": {
           "long_name": "Pressure",
           "short_name": "pres",
-          "standard_name": "air_pressure_at_cloud_top",
           "units": "Pa",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -907,7 +904,6 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no low cloud in the column, and at some cloud-field edges where average_low_cloud_cover is near zero.",
           "step_type": "avg",
@@ -972,7 +968,6 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
           "step_type": "avg",
@@ -1455,7 +1450,7 @@
           "long_name": "Clear sky UV-B downward solar flux",
           "short_name": "cduvb",
           "units": "W m-2",
-          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). Downward solar flux in the UV-B band (280-315 nm) at the surface computed with clouds removed.",
+          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm, computed with clouds removed.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1920,6 +1915,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1978,6 +1974,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2036,6 +2033,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3151,6 +3149,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3561,7 +3560,7 @@
           "long_name": "Haines Index",
           "short_name": "hindex",
           "units": "1",
-          "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN on about 60% of the grid, chiefly over ocean.",
+          "comment": "Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN over open water and over high terrain such as Antarctica and Tibet; sea ice is populated.",
           "step_type": "instant",
           "flag_values": [
             2,
@@ -4335,7 +4334,7 @@
           "long_name": "ICAO Standard Atmosphere reference height",
           "short_name": "icaht",
           "units": "m",
-          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries.",
+          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries. The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4920,7 +4919,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4978,7 +4977,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5036,7 +5035,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5094,7 +5093,7 @@
           "long_name": "Liquid volumetric soil moisture (non-frozen)",
           "short_name": "soill",
           "units": "1",
-          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water.",
+          "comment": "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6341,6 +6340,7 @@
           "long_name": "Montgomery stream Function",
           "short_name": "mntsf",
           "units": "m2 s-2",
+          "comment": "NaN where this isentropic surface lies below the ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7158,8 +7158,8 @@
         "attributes": {
           "long_name": "Precipitable water",
           "short_name": "pwat",
-          "standard_name": "atmosphere_mass_content_of_water_vapor",
           "units": "kg m-2",
+          "comment": "Integrated over the 30 mb layer above ground, not the whole column; precipitable_water_atmosphere carries the column total.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8123,6 +8123,7 @@
           "long_name": "Icing severity",
           "short_name": "ICSEV",
           "units": "1",
+          "comment": "Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
           "step_type": "instant",
           "flag_values": [
             0,
@@ -9013,6 +9014,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9425,6 +9427,7 @@
           "short_name": "prmsl",
           "standard_name": "air_pressure_at_mean_sea_level",
           "units": "Pa",
+          "comment": "The model's standard mean sea level reduction, one of this dataset's three mean-sea-level products alongside pressure_reduced_to_mean_sea_level_eta_model and pressure_mean_sea_level.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10006,6 +10009,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10064,6 +10068,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10122,6 +10127,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10296,6 +10302,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10354,6 +10361,7 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10691,6 +10699,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 1000.0
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "WEASD",
@@ -10769,7 +10783,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10834,7 +10848,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10899,7 +10913,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10964,7 +10978,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11072,6 +11086,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11130,6 +11145,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11188,6 +11204,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11362,6 +11379,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11478,6 +11496,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11968,6 +11987,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12032,6 +12052,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12096,6 +12117,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12678,6 +12700,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12871,6 +12894,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12935,6 +12959,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13321,7 +13346,7 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature",
+          "standard_name": "tropopause_air_temperature",
           "units": "degree_Celsius",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -13563,6 +13588,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13856,7 +13882,7 @@
           "long_name": "UV-B downward solar flux",
           "short_name": "duvb",
           "units": "W m-2",
-          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). Downward solar flux in the UV-B band (280-315 nm) at the surface.",
+          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). The UV-B portion of the downward shortwave flux at the surface, covering 263-345 nm.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13914,6 +13940,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14029,6 +14056,7 @@
           "long_name": "Ventilation Rate",
           "short_name": "VRATE",
           "units": "m2 s-1",
+          "comment": "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a small value rounded down rather than missing data.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14734,7 +14762,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14793,7 +14821,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14852,7 +14880,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14911,7 +14939,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15379,6 +15407,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15437,6 +15466,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15495,6 +15525,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15965,6 +15996,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16140,6 +16172,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16198,6 +16231,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16492,6 +16526,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16841,6 +16876,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 120-90 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16899,6 +16935,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16957,6 +16994,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17427,6 +17465,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 60-30 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17602,6 +17641,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The 90-60 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17660,6 +17700,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17954,6 +17995,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "The mean wind through the depth of the planetary boundary layer, not the wind at its top.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

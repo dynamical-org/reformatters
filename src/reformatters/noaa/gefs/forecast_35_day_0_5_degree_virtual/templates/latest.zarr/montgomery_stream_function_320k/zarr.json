@@ -40,6 +40,7 @@
     "long_name": "Montgomery stream Function",
     "short_name": "mntsf",
     "units": "m2 s-2",
+    "comment": "NaN where this isentropic surface lies below the ground.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

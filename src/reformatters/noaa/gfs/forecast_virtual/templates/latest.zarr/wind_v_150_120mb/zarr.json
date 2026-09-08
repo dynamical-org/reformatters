@@ -39,6 +39,7 @@
     "short_name": "v",
     "standard_name": "northward_wind",
     "units": "m s-1",
+    "comment": "The 150-120 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
