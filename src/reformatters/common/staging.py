@@ -29,6 +29,11 @@ def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
     return f"stage-{trimmed_id}-v{version_dashes}-{suffix}"
 
 
+def is_staging_job_name(job_name: str) -> bool:
+    """Whether a pod's job name came from a staging cronjob."""
+    return job_name.startswith("stage-")
+
+
 def rename_cronjob_for_staging(
     cronjob: CronJob, dataset_id: str, version: str
 ) -> CronJob:

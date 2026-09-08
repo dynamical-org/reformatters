@@ -7,8 +7,8 @@ import pandas as pd
 import pydantic
 from icechunk.store import IcechunkStore
 
-from reformatters.common.download import s3_download_to_disk
 from reformatters.common.logging import get_logger
+from reformatters.common.staging import is_staging_job_name
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
@@ -37,7 +37,6 @@ from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
     hrrr_virtual_chunk_containers,
 )
-from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
 
 log = get_logger(__name__)
 
@@ -47,7 +46,7 @@ type SourceBucket = Literal["nodd", "cache"]
 def hrrr_18_hour_virtual_chunk_containers() -> tuple[
     icechunk.VirtualChunkContainer, ...
 ]:
-    """NODD plus the NOMADS cache; fresh objects per call like the NODD-only helper."""
+    """NODD plus the NOMADS cache."""
     return (
         *hrrr_virtual_chunk_containers(),
         icechunk.VirtualChunkContainer(
@@ -60,11 +59,8 @@ def hrrr_18_hour_virtual_chunk_containers() -> tuple[
 class NoaaHrrrForecast18HourVirtualSourceFileCoord(
     NoaaHrrrForecastVirtualSourceFileCoord
 ):
-    """An HRRR file resolved against NODD or the NOMADS cache (identical keys).
-
-    Discovery records where it found the file on the object the write loop hands it
-    (the loop drops coords by identity), so the three routing fields are assignable;
-    the fields naming the file stay frozen.
+    """An HRRR file resolved against NODD or the NOMADS cache (identical keys). The
+    routing fields are assignable; the fields naming the file stay frozen.
     """
 
     model_config = pydantic.ConfigDict(frozen=False, strict=True)
@@ -78,8 +74,17 @@ class NoaaHrrrForecast18HourVirtualSourceFileCoord(
     bucket: SourceBucket = "nodd"
     # A second pass over an already-ingested cache file, rewriting its refs from NODD.
     repoint: bool = False
-    # The cache's copy did not carry every variable this coord needs; use NODD.
+    # The cache's copy could not supply this coord's refs; use NODD.
     cache_rejected: bool = False
+    # Refs discovery built from the cache, so that what was validated is what is written.
+    _prepared_refs: list[VirtualRef] | None = pydantic.PrivateAttr(default=None)
+
+    @property
+    def prepared_refs(self) -> list[VirtualRef] | None:
+        return self._prepared_refs
+
+    def prepare(self, refs: list[VirtualRef]) -> None:
+        self._prepared_refs = refs
 
     def route_to(self, bucket: SourceBucket) -> None:
         self.bucket = bucket  # ty: ignore[invalid-assignment] - frozen=False here
@@ -118,8 +123,7 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     source_file_coord_class: ClassVar[
         type[NoaaHrrrForecast18HourVirtualSourceFileCoord]
     ] = NoaaHrrrForecast18HourVirtualSourceFileCoord
-    # Rollback knob: False stops selecting the cache for new files while repoints,
-    # markers and the container registration keep working.
+    # Rollback knob: False stops selecting the cache for new files; repoints go on.
     cache_first: ClassVar[bool] = True
     # Repoint twins wait on NODD for minutes to days; probing them every tick would
     # list every old date's NODD prefix each second ahead of the current init's files.
@@ -137,13 +141,20 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     def cache_store(self) -> obstore.store.ObjectStore:
         return nomads_cache_store(write=False)
 
+    def _owns_cache(self) -> bool:
+        """Only the production store repoints and marks cached files: a staging
+        version writing markers would tell production its repair work was done."""
+        return self.processing_mode == "update" and not is_staging_job_name(
+            self.reformat_job_name
+        )
+
     def cache_writer(self) -> obstore.store.ObjectStore:
         return nomads_cache_store(write=True)
 
     def unfinished_work(
         self, store: IcechunkStore
     ) -> list[NoaaHrrrForecastVirtualSourceFileCoord]:
-        if self.processing_mode != "update":
+        if not self._owns_cache():
             return super().unfinished_work(store)
         candidates = [_routed(coord) for coord in self.source_file_coords()]
         try:
@@ -154,11 +165,16 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
             )
             unrepointed = set()
         known = {coord.file_key() for coord in candidates}
+        root = self.template_ds.to_dataset()
+        init_times = root.get_index("init_time")
+        lead_times = root.get_index("lead_time")
         for key in unrepointed:
             parsed = parse_cache_key(key)
             assert parsed is not None
             init_time, lead_time, file_type = parsed
             if (init_time, lead_time, "conus", file_type) in known:
+                continue
+            if init_time not in init_times or lead_time not in lead_times:
                 continue
             coord = self.source_file_coord(
                 init_time, lead_time, file_type, self.data_vars
@@ -177,7 +193,7 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
     def discover_available(
         self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
     ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-        if self.processing_mode != "update" or not self.cache_first:
+        if not (self._owns_cache() and self.cache_first):
             return super().discover_available(pending)
         self._ticks += 1
         routed = [_routed(coord) for coord in pending]
@@ -196,14 +212,14 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
                 require_index=True,
             )
             for coord, size in in_cache:
-                if self._cache_index_covers(coord):
+                # Build the refs now: a cache copy that cannot supply every cell the
+                # coord names is left pending for NODD rather than dropped for the fire.
+                refs = self._file_refs_or_skip(coord, size)
+                if refs:
+                    coord.prepare(refs)
                     found.append((coord, size))
                 else:
                     coord.reject_cache()
-                    log.warning(
-                        f"Cache index for {cache_key(coord)} does not cover every "
-                        "variable the file supplies; waiting for NODD"
-                    )
         except Exception:
             # The cache is an accelerator; NODD stays the floor when it is unreachable.
             log.exception("Cannot read the NOMADS cache this tick; using NODD only")
@@ -225,6 +241,8 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
             tuple[NoaaHrrrForecastVirtualSourceFileCoord, Sequence[VirtualRef]]
         ],
     ) -> Sequence[NoaaHrrrForecastVirtualSourceFileCoord]:
+        if not self._owns_cache():
+            return ()
         follow_ups = []
         for coord, _ in batch:
             routed = _routed(coord)
@@ -253,24 +271,11 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
                 f"{len(missing) + len(refs)} expected cells; missing e.g. {sorted(missing)[:3]}"
             )
 
-    def _cache_index_covers(
-        self, coord: NoaaHrrrForecast18HourVirtualSourceFileCoord
-    ) -> bool:
-        index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=NOMADS_CACHE_BUCKET_REGION
-        )
-        try:
-            index_lines = parse_grib_index_lines(index_path)
-        finally:
-            index_path.unlink()
-        lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
-        out_loc_base = dict(coord.out_loc())
-        covered = {
-            (var.name, tuple(sorted({**out_loc_base, **level_label}.items())))
-            for _, element, level, window in index_lines
-            for var, level_label in lookup.get((element, level, window), [])
-        }
-        return self._expected_cells(coord) <= covered
+    def file_refs(
+        self, coord: NoaaHrrrForecastVirtualSourceFileCoord, file_size: int
+    ) -> list[VirtualRef]:
+        prepared = _routed(coord).prepared_refs
+        return prepared if prepared is not None else super().file_refs(coord, file_size)
 
     def _expected_cells(
         self, coord: NoaaHrrrForecastVirtualSourceFileCoord

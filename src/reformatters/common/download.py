@@ -240,13 +240,14 @@ def _httpx_get_with_retry(
     headers: dict[str, str] | None = None,
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+    retry_timeout: float = _RETRY_TIMEOUT_SECONDS,
 ) -> httpx.Response:
     client = _httpx_client()
     start_time = time.monotonic()
 
     last_exception: Exception | None = None
     for attempt in range(_MAX_RETRIES + 1):
-        if time.monotonic() - start_time > _RETRY_TIMEOUT_SECONDS:
+        if time.monotonic() - start_time > retry_timeout:
             break
 
         if attempt > 0:
@@ -318,8 +319,10 @@ def httpx_download_to_disk(
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
     disk_cache: bool = False,
+    retry_timeout: float = _RETRY_TIMEOUT_SECONDS,
 ) -> Path:
-    """httpx based download which supports redirects and maintains cookies."""
+    """httpx based download which supports redirects and maintains cookies.
+    Retries stop once `retry_timeout` seconds have passed since the first attempt."""
     parsed_url = urlparse(url)
     local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
     if disk_cache and local_path.exists():
@@ -338,6 +341,7 @@ def httpx_download_to_disk(
                 headers={"Range": range_header},
                 rate_limiter=rate_limiter,
                 retry_status_codes=retry_status_codes,
+                retry_timeout=retry_timeout,
             )
 
             content_type = response.headers.get("content-type", "")
@@ -351,7 +355,10 @@ def httpx_download_to_disk(
                 f.write(body)
         else:
             response = _httpx_get_with_retry(
-                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+                url,
+                rate_limiter=rate_limiter,
+                retry_status_codes=retry_status_codes,
+                retry_timeout=retry_timeout,
             )
             with open(temp_path, "wb") as f:
                 f.write(response.content)

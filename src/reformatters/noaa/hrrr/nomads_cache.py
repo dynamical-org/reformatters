@@ -122,8 +122,9 @@ def _write_credentials() -> dict[str, str]:
 
 
 class CheckNomadsCacheRepointed(Validator):
-    """Fail when a cached data file older than `max_age` has not been repointed to NODD:
-    NODD has not published it, so main still depends on the cache for it."""
+    """Fail when a cached data file older than `max_age` carries no repoint marker:
+    NODD has not published it, or its repoint has not landed; either way main may
+    still depend on the cache for it. docs/ops_card.md says how to tell which."""
 
     max_age: timedelta = timedelta(hours=3)
 
@@ -138,8 +139,9 @@ class CheckNomadsCacheRepointed(Validator):
         if stale:
             return ValidationResult(
                 passed=False,
-                message=f"{len(stale)} cached files older than {self.max_age} still "
-                f"point main at the cache (NODD has not published them): {stale[:10]}",
+                message=f"{len(stale)} cached files older than {self.max_age} have no "
+                f"repoint marker (NODD has not published them, or the repoint has not "
+                f"landed; see docs/ops_card.md): {stale[:10]}",
                 checked_count=len(listing),
             )
         return ValidationResult(

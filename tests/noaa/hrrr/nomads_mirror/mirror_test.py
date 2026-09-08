@@ -1,4 +1,5 @@
 from datetime import timedelta
+from itertools import count
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -64,7 +65,7 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
         nonlocal polls
         polls += 1
 
-    def download(url: str) -> Path:
+    def download(url: str, retry_timeout: float) -> Path:
         lead = next(
             lead for lead in leads if coord(lead).get_url(source="nomads") == url
         )
@@ -151,13 +152,51 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
 def test_download_from_nomads(monkeypatch: pytest.MonkeyPatch) -> None:
     download = Mock(return_value=Path("download"))
     monkeypatch.setattr(mirror, "httpx_download_to_disk", download)
-    assert mirror.download_from_nomads("url") == Path("download")
+    assert mirror.download_from_nomads("url", 42.0) == Path("download")
     download.assert_called_once_with(
         "url",
         "noaa-hrrr-nomads-cache",
         rate_limiter=mirror.nomads_rate_limiter,
         retry_status_codes=mirror.NOMADS_RETRY_STATUS_CODES,
+        retry_timeout=42.0,
     )
+
+
+def test_mirror_passes_its_remaining_time_as_the_download_retry_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    budgets: list[float] = []
+
+    def download(url: str, retry_timeout: float) -> Path:
+        budgets.append(retry_timeout)
+        raise httpx.HTTPStatusError(
+            "404", request=httpx.Request("GET", url), response=httpx.Response(404)
+        )
+
+    monkeypatch.setattr(mirror.time, "sleep", lambda _s: None)
+    start = pd.Timestamp("2026-09-08T20:00Z")
+    clock = count()
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(
+            lambda cls, *a, **k: start + pd.Timedelta(seconds=30 * next(clock))
+        ),
+    )
+    mirror.mirror_init_time(
+        INIT,
+        obstore.store.LocalStore(tmp_path, mkdir=True),
+        deadline=start + timedelta(minutes=5),
+        lead_hours={"sfc": [0]},
+        poll_interval=timedelta(0),
+        stop_margin=timedelta(minutes=2),
+        download=download,
+        max_invalid_attempts=1,
+    )
+    # Left of the deadline minus the stop margin: about three minutes, shrinking.
+    assert budgets
+    assert 150 <= budgets[0] <= 180
+    assert budgets[-1] <= budgets[0]
 
 
 def test_frontier_attempts_walk_past_a_run_of_unpublished_leads() -> None:

@@ -32,12 +32,13 @@ class MirrorResult(NamedTuple):
     skipped: list[str]
 
 
-def download_from_nomads(url: str) -> Path:
+def download_from_nomads(url: str, retry_timeout: float) -> Path:
     return httpx_download_to_disk(
         url,
         "noaa-hrrr-nomads-cache",
         rate_limiter=nomads_rate_limiter,
         retry_status_codes=NOMADS_RETRY_STATUS_CODES,
+        retry_timeout=retry_timeout,
     )
 
 
@@ -52,7 +53,7 @@ def mirror_init_time(
     frontier_width: int = 2,
     max_invalid_attempts: int = 3,
     stop_margin: timedelta = timedelta(minutes=2),
-    download: Callable[[str], Path] = download_from_nomads,
+    download: Callable[[str, float], Path] = download_from_nomads,
     build_index: Callable[[Path, Path], None] = write_grib_index,
 ) -> MirrorResult:
     listed = {
@@ -98,10 +99,15 @@ def mirror_init_time(
                 else coords[:1]
             )
             for coord in attempts:
-                if pd.Timestamp.now("UTC") >= deadline - stop_margin:
+                remaining = (deadline - pd.Timestamp.now("UTC")).total_seconds()
+                if remaining <= stop_margin.total_seconds():
                     return result
                 key = cache_key(coord)
-                path, unpublished = _download_published(coord, download)
+                path, unpublished = _download_published(
+                    coord,
+                    download,
+                    retry_timeout=remaining - stop_margin.total_seconds(),
+                )
                 if path is None:
                     if unpublished:
                         missing.append(coord)
@@ -147,13 +153,16 @@ def _skip_lower_unpublished(
 
 
 def _download_published(
-    coord: NoaaHrrrSourceFileCoord, download: Callable[[str], Path]
+    coord: NoaaHrrrSourceFileCoord,
+    download: Callable[[str, float], Path],
+    *,
+    retry_timeout: float,
 ) -> tuple[Path | None, bool]:
     """(downloaded file or None, whether NOMADS answered that it has no such file).
-    A failed request is (None, False): the downloader has already retried, and the
-    next poll tries again."""
+    A failed request is (None, False): the downloader has retried within
+    `retry_timeout` seconds, and the next poll tries again."""
     try:
-        return download(coord.get_url(source="nomads")), False
+        return download(coord.get_url(source="nomads"), retry_timeout), False
     except Exception as exc:  # noqa: BLE001
         if is_not_found(exc):
             return None, True

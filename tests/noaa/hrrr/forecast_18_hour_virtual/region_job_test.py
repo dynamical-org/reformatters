@@ -13,9 +13,6 @@ from reformatters.common import template_utils
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
-from reformatters.noaa.hrrr.forecast_18_hour_virtual import (
-    region_job as region_job_module,
-)
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
 )
@@ -155,10 +152,15 @@ def make_job(
     )
 
 
-def cache_file(tmp_path: Path, coord: NoaaHrrrSourceFileCoord, index: str) -> None:
+def cache_file(
+    tmp_path: Path,
+    coord: NoaaHrrrSourceFileCoord,
+    index: str,
+    grib: bytes | None = None,
+) -> None:
     path = tmp_path / "cache" / cache_key(coord)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"GRIB" * 4)
+    path.write_bytes(FIXTURE_GRIB.read_bytes() if grib is None else grib)
     path.with_name(path.name + ".idx").write_text(index)
 
 
@@ -230,14 +232,16 @@ def test_discover_available_prefers_the_cache_then_nodd(
         "discover_available",
         _nodd_listing({(CACHED_INIT, pd.Timedelta("1h"), "sfc")}),
     )
-    stub_cache_index_reads(monkeypatch, tmp_path)
+    stub_source_reads(monkeypatch, tmp_path)
 
     found = job.discover_available([cached, on_nodd, nowhere])
 
-    assert found == [(cached, 16), (on_nodd, 16)]
-    assert found[0][0] is cached
+    assert [(id(c), size) for c, size in found] == [
+        (id(cached), FIXTURE_GRIB.stat().st_size),
+        (id(on_nodd), 16),
+    ]
     assert cached.bucket == "cache"
-    assert found[1][0] is on_nodd
+    assert cached.prepared_refs
     assert on_nodd.bucket == "nodd"
     assert nowhere.bucket == "nodd"
     assert not nowhere.cache_rejected
@@ -256,7 +260,7 @@ def test_discover_available_rejects_a_cache_index_missing_a_variable(
     monkeypatch.setattr(
         NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
     )
-    stub_cache_index_reads(monkeypatch, tmp_path)
+    stub_source_reads(monkeypatch, tmp_path)
 
     assert job.discover_available([coord]) == []
     assert coord.cache_rejected
@@ -279,7 +283,7 @@ def test_discover_available_probes_repoint_twins_on_nodd_only(
     monkeypatch.setattr(
         NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
     )
-    stub_cache_index_reads(monkeypatch, tmp_path)
+    stub_source_reads(monkeypatch, tmp_path)
     assert job.discover_available([twin]) == []
     assert twin.bucket == "nodd"
 
@@ -394,16 +398,25 @@ def routed(
     return coord
 
 
-def stub_cache_index_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Serve `s3_download_to_disk` for cache index URLs from the local cache dir."""
+def stub_source_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Serve the index downloads and GRIB header reads `file_refs` makes from
+    `tmp_path/cache` and `tmp_path/nodd`, chosen by the URL's container prefix."""
+
+    def local_path(url: str) -> Path:
+        if url.startswith(NOMADS_CACHE_LOCATION_PREFIX):
+            return tmp_path / "cache" / url.removeprefix(NOMADS_CACHE_LOCATION_PREFIX)
+        return tmp_path / "nodd" / url.removeprefix(S3_LOCATION_PREFIX)
 
     def download(url: str, dataset_id: str, **kwargs: object) -> Path:
-        source = tmp_path / "cache" / url.removeprefix(NOMADS_CACHE_LOCATION_PREFIX)
         copy = tmp_path / f"{next(_copy_counter)}.idx"
-        copy.write_bytes(source.read_bytes())
+        copy.write_bytes(local_path(url).read_bytes())
         return copy
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", download)
+    def read_bytes(url: str, *, start: int, end: int, **kwargs: object) -> bytes:
+        return local_path(url).read_bytes()[start:end]
+
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", download)
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
 
 
 _copy_counter = count()
@@ -463,28 +476,13 @@ def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
                 publish_on_nodd()
             return super().discover_available(pending)
 
-    def local_dir(url: str) -> Path:
-        if url.startswith(NOMADS_CACHE_LOCATION_PREFIX):
-            return cache_dir / url.removeprefix(NOMADS_CACHE_LOCATION_PREFIX)
-        return nodd_dir / url.removeprefix(S3_LOCATION_PREFIX)
-
-    def download(url: str, dataset_id: str, **kwargs: object) -> Path:
-        copy = tmp_path / f"{next(_copy_counter)}.idx"
-        copy.write_bytes(local_dir(url).read_bytes())
-        return copy
-
-    def read_bytes(url: str, *, start: int, end: int, **kwargs: object) -> bytes:
-        return local_dir(url).read_bytes()[start:end]
-
     nodd_dir.mkdir()
     monkeypatch.setattr(
         shared_region_job_module,
         "s3_store",
         lambda bucket_url, region, **kwargs: obstore.store.LocalStore(nodd_dir),
     )
-    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", download)
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", download)
-    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
+    stub_source_reads(monkeypatch, tmp_path)
     monkeypatch.setattr(TwoSourceJob, "tick_interval", pd.Timedelta("0s"))
     monkeypatch.setattr(TwoSourceJob, "repoint_probe_every", 2)
 
@@ -583,3 +581,89 @@ def test_an_unreachable_cache_leaves_nodd_as_the_floor(
     work = job.unfinished_work(Mock())
     assert [routed(c).file_key() for c in work] == [coord.file_key()]
     assert not any(routed(c).repoint for c in work)
+
+
+def test_discovery_rejects_a_cache_file_whose_refs_cannot_be_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The index covers the variable but the data object is not GRIB at its offsets."""
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    coord = routed_coord([get_var("composite_reflectivity")])
+    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text(), grib=b"\0" * 700_000)
+    nodd = {(CACHED_INIT, LEAD_0, "sfc")}
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
+    )
+    stub_source_reads(monkeypatch, tmp_path)
+
+    assert job.discover_available([coord]) == []
+    assert coord.cache_rejected
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(nodd)
+    )
+    assert job.discover_available([coord]) == [(coord, 16)]
+    assert coord.bucket == "nodd"
+    assert coord.prepared_refs is None
+
+
+def test_prepared_cache_refs_are_what_file_refs_returns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    coord = routed_coord([get_var("composite_reflectivity")])
+    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
+    )
+    stub_source_reads(monkeypatch, tmp_path)
+    ((found, size),) = job.discover_available([coord])
+    assert found is coord
+    (ref,) = job.file_refs(coord, size)
+    assert ref.location == NOMADS_CACHE_LOCATION_PREFIX + cache_key(coord)
+    assert (ref.offset, ref.length) == (0, 381629)
+
+
+def test_a_staging_store_never_selects_repoints_or_marks_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    job = job.model_copy(
+        update={"reformat_job_name": "stage-noaa-hrrr-v0-2-0-update-1"}
+    )
+    coord = routed(job.source_file_coords()[0])
+    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
+    )
+    stub_source_reads(monkeypatch, tmp_path)
+
+    assert job.discover_available([coord]) == []
+    assert coord.bucket == "nodd"
+    monkeypatch.setattr(
+        NoaaHrrrForecast18HourVirtualRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [],
+    )
+    assert job.unfinished_work(Mock()) == []
+    twin = coord.repoint_twin()
+    assert job.committed([(twin, [])]) == ()
+    assert not (
+        tmp_path / "cache" / (cache_key(twin) + REPOINTED_MARKER_SUFFIX)
+    ).exists()
+
+
+def test_unfinished_work_ignores_cache_files_outside_the_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("composite_reflectivity")]
+    job = make_job(tmp_path, data_vars)
+    beyond_lead = routed_coord(data_vars, lead_time=pd.Timedelta("40h"))
+    beyond_init = routed_coord(data_vars, init_time=CACHED_INIT + pd.Timedelta("48h"))
+    for coord in (beyond_lead, beyond_init):
+        cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
+    monkeypatch.setattr(
+        NoaaHrrrForecast18HourVirtualRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [],
+    )
+    assert job.unfinished_work(Mock()) == []
