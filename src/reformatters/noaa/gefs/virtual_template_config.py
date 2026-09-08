@@ -2186,6 +2186,13 @@ def _a_b_root_data_vars(
             short_name="hlcy",
             long_name="Storm relative helicity",
             units="m2 s-2",
+            comment=(
+                "Uses a right-moving storm motion in both hemispheres, so southern "
+                "hemisphere values are positive-mean rather than mirrored. Some source "
+                "values reach magnitudes near 100,000 m2 s-2, far above the roughly "
+                "1,500 m2 s-2 physical ceiling for this quantity. Mask absolute values "
+                "above 2,000."
+            ),
         ),
         var(
             "u_component_storm_motion_6000_0m",
