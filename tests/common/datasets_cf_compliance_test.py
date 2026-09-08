@@ -9,8 +9,10 @@ import pytest
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.types import Dim
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -1669,4 +1671,147 @@ def test_metadata_consistency_across_datasets() -> None:
 
     assert not conflicts, (
         "Metadata inconsistencies found across datasets:\n\n" + "\n\n".join(conflicts)
+    )
+
+
+# --- Declared units vs. decode filter chain ---
+
+CELSIUS_UNITS = "degree_Celsius"
+KELVIN_TO_CELSIUS_OFFSET = -273.15
+
+# Placeholders emitted where the source could not name the parameter, left in place
+# by configs that locate their messages by some other key. They are not element
+# names: two genuinely different parameters can carry either string, so as a
+# grouping key they identify nothing and would group unrelated variables together.
+# Excluding a degenerate key is not an exception list -- it states that the key
+# does not identify anything there.
+DEGENERATE_GRIB_ELEMENT_KEYS = frozenset({"", "unknown"})
+
+
+def _has_kelvin_to_celsius_filter(var_config: DataVar[Any]) -> bool:
+    """Whether a variable's filter chain converts Kelvin to Celsius on read."""
+    return any(
+        codec.get("name") == "scale_offset"
+        and codec.get("configuration", {}).get("offset") == KELVIN_TO_CELSIUS_OFFSET
+        for codec in var_config.encoding.filters or ()
+    )
+
+
+def test_celsius_units_match_decode_filters() -> None:
+    """
+    One invariant: declaring degree_Celsius implies the Kelvin conversion happened.
+    Each dataset family performs it somewhere else, so the invariant is stated per
+    family rather than as two independent rules.
+
+    - A virtual dataset references the source GRIB bytes unchanged, and those are
+      Kelvin, so the conversion must be a decode-time ScaleOffset carrying
+      offset=-273.15.
+    - A materialized dataset converts in read_data before writing, so the stored
+      bytes are already Celsius and must carry no such filter, which would
+      subtract 273.15 a second time.
+
+    The asymmetry is deliberate: filter equality across the two families is false
+    by construction for every Celsius variable here, so do not "fix" it.
+
+    A regression fence, not a bug report -- it holds with no exceptions today. It
+    exists because the conversion cannot be read off a call site: the filter is
+    supplied by default from a per-element set, an explicit filters= argument
+    silently overrides that default, and an override omitting the offset publishes
+    Kelvin values declaring degree_Celsius with nothing raising. Absence of a
+    filters= argument likewise means "converted" for an element in that set and
+    means nothing for any element outside it. Which variables exercise which path
+    changes; the repo is the source of truth for that and this test does not
+    name them.
+    """
+    problems: list[str] = []
+    checked = 0
+
+    for dataset in IMPLEMENTED_DATASETS:
+        is_virtual = issubclass(dataset.region_job_class, VirtualRegionJob)
+        for var_config in dataset.template_config.data_vars:
+            if var_config.attrs.units != CELSIUS_UNITS:
+                continue
+            checked += 1
+            has_filter = _has_kelvin_to_celsius_filter(var_config)
+            if is_virtual and not has_filter:
+                problems.append(
+                    f"{dataset.dataset_id}/{var_config.path} declares "
+                    f"{CELSIUS_UNITS} in a virtual dataset but no ScaleOffset "
+                    f"applies offset={KELVIN_TO_CELSIUS_OFFSET}, so readers get "
+                    f"Kelvin labelled Celsius. filters={var_config.encoding.filters}"
+                )
+            elif not is_virtual and has_filter:
+                problems.append(
+                    f"{dataset.dataset_id}/{var_config.path} declares "
+                    f"{CELSIUS_UNITS} in a materialized dataset and also applies "
+                    f"offset={KELVIN_TO_CELSIUS_OFFSET} on read, subtracting "
+                    f"273.15 from values read_data already converted. "
+                    f"filters={var_config.encoding.filters}"
+                )
+
+    # A rename of units or of the filter dict shape would leave every branch above
+    # unreachable and this test passing on nothing, which is indistinguishable from
+    # passing on real data. 235 variables qualify today.
+    assert checked > 100, f"only {checked} {CELSIUS_UNITS} variables found to check"
+    assert not problems, "Celsius unit/filter mismatches found:\n" + "\n".join(problems)
+
+
+def test_same_grib_element_and_units_have_same_filters() -> None:
+    """
+    Within one dataset, two variables reading the same GRIB element and declaring
+    the same units must decode those bytes identically. The source bytes and the
+    declared destination units are the same on both sides, so any difference in
+    the filter chain means one of the two is mislabelled.
+
+    Same element with *different* declared units is legitimate and not checked
+    here: GRIB reuses an element across meanings, and a config may publish one
+    element as two variables in two units on purpose. Variables whose element is
+    a degenerate key are excluded, since there the key names no parameter.
+
+    A regression fence: it holds with no exceptions today. It has surface because
+    these configs repeat an element widely across separately maintained blocks,
+    per vertical level and per statistic, and the copies are never compared to
+    each other. When written, 21 elements appeared more than once in the GEFS
+    16 day virtual catalog and 35 did in the GFS forecast virtual catalog.
+    """
+    problems: list[str] = []
+    checked_groups = 0
+
+    for dataset in IMPLEMENTED_DATASETS:
+        vars_by_element_and_units: dict[tuple[str, str], list[DataVar[Any]]] = {}
+        for var_config in dataset.template_config.data_vars:
+            # Non-GRIB sources have no such field and are not applicable.
+            element = getattr(var_config.internal_attrs, "grib_element", None)
+            if element is None or element.strip().lower() in (
+                DEGENERATE_GRIB_ELEMENT_KEYS
+            ):
+                continue
+            vars_by_element_and_units.setdefault(
+                (element, var_config.attrs.units), []
+            ).append(var_config)
+
+        for (element, units), var_configs in vars_by_element_and_units.items():
+            if len(var_configs) < 2:
+                continue
+            checked_groups += 1
+            filters_to_vars: dict[str, list[str]] = {}
+            for var_config in var_configs:
+                key = repr(tuple(var_config.encoding.filters or ()))
+                filters_to_vars.setdefault(key, []).append(var_config.path)
+            if len(filters_to_vars) > 1:
+                detail = "\n".join(
+                    f"    {filters}: {', '.join(paths)}"
+                    for filters, paths in filters_to_vars.items()
+                )
+                problems.append(
+                    f"{dataset.dataset_id} reads GRIB element {element} as "
+                    f"units='{units}' with differing filters, so at most one of "
+                    f"these is correct:\n{detail}"
+                )
+
+    # Guards against the check silently covering nothing, e.g. if grib_element were
+    # renamed and the getattr above began skipping every variable. 256 groups today.
+    assert checked_groups > 100, f"only {checked_groups} groups found to check"
+    assert not problems, "GRIB element/units filter mismatches found:\n" + "\n".join(
+        problems
     )
