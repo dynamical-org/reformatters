@@ -39,6 +39,7 @@
   "attributes": {
     "long_name": "Precipitable water",
     "short_name": "pwat",
+    "standard_name": "mass_content_of_water_vapor_in_atmosphere_layer",
     "units": "kg m-2",
     "comment": "Integrated over the 30 mb layer above ground, not the whole column; precipitable_water_atmosphere carries the column total.",
     "step_type": "instant",

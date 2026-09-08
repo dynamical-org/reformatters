@@ -162,19 +162,19 @@ _DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
 
 _MAX_WIND_SEARCH_LAYER = (
     "The source finds this level by searching a bounded layer rather than the "
-    "whole column, so the column wind maximum can lie above it, and often does "
-    "over the winter pole."
+    "whole column, so the column wind maximum can lie above it."
 )
 
 _PRESSURE_DIFFERENCE_LAYER = (
-    "The {} in the name are pressure differences from the surface, not isobaric "
-    "levels, so this layer sits just above the ground rather than in the upper "
-    "troposphere."
+    "The {layer} in the name are pressure differences from the surface, not "
+    "isobaric levels, so this layer sits just above the ground rather than in "
+    "the upper troposphere."
 )
 
 _CONVECTIVE_INHIBITION = (
-    "Negative by convention, and no inhibition reads as a small negative value "
-    "rather than exactly 0, so selecting cells equal to 0 finds nothing."
+    "Negative where there is inhibition and at or near zero where there is "
+    "none, so distinguish the two with a tolerance rather than an exact "
+    "comparison."
 )
 
 _SOIL_MOISTURE_LAND_ICE = (
@@ -2235,7 +2235,11 @@ def _a_b_root_data_vars(
             short_name="ustm",
             long_name="U-component storm motion",
             units="m s-1",
-            comment="The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+            comment=(
+                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
+            ),
         ),
         var(
             "v_component_storm_motion_6000_0m",
@@ -2245,7 +2249,11 @@ def _a_b_root_data_vars(
             short_name="vstm",
             long_name="V-component storm motion",
             units="m s-1",
-            comment="The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+            comment=(
+                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
+            ),
         ),
         var(
             "pressure_tropopause",
@@ -2572,6 +2580,7 @@ def _a_b_root_data_vars(
             short_name="pwat",
             long_name="Precipitable water",
             units="kg m-2",
+            standard_name="mass_content_of_water_vapor_in_atmosphere_layer",
             comment=(
                 "Integrated over the 30 mb layer above ground, not the whole column; "
                 "precipitable_water_atmosphere carries the column total."
@@ -2596,7 +2605,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         var(
             "relative_humidity_60_30mb",
@@ -2607,7 +2616,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         var(
             "specific_humidity_60_30mb",
@@ -2618,7 +2627,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         var(
             "wind_u_60_30mb",
@@ -2629,7 +2638,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         var(
             "wind_v_60_30mb",
@@ -2640,7 +2649,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("60-30 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="60-30 mb"),
         ),
         var(
             "temperature_90_60mb",
@@ -2651,7 +2660,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         var(
             "relative_humidity_90_60mb",
@@ -2662,7 +2671,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         var(
             "specific_humidity_90_60mb",
@@ -2673,7 +2682,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         var(
             "wind_u_90_60mb",
@@ -2684,7 +2693,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         var(
             "wind_v_90_60mb",
@@ -2695,7 +2704,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("90-60 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="90-60 mb"),
         ),
         var(
             "temperature_120_90mb",
@@ -2706,7 +2715,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         var(
             "relative_humidity_120_90mb",
@@ -2717,7 +2726,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         var(
             "specific_humidity_120_90mb",
@@ -2728,7 +2737,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         var(
             "wind_u_120_90mb",
@@ -2739,7 +2748,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         var(
             "wind_v_120_90mb",
@@ -2750,7 +2759,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("120-90 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="120-90 mb"),
         ),
         var(
             "temperature_150_120mb",
@@ -2761,7 +2770,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         var(
             "relative_humidity_150_120mb",
@@ -2772,7 +2781,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         var(
             "specific_humidity_150_120mb",
@@ -2783,7 +2792,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         var(
             "wind_u_150_120mb",
@@ -2794,7 +2803,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         var(
             "wind_v_150_120mb",
@@ -2805,7 +2814,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("150-120 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="150-120 mb"),
         ),
         var(
             "temperature_180_150mb",
@@ -2816,7 +2825,7 @@ def _a_b_root_data_vars(
             long_name="Temperature",
             units="degree_Celsius",
             standard_name="air_temperature",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         var(
             "relative_humidity_180_150mb",
@@ -2827,7 +2836,7 @@ def _a_b_root_data_vars(
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         var(
             "specific_humidity_180_150mb",
@@ -2838,7 +2847,7 @@ def _a_b_root_data_vars(
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         var(
             "wind_u_180_150mb",
@@ -2849,7 +2858,7 @@ def _a_b_root_data_vars(
             long_name="U component of wind",
             units="m s-1",
             standard_name="eastward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         var(
             "wind_v_180_150mb",
@@ -2860,7 +2869,7 @@ def _a_b_root_data_vars(
             long_name="V component of wind",
             units="m s-1",
             standard_name="northward_wind",
-            comment=_PRESSURE_DIFFERENCE_LAYER.format("180-150 mb"),
+            comment=_PRESSURE_DIFFERENCE_LAYER.format(layer="180-150 mb"),
         ),
         var(
             "best_4_layer_lifted_index_surface",

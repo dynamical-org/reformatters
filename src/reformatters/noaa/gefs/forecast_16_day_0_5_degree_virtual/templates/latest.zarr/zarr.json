@@ -1915,7 +1915,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1974,7 +1974,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2033,7 +2033,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3149,7 +3149,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4334,7 +4334,7 @@
           "long_name": "ICAO Standard Atmosphere reference height",
           "short_name": "icaht",
           "units": "m",
-          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries. The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "Pressure altitude: the ICAO Standard Atmosphere height for this level's pressure, not its actual height, which geopotential_height_max_wind carries. The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7158,6 +7158,7 @@
         "attributes": {
           "long_name": "Precipitable water",
           "short_name": "pwat",
+          "standard_name": "mass_content_of_water_vapor_in_atmosphere_layer",
           "units": "kg m-2",
           "comment": "Integrated over the 30 mb layer above ground, not the whole column; precipitable_water_atmosphere carries the column total.",
           "step_type": "instant",
@@ -9014,7 +9015,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -12959,7 +12960,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13588,7 +13589,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
-          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+          "comment": "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13940,7 +13941,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
-          "comment": "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+          "comment": "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16231,7 +16232,7 @@
           "short_name": "u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
-          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17700,7 +17701,7 @@
           "short_name": "v",
           "standard_name": "northward_wind",
           "units": "m s-1",
-          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
+          "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

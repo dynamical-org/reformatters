@@ -324,10 +324,10 @@ def test_flag_variables_carry_only_their_codes(
     severity = get_var(config, "pressure_level/icing_severity")
     assert severity.attrs.flag_values == (0, 1, 2, 3, 4, 5)
     assert severity.attrs.flag_meanings == "none light moderate severe trace heavy"
-    assert (
-        severity.attrs.comment
-        == get_var(config, "pressure_level/icing_probability").attrs.comment
-    )
+    probability = get_var(config, "pressure_level/icing_probability")
+    assert severity.attrs.comment is not None
+    assert severity.attrs.comment == probability.attrs.comment
+    assert "hour period" not in severity.attrs.comment
 
 
 @AB_CONFIG_PARAMS

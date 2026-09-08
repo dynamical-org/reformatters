@@ -68,9 +68,11 @@ _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
 _MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM = pd.Timestamp("2020-12-02T13:00")
 
 _CONVECTIVE_INHIBITION = (
-    "Negative by convention, and no inhibition reads as a small negative value "
-    "rather than exactly 0, so selecting cells equal to 0 finds nothing."
+    "Negative where there is inhibition and at or near zero where there is "
+    "none, so distinguish the two with a tolerance rather than an exact "
+    "comparison."
 )
+
 type WindowKind = Literal["instant", "max", "min", "avg", "acc_run", "acc_1h"]
 
 # Each windowed kind's (step_type, window_reset_frequency). acc_run is the
@@ -666,8 +668,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
             comment=(
                 "The 100-1000 mb in the name are pressure differences from the surface, "
-                "not isobaric levels, so this layer sits just above the ground rather "
-                "than in the upper troposphere."
+                "not isobaric levels."
             ),
         ),
         root_var(
@@ -681,8 +682,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
             comment=(
                 "The 100-1000 mb in the name are pressure differences from the surface, "
-                "not isobaric levels, so this layer sits just above the ground rather "
-                "than in the upper troposphere."
+                "not isobaric levels."
             ),
         ),
         root_var(
@@ -1629,9 +1629,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="U-component storm motion",
             units="m s-1",
             comment=(
-                "Velocity along the model grid's x dimension, not eastward velocity. "
-                "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation "
-                "clockwise of the 1000-500 hPa mean wind, not the mean wind itself."
+                "Velocity along the model grid's x dimension, not eastward velocity. The "
+                "Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
             ),
         ),
         root_var(
@@ -1643,8 +1644,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             units="m s-1",
             comment=(
                 "Velocity along the model grid's y dimension, not northward velocity. "
-                "The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation "
-                "clockwise of the 1000-500 hPa mean wind, not the mean wind itself."
+                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
+                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
+                "the mean wind itself."
             ),
         ),
         root_var(

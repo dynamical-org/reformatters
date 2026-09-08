@@ -37,7 +37,7 @@
     "short_name": "cin",
     "standard_name": "atmosphere_convective_inhibition",
     "units": "J kg-1",
-    "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+    "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

@@ -1011,7 +1011,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1064,7 +1064,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1117,7 +1117,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -1170,7 +1170,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "Negative by convention, and no inhibition reads as a small negative value rather than exactly 0, so selecting cells equal to 0 finds nothing.",
+          "comment": "Negative where there is inhibition and at or near zero where there is none, so distinguish the two with a tolerance rather than an exact comparison.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -3443,7 +3443,7 @@
           "long_name": "Maximum downward vertical velocity",
           "short_name": "maxdvv",
           "units": "m s-1",
-          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
+          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels.",
           "step_type": "max",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -3906,7 +3906,7 @@
           "short_name": "maxuvv",
           "standard_name": "upward_air_velocity",
           "units": "m s-1",
-          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
+          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels.",
           "step_type": "max",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9313,7 +9313,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
-          "comment": "Velocity along the model grid's x dimension, not eastward velocity. The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+          "comment": "Velocity along the model grid's x dimension, not eastward velocity. The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
@@ -9573,7 +9573,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
-          "comment": "Velocity along the model grid's y dimension, not northward velocity. The Bunkers right-moving supercell motion, a fixed 7.5 m s-1 deviation clockwise of the 1000-500 hPa mean wind, not the mean wind itself.",
+          "comment": "Velocity along the model grid's y dimension, not northward velocity. The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not the mean wind itself.",
           "step_type": "instant",
           "coordinates": "latitude longitude spatial_ref",
           "_FillValue": "AAAAAAAA+H8="
