@@ -36,7 +36,8 @@ def coord(lead: int) -> NoaaHrrrSourceFileCoord:
         "frontier",
         "deadline",
         "offsets",
-        "download_error",
+        "transport_error",
+        "late_frontier",
     ],
 )
 def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) -> None:  # noqa: PLR0915
@@ -44,7 +45,13 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
     requested: list[int] = []
     uploaded: list[str] = []
     polls = 0
-    leads = [5, 6] if scenario == "frontier" else [0, 1]
+    leads = (
+        [5, 6, 7]
+        if scenario == "frontier"
+        else [5, 6]
+        if scenario == "late_frontier"
+        else [0, 1]
+    )
     if scenario == "cached":
         obstore.put(cache, cache_key(coord(0)) + ".idx", b"cached")
     original_put = obstore.put
@@ -62,16 +69,18 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
             lead for lead in leads if coord(lead).get_url(source="nomads") == url
         )
         requested.append(lead)
-        if (scenario == "frontier" and lead == 5) or (
-            scenario == "published" and polls == 0
+        if (
+            (scenario == "frontier" and lead in {5, 6})
+            or (scenario == "late_frontier" and lead == 5 and polls < 6)
+            or (scenario == "published" and polls == 0)
         ):
             raise httpx.HTTPStatusError(
                 "404", request=httpx.Request("GET", url), response=httpx.Response(404)
             )
-        if scenario == "download_error":
-            raise RuntimeError("download failed")
+        if scenario == "transport_error" and len(requested) <= 4:
+            raise httpx.TransportError("download failed")
         data = FIXTURE.read_bytes()
-        if scenario == "truncated":
+        if scenario == "truncated" or (scenario == "late_frontier" and lead == 6):
             data = data[:-10]
         if scenario == "fewer" and lead == 1:
             data = data[
@@ -100,10 +109,11 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
         INIT,
         cache,
         deadline=pd.Timestamp.now("UTC")
-        + timedelta(seconds=-1 if scenario == "deadline" else 20),
+        + timedelta(seconds=119 if scenario == "deadline" else 180),
         lead_hours={"sfc": leads},
         poll_interval=timedelta(0),
         frontier_probe_every=2,
+        frontier_width=2,
         download=download,
         build_index=build_index,
     )
@@ -111,15 +121,22 @@ def test_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: str) 
     if scenario == "deadline":
         assert result == ([], [])
         assert not requested
-    elif scenario in {"truncated", "offsets", "download_error"}:
+    elif scenario in {"truncated", "offsets"}:
         assert result == ([], keys)
         assert requested == [0, 0, 1, 0, 1, 1]
         assert not uploaded
     elif scenario == "fewer":
         assert result == ([keys[0]], [keys[1]])
     elif scenario == "frontier":
-        assert result == ([keys[1]], [keys[0]])
-        assert requested == [5, 5, 6]
+        assert result == ([keys[2]], keys[:2])
+        assert requested == [5, 5, 6, 7]
+    elif scenario == "late_frontier":
+        assert result == ([keys[0]], [keys[1]])
+        assert requested.count(6) == 3
+        assert requested.count(5) == 7
+    elif scenario == "transport_error":
+        assert result == (keys, [])
+        assert len(requested) == 6
     elif scenario == "cached":
         assert result == ([keys[1]], [])
         assert requested == [1]

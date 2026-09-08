@@ -18,6 +18,7 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
     NoaaHrrrForecast18HourVirtualRegionJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.nomads_cache import CheckNomadsCacheRepointed
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
 _Y, _X = 635, 1062
@@ -194,7 +195,10 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 4
+    assert any(
+        isinstance(validator, CheckNomadsCacheRepointed) for validator in validators
+    )
     (current_data,) = [
         validator
         for validator in validators
@@ -233,8 +237,8 @@ def test_manifest_split_size_resolves_per_group(
     assert _resolved_split_size(split, "/temperature_2m") == 1500
 
 
-def test_virtual_container_matches_ref_prefix(
+def test_virtual_containers_match_the_ref_prefixes_of_both_sources(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
-    (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "s3://noaa-hrrr-bdp-pds/"
+    prefixes = [c.url_prefix for c in dataset.icechunk_virtual_config.containers]
+    assert prefixes == ["s3://noaa-hrrr-bdp-pds/", "s3://dynamical-noaa-hrrr-nomads/"]

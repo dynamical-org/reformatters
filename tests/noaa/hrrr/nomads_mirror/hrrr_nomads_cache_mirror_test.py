@@ -27,3 +27,16 @@ def test_cron_and_cli() -> None:
         pd.Timestamp(value)
         for value in ["2026-09-08T19:00Z", "2026-09-08T19:49Z", "2026-09-08T20:43Z"]
     )
+
+
+def test_mirror_window_after_hour() -> None:
+    (cron,) = NoaaHrrrNomadsCacheMirror().operational_kubernetes_resources("test-image")
+    now = pd.Timestamp("2026-09-08T20:10Z")
+    fire = cron.previous_fire_time(now)
+    assert fire.tzinfo is not None
+    assert fire == pd.Timestamp("2026-09-08T19:45Z")
+    assert mirror_window(now, cron, 49) == (
+        pd.Timestamp("2026-09-08T19:00Z"),
+        pd.Timestamp("2026-09-08T19:49Z"),
+        pd.Timestamp("2026-09-08T20:43Z"),
+    )

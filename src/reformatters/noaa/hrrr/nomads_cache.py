@@ -8,10 +8,10 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Final, cast
 
-import boto3
 import obstore
 import obstore.store
 import pandas as pd
+import s3fs
 
 from reformatters.common import download, kubernetes
 from reformatters.common.validation import (
@@ -20,7 +20,7 @@ from reformatters.common.validation import (
     Validator,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrFileType
-from reformatters.noaa.hrrr.region_job import NODD_HTTPS_PREFIX, NoaaHrrrSourceFileCoord
+from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 NOMADS_CACHE_BUCKET: Final = "dynamical-noaa-hrrr-nomads"
 NOMADS_CACHE_BUCKET_REGION: Final = "us-west-2"
@@ -38,9 +38,7 @@ _CACHE_KEY_PATTERN = re.compile(
 
 def cache_key(coord: NoaaHrrrSourceFileCoord) -> str:
     """The cache object key for coord's data file: identical to its NODD key."""
-    url = coord.get_url(source="s3")
-    assert url.startswith(NODD_HTTPS_PREFIX)
-    return url.removeprefix(NODD_HTTPS_PREFIX)
+    return coord.relative_path()
 
 
 def parse_cache_key(
@@ -99,17 +97,13 @@ def mark_repointed(key: str, store: obstore.store.ObjectStore) -> None:
 
 def _tag_repointed(keys: Sequence[str]) -> None:
     credentials = _write_credentials()
-    client = boto3.client(
-        "s3",
-        region_name=NOMADS_CACHE_BUCKET_REGION,
-        aws_access_key_id=credentials.get("access_key_id"),
-        aws_secret_access_key=credentials.get("secret_access_key"),
+    fs = s3fs.S3FileSystem(
+        key=credentials.get("access_key_id"),
+        secret=credentials.get("secret_access_key"),
+        client_kwargs={"region_name": NOMADS_CACHE_BUCKET_REGION},
     )
-    tag_set = [{"Key": k, "Value": v} for k, v in REPOINTED_TAG.items()]
     for key in keys:
-        client.put_object_tagging(
-            Bucket=NOMADS_CACHE_BUCKET, Key=key, Tagging={"TagSet": tag_set}
-        )
+        fs.put_tags(f"{NOMADS_CACHE_BUCKET}/{key}", dict(REPOINTED_TAG))
 
 
 def _write_credentials() -> dict[str, str]:

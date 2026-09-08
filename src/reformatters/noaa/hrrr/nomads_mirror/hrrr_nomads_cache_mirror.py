@@ -66,12 +66,12 @@ class NoaaHrrrNomadsCacheMirror(OperationalResources):
                 now, self._operational_cron_job(CronJob), poll_start_minutes
             )
             wait = max(0, (poll_start - now).total_seconds())
-            log.info("Waiting %.2f seconds to mirror %s", wait, init_time)
+            log.info(f"Waiting {wait:.2f} seconds to mirror {init_time}")
             time.sleep(wait)
             result = mirror_init_time(
                 init_time, nomads_cache_store(write=True), deadline=deadline
             )
-            log.info("Mirror result: %s", result)
+            log.info(f"Mirror result: {result}")
 
     def get_cli(self) -> typer.Typer:
         app = typer.Typer()
