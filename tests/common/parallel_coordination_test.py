@@ -467,7 +467,7 @@ class TestWaitForWorkers:
             pc.wait_for_workers(factory, "job", workers_total=12)  # ty: ignore[invalid-argument-type]
 
         assert "Waiting for 12 of 12 workers" in caplog.text
-        assert "missing worker indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]" in caplog.text
+        assert "missing worker indexes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]" in caplog.text
         assert "10, 11" not in caplog.text
 
 
