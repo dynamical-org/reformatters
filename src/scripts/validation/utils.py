@@ -366,10 +366,15 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     return repo.readonly_session("main").store
 
 
+# Backoff grows with attempt in retry(), so these attempts span several minutes,
+# matching the whole-archive manifest scan's budget.
+_LOAD_MAX_ATTEMPTS = 20
+
+
 def load_retried(da: xr.DataArray) -> xr.DataArray:
     """Hours-long runs make enough object store reads that a transient failure is
     near-certain; reads are idempotent so retry them."""
-    return retry(da.load)
+    return retry(da.load, max_attempts=_LOAD_MAX_ATTEMPTS)
 
 
 def load_zarr_dataset(url: str) -> xr.Dataset:
