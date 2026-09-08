@@ -47,6 +47,7 @@
     "short_name": "t",
     "standard_name": "air_temperature",
     "units": "degree_Celsius",
+    "comment": "The 180-150 mb in the name are pressure differences from the surface, not isobaric levels, so this layer sits just above the ground rather than in the upper troposphere.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

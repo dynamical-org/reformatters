@@ -37,6 +37,7 @@
     "short_name": "prmsl",
     "standard_name": "air_pressure_at_mean_sea_level",
     "units": "Pa",
+    "comment": "The model's standard mean sea level reduction, an alternative to pressure_reduced_to_mean_sea_level_eta_model in this dataset.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

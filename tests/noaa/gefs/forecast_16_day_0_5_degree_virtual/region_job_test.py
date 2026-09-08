@@ -300,6 +300,11 @@ assert all(_IDX_FIXTURE_NAME.match(name) for name in _IDX_FIXTURES), _IDX_FIXTUR
 # 125 mb, the one isobaric level outside the 31 the pressure_level dimension spans.
 _DECLINED = (("HGT", "surface"), ("O3MR", "125 mb"))
 
+# Sunshine duration is published at lead 0 as an analysis message, but the value there
+# is a partial accumulation window rather than the zero-length one that step type
+# implies, so the catalog declines it at lead 0 alone.
+_DECLINED_AT_LEAD_0 = (("SUNSD", "surface"),)
+
 
 @pytest.mark.parametrize("fixture_name", _IDX_FIXTURES)
 def test_every_requested_variable_maps_to_a_real_message(
@@ -360,7 +365,12 @@ def test_every_requested_variable_maps_to_a_real_message(
     declined = [
         fields
         for fields in messages
-        if (fields[3], fields[4]) in _DECLINED or fields[5].startswith("0-0 ")
+        if (fields[3], fields[4]) in _DECLINED
+        or (
+            lead_time == pd.Timedelta(0)
+            and (fields[3], fields[4]) in _DECLINED_AT_LEAD_0
+        )
+        or fields[5].startswith("0-0 ")
     ]
     assert len(refs) == len(messages) - len(declined), (
         f"{fixture_name}: {len(refs)} refs for {len(messages)} messages "

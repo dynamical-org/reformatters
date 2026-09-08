@@ -43,6 +43,7 @@
     "short_name": "t",
     "standard_name": "air_temperature",
     "units": "degree_Celsius",
+    "comment": "The source finds this level by searching a bounded layer rather than the whole column, so the column wind maximum can lie above it, and often does over the winter pole.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
