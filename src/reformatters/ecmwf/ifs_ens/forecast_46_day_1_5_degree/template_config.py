@@ -18,7 +18,7 @@ from reformatters.common.deaccumulation import (
     PRECIPITATION_RATE_INVALID_BELOW_THRESHOLD,
     RADIATION_INVALID_BELOW_THRESHOLD,
 )
-from reformatters.common.types import Dim, Dims, Timedelta
+from reformatters.common.types import Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -62,6 +62,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
         ),
     }
 
+    append_dim_start: Timestamp = pd.Timestamp("2026-01-01T00:00")
     lead_time_frequency: Timedelta = pd.Timedelta("24h")
 
     @computed_field
@@ -69,7 +70,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-46-day-1-5-degree",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="ECMWF IFS ENS forecast, 46 day, 1.5 degree",
             description="Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
             attribution="ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
