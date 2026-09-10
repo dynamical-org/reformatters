@@ -1,7 +1,7 @@
 import logging
 import signal
 from datetime import timedelta
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 import sentry_sdk
@@ -35,12 +35,13 @@ def test_monitor_cron_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None
     with monitor_cron(_CRON_JOB, "job-name"):
         pass
     statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "ok"]
+    assert statuses == ["in_progress", "ok", "ok"]
+    assert len({c.kwargs["check_in_id"] for c in mock_capture.call_args_list}) == 1
 
     call_kwargs = mock_capture.call_args_list[0].kwargs
     assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
     assert call_kwargs["monitor_config"]["max_runtime"] == 120
-    mock_flush.assert_called_once_with(timeout=15)
+    assert mock_flush.call_args_list == [call(timeout=15)] * 2
 
     mock_capture.reset_mock()
     mock_flush.reset_mock()
@@ -48,8 +49,8 @@ def test_monitor_cron_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None
         with monitor_cron(_CRON_JOB, "job-name"):
             raise ValueError("failure")
     statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
-    assert statuses == ["in_progress", "error"]
-    mock_flush.assert_called_once_with(timeout=15)
+    assert statuses == ["in_progress", "error", "error"]
+    assert mock_flush.call_args_list == [call(timeout=15)] * 2
 
 
 def test_monitor_cron_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:

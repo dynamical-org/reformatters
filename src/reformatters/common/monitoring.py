@@ -46,21 +46,26 @@ def monitor_cron(
     monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
 
     def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
-        sentry_sdk.crons.capture_checkin(
-            monitor_slug=monitor_slug,
-            check_in_id=digest([reformat_job_name], length=32),
-            status=status,
-            monitor_config={
-                "schedule": {"type": "crontab", "value": cron_job.schedule},
-                "timezone": "UTC",
-                "checkin_margin": 10,
-                "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
-                "failure_issue_threshold": 1,
-                "recovery_threshold": 1,
-            },
-        )
-        if status != "in_progress":
-            sentry_sdk.flush(timeout=15)  # make sure final events reach sentry
+        check_in_id = digest([reformat_job_name], length=32)
+        attempts = 1 if status == "in_progress" else 2
+        for _ in range(attempts):
+            sentry_sdk.crons.capture_checkin(
+                monitor_slug=monitor_slug,
+                check_in_id=check_in_id,
+                status=status,
+                monitor_config={
+                    "schedule": {"type": "crontab", "value": cron_job.schedule},
+                    "timezone": "UTC",
+                    "checkin_margin": 10,
+                    "max_runtime": int(
+                        cron_job.pod_active_deadline.total_seconds() / 60
+                    ),
+                    "failure_issue_threshold": 1,
+                    "recovery_threshold": 1,
+                },
+            )
+            if status != "in_progress":
+                sentry_sdk.flush(timeout=15)  # make sure final events reach sentry
 
     if send_in_progress:
         capture_checkin("in_progress")
