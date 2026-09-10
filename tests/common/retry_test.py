@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from reformatters.common import retry as retry_module
-from reformatters.common.retry import retry
+from reformatters.common.retry import exponential_backoff_time, retry
 
 
 @pytest.fixture
@@ -49,15 +49,21 @@ def test_retryable_exceptions_propagates_non_matching(sleeps: list[float]) -> No
     assert sleeps == []
 
 
-def test_retry_backoff_grows_exponentially_then_caps(sleeps: list[float]) -> None:
+def test_retry_sleeps_between_every_attempt(sleeps: list[float]) -> None:
     mock_func = Mock(side_effect=OSError("transient"))
     with pytest.raises(OSError, match="transient"):
         retry(mock_func, max_attempts=8)
 
-    # Doubling from 1s, capped at 16s, each with +/-20% jitter.
-    expected_unjittered = [1, 2, 4, 8, 16, 16, 16]
-    assert len(sleeps) == len(expected_unjittered)
-    for slept, expected in zip(sleeps, expected_unjittered, strict=True):
-        assert 0.8 * expected <= slept <= 1.2 * expected
+    assert len(sleeps) == 7
+
+
+def test_exponential_backoff_time_grows_then_caps() -> None:
+    max_delays = [0.2, 1, 2, 4, 8, 16, 16, 16]
+    for attempt, max_delay in enumerate(max_delays):
+        # Jitter takes each delay down to as little as half its maximum.
+        times = [exponential_backoff_time(attempt) for _ in range(50)]
+        assert all(0.5 * max_delay <= t <= max_delay for t in times)
+        assert min(times) < 0.75 * max_delay < max(times)
+
     # Long enough in total to ride out a transient object store outage.
-    assert sum(sleeps) > 50
+    assert sum(exponential_backoff_time(a) for a in range(9)) > 35

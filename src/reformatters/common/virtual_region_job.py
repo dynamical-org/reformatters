@@ -28,7 +28,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.retry import sleep_before_retry
+from reformatters.common.retry import exponential_backoff_time
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
 log = get_logger(__name__)
@@ -745,7 +745,7 @@ def _exists_many(
             return result
         pending = failed
         if attempt < max_attempts - 1:
-            sleep_before_retry(attempt)
+            time.sleep(exponential_backoff_time(attempt))
 
     assert last_exception is not None
     raise last_exception

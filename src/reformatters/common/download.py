@@ -18,7 +18,7 @@ import requests
 from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common.logging import get_logger
-from reformatters.common.retry import sleep_before_retry
+from reformatters.common.retry import exponential_backoff_time
 
 if TYPE_CHECKING:
     from obstore.store import ObjectStore
@@ -250,7 +250,7 @@ def _httpx_get_with_retry(
             break
 
         if attempt > 0:
-            sleep_before_retry(attempt - 1)
+            time.sleep(exponential_backoff_time(attempt - 1))
 
         if rate_limiter is not None:
             rate_limiter.wait()

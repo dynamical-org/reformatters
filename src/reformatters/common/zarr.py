@@ -225,7 +225,6 @@ def sync_to_store(store: Store, key: str, data: bytes) -> None:
             ),
             timeout=90,  # In seconds. Timeout needs to be long enough to upload a large shard.
         ),
-        # Transient object store 5xx bursts can outlast the default retry window.
         max_attempts=10,
     )
 
