@@ -13,12 +13,12 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import httpx
-import numpy as np
 import obstore
 import requests
 from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import sleep_before_retry
 
 if TYPE_CHECKING:
     from obstore.store import ObjectStore
@@ -232,8 +232,6 @@ class RateLimiter:
 
 _DEFAULT_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 16
-_INIT_BACKOFF_SECONDS = 1.0
-_MAX_BACKOFF_SECONDS = 16.0
 _RETRY_TIMEOUT_SECONDS = 300.0
 
 
@@ -244,7 +242,6 @@ def _httpx_get_with_retry(
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
 ) -> httpx.Response:
     client = _httpx_client()
-    rng = np.random.default_rng()
     start_time = time.monotonic()
 
     last_exception: Exception | None = None
@@ -253,11 +250,7 @@ def _httpx_get_with_retry(
             break
 
         if attempt > 0:
-            backoff = min(
-                _INIT_BACKOFF_SECONDS * (2 ** (attempt - 1)), _MAX_BACKOFF_SECONDS
-            )
-            jitter = rng.uniform(0.5, 1.5)
-            time.sleep(backoff * jitter)
+            sleep_before_retry(attempt - 1)
 
         if rate_limiter is not None:
             rate_limiter.wait()
