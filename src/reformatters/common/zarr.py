@@ -225,7 +225,7 @@ def sync_to_store(store: Store, key: str, data: bytes) -> None:
             ),
             timeout=90,  # In seconds. Timeout needs to be long enough to upload a large shard.
         ),
-        max_attempts=6,
+        max_attempts=10,
     )
 
 
