@@ -60,7 +60,7 @@ def monitor_cron(
             },
         )
         if status != "in_progress":
-            sentry_sdk.flush()  # make sure final events reach sentry
+            sentry_sdk.flush(timeout=15)  # make sure final events reach sentry
 
     if send_in_progress:
         capture_checkin("in_progress")

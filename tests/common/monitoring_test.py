@@ -28,7 +28,9 @@ _CRON_JOB = CronJob(
 def test_monitor_cron_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
     mock_capture = Mock()
+    mock_flush = Mock()
     monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", mock_capture)
+    monkeypatch.setattr(sentry_sdk, "flush", mock_flush)
 
     with monitor_cron(_CRON_JOB, "job-name"):
         pass
@@ -38,13 +40,16 @@ def test_monitor_cron_success_and_error(monkeypatch: pytest.MonkeyPatch) -> None
     call_kwargs = mock_capture.call_args_list[0].kwargs
     assert call_kwargs["monitor_config"]["schedule"]["value"] == "0 4 * * *"
     assert call_kwargs["monitor_config"]["max_runtime"] == 120
+    mock_flush.assert_called_once_with(timeout=15)
 
     mock_capture.reset_mock()
+    mock_flush.reset_mock()
     with pytest.raises(ValueError, match="failure"):  # noqa: SIM117
         with monitor_cron(_CRON_JOB, "job-name"):
             raise ValueError("failure")
     statuses = [c.kwargs["status"] for c in mock_capture.call_args_list]
     assert statuses == ["in_progress", "error"]
+    mock_flush.assert_called_once_with(timeout=15)
 
 
 def test_monitor_cron_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
