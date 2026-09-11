@@ -11,7 +11,6 @@ import pytest
 
 from reformatters.common import template_utils
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa import noaa_virtual_region_job as shared_region_job_module
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
@@ -24,12 +23,7 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.template_config import (
     NoaaHrrrForecast18HourVirtualTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.nomads_cache import (
-    NOMADS_CACHE_LOCATION_PREFIX,
-    REPOINTED_MARKER_SUFFIX,
-    cache_key,
-)
-from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
+from reformatters.noaa.hrrr.nomads_mirror import MIRROR_LOCATION_PREFIX, mirror_key
 from reformatters.noaa.hrrr.virtual_region_job import (
     S3_LOCATION_PREFIX,
     NoaaHrrrForecastVirtualRegionJob,
@@ -38,6 +32,12 @@ from reformatters.noaa.hrrr.virtual_region_job import (
 )
 
 TEMPLATE_CONFIG = NoaaHrrrForecast18HourVirtualTemplateConfig()
+FIXTURES = Path(__file__).parents[2] / "fixtures"
+FIXTURE_GRIB = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2"
+FIXTURE_INDEX = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2.idx"
+MIRRORED_INIT = pd.Timestamp("2026-09-07T19:00")
+LEAD_0 = pd.Timedelta("0h")
+_copy_counter = count()
 
 
 def test_source_file_coord_url_non_synoptic_init() -> None:
@@ -53,7 +53,7 @@ def test_source_file_coord_url_non_synoptic_init() -> None:
     )
 
 
-def test_operational_update_jobs_cover_six_hourly_cycles(
+def test_operational_update_jobs_cover_six_hourly_cycles_and_repoint_mirrored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = pd.Timestamp("2024-06-02T01:00")
@@ -71,324 +71,30 @@ def test_operational_update_jobs_cover_six_hourly_cycles(
     (job,) = jobs
     assert isinstance(job, NoaaHrrrForecast18HourVirtualRegionJob)
     assert job.processing_mode == "update"
+    assert job.repoint_mirrored
     init_times = template_ds.to_dataset().get_index("init_time")
     assert job.region == slice(len(init_times) - 6, len(init_times))
 
 
-def test_generate_source_file_coords_uses_the_declared_coord_class() -> None:
-    class RoutedCoord(NoaaHrrrForecastVirtualSourceFileCoord):
-        pass
-
-    class RoutedJob(NoaaHrrrForecast18HourVirtualRegionJob):
-        source_file_coord_class = RoutedCoord
-
-    template_ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2018-07-13T13:00"))
-    job = RoutedJob(
-        tmp_store=Path("unused-tmp.zarr"),
-        template_ds=template_ds,
-        data_vars=TEMPLATE_CONFIG.data_vars[:2],
-        append_dim="init_time",
-        region=slice(0, 1),
-        reformat_job_name="test",
-    )
-    coords = job.generate_source_file_coords(job._processing_region_ds(), job.data_vars)
-    assert coords
-    assert all(type(coord) is RoutedCoord for coord in coords)
-
-
-# --- Cache-first routing ---
-
-FIXTURES = Path(__file__).parents[2] / "fixtures"
-FIXTURE_INDEX = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2.idx"
-FIXTURE_GRIB = FIXTURES / "hrrr.t19z.wrfsfcf00.first2.grib2"
-CACHED_INIT = pd.Timestamp("2026-09-07T19:00")
+# --- Routing between NODD and the mirror ---
 
 
 def get_var(name: str) -> NoaaHrrrDataVar:
     return next(v for v in TEMPLATE_CONFIG.data_vars if v.name == name)
 
 
-LEAD_0 = pd.Timedelta("0h")
-
-
 def routed_coord(
     data_vars: Sequence[NoaaHrrrDataVar] | None = None,
     lead_time: pd.Timedelta = LEAD_0,
-    init_time: pd.Timestamp = CACHED_INIT,
+    init_time: pd.Timestamp = MIRRORED_INIT,
 ) -> NoaaHrrrForecast18HourVirtualSourceFileCoord:
     return NoaaHrrrForecast18HourVirtualSourceFileCoord(
         init_time=init_time,
         lead_time=lead_time,
         domain="conus",
         file_type="sfc",
-        data_vars=data_vars or [get_var("composite_reflectivity"), get_var("echo_top")],
+        data_vars=data_vars or [get_var("composite_reflectivity")],
     )
-
-
-def make_job(
-    tmp_path: Path,
-    data_vars: Sequence[NoaaHrrrDataVar],
-    processing_mode: Literal["backfill", "update"] = "update",
-) -> NoaaHrrrForecast18HourVirtualRegionJob:
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir(exist_ok=True)
-
-    class LocalCacheJob(NoaaHrrrForecast18HourVirtualRegionJob):
-        def cache_store(self) -> obstore.store.ObjectStore:
-            return obstore.store.LocalStore(cache_dir)
-
-        def cache_writer(self) -> obstore.store.ObjectStore:
-            return obstore.store.LocalStore(cache_dir)
-
-    template_ds = TEMPLATE_CONFIG.get_template(CACHED_INIT + pd.Timedelta("1h"))
-    return LocalCacheJob(
-        tmp_store=Path("unused-tmp.zarr"),
-        template_ds=template_ds,
-        data_vars=data_vars,
-        append_dim="init_time",
-        region=slice(0, 1),
-        reformat_job_name="test",
-        processing_mode=processing_mode,
-    )
-
-
-def cache_file(
-    tmp_path: Path,
-    coord: NoaaHrrrSourceFileCoord,
-    index: str,
-    grib: bytes | None = None,
-) -> None:
-    path = tmp_path / "cache" / cache_key(coord)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(FIXTURE_GRIB.read_bytes() if grib is None else grib)
-    path.with_name(path.name + ".idx").write_text(index)
-
-
-def test_routing_fields_are_assignable_and_identity_is_frozen() -> None:
-    coord = routed_coord()
-    assert coord.bucket == "nodd"
-    assert coord.get_url() == (
-        "s3://noaa-hrrr-bdp-pds/hrrr.20260907/conus/hrrr.t19z.wrfsfcf00.grib2"
-    )
-    coord.route_to("cache")
-    assert coord.get_url() == (
-        "s3://dynamical-noaa-hrrr-nomads/hrrr.20260907/conus/hrrr.t19z.wrfsfcf00.grib2"
-    )
-    assert coord.get_index_url().endswith(".grib2.idx")
-    coord.reject_cache()
-    assert coord.cache_rejected
-    with pytest.raises(pydantic.ValidationError):
-        coord.lead_time = pd.Timedelta("1h")  # ty: ignore[invalid-assignment]
-    twin = coord.repoint_twin()
-    assert twin.repoint
-    assert twin.bucket == "nodd"
-    assert not twin.cache_rejected
-    assert twin.file_key() == coord.file_key()
-    assert twin.data_vars[0] is coord.data_vars[0]
-
-
-def test_source_region_follows_the_bucket(tmp_path: Path) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    coord = routed_coord()
-    assert job.source_region(coord) == "us-east-1"
-    coord.route_to("cache")
-    assert job.source_region(coord) == "us-west-2"
-
-
-def test_generate_source_file_coords_are_routable(tmp_path: Path) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    coords = job.generate_source_file_coords(job._processing_region_ds(), job.data_vars)
-    assert all(
-        isinstance(c, NoaaHrrrForecast18HourVirtualSourceFileCoord) for c in coords
-    )
-
-
-def _nodd_listing(
-    available: set[tuple[pd.Timestamp, pd.Timedelta, str]],
-) -> Callable[..., list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]]:
-    def discover(
-        self: NoaaHrrrForecastVirtualRegionJob,
-        pending: list[NoaaHrrrForecastVirtualSourceFileCoord],
-    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-        return [
-            (coord, 16)
-            for coord in pending
-            if (coord.init_time, coord.lead_time, coord.file_type) in available
-        ]
-
-    return discover
-
-
-def test_discover_available_prefers_the_cache_then_nodd(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity"), get_var("echo_top")])
-    cached = routed_coord(lead_time=pd.Timedelta("0h"))
-    on_nodd = routed_coord(lead_time=pd.Timedelta("1h"))
-    nowhere = routed_coord(lead_time=pd.Timedelta("2h"))
-    cache_file(tmp_path, cached, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob,
-        "discover_available",
-        _nodd_listing({(CACHED_INIT, pd.Timedelta("1h"), "sfc")}),
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-
-    found = job.discover_available([cached, on_nodd, nowhere])
-
-    assert [(id(c), size) for c, size in found] == [
-        (id(cached), FIXTURE_GRIB.stat().st_size),
-        (id(on_nodd), 16),
-    ]
-    assert cached.bucket == "cache"
-    assert cached.prepared_refs
-    assert on_nodd.bucket == "nodd"
-    assert nowhere.bucket == "nodd"
-    assert not nowhere.cache_rejected
-
-
-def test_discover_available_rejects_a_cache_index_missing_a_variable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The cached f00 index only names REFC and RETOP; the coord also needs TMP.
-    job = make_job(
-        tmp_path, [get_var("composite_reflectivity"), get_var("temperature_2m")]
-    )
-    coord = routed_coord([get_var("composite_reflectivity"), get_var("temperature_2m")])
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    nodd_has_it = {(CACHED_INIT, pd.Timedelta("0h"), "sfc")}
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-
-    assert job.discover_available([coord]) == []
-    assert coord.cache_rejected
-    assert coord.bucket == "nodd"
-
-    # Next tick NODD has the file: the rejected coord goes to NODD, never the cache.
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(nodd_has_it)
-    )
-    assert job.discover_available([coord]) == [(coord, 16)]
-    assert coord.bucket == "nodd"
-
-
-def test_discover_available_probes_repoint_twins_on_nodd_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    twin = routed_coord([get_var("composite_reflectivity")]).repoint_twin()
-    cache_file(tmp_path, twin, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-    assert job.discover_available([twin]) == []
-    assert twin.bucket == "nodd"
-
-
-def test_discover_available_is_nodd_only_for_backfills_and_when_cache_first_is_off(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    coord = routed_coord([get_var("composite_reflectivity")])
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    backfill = make_job(tmp_path, [get_var("composite_reflectivity")], "backfill")
-    assert backfill.discover_available([coord]) == []
-    update = make_job(tmp_path, [get_var("composite_reflectivity")])
-    monkeypatch.setattr(type(update), "cache_first", False)
-    assert update.discover_available([coord]) == []
-    assert coord.bucket == "nodd"
-
-
-def test_committed_schedules_a_repoint_twin_and_marks_a_finished_repoint(
-    tmp_path: Path,
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    from_cache = routed_coord([get_var("composite_reflectivity")])
-    from_cache.route_to("cache")
-    from_nodd = routed_coord(
-        [get_var("composite_reflectivity")], lead_time=pd.Timedelta("1h")
-    )
-    twin = routed_coord(
-        [get_var("composite_reflectivity")], lead_time=pd.Timedelta("2h")
-    ).repoint_twin()
-    cache_file(tmp_path, twin, FIXTURE_INDEX.read_text())
-
-    follow_ups = job.committed([(from_cache, []), (from_nodd, []), (twin, [])])
-
-    (follow_up,) = (routed(c) for c in follow_ups)
-    assert follow_up.repoint
-    assert follow_up.file_key() == from_cache.file_key()
-    marker = tmp_path / "cache" / (cache_key(twin) + REPOINTED_MARKER_SUFFIX)
-    assert marker.exists()
-    assert not (
-        tmp_path / "cache" / (cache_key(from_cache) + REPOINTED_MARKER_SUFFIX)
-    ).exists()
-
-
-def test_check_refs_complete_guards_cache_files_and_repoints_only(
-    tmp_path: Path,
-) -> None:
-    data_vars = [get_var("composite_reflectivity"), get_var("echo_top")]
-    job = make_job(tmp_path, data_vars)
-    coord = routed_coord(data_vars)
-    partial = [
-        VirtualRef(
-            data_var=get_var("composite_reflectivity"),
-            out_loc=coord.out_loc(),
-            location=coord.get_url(),
-            offset=0,
-            length=16,
-        )
-    ]
-    job._check_refs_complete(coord, partial)  # plain NODD: partial files are allowed
-    coord.route_to("cache")
-    with pytest.raises(ValueError, match="echo_top"):
-        job._check_refs_complete(coord, partial)
-    with pytest.raises(ValueError, match="echo_top"):
-        job._check_refs_complete(coord.repoint_twin(), partial)
-
-
-def test_unfinished_work_merges_the_window_with_the_cache_listing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    data_vars = [get_var("composite_reflectivity")]
-    job = make_job(tmp_path, data_vars)
-    window = [routed(c) for c in job.source_file_coords()]
-    present_cached, present_plain, absent = window[0], window[1], window[2]
-    cache_file(tmp_path, present_cached, FIXTURE_INDEX.read_text())
-    cache_file(tmp_path, absent, FIXTURE_INDEX.read_text())
-    # A cached file from an init outside the window, already ingested from the cache.
-    older = routed_coord(data_vars, init_time=CACHED_INIT - pd.Timedelta("8h"))
-    cache_file(tmp_path, older, FIXTURE_INDEX.read_text())
-    # And one already repointed: nothing left to do for it.
-    done = routed_coord(data_vars, init_time=CACHED_INIT - pd.Timedelta("9h"))
-    cache_file(tmp_path, done, FIXTURE_INDEX.read_text())
-    (tmp_path / "cache" / (cache_key(done) + REPOINTED_MARKER_SUFFIX)).write_bytes(b"")
-
-    absent_keys = {absent.file_key()}
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualRegionJob,
-        "filter_already_present",
-        lambda self, candidates, store: [
-            c for c in candidates if routed(c).file_key() in absent_keys
-        ],
-    )
-
-    work = [routed(c) for c in job.unfinished_work(Mock())]
-
-    by_key = {(c.file_key(), c.repoint) for c in work}
-    assert by_key == {
-        (absent.file_key(), False),
-        (present_cached.file_key(), True),
-        (older.file_key(), True),
-    }
-    assert present_plain.file_key() not in {c.file_key() for c in work}
-    assert len(work) == 3
 
 
 def routed(
@@ -398,13 +104,214 @@ def routed(
     return coord
 
 
+def make_job(
+    tmp_path: Path,
+    data_vars: Sequence[NoaaHrrrDataVar],
+    processing_mode: Literal["backfill", "update"] = "update",
+) -> NoaaHrrrForecast18HourVirtualRegionJob:
+    mirror_dir = tmp_path / "mirror"
+    mirror_dir.mkdir(exist_ok=True)
+
+    class LocalMirrorJob(NoaaHrrrForecast18HourVirtualRegionJob):
+        def mirror_store(self) -> obstore.store.ObjectStore:
+            return obstore.store.LocalStore(mirror_dir)
+
+    template_ds = TEMPLATE_CONFIG.get_template(MIRRORED_INIT + pd.Timedelta("1h"))
+    return LocalMirrorJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+        processing_mode=processing_mode,
+        repoint_mirrored=True,
+    )
+
+
+def mirror_file(tmp_path: Path, coord: NoaaHrrrForecastVirtualSourceFileCoord) -> None:
+    path = tmp_path / "mirror" / mirror_key(coord)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(FIXTURE_GRIB.read_bytes())
+    path.with_name(path.name + ".idx").write_bytes(FIXTURE_INDEX.read_bytes())
+
+
+def _nodd_listing(
+    available: set[tuple[pd.Timestamp, pd.Timedelta, str]],
+    probed: list[list[pd.Timedelta]] | None = None,
+) -> Callable[..., list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]]:
+    def discover(
+        self: NoaaHrrrForecastVirtualRegionJob,
+        pending: list[NoaaHrrrForecastVirtualSourceFileCoord],
+    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
+        if probed is not None:
+            probed.append([c.lead_time for c in pending])
+        return [
+            (coord, 16)
+            for coord in pending
+            if (coord.init_time, coord.lead_time, coord.file_type) in available
+        ]
+
+    return discover
+
+
+def test_routing_fields_are_assignable_and_identity_is_frozen() -> None:
+    coord = routed_coord()
+    assert coord.bucket == "nodd"
+    assert coord.get_url() == S3_LOCATION_PREFIX + mirror_key(coord)
+    coord.route_to("mirror")
+    assert coord.get_url() == MIRROR_LOCATION_PREFIX + mirror_key(coord)
+    assert coord.get_index_url() == MIRROR_LOCATION_PREFIX + mirror_key(coord) + ".idx"
+    coord.mark_present()
+    assert coord.already_present
+    with pytest.raises(pydantic.ValidationError):
+        coord.lead_time = pd.Timedelta("1h")  # ty: ignore[invalid-assignment]
+
+
+def test_generate_source_file_coords_are_routable_and_regions_follow_the_bucket(
+    tmp_path: Path,
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    coords = job.generate_source_file_coords(job._processing_region_ds(), job.data_vars)
+    assert coords
+    coord = routed(coords[0])
+    assert job.source_region(coord) == "us-east-1"
+    coord.route_to("mirror")
+    assert job.source_region(coord) == "us-west-2"
+
+
+def test_discover_prefers_nodd_then_the_mirror_then_waits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    both = routed_coord(lead_time=LEAD_0)
+    mirror_only = routed_coord(lead_time=pd.Timedelta("1h"))
+    nowhere = routed_coord(lead_time=pd.Timedelta("2h"))
+    mirror_file(tmp_path, both)
+    mirror_file(tmp_path, mirror_only)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        _nodd_listing({(MIRRORED_INIT, LEAD_0, "sfc")}),
+    )
+
+    found = job.discover_available([both, mirror_only, nowhere])
+
+    assert [id(c) for c, _ in found] == [id(both), id(mirror_only)]
+    assert both.bucket == "nodd"
+    assert mirror_only.bucket == "mirror"
+    assert found[1][1] == FIXTURE_GRIB.stat().st_size
+    assert nowhere.bucket == "nodd"
+
+
+def test_a_present_file_is_only_ever_resupplied_by_nodd_and_probed_once_a_minute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    monkeypatch.setattr(type(job), "repoint_probe_every", 3)
+    present = routed_coord(lead_time=LEAD_0)
+    present.mark_present()
+    mirror_file(tmp_path, present)
+    fresh = routed_coord(lead_time=pd.Timedelta("1h"))
+    probed: list[list[pd.Timedelta]] = []
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set(), probed)
+    )
+
+    for _ in range(4):
+        assert job.discover_available([present, fresh]) == []
+    # The present file is in the mirror but never re-read from it, and NODD is asked
+    # about it on ticks 1 and 4 only; the fresh file is asked about every tick.
+    assert probed == [
+        [LEAD_0, pd.Timedelta("1h")],
+        [pd.Timedelta("1h")],
+        [pd.Timedelta("1h")],
+        [LEAD_0, pd.Timedelta("1h")],
+    ]
+    assert present.bucket == "nodd"
+
+    monkeypatch.setattr(type(job), "repoint_probe_every", 1)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        _nodd_listing({(MIRRORED_INIT, LEAD_0, "sfc")}),
+    )
+    assert job.discover_available([present]) == [(present, 16)]
+
+
+def test_discover_is_nodd_only_for_backfills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(
+        tmp_path, [get_var("composite_reflectivity")], processing_mode="backfill"
+    )
+    coord = routed_coord()
+    mirror_file(tmp_path, coord)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
+    )
+    assert job.discover_available([coord]) == []
+    assert coord.bucket == "nodd"
+
+
+def test_an_unreachable_mirror_leaves_nodd_as_the_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    coord = routed_coord()
+
+    def broken_store(
+        self: NoaaHrrrForecast18HourVirtualRegionJob,
+    ) -> obstore.store.ObjectStore:
+        raise RuntimeError("mirror bucket unreachable")
+
+    monkeypatch.setattr(type(job), "mirror_store", broken_store)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "discover_available",
+        _nodd_listing({(MIRRORED_INIT, LEAD_0, "sfc")}),
+    )
+    assert job.discover_available([coord]) == [(coord, 16)]
+    assert coord.bucket == "nodd"
+
+
+def test_filter_keeps_offering_present_files_the_mirror_still_lists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    absent = routed_coord(lead_time=LEAD_0)
+    present_in_mirror = routed_coord(lead_time=pd.Timedelta("1h"))
+    present_final = routed_coord(lead_time=pd.Timedelta("2h"))
+    mirror_file(tmp_path, absent)
+    mirror_file(tmp_path, present_in_mirror)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [absent],
+    )
+
+    remaining = job.filter_already_present(
+        [absent, present_in_mirror, present_final], Mock()
+    )
+
+    assert [id(c) for c in remaining] == [id(absent), id(present_in_mirror)]
+    assert not absent.already_present
+    assert present_in_mirror.already_present
+
+    # The validation job asks the plain question.
+    plain = job.model_copy(update={"repoint_mirrored": False})
+    assert plain.filter_already_present(
+        [absent, present_in_mirror, present_final], Mock()
+    ) == [absent]
+
+
 def stub_source_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Serve the index downloads and GRIB header reads `file_refs` makes from
-    `tmp_path/cache` and `tmp_path/nodd`, chosen by the URL's container prefix."""
+    `tmp_path/mirror` and `tmp_path/nodd`, chosen by the URL's container prefix."""
 
     def local_path(url: str) -> Path:
-        if url.startswith(NOMADS_CACHE_LOCATION_PREFIX):
-            return tmp_path / "cache" / url.removeprefix(NOMADS_CACHE_LOCATION_PREFIX)
+        if url.startswith(MIRROR_LOCATION_PREFIX):
+            return tmp_path / "mirror" / url.removeprefix(MIRROR_LOCATION_PREFIX)
         return tmp_path / "nodd" / url.removeprefix(S3_LOCATION_PREFIX)
 
     def download(url: str, dataset_id: str, **kwargs: object) -> Path:
@@ -419,16 +326,12 @@ def stub_source_reads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
 
 
-_copy_counter = count()
-
-
-def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
+def test_a_mirror_file_is_ingested_then_repointed_to_nodd_on_the_next_fire(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """End to end against a local icechunk store: the file is ingested from the cache
-    the tick it appears there, its refs are rewritten from NODD the tick NODD has it,
-    and the cache object is then marked repointed."""
-    cache_dir, nodd_dir = tmp_path / "cache", tmp_path / "nodd"
+    """End to end against a local icechunk store: fire 1 ingests the file from the
+    mirror the tick it appears there; fire 2 rewrites its refs from NODD."""
+    mirror_dir, nodd_dir = tmp_path / "mirror", tmp_path / "nodd"
     dataset = NoaaHrrrForecast18HourVirtualDataset(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path / "store"), format=DatasetFormat.ICECHUNK
@@ -440,42 +343,19 @@ def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
         "get_template",
         lambda self, end_time: original_get_template(end_time).isel(lead_time=[0]),
     )
-    template_ds = dataset.template_config.get_template(CACHED_INIT + pd.Timedelta("1h"))
+    template_ds = dataset.template_config.get_template(
+        MIRRORED_INIT + pd.Timedelta("1h")
+    )
     template_utils.write_metadata(template_ds, dataset.store_factory)
     (_, repo), *_ = dataset.store_factory.icechunk_repos(sort="primary-first")
     position = int(
         template_ds.to_dataset()
         .get_index("init_time")
-        .get_indexer(pd.Index([CACHED_INIT]))[0]
+        .get_indexer(pd.Index([MIRRORED_INIT]))[0]
     )
     data_vars = [get_var("composite_reflectivity")]
     coord = routed_coord(data_vars)
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    (cache_dir / cache_key(coord)).write_bytes(FIXTURE_GRIB.read_bytes())
-
-    def publish_on_nodd() -> None:
-        target = nodd_dir / cache_key(coord)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(FIXTURE_GRIB.read_bytes())
-        target.with_name(target.name + ".idx").write_text(FIXTURE_INDEX.read_text())
-
-    class TwoSourceJob(NoaaHrrrForecast18HourVirtualRegionJob):
-        ticks: ClassVar[int] = 0
-
-        def cache_store(self) -> obstore.store.ObjectStore:
-            return obstore.store.LocalStore(cache_dir)
-
-        def cache_writer(self) -> obstore.store.ObjectStore:
-            return obstore.store.LocalStore(cache_dir)
-
-        def discover_available(
-            self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
-        ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-            TwoSourceJob.ticks += 1
-            if TwoSourceJob.ticks == 2:
-                publish_on_nodd()
-            return super().discover_available(pending)
-
+    mirror_file(tmp_path, coord)
     nodd_dir.mkdir()
     monkeypatch.setattr(
         shared_region_job_module,
@@ -483,213 +363,45 @@ def test_a_cache_file_is_repointed_to_nodd_within_one_fire(
         lambda bucket_url, region, **kwargs: obstore.store.LocalStore(nodd_dir),
     )
     stub_source_reads(monkeypatch, tmp_path)
-    monkeypatch.setattr(TwoSourceJob, "tick_interval", pd.Timedelta("0s"))
-    monkeypatch.setattr(TwoSourceJob, "repoint_probe_every", 2)
 
-    job = TwoSourceJob(
-        tmp_store=Path("unused-tmp.zarr"),
-        template_ds=template_ds,
-        data_vars=data_vars,
-        append_dim="init_time",
-        region=slice(position, position + 1),
-        reformat_job_name="test",
-        processing_mode="update",
-        poll_deadline=pd.Timestamp.now() + pd.Timedelta("60s"),
-    )
-    snapshots_before = [s.id for s in repo.ancestry(branch="main")]
-    remaining = job.unfinished_work(repo.readonly_session("main").store)
-    assert [routed(c).file_key() for c in remaining] == [coord.file_key()]
+    class LocalMirrorJob(NoaaHrrrForecast18HourVirtualRegionJob):
+        ticks: ClassVar[int] = 0
 
-    job.process_virtual(repo, [], "main", remaining)
+        def mirror_store(self) -> obstore.store.ObjectStore:
+            return obstore.store.LocalStore(mirror_dir)
 
-    head, after_cache, *_ = [
-        s.id for s in repo.ancestry(branch="main") if s.id not in snapshots_before
-    ]
-    cache_url = NOMADS_CACHE_LOCATION_PREFIX + cache_key(coord)
-    nodd_url = S3_LOCATION_PREFIX + cache_key(coord)
-    assert (
-        cache_url
-        in repo.readonly_session(snapshot_id=after_cache).all_virtual_chunk_locations()
-    )
-    head_locations = repo.readonly_session(
-        snapshot_id=head
-    ).all_virtual_chunk_locations()
-    assert nodd_url in head_locations
-    assert cache_url not in head_locations
-    assert (cache_dir / (cache_key(coord) + REPOINTED_MARKER_SUFFIX)).exists()
-    # Tick 1 ingested from the cache, tick 2 published NODD, tick 3 (the next twin
-    # probe) repointed.
-    assert TwoSourceJob.ticks == 3
+    monkeypatch.setattr(LocalMirrorJob, "tick_interval", pd.Timedelta("0s"))
 
+    def fire() -> None:
+        job = LocalMirrorJob(
+            tmp_store=Path("unused-tmp.zarr"),
+            template_ds=template_ds,
+            data_vars=data_vars,
+            append_dim="init_time",
+            region=slice(position, position + 1),
+            reformat_job_name="test",
+            processing_mode="update",
+            repoint_mirrored=True,
+            poll_deadline=pd.Timestamp.now() + pd.Timedelta("30s"),
+        )
+        remaining = job.filter_already_present(
+            job.source_file_coords(), repo.readonly_session("main").store
+        )
+        job.process_virtual(repo, [], "main", remaining)
 
-def test_repoint_twins_are_probed_on_a_slower_cadence_than_new_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    monkeypatch.setattr(type(job), "repoint_probe_every", 3)
-    twin = routed_coord([get_var("composite_reflectivity")]).repoint_twin()
-    fresh = routed_coord([get_var("composite_reflectivity")], pd.Timedelta("1h"))
-    probed: list[list[pd.Timedelta]] = []
+    mirror_url = MIRROR_LOCATION_PREFIX + mirror_key(coord)
+    nodd_url = S3_LOCATION_PREFIX + mirror_key(coord)
 
-    def discover(
-        self: NoaaHrrrForecastVirtualRegionJob,
-        pending: list[NoaaHrrrForecastVirtualSourceFileCoord],
-    ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-        probed.append([c.lead_time for c in pending])
-        return []
+    fire()
+    locations = repo.readonly_session("main").all_virtual_chunk_locations()
+    assert mirror_url in locations
+    assert nodd_url not in locations
 
-    monkeypatch.setattr(NoaaHrrrVirtualRegionJob, "discover_available", discover)
-    for _ in range(4):
-        job.discover_available([twin, fresh])
-    # Tick 1 and tick 4 (every third) include the twin; every tick has the fresh file.
-    assert probed == [
-        [LEAD_0, pd.Timedelta("1h")],
-        [pd.Timedelta("1h")],
-        [pd.Timedelta("1h")],
-        [LEAD_0, pd.Timedelta("1h")],
-    ]
-
-
-def test_an_unreachable_cache_leaves_nodd_as_the_floor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    coord = routed(job.source_file_coords()[0])
-
-    def broken_store(
-        self: NoaaHrrrForecast18HourVirtualRegionJob,
-    ) -> obstore.store.ObjectStore:
-        raise RuntimeError("cache bucket unreachable")
-
-    monkeypatch.setattr(type(job), "cache_store", broken_store)
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob,
-        "discover_available",
-        _nodd_listing({(coord.init_time, coord.lead_time, "sfc")}),
-    )
-    assert job.discover_available([coord]) == [(coord, 16)]
-    assert coord.bucket == "nodd"
-
-    absent = {coord.file_key()}
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualRegionJob,
-        "filter_already_present",
-        lambda self, candidates, store: [
-            c for c in candidates if routed(c).file_key() in absent
-        ],
-    )
-    work = job.unfinished_work(Mock())
-    assert [routed(c).file_key() for c in work] == [coord.file_key()]
-    assert not any(routed(c).repoint for c in work)
-
-
-def test_discovery_rejects_a_cache_file_whose_refs_cannot_be_built(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The index covers the variable but the data object is not GRIB at its offsets."""
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    coord = routed_coord([get_var("composite_reflectivity")])
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text(), grib=b"\0" * 700_000)
-    nodd = {(CACHED_INIT, LEAD_0, "sfc")}
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-
-    assert job.discover_available([coord]) == []
-    assert coord.cache_rejected
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(nodd)
-    )
-    assert job.discover_available([coord]) == [(coord, 16)]
-    assert coord.bucket == "nodd"
-    assert coord.prepared_refs is None
-
-
-def test_prepared_cache_refs_are_what_file_refs_returns(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    coord = routed_coord([get_var("composite_reflectivity")])
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-    ((found, size),) = job.discover_available([coord])
-    assert found is coord
-    (ref,) = job.file_refs(coord, size)
-    assert ref.location == NOMADS_CACHE_LOCATION_PREFIX + cache_key(coord)
-    assert (ref.offset, ref.length) == (0, 381629)
-
-
-def test_a_staging_store_never_selects_repoints_or_marks_the_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    job = job.model_copy(
-        update={"reformat_job_name": "stage-noaa-hrrr-v0-2-0-update-1"}
-    )
-    coord = routed(job.source_file_coords()[0])
-    cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob, "discover_available", _nodd_listing(set())
-    )
-    stub_source_reads(monkeypatch, tmp_path)
-
-    assert job.discover_available([coord]) == []
-    assert coord.bucket == "nodd"
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualRegionJob,
-        "filter_already_present",
-        lambda self, candidates, store: [],
-    )
-    assert job.unfinished_work(Mock()) == []
-    twin = coord.repoint_twin()
-    assert job.committed([(twin, [])]) == ()
-    assert not (
-        tmp_path / "cache" / (cache_key(twin) + REPOINTED_MARKER_SUFFIX)
-    ).exists()
-
-
-def test_unfinished_work_ignores_cache_files_outside_the_template(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    data_vars = [get_var("composite_reflectivity")]
-    job = make_job(tmp_path, data_vars)
-    beyond_lead = routed_coord(data_vars, lead_time=pd.Timedelta("40h"))
-    beyond_init = routed_coord(data_vars, init_time=CACHED_INIT + pd.Timedelta("48h"))
-    for coord in (beyond_lead, beyond_init):
-        cache_file(tmp_path, coord, FIXTURE_INDEX.read_text())
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualRegionJob,
-        "filter_already_present",
-        lambda self, candidates, store: [],
-    )
-    assert job.unfinished_work(Mock()) == []
-
-
-def test_a_manual_job_cloned_from_a_staging_cron_does_not_own_the_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    job = job.model_copy(update={"reformat_job_name": "manual-repair"})
-    monkeypatch.setenv("CRON_JOB_NAME", "stage-noaa-hrrr-forecast-18-v0-2-0-update")
-    assert not job._owns_cache()
-    monkeypatch.setenv("CRON_JOB_NAME", "noaa-hrrr-forecast-18-hour-virtual-update")
-    assert job._owns_cache()
-
-
-def test_repoint_twins_can_be_probed_every_tick(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    monkeypatch.setattr(type(job), "repoint_probe_every", 1)
-    twin = routed_coord([get_var("composite_reflectivity")]).repoint_twin()
-    monkeypatch.setattr(
-        NoaaHrrrVirtualRegionJob,
-        "discover_available",
-        _nodd_listing({(CACHED_INIT, LEAD_0, "sfc")}),
-    )
-    for _ in range(3):
-        assert job.discover_available([twin]) == [(twin, 16)]
+    target = nodd_dir / mirror_key(coord)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(FIXTURE_GRIB.read_bytes())
+    target.with_name(target.name + ".idx").write_bytes(FIXTURE_INDEX.read_bytes())
+    fire()
+    locations = repo.readonly_session("main").all_virtual_chunk_locations()
+    assert nodd_url in locations
+    assert mirror_url not in locations

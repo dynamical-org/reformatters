@@ -1,17 +1,19 @@
-from collections.abc import Sequence
-from typing import Any, ClassVar, Literal
+from collections.abc import Callable, Sequence
+from pathlib import Path
+from typing import ClassVar, Literal
 
 import icechunk
+import obstore
 import obstore.store
 import pandas as pd
 import pydantic
+import xarray as xr
 from icechunk.store import IcechunkStore
+from zarr.abc.store import Store
 
 from reformatters.common.logging import get_logger
-from reformatters.common.staging import is_staging_run
-from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Timedelta, Timestamp
-from reformatters.common.virtual_region_job import VirtualRef
+from reformatters.common.region_job import RegionJob
+from reformatters.common.types import AppendDim, DatetimeLike, Timedelta, Timestamp
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
 )
@@ -20,15 +22,11 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDomain,
     NoaaHrrrFileType,
 )
-from reformatters.noaa.hrrr.nomads_cache import (
-    NOMADS_CACHE_BUCKET_REGION,
-    NOMADS_CACHE_LOCATION_PREFIX,
-    cache_key,
-    list_cache,
-    mark_repointed,
-    nomads_cache_store,
-    parse_cache_key,
-    unrepointed_data_files,
+from reformatters.noaa.hrrr.nomads_mirror import (
+    MIRROR_BUCKET_REGION,
+    MIRROR_LOCATION_PREFIX,
+    mirror_key,
+    mirror_store,
 )
 from reformatters.noaa.hrrr.region_job import NODD_BUCKET_REGION, DownloadSource
 from reformatters.noaa.hrrr.virtual_region_job import (
@@ -40,18 +38,17 @@ from reformatters.noaa.hrrr.virtual_region_job import (
 
 log = get_logger(__name__)
 
-type SourceBucket = Literal["nodd", "cache"]
+type SourceBucket = Literal["nodd", "mirror"]
 
 
 def hrrr_18_hour_virtual_chunk_containers() -> tuple[
     icechunk.VirtualChunkContainer, ...
 ]:
-    """NODD plus the NOMADS cache."""
+    """NODD plus the NOMADS mirror."""
     return (
         *hrrr_virtual_chunk_containers(),
         icechunk.VirtualChunkContainer(
-            NOMADS_CACHE_LOCATION_PREFIX,
-            icechunk.s3_store(region=NOMADS_CACHE_BUCKET_REGION),
+            MIRROR_LOCATION_PREFIX, icechunk.s3_store(region=MIRROR_BUCKET_REGION)
         ),
     )
 
@@ -59,8 +56,8 @@ def hrrr_18_hour_virtual_chunk_containers() -> tuple[
 class NoaaHrrrForecast18HourVirtualSourceFileCoord(
     NoaaHrrrForecastVirtualSourceFileCoord
 ):
-    """An HRRR file resolved against NODD or the NOMADS cache (identical keys). The
-    routing fields are assignable; the fields naming the file stay frozen.
+    """An HRRR file resolved against NODD or the NOMADS mirror (identical keys). The
+    two routing fields are assignable; the fields naming the file stay frozen.
     """
 
     model_config = pydantic.ConfigDict(frozen=False, strict=True)
@@ -72,222 +69,151 @@ class NoaaHrrrForecast18HourVirtualSourceFileCoord(
     data_vars: Sequence[NoaaHrrrDataVar] = pydantic.Field(frozen=True)
 
     bucket: SourceBucket = "nodd"
-    # A second pass over an already-ingested cache file, rewriting its refs from NODD.
-    repoint: bool = False
-    # The cache's copy could not supply this coord's refs; use NODD.
-    cache_rejected: bool = False
-    # Refs discovery built from the cache, so that what was validated is what is written.
-    _prepared_refs: list[VirtualRef] | None = pydantic.PrivateAttr(default=None)
-
-    @property
-    def prepared_refs(self) -> list[VirtualRef] | None:
-        return self._prepared_refs
-
-    def prepare(self, refs: list[VirtualRef]) -> None:
-        self._prepared_refs = refs
+    # The store already holds refs for this file, possibly into the mirror; only
+    # NODD may supply it again.
+    already_present: bool = False
 
     def route_to(self, bucket: SourceBucket) -> None:
         self.bucket = bucket  # ty: ignore[invalid-assignment] - frozen=False here
 
-    def reject_cache(self) -> None:
-        self.cache_rejected = True  # ty: ignore[invalid-assignment] - frozen=False here
+    def mark_present(self) -> None:
+        self.already_present = True  # ty: ignore[invalid-assignment] - frozen=False here
 
     def get_url(self, source: DownloadSource = "s3") -> str:
         url = super().get_url(source=source)
-        if self.bucket == "cache":
-            return NOMADS_CACHE_LOCATION_PREFIX + url.removeprefix(S3_LOCATION_PREFIX)
+        if self.bucket == "mirror":
+            return MIRROR_LOCATION_PREFIX + url.removeprefix(S3_LOCATION_PREFIX)
         return url
-
-    def file_key(
-        self,
-    ) -> tuple[pd.Timestamp, pd.Timedelta, NoaaHrrrDomain, NoaaHrrrFileType]:
-        return (self.init_time, self.lead_time, self.domain, self.file_type)
-
-    def repoint_twin(self) -> NoaaHrrrForecast18HourVirtualSourceFileCoord:
-        return NoaaHrrrForecast18HourVirtualSourceFileCoord(
-            init_time=self.init_time,
-            lead_time=self.lead_time,
-            domain=self.domain,
-            file_type=self.file_type,
-            data_vars=self.data_vars,
-            repoint=True,
-        )
 
 
 class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
-    """Reads the NOMADS cache before NODD during operational updates, then rewrites
-    each cache-sourced file's refs from NODD once NODD publishes it. See "NOMADS
-    cache" in docs/virtual_datasets.md."""
+    """Reads the NOMADS mirror when NODD does not have a file yet, and keeps offering a
+    file the store holds while the mirror still lists it, so its refs are rewritten
+    from NODD once NODD publishes it (an idempotent rewrite when they already point
+    there). See "NOMADS mirror" in docs/virtual_datasets.md."""
 
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("6h")
     source_file_coord_class: ClassVar[
         type[NoaaHrrrForecast18HourVirtualSourceFileCoord]
     ] = NoaaHrrrForecast18HourVirtualSourceFileCoord
-    # Rollback knob: False stops selecting the cache for new files; repoints go on.
-    cache_first: ClassVar[bool] = True
-    # Repoint twins wait on NODD for minutes to days; probing them every tick would
-    # list every old date's NODD prefix each second ahead of the current init's files.
+    # Re-offering present files is update work only: operational_update_jobs turns it
+    # on, and the validation job keeps the plain manifest probe.
+    repoint_mirrored: bool = False
+    # Files the store holds wait on NODD for minutes to days; probing them every tick
+    # would list every old date's NODD prefix each second ahead of the current init.
     repoint_probe_every: ClassVar[int] = 60
 
     _ticks: int = pydantic.PrivateAttr(default=0)
 
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[NoaaHrrrDataVar],
+        reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
+    ) -> tuple[
+        Sequence[RegionJob[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord]],
+        xr.DataTree,
+    ]:
+        jobs, template_ds = super().operational_update_jobs(
+            primary_store,
+            tmp_store,
+            get_template_fn,
+            append_dim,
+            all_data_vars,
+            reformat_job_name,
+            job_fire_time,
+        )
+        return [job.model_copy(update={"repoint_mirrored": True}) for job in jobs], (
+            template_ds
+        )
+
     def source_region(self, coord: NoaaHrrrForecastVirtualSourceFileCoord) -> str:
         return (
-            NOMADS_CACHE_BUCKET_REGION
-            if _routed(coord).bucket == "cache"
+            MIRROR_BUCKET_REGION
+            if _routed(coord).bucket == "mirror"
             else NODD_BUCKET_REGION
         )
 
-    def cache_store(self) -> obstore.store.ObjectStore:
-        return nomads_cache_store(write=False)
+    def mirror_store(self) -> obstore.store.ObjectStore:
+        return mirror_store(write=False)
 
-    def _owns_cache(self) -> bool:
-        """Only the production store repoints and marks cached files: a staging
-        version writing markers would tell production its repair work was done."""
-        return self.processing_mode == "update" and not is_staging_run(
-            self.reformat_job_name
-        )
-
-    def cache_writer(self) -> obstore.store.ObjectStore:
-        return nomads_cache_store(write=True)
-
-    def unfinished_work(
-        self, store: IcechunkStore
+    def filter_already_present(
+        self,
+        candidates: Sequence[NoaaHrrrForecastVirtualSourceFileCoord],
+        store: IcechunkStore,
     ) -> list[NoaaHrrrForecastVirtualSourceFileCoord]:
-        if not self._owns_cache():
-            return super().unfinished_work(store)
-        candidates = [_routed(coord) for coord in self.source_file_coords()]
-        try:
-            unrepointed = set(unrepointed_data_files(list_cache(self.cache_store())))
-        except Exception:
-            log.exception(
-                "Cannot list the NOMADS cache; repoints wait for a later fire"
-            )
-            unrepointed = set()
-        known = {coord.file_key() for coord in candidates}
-        root = self.template_ds.to_dataset()
-        init_times = root.get_index("init_time")
-        lead_times = root.get_index("lead_time")
-        for key in unrepointed:
-            parsed = parse_cache_key(key)
-            assert parsed is not None
-            init_time, lead_time, file_type = parsed
-            if (init_time, lead_time, "conus", file_type) in known:
-                continue
-            if init_time not in init_times or lead_time not in lead_times:
-                continue
-            coord = self.source_file_coord(
-                init_time, lead_time, file_type, self.data_vars
-            )
-            if coord is not None:
-                candidates.append(_routed(coord))
-        absent = {id(coord) for coord in self.filter_already_present(candidates, store)}
-        work: list[NoaaHrrrForecastVirtualSourceFileCoord] = []
+        absent = super().filter_already_present(candidates, store)
+        if not self.repoint_mirrored:
+            return absent
+        absent_ids = {id(coord) for coord in absent}
+        mirrored = self._mirror_listing(candidates)
+        present_in_mirror = []
         for coord in candidates:
-            if id(coord) in absent:
-                work.append(coord)
-            elif cache_key(coord) in unrepointed:
-                work.append(coord.repoint_twin())
-        return work
+            if id(coord) not in absent_ids and mirror_key(coord) in mirrored:
+                _routed(coord).mark_present()
+                present_in_mirror.append(coord)
+        return [*absent, *present_in_mirror]
 
     def discover_available(
         self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
     ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-        if not (self._owns_cache() and self.cache_first):
+        if self.processing_mode != "update":
             return super().discover_available(pending)
         self._ticks += 1
-        routed = [_routed(coord) for coord in pending]
         assert self.repoint_probe_every >= 1
-        probe_twins = (self._ticks - 1) % self.repoint_probe_every == 0
-        cache_candidates = [
-            coord for coord in routed if not (coord.repoint or coord.cache_rejected)
+        probe_present = (self._ticks - 1) % self.repoint_probe_every == 0
+        routed = [_routed(coord) for coord in pending]
+        for coord in routed:
+            coord.route_to("nodd")
+        nodd_pending: list[NoaaHrrrForecastVirtualSourceFileCoord] = [
+            c for c in routed if probe_present or not c.already_present
         ]
-        for coord in cache_candidates:
-            coord.route_to("cache")
-        found: list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]] = []
+        on_nodd = super().discover_available(nodd_pending)
+        found_ids = {id(coord) for coord, _ in on_nodd}
+        candidates = [
+            c for c in routed if id(c) not in found_ids and not c.already_present
+        ]
+        for coord in candidates:
+            coord.route_to("mirror")
         try:
-            in_cache = discover_available_by_obstore_listing(
-                cache_candidates,
-                store=self.cache_store(),
-                location_prefix=NOMADS_CACHE_LOCATION_PREFIX,
+            on_mirror = discover_available_by_obstore_listing(
+                candidates,
+                store=self.mirror_store(),
+                location_prefix=MIRROR_LOCATION_PREFIX,
                 require_index=True,
             )
-            for coord, size in in_cache:
-                # Build the refs now: a cache copy that cannot supply every cell the
-                # coord names is left pending for NODD rather than dropped for the fire.
-                refs = self._file_refs_or_skip(coord, size)
-                if refs:
-                    coord.prepare(refs)
-                    found.append((coord, size))
-                else:
-                    coord.reject_cache()
         except Exception:
-            # The cache is an accelerator; NODD stays the floor when it is unreachable.
-            log.exception("Cannot read the NOMADS cache this tick; using NODD only")
-            found = []
-        found_ids = {id(coord) for coord, _ in found}
-        rest = [
-            coord
-            for coord in routed
-            if id(coord) not in found_ids and (probe_twins or not coord.repoint)
-        ]
-        for coord in rest:
-            coord.route_to("nodd")
-        nodd_pending: list[NoaaHrrrForecastVirtualSourceFileCoord] = list(rest)
-        return [*found, *super().discover_available(nodd_pending)]
+            # The mirror is an accelerator; NODD stays the floor when it is unreachable.
+            log.exception("Cannot list the NOMADS mirror this tick; using NODD only")
+            on_mirror = []
+        mirrored_ids = {id(coord) for coord, _ in on_mirror}
+        for coord in candidates:
+            if id(coord) not in mirrored_ids:
+                coord.route_to("nodd")
+        return [*on_nodd, *on_mirror]
 
-    def committed(
-        self,
-        batch: Sequence[
-            tuple[NoaaHrrrForecastVirtualSourceFileCoord, Sequence[VirtualRef]]
-        ],
-    ) -> Sequence[NoaaHrrrForecastVirtualSourceFileCoord]:
-        if not self._owns_cache():
-            return ()
-        follow_ups = []
-        for coord, _ in batch:
-            routed = _routed(coord)
-            if routed.repoint:
-                mark_repointed(cache_key(routed), self.cache_writer())
-            elif routed.bucket == "cache":
-                follow_ups.append(routed.repoint_twin())
-        return follow_ups
-
-    def _check_refs_complete(
-        self,
-        coord: NoaaHrrrForecastVirtualSourceFileCoord,
-        refs: list[VirtualRef],
-    ) -> None:
-        # A cache file or a repoint must fill every cell the coord names: a partial
-        # repoint would leave refs on the cache under a marker that says otherwise.
-        routed = _routed(coord)
-        if routed.bucket != "cache" and not routed.repoint:
-            return
-        missing = self._expected_cells(coord) - {
-            (ref.data_var.name, tuple(sorted(ref.out_loc.items()))) for ref in refs
-        }
-        if missing:
-            raise ValueError(
-                f"{coord.get_url()} filled {len(refs)} of "
-                f"{len(missing) + len(refs)} expected cells; missing e.g. {sorted(missing)[:3]}"
+    def _mirror_listing(
+        self, candidates: Sequence[NoaaHrrrForecastVirtualSourceFileCoord]
+    ) -> set[str]:
+        prefixes = sorted({mirror_key(c).rsplit("/", 1)[0] + "/" for c in candidates})
+        try:
+            store = self.mirror_store()
+            return {
+                meta["path"]
+                for prefix in prefixes
+                for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
+                for meta in batch
+            }
+        except Exception:
+            log.exception(
+                "Cannot list the NOMADS mirror; repoints wait for a later fire"
             )
-
-    def file_refs(
-        self, coord: NoaaHrrrForecastVirtualSourceFileCoord, file_size: int
-    ) -> list[VirtualRef]:
-        prepared = _routed(coord).prepared_refs
-        return prepared if prepared is not None else super().file_refs(coord, file_size)
-
-    def _expected_cells(
-        self, coord: NoaaHrrrForecastVirtualSourceFileCoord
-    ) -> set[tuple[str, tuple[tuple[str, Any], ...]]]:
-        lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
-        out_loc_base = dict(coord.out_loc())
-        return {
-            (var.name, tuple(sorted({**out_loc_base, **level_label}.items())))
-            for matches in lookup.values()
-            for var, level_label in matches
-        }
+            return set()
 
 
 def _routed(

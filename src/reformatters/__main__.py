@@ -93,9 +93,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualDataset,
 )
-from reformatters.noaa.hrrr.nomads_mirror.hrrr_nomads_cache_mirror import (
-    NoaaHrrrNomadsCacheMirror,
-)
+from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
@@ -375,7 +373,7 @@ app.command()(initialize_new_integration)
 # their own cronjobs and are not datasets, so they carry no update/validate/backfill.
 OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [
     EcmwfIfsEns46DayGribArchiver(),
-    NoaaHrrrNomadsCacheMirror(),
+    NoaaHrrrNomadsMirror(),
 ]
 
 for dataset in DYNAMICAL_DATASETS:

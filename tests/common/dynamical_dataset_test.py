@@ -1080,7 +1080,11 @@ def test_virtual_update_persists_a_newly_registered_container(
         "operational_update_jobs",
         classmethod(lambda cls, **kwargs: ([job], _create_template_ds(2))),
     )
-    monkeypatch.setattr(VirtualTestRegionJob, "unfinished_work", lambda self, store: [])
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [],
+    )
 
     dataset.update("test")
 

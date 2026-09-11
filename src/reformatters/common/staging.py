@@ -1,5 +1,4 @@
 import json
-import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -28,19 +27,6 @@ def staging_cronjob_name(dataset_id: str, version: str, suffix: str) -> str:
     )
     trimmed_id = dataset_id[:max_id_len].rstrip("-")
     return f"stage-{trimmed_id}-v{version_dashes}-{suffix}"
-
-
-def is_staging_job_name(job_name: str) -> bool:
-    """Whether a pod's job name came from a staging cronjob."""
-    return job_name.startswith("stage-")
-
-
-def is_staging_run(job_name: str) -> bool:
-    """Whether the current pod runs a staging version: its job, or the cronjob a
-    manual job was cloned from (`CRON_JOB_NAME`), is a staging one."""
-    return is_staging_job_name(job_name) or is_staging_job_name(
-        os.environ.get("CRON_JOB_NAME", "")
-    )
 
 
 def rename_cronjob_for_staging(

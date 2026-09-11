@@ -240,14 +240,13 @@ def _httpx_get_with_retry(
     headers: dict[str, str] | None = None,
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
-    retry_timeout: float = _RETRY_TIMEOUT_SECONDS,
 ) -> httpx.Response:
     client = _httpx_client()
     start_time = time.monotonic()
 
     last_exception: Exception | None = None
     for attempt in range(_MAX_RETRIES + 1):
-        if time.monotonic() - start_time > retry_timeout:
+        if time.monotonic() - start_time > _RETRY_TIMEOUT_SECONDS:
             break
 
         if attempt > 0:
@@ -255,10 +254,6 @@ def _httpx_get_with_retry(
 
         if rate_limiter is not None:
             rate_limiter.wait()
-
-        # The waits above count against the budget too.
-        if time.monotonic() - start_time > retry_timeout:
-            break
 
         try:
             response = client.get(url, headers=headers)
@@ -280,8 +275,7 @@ def _httpx_get_with_retry(
             f"Retryable status {response.status_code} on attempt {attempt + 1} for {url}"
         )
 
-    if last_exception is None:
-        raise TimeoutError(f"retry budget of {retry_timeout:.0f}s spent before {url}")
+    assert last_exception is not None
     raise last_exception
 
 
@@ -324,10 +318,8 @@ def httpx_download_to_disk(
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
     disk_cache: bool = False,
-    retry_timeout: float = _RETRY_TIMEOUT_SECONDS,
 ) -> Path:
-    """httpx based download which supports redirects and maintains cookies.
-    Retries stop once `retry_timeout` seconds have passed since the first attempt."""
+    """httpx based download which supports redirects and maintains cookies."""
     parsed_url = urlparse(url)
     local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
     if disk_cache and local_path.exists():
@@ -346,7 +338,6 @@ def httpx_download_to_disk(
                 headers={"Range": range_header},
                 rate_limiter=rate_limiter,
                 retry_status_codes=retry_status_codes,
-                retry_timeout=retry_timeout,
             )
 
             content_type = response.headers.get("content-type", "")
@@ -360,10 +351,7 @@ def httpx_download_to_disk(
                 f.write(body)
         else:
             response = _httpx_get_with_retry(
-                url,
-                rate_limiter=rate_limiter,
-                retry_status_codes=retry_status_codes,
-                retry_timeout=retry_timeout,
+                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
             )
             with open(temp_path, "wb") as f:
                 f.write(response.content)
@@ -377,6 +365,18 @@ def httpx_download_to_disk(
         raise
 
     return local_path
+
+
+def httpx_get_text(
+    url: str,
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+) -> str:
+    """Fetch a small text resource, e.g. an HTML directory listing, with the same
+    retries and rate limiting as httpx_download_to_disk."""
+    return _httpx_get_with_retry(
+        url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+    ).text
 
 
 def http_status_code(e: Exception) -> int | None:

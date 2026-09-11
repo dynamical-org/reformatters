@@ -79,15 +79,6 @@ RUN --mount=type=cache,target=/root/.cache \
 
 ##########################################################################
 
-# Inventory (-s) only reads headers, so g2c and the decoders are off.
-FROM ubuntu:noble AS wgrib2
-ARG WGRIB2_VERSION=v3.8.0
-RUN apt-get update -qy && apt-get install -qyy -o APT::Install-Recommends=false ca-certificates cmake gcc git libc6-dev make && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch ${WGRIB2_VERSION} https://github.com/NOAA-EMC/wgrib2 /wgrib2 \
-    && cmake -S /wgrib2 -B /wgrib2/build -DCMAKE_BUILD_TYPE=Release -DUSE_G2CLIB=OFF -DBUILD_LIB=OFF -DBUILD_SHARED_LIB=OFF -DUSE_NETCDF=OFF -DUSE_IPOLATES=OFF \
-    && cmake --build /wgrib2/build -j \
-    && cmake --install /wgrib2/build --prefix /opt/wgrib2
-
 FROM ubuntu:noble
 SHELL ["sh", "-exc"]
 
@@ -118,7 +109,6 @@ COPY --from=build /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-noble.sources /e
 
 # Copy rclone from official image (Noble's version is too old for `rclone copyurl --urls` flag)
 COPY --from=rclone/rclone:latest /usr/local/bin/rclone /usr/bin/rclone
-COPY --from=wgrib2 /opt/wgrib2/bin/wgrib2 /usr/bin/wgrib2
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!
@@ -145,6 +135,5 @@ WORKDIR /app
 # Light test that the app can be run
 RUN <<EOT
 python -V
-wgrib2 tests/noaa/fixtures/hrrr.t19z.wrfsfcf00.first2.grib2 -s | diff - tests/noaa/fixtures/hrrr.t19z.wrfsfcf00.first2.grib2.idx
 python src/reformatters/__main__.py --help
 EOT

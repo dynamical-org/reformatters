@@ -6,10 +6,11 @@ from typing import Any
 
 import icechunk
 import numpy as np
+import obstore.store
 import pandas as pd
 import pytest
 
-from reformatters.common import validation
+from reformatters.common import template_utils, validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
@@ -18,7 +19,6 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
     NoaaHrrrForecast18HourVirtualRegionJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.nomads_cache import CheckNomadsCacheRepointed
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
 _Y, _X = 635, 1062
@@ -111,6 +111,11 @@ def test_backfill_local_and_operational_update(
         classmethod(filtered_update_jobs),
     )
 
+    monkeypatch.setattr(
+        NoaaHrrrForecast18HourVirtualRegionJob,
+        "mirror_store",
+        lambda self: obstore.store.LocalStore(tmp_path / "empty-mirror", mkdir=True),
+    )
     dataset.update("test-update")
 
     updated = validation.open_flattened_dataset(
@@ -195,10 +200,7 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 4
-    assert any(
-        isinstance(validator, CheckNomadsCacheRepointed) for validator in validators
-    )
+    assert len(validators) == 3
     (current_data,) = [
         validator
         for validator in validators
@@ -241,4 +243,24 @@ def test_virtual_containers_match_the_ref_prefixes_of_both_sources(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
     prefixes = [c.url_prefix for c in dataset.icechunk_virtual_config.containers]
-    assert prefixes == ["s3://noaa-hrrr-bdp-pds/", "s3://dynamical-noaa-hrrr-nomads/"]
+    assert prefixes == [
+        "s3://noaa-hrrr-bdp-pds/",
+        "s3://dynamical-noaa-hrrr-nomads-mirror/",
+    ]
+
+
+def test_validation_job_probes_the_manifest_without_the_mirror_override(
+    dataset: NoaaHrrrForecast18HourVirtualDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-02T01:00")),
+    )
+    template_ds = dataset.template_config.get_template(pd.Timestamp("2024-06-01T02:00"))
+    template_utils.write_metadata(
+        template_ds.isel(lead_time=[0]), dataset.store_factory
+    )
+    job = dataset._virtual_validation_region_job(dataset.validators(), "test")
+    assert isinstance(job, NoaaHrrrForecast18HourVirtualRegionJob)
+    assert not job.repoint_mirrored

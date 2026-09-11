@@ -1,5 +1,3 @@
-import shutil
-import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -18,9 +16,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 from reformatters.noaa.noaa_grib_index import (
     grib_index_window_str,
     grib_message_byte_ranges_from_index,
-    parse_grib_index_lines,
-    scan_grib_message_offsets,
-    write_grib_index,
 )
 
 IDX_FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -427,29 +422,3 @@ class TestLeadTimeStr:
         )
         with pytest.raises(ValueError, match="Unhandled grib lead/accumulation hours"):
             grib_index_window_str(var_with_avg, lead_hours=5)
-
-
-def test_scan_grib_message_offsets(tmp_path: Path) -> None:
-    fixture = IDX_FIXTURES_DIR / "hrrr.t19z.wrfsfcf00.first2.grib2"
-    offsets = [
-        line[0] for line in parse_grib_index_lines(fixture.with_suffix(".grib2.idx"))
-    ]
-    assert scan_grib_message_offsets(fixture) == offsets
-    cut = tmp_path / "cut.grib2"
-    cut.write_bytes(fixture.read_bytes()[:-10])
-    with pytest.raises(ValueError, match="Invalid GRIB2 length"):
-        scan_grib_message_offsets(cut)
-    cut.write_bytes(fixture.read_bytes()[: offsets[1]])
-    assert scan_grib_message_offsets(cut) == [0]
-
-
-@pytest.mark.skipif(shutil.which("wgrib2") is None, reason="wgrib2 not installed")
-def test_write_grib_index(tmp_path: Path) -> None:
-    fixture = IDX_FIXTURES_DIR / "hrrr.t19z.wrfsfcf00.first2.grib2"
-    index = tmp_path / "out.idx"
-    write_grib_index(fixture, index)
-    assert index.read_bytes() == fixture.with_suffix(".grib2.idx").read_bytes()
-    cut = tmp_path / "cut.grib2"
-    cut.write_bytes(fixture.read_bytes()[:-10])
-    with pytest.raises(subprocess.CalledProcessError):
-        write_grib_index(cut, index)

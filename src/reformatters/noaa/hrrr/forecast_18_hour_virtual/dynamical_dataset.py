@@ -10,8 +10,8 @@ from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
 )
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.nomads_cache import CheckNomadsCacheRepointed
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
@@ -76,6 +76,20 @@ class NoaaHrrrForecast18HourVirtualDataset(
 
         return [operational_update_cron_job, validation_cron_job]
 
+    def _virtual_validation_region_job(
+        self,
+        validators: Sequence[validation.Validator],
+        reformat_job_name: str,
+    ) -> (
+        VirtualRegionJob[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord] | None
+    ):
+        # Validation asks "is the file in the store", not "is it still worth
+        # rewriting from NODD", so it probes the manifest without the mirror override.
+        job = super()._virtual_validation_region_job(validators, reformat_job_name)
+        return (
+            None if job is None else job.model_copy(update={"repoint_mirrored": False})
+        )
+
     def validators(self) -> Sequence[validation.Validator]:
         return (
             # The hourly update polls each init from init+50m (f00 publishes ~init+51m);
@@ -89,5 +103,4 @@ class NoaaHrrrForecast18HourVirtualDataset(
                 min_present_fraction=(0.05, 1.0)
             ),
             validation.CheckVirtualDecodeHealth(),
-            CheckNomadsCacheRepointed(),
         )
