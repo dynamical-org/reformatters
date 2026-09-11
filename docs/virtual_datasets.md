@@ -136,6 +136,27 @@ Two virtual checks ship in `validation.py`; both are bounded so the whole valida
 
 Tuning (completeness's `min_present_fraction`; decode health's `positions`, `sampled_leads`, `max_workers`) is set where the check is listed in `validators()` — one place. The materialized `CheckExpectedShards` does not carry over — a virtual store holds chunk references, not shards. `CheckReplicaMatchesPrimary` does apply: any dataset declaring a replica gets it, and on a virtual pair it reads both manifests' references back to catch a replica whose references diverge from the primary's.
 
+## NOMADS mirror: a second source ahead of NODD
+
+NOMADS publishes each HRRR file 60 to 80 s before NOAA's AWS archive (NODD) lists it, and NODD occasionally holds a file for ten minutes. The `noaa-hrrr-forecast-18-hour-virtual` product closes that gap with three single-pod crons: the mirror, the dataset's standard update, and its standard validate.
+
+- **The mirror** (`noaa-hrrr-nomads`, an `OperationalResources` cron in `noaa/hrrr/nomads_mirror.py`, not a dataset) fires hourly, waits for the init's publication window, then polls NOMADS once a second with one directory listing and copies each of the init's files, sfc, prs and nat, f00 to f18, GRIB and NOAA's own `.idx`, into `s3://dynamical-noaa-hrrr-nomads-mirror/` under the exact key NODD will use. Every listing and copy goes through the shared `nomads_rate_limiter` (100 per minute, under NOMADS' 120 per minute ban threshold): about 60 listings plus a few copies per minute. A data file is copied only once it parses as whole GRIB2 messages, and its index only once it lists exactly the messages the mirrored data file holds (the data file is fetched again and replaced if NOMADS appended messages after the first copy), so an index in the mirror implies a data file the index describes. Whether NOMADS ever lists a file before it is fully written is not documented; a data file and index that were both partial yet agreed would be copied as they are.
+- **The update** is the dataset's ordinary virtual update with two overrides on `NoaaHrrrForecast18HourVirtualRegionJob`. `discover_available` takes a pending file from NODD when NODD has it and from the mirror otherwise (the mirror is a second virtual chunk container; refs into it differ from NODD refs only by prefix). `filter_already_present`, for the update job only, keeps offering every file the mirror still holds, whether or not it is in the update window, and such a file may only be supplied by NODD again: so a file first ingested from the mirror has its refs rewritten from NODD on the next fire after NODD publishes it, an idempotent rewrite when they already point there, for as long as the mirror keeps the file. Those re-offers are probed on NODD every 60th discovery sweep rather than every one so they never sit ahead of the current init's files, and a mirror that cannot be listed leaves NODD as the floor. Backfills use NODD only.
+- **Validate** is the standard virtual validation plus `CheckMirroredFilesReachNodd`, which fails when a file the mirror has held for 36 hours is still not on NODD: its refs can only point at the mirror, and the mirror expires objects after three days.
+
+Readers see the mirror-pointed window (typically until the next hourly fire) only if they authorize the mirror container; the STAC catalog lists both containers, so deploy the catalog change before the code.
+
+### Bucket setup
+
+The mirror bucket is created like every other AWS Open Data bucket, then given an age-out rule in place of the script's lifecycle (the bucket is versioned, so expiry writes a delete marker and the noncurrent rule removes the bytes a day later):
+
+```bash
+deploy/aws/create_new_aws_open_data_bucket.sh noaa-hrrr-nomads-mirror
+aws s3api put-bucket-lifecycle-configuration --bucket dynamical-noaa-hrrr-nomads-mirror --lifecycle-configuration '{"Rules": [{"ID": "ExpireMirroredFiles", "Status": "Enabled", "Filter": {}, "Expiration": {"Days": 3}, "NoncurrentVersionExpiration": {"NoncurrentDays": 1}}, {"ID": "CleanUpDeleteMarkers", "Status": "Enabled", "Filter": {}, "Expiration": {"ExpiredObjectDeleteMarker": true}}, {"ID": "AbortIncompleteMultipartUploads", "Status": "Enabled", "Filter": {}, "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}]}'
+```
+
+The IAM principal behind `aws-open-data-icechunk-storage-options-key` writes the mirror; the update and readers list and read it anonymously.
+
 ## Storage and reading
 
 A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
@@ -147,6 +168,6 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
 - **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
 
-Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`) by backfill setup and by every operational update fire, so a container added in code reaches readers on the next fire and a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).

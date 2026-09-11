@@ -73,6 +73,11 @@ class NoaaVirtualRegionJob(
             require_index=True,
         )
 
+    def source_region(self, coord: NOAA_VIRTUAL_COORD) -> str:  # noqa: ARG002 - overrides route per coord
+        """The bucket region `coord`'s data file and index are read from. Default:
+        `source_bucket_region`; override where a coord may resolve to another bucket."""
+        return self.source_bucket_region
+
     def owns_index_message(
         self,
         coord: NOAA_VIRTUAL_COORD,  # noqa: ARG002 - overrides key the decision on it
@@ -89,7 +94,7 @@ class NoaaVirtualRegionJob(
 
     def file_refs(self, coord: NOAA_VIRTUAL_COORD, file_size: int) -> list[VirtualRef]:
         index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
+            coord.get_index_url(), self.dataset_id, region=self.source_region(coord)
         )
         try:
             index_lines = parse_grib_index_lines(index_path)
@@ -176,7 +181,7 @@ class NoaaVirtualRegionJob(
             return None
         header = s3_read_bytes(
             coord.get_url(),
-            region=self.source_bucket_region,
+            region=self.source_region(coord),
             start=offset,
             end=offset + GRIB_SECTION_0_BYTES,
         )

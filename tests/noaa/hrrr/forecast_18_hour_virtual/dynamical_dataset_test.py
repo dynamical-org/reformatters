@@ -1,17 +1,21 @@
 import re
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import icechunk
 import numpy as np
+import obstore.store
 import pandas as pd
 import pytest
+import xarray as xr
 
-from reformatters.common import validation
+from reformatters.common import template_utils, validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
+    CheckMirroredFilesReachNodd,
     NoaaHrrrForecast18HourVirtualDataset,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
@@ -110,6 +114,12 @@ def test_backfill_local_and_operational_update(
         classmethod(filtered_update_jobs),
     )
 
+    monkeypatch.setattr(
+        NoaaHrrrForecast18HourVirtualRegionJob,
+        "mirror_store",
+        lambda self: obstore.store.LocalStore(tmp_path / "empty-mirror", mkdir=True),
+    )
+    monkeypatch.setattr(CheckMirroredFilesReachNodd, "mirror_listing", lambda self: {})
     dataset.update("test-update")
 
     updated = validation.open_flattened_dataset(
@@ -194,7 +204,8 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 4
+    assert any(isinstance(v, CheckMirroredFilesReachNodd) for v in validators)
     (current_data,) = [
         validator
         for validator in validators
@@ -233,8 +244,93 @@ def test_manifest_split_size_resolves_per_group(
     assert _resolved_split_size(split, "/temperature_2m") == 1500
 
 
-def test_virtual_container_matches_ref_prefix(
+def test_virtual_containers_match_the_ref_prefixes_of_both_sources(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
-    (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "s3://noaa-hrrr-bdp-pds/"
+    prefixes = [c.url_prefix for c in dataset.icechunk_virtual_config.containers]
+    assert prefixes == [
+        "s3://noaa-hrrr-bdp-pds/",
+        "s3://dynamical-noaa-hrrr-nomads-mirror/",
+    ]
+
+
+def test_validation_job_probes_the_manifest_without_the_mirror_override(
+    dataset: NoaaHrrrForecast18HourVirtualDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-06-02T01:00")),
+    )
+    template_ds = dataset.template_config.get_template(pd.Timestamp("2024-06-01T02:00"))
+    template_utils.write_metadata(
+        template_ds.isel(lead_time=[0]), dataset.store_factory
+    )
+    job = dataset._virtual_validation_region_job(dataset.validators(), "test")
+    assert isinstance(job, NoaaHrrrForecast18HourVirtualRegionJob)
+    assert not job.repoint_mirrored
+
+
+def _reach_nodd_check(
+    mirror: dict[str, datetime], nodd: set[str], max_age: timedelta
+) -> CheckMirroredFilesReachNodd:
+    class LocalCheck(CheckMirroredFilesReachNodd):
+        def mirror_listing(self) -> dict[str, datetime]:
+            return mirror
+
+        def nodd_listing(self, keys: Sequence[str]) -> set[str]:  # noqa: ARG002
+            return nodd
+
+    return LocalCheck(max_age=max_age)
+
+
+def test_mirrored_files_that_reached_nodd_pass_and_old_missing_ones_fail() -> None:
+    key = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+    other = "hrrr.20260907/conus/hrrr.t19z.wrfprsf01.grib2"
+    fresh = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf02.grib2"
+    now = datetime.now(UTC)
+    mirror = {
+        key: now - timedelta(hours=40),
+        key + ".idx": now - timedelta(hours=40),
+        other: now - timedelta(hours=40),
+        other + ".idx": now - timedelta(hours=40),
+        fresh: now - timedelta(hours=1),
+    }
+    context = validation.ValidationContext(
+        store=Mock(), ds=xr.Dataset(), append_dim="init_time"
+    )
+    complete = {key, key + ".idx", other, other + ".idx"}
+    check = _reach_nodd_check(mirror, complete, timedelta(hours=36))
+    assert check.check(context).passed
+
+    # NODD holding the GRIB without its index cannot be repointed to either.
+    check = _reach_nodd_check(mirror, {key, other, other + ".idx"}, timedelta(hours=36))
+    result = check.check(context)
+    assert not result.passed
+    assert key in result.message
+    assert other not in result.message
+    assert fresh not in result.message
+
+
+def test_the_nodd_listing_is_fetched_once_per_check() -> None:
+    now = datetime.now(UTC)
+    mirror = {
+        f"hrrr.20260907/conus/hrrr.t19z.wrfsfcf{lead:02d}.grib2": now
+        - timedelta(hours=40)
+        for lead in range(5)
+    }
+    calls: list[int] = []
+
+    class CountingCheck(CheckMirroredFilesReachNodd):
+        def mirror_listing(self) -> dict[str, datetime]:
+            return mirror
+
+        def nodd_listing(self, keys: Sequence[str]) -> set[str]:
+            calls.append(len(keys))
+            return set()
+
+    context = validation.ValidationContext(
+        store=Mock(), ds=xr.Dataset(), append_dim="init_time"
+    )
+    assert not CountingCheck().check(context).passed
+    assert calls == [5]

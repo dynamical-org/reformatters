@@ -43,6 +43,7 @@ from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.common.virtual_region_job_test import (
+    VirtualTestDataset,
     VirtualTestRegionJob,
     _create_template_ds,
     _make_dataset,
@@ -1049,3 +1050,50 @@ def test_backfill_local_fails_in_wrong_environment(
             dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
     else:
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+
+
+def test_virtual_update_persists_a_newly_registered_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+    (persisted_before,) = _persisted_containers(dataset)
+
+    extra = icechunk.VirtualChunkContainer(
+        f"file://{tmp_path}/other/",
+        icechunk.local_filesystem_store(str(tmp_path / "other")),
+    )
+    assert dataset.icechunk_virtual_config is not None
+    dataset = VirtualTestDataset(
+        primary_storage_config=dataset.primary_storage_config,
+        icechunk_virtual_config=IcechunkVirtualConfig(
+            containers=(*dataset.icechunk_virtual_config.containers, extra),
+            manifest_split=dataset.icechunk_virtual_config.manifest_split,
+        ),
+    )
+    job = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    # Every file is already present, so the fire writes no refs.
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "operational_update_jobs",
+        classmethod(lambda cls, **kwargs: ([job], _create_template_ds(2))),
+    )
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [],
+    )
+
+    dataset.update("test")
+
+    assert set(_persisted_containers(dataset)) == {persisted_before, extra.url_prefix}
+
+
+def _persisted_containers(dataset: VirtualTestDataset) -> list[str]:
+    config = icechunk.Repository.fetch_config(
+        _primary_repo(dataset.store_factory).storage
+    )
+    assert config is not None
+    return list(config.virtual_chunk_containers or ())

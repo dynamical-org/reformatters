@@ -561,8 +561,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         job = job.model_copy(
             update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
         )
-        # Deploy checked-in template metadata fixes (attrs, coordinate values) before
-        # ingesting. No-op commit-wise when the store already matches the template.
+        # Deploy in-code config before ingesting: virtual chunk containers and
+        # checked-in template metadata fixes. No-ops when the store already matches.
+        self.store_factory.persist_virtual_config()
         job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             [job], self.store_factory, "main", worker_index, overwrite_chunks=False

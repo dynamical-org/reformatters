@@ -650,3 +650,43 @@ def test_float_levels_render_and_resolve_for_a_non_hrrr_data_var(
         (0, 6, 0, 0, 0),
         (0, 6, 0, 0, 38),
     ]
+
+
+def test_file_refs_reads_index_and_header_from_the_coords_source_region(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A subclass that resolves one file against several buckets routes the index
+    download and the GRIB header read to that coord's bucket region."""
+    regions: list[str] = []
+
+    class OtherRegionJob(NoaaHrrrForecast48HourVirtualRegionJob):
+        def source_region(
+            self,
+            coord: NoaaHrrrForecastVirtualSourceFileCoord,  # noqa: ARG002
+        ) -> str:
+            return "eu-west-1"
+
+    def download(url: str, dataset_id: str, **kwargs: object) -> Path:
+        regions.append(str(kwargs["region"]))
+        path = tmp_path / "index.idx"
+        path.write_text(_SFC_INDEX)
+        return path
+
+    def read_bytes(url: str, *, start: int, end: int, **kwargs: object) -> bytes:
+        regions.append(str(kwargs["region"]))
+        return grib_section_0(9000 - start)
+
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", download)
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", read_bytes)
+    data_vars = [get_var("temperature_2m")]
+    job = OtherRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    refs = job.file_refs(coord("sfc", data_vars), file_size=9000)
+    assert len(refs) == 1
+    assert regions == ["eu-west-1", "eu-west-1"]
