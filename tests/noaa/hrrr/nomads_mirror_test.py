@@ -311,3 +311,32 @@ def test_mirror_window_is_anchored_to_the_scheduled_fire() -> None:
     assert init_time == pd.Timestamp("2026-09-08T19:00Z")
     assert poll_start == pd.Timestamp("2026-09-08T19:49Z")
     assert deadline == pd.Timestamp("2026-09-08T20:43Z")
+
+
+def test_after_a_restart_the_mirrored_file_is_scanned_before_its_index_is_trusted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    whole, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
+    # An earlier pod mirrored one version of the file; NOMADS now serves another
+    # whose index names an in-bounds but different second offset.
+    obstore.put(mirror, mirror_key(coord(0)), whole)
+    lines = index.decode().splitlines()
+    shifted = lines[1].split(":")
+    shifted[1] = str(int(shifted[1]) - 1)
+    shifted_index = (lines[0] + "\n" + ":".join(shifted) + "\n").encode()
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", shifted_index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == []
+    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+    # The data file was fetched again in case NOMADS had replaced it.
+    assert nomads.fetched == [
+        "hrrr.t19z.wrfsfcf00.grib2.idx",
+        "hrrr.t19z.wrfsfcf00.grib2",
+    ]
+
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == [mirror_key(coord(0)) + ".idx"]

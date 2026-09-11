@@ -6,6 +6,7 @@ dataset reads the mirror when NODD does not have a file yet; see "NOMADS mirror"
 
 import re
 import struct
+import tempfile
 import time
 from collections.abc import Callable, Sequence
 from datetime import timedelta
@@ -220,11 +221,10 @@ def _copy_index(
     in_mirror: dict[str, int],
     offsets_by_key: dict[str, list[int]],
 ) -> bool:
-    """Copy an index once it agrees with the mirrored data file: every message it lists
-    must start inside the file and, when this run copied the file, at the offsets the
-    file was scanned to have. A data file copied while NOMADS was still appending
-    messages passes the whole-GRIB2 check, so on disagreement the data file is fetched
-    again and replaced before the index is exposed."""
+    """Copy an index once it lists exactly the messages the mirrored data file holds.
+    A data file copied while NOMADS was still appending messages passes the
+    whole-GRIB2 check, so on disagreement the data file is fetched again and replaced
+    before the index is exposed."""
     data_key = mirror_key(file.coord)
     path = fetch(file.url)
     try:
@@ -232,9 +232,10 @@ def _copy_index(
         if not index_offsets:
             log.warning(f"{file.name} is empty on NOMADS; will retry")
             return False
-        if not _index_matches(
-            index_offsets, in_mirror[data_key], offsets_by_key.get(data_key)
-        ):
+        if data_key not in offsets_by_key:
+            # Copied by an earlier pod: scan the mirror's copy before trusting the index.
+            offsets_by_key[data_key] = _mirrored_message_offsets(mirror, data_key) or []
+        if not _index_matches(index_offsets, offsets_by_key[data_key]):
             log.warning(
                 f"{file.name} lists messages the mirrored data file lacks; "
                 "re-copying the data file"
@@ -242,9 +243,7 @@ def _copy_index(
             data_file = _MirrorFile(file.coord, is_index=False)
             if not _copy_data(data_file, mirror, fetch, in_mirror, offsets_by_key):
                 return False
-            if not _index_matches(
-                index_offsets, in_mirror[data_key], offsets_by_key[data_key]
-            ):
+            if not _index_matches(index_offsets, offsets_by_key[data_key]):
                 log.warning(
                     f"{file.name} still disagrees with its data file; will retry"
                 )
@@ -257,12 +256,18 @@ def _copy_index(
         path.unlink()
 
 
-def _index_matches(
-    index_offsets: list[int], data_size: int, data_offsets: list[int] | None
-) -> bool:
-    if data_offsets is not None:
-        return index_offsets == data_offsets
-    return index_offsets[-1] < data_size
+def _index_matches(index_offsets: list[int], data_offsets: list[int]) -> bool:
+    return index_offsets == data_offsets
+
+
+def _mirrored_message_offsets(
+    mirror: obstore.store.ObjectStore, key: str
+) -> list[int] | None:
+    with tempfile.NamedTemporaryFile(suffix=".grib2") as copy:
+        for chunk in obstore.get(mirror, key):
+            copy.write(chunk)
+        copy.flush()
+        return grib_message_offsets(Path(copy.name))
 
 
 def is_whole_grib2(path: Path) -> bool:

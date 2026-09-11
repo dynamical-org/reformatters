@@ -119,6 +119,7 @@ def test_backfill_local_and_operational_update(
         "mirror_store",
         lambda self: obstore.store.LocalStore(tmp_path / "empty-mirror", mkdir=True),
     )
+    monkeypatch.setattr(CheckMirroredFilesReachNodd, "mirror_listing", lambda self: {})
     dataset.update("test-update")
 
     updated = validation.open_flattened_dataset(
@@ -285,22 +286,51 @@ def _reach_nodd_check(
 
 def test_mirrored_files_that_reached_nodd_pass_and_old_missing_ones_fail() -> None:
     key = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+    other = "hrrr.20260907/conus/hrrr.t19z.wrfprsf01.grib2"
     fresh = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf02.grib2"
     now = datetime.now(UTC)
     mirror = {
         key: now - timedelta(hours=40),
         key + ".idx": now - timedelta(hours=40),
+        other: now - timedelta(hours=40),
+        other + ".idx": now - timedelta(hours=40),
         fresh: now - timedelta(hours=1),
     }
     context = validation.ValidationContext(
         store=Mock(), ds=xr.Dataset(), append_dim="init_time"
     )
-    assert (
-        _reach_nodd_check(mirror, {key, key + ".idx"}, timedelta(hours=36))
-        .check(context)
-        .passed
-    )
-    result = _reach_nodd_check(mirror, set(), timedelta(hours=36)).check(context)
+    complete = {key, key + ".idx", other, other + ".idx"}
+    check = _reach_nodd_check(mirror, complete, timedelta(hours=36))
+    assert check.check(context).passed
+
+    # NODD holding the GRIB without its index cannot be repointed to either.
+    check = _reach_nodd_check(mirror, {key, other, other + ".idx"}, timedelta(hours=36))
+    result = check.check(context)
     assert not result.passed
     assert key in result.message
+    assert other not in result.message
     assert fresh not in result.message
+
+
+def test_the_nodd_listing_is_fetched_once_per_check() -> None:
+    now = datetime.now(UTC)
+    mirror = {
+        f"hrrr.20260907/conus/hrrr.t19z.wrfsfcf{lead:02d}.grib2": now
+        - timedelta(hours=40)
+        for lead in range(5)
+    }
+    calls: list[int] = []
+
+    class CountingCheck(CheckMirroredFilesReachNodd):
+        def mirror_listing(self) -> dict[str, datetime]:
+            return mirror
+
+        def nodd_listing(self, keys: Sequence[str]) -> set[str]:
+            calls.append(len(keys))
+            return set()
+
+    context = validation.ValidationContext(
+        store=Mock(), ds=xr.Dataset(), append_dim="init_time"
+    )
+    assert not CountingCheck().check(context).passed
+    assert calls == [5]

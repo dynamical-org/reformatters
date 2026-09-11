@@ -45,8 +45,10 @@ class CheckMirroredFilesReachNodd(validation.Validator):
             for key, written in self.mirror_listing().items()
             if parse_mirror_key(key) is not None and now - written > self.max_age
         }
+        on_nodd = self.nodd_listing(sorted(old))
+        # Discovery needs both objects on NODD before it can rewrite a file's refs.
         missing = sorted(
-            key for key in old if key not in self.nodd_listing(sorted(old))
+            key for key in old if key not in on_nodd or key + ".idx" not in on_nodd
         )
         if missing:
             return validation.ValidationResult(
