@@ -148,11 +148,11 @@ Readers see the mirror-pointed window (typically until the next hourly fire) onl
 
 ### Bucket setup
 
-The mirror bucket is created like every other AWS Open Data bucket, then given an age-out rule (access logging comes with the script):
+The mirror bucket is created like every other AWS Open Data bucket, then given an age-out rule in place of the script's lifecycle (the bucket is versioned, so expiry writes a delete marker and the noncurrent rule removes the bytes a day later):
 
 ```bash
 deploy/aws/create_new_aws_open_data_bucket.sh noaa-hrrr-nomads-mirror
-aws s3api put-bucket-lifecycle-configuration --bucket dynamical-noaa-hrrr-nomads-mirror --lifecycle-configuration '{"Rules": [{"ID": "ExpireMirroredFiles", "Status": "Enabled", "Filter": {}, "Expiration": {"Days": 3}, "NoncurrentVersionExpiration": {"NoncurrentDays": 1}}, {"ID": "AbortIncompleteMultipartUploadRule", "Status": "Enabled", "Filter": {}, "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}]}'
+aws s3api put-bucket-lifecycle-configuration --bucket dynamical-noaa-hrrr-nomads-mirror --lifecycle-configuration '{"Rules": [{"ID": "ExpireMirroredFiles", "Status": "Enabled", "Filter": {}, "Expiration": {"Days": 3}, "NoncurrentVersionExpiration": {"NoncurrentDays": 1}}, {"ID": "CleanUpDeleteMarkers", "Status": "Enabled", "Filter": {}, "Expiration": {"ExpiredObjectDeleteMarker": true}}, {"ID": "AbortIncompleteMultipartUploads", "Status": "Enabled", "Filter": {}, "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}]}'
 ```
 
 The IAM principal behind `aws-open-data-icechunk-storage-options-key` writes the mirror; the update and readers list and read it anonymously.
