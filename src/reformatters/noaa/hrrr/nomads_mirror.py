@@ -145,9 +145,9 @@ def mirror_init_time(
 
     Each poll is one NOMADS directory listing, so the poll rate alone is the listing
     rate; every listing and copy goes through the shared NOMADS limiter. A data file
-    is copied before its index, and an index only once its data file is in the mirror,
-    so an index in the mirror implies a complete data file. A data file that does not
-    parse as whole GRIB2 messages is retried on a later poll rather than copied.
+    is copied once it parses as whole GRIB2 messages, and its index only once it
+    lists exactly the messages the mirrored data file holds, so an index in the
+    mirror describes the data file beside it; anything else is retried next poll.
     """
     files = [
         _MirrorFile(coord, is_index)
