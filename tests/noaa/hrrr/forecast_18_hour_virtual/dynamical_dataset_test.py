@@ -1,18 +1,21 @@
 import re
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import icechunk
 import numpy as np
 import obstore.store
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common import template_utils, validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
+    CheckMirroredFilesReachNodd,
     NoaaHrrrForecast18HourVirtualDataset,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
@@ -200,7 +203,8 @@ def test_operational_kubernetes_resources(
 
 def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 3
+    assert len(validators) == 4
+    assert any(isinstance(v, CheckMirroredFilesReachNodd) for v in validators)
     (current_data,) = [
         validator
         for validator in validators
@@ -264,3 +268,39 @@ def test_validation_job_probes_the_manifest_without_the_mirror_override(
     job = dataset._virtual_validation_region_job(dataset.validators(), "test")
     assert isinstance(job, NoaaHrrrForecast18HourVirtualRegionJob)
     assert not job.repoint_mirrored
+
+
+def _reach_nodd_check(
+    mirror: dict[str, datetime], nodd: set[str], max_age: timedelta
+) -> CheckMirroredFilesReachNodd:
+    class LocalCheck(CheckMirroredFilesReachNodd):
+        def mirror_listing(self) -> dict[str, datetime]:
+            return mirror
+
+        def nodd_listing(self, keys: Sequence[str]) -> set[str]:  # noqa: ARG002
+            return nodd
+
+    return LocalCheck(max_age=max_age)
+
+
+def test_mirrored_files_that_reached_nodd_pass_and_old_missing_ones_fail() -> None:
+    key = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+    fresh = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf02.grib2"
+    now = datetime.now(UTC)
+    mirror = {
+        key: now - timedelta(hours=40),
+        key + ".idx": now - timedelta(hours=40),
+        fresh: now - timedelta(hours=1),
+    }
+    context = validation.ValidationContext(
+        store=Mock(), ds=xr.Dataset(), append_dim="init_time"
+    )
+    assert (
+        _reach_nodd_check(mirror, {key, key + ".idx"}, timedelta(hours=36))
+        .check(context)
+        .passed
+    )
+    result = _reach_nodd_check(mirror, set(), timedelta(hours=36)).check(context)
+    assert not result.passed
+    assert key in result.message
+    assert fresh not in result.message

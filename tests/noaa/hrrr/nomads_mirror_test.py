@@ -36,8 +36,11 @@ def coord(lead: int, file_type: NoaaHrrrFileType = "sfc") -> NoaaHrrrSourceFileC
     )
 
 
-def test_mirror_key_is_the_nodd_key() -> None:
-    assert mirror_key(coord(1)) == "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+def test_mirror_key_is_the_nodd_key_and_parses_back() -> None:
+    key = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+    assert mirror_key(coord(1)) == key
+    assert nomads_mirror.parse_mirror_key(key) == (INIT, pd.Timedelta("1h"), "sfc")
+    assert nomads_mirror.parse_mirror_key(key + ".idx") is None
 
 
 class FakeNomads:
@@ -198,6 +201,51 @@ def test_is_whole_grib2_rejects_a_cut_inside_a_message(tmp_path: Path) -> None:
     not_grib = tmp_path / "x.grib2"
     not_grib.write_bytes(b"<html>rate limited</html>")
     assert not nomads_mirror.is_whole_grib2(not_grib)
+    empty = tmp_path / "empty.grib2"
+    empty.write_bytes(b"")
+    assert not nomads_mirror.is_whole_grib2(empty)
+
+
+def test_a_data_file_cut_between_messages_is_replaced_when_its_index_disagrees(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    whole, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
+    second_message_start = int(index.decode().splitlines()[1].split(":")[1])
+    # NOMADS lists the file while it holds only its first message: whole GRIB2, but short.
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole[:second_message_start])
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == [mirror_key(coord(0))]
+
+    # The index arrives naming both messages: the short copy is replaced first.
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == [mirror_key(coord(0)) + ".idx"]
+    assert nomads.fetched == [
+        "hrrr.t19z.wrfsfcf00.grib2",
+        "hrrr.t19z.wrfsfcf00.grib2.idx",
+        "hrrr.t19z.wrfsfcf00.grib2",
+    ]
+    assert obstore.get(mirror, mirror_key(coord(0))).bytes().to_bytes() == whole
+
+
+def test_an_index_disagreeing_with_a_file_mirrored_by_an_earlier_pod_waits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    whole, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
+    second_message_start = int(index.decode().splitlines()[1].split(":")[1])
+    obstore.put(mirror, mirror_key(coord(0)), whole[:second_message_start])
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole[:second_message_start])
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    # The index's last message starts past the mirrored file; NOMADS still serves
+    # the short file, so nothing is exposed and the index stays pending.
+    assert result.copied == []
+    assert result.pending == [mirror_key(coord(0)) + ".idx"]
 
 
 def test_downloads_and_listings_go_through_the_nomads_limiter(

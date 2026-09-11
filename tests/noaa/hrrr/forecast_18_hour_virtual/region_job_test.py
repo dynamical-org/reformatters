@@ -405,3 +405,29 @@ def test_a_mirror_file_is_ingested_then_repointed_to_nodd_on_the_next_fire(
     locations = repo.readonly_session("main").all_virtual_chunk_locations()
     assert nodd_url in locations
     assert mirror_url not in locations
+
+
+def test_filter_recovers_a_mirrored_file_from_outside_the_update_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file mirrored two days ago whose refs still point at the mirror is re-offered
+    even though the update window has moved on; one outside the template is not."""
+    job = make_job(tmp_path, [get_var("composite_reflectivity")])
+    old = routed_coord(init_time=MIRRORED_INIT - pd.Timedelta("48h"))
+    beyond_template = routed_coord(lead_time=pd.Timedelta("40h"))
+    mirror_file(tmp_path, old)
+    mirror_file(tmp_path, beyond_template)
+    monkeypatch.setattr(
+        NoaaHrrrVirtualRegionJob,
+        "filter_already_present",
+        lambda self, candidates, store: [],
+    )
+    remaining = job.filter_already_present([], Mock())
+    (recovered,) = (routed(c) for c in remaining)
+    assert (recovered.init_time, recovered.lead_time, recovered.file_type) == (
+        old.init_time,
+        old.lead_time,
+        "sfc",
+    )
+    assert recovered.already_present
+    assert [v.name for v in recovered.data_vars] == ["composite_reflectivity"]

@@ -27,6 +27,7 @@ from reformatters.noaa.hrrr.nomads_mirror import (
     MIRROR_LOCATION_PREFIX,
     mirror_key,
     mirror_store,
+    parse_mirror_key,
 )
 from reformatters.noaa.hrrr.region_job import NODD_BUCKET_REGION, DownloadSource
 from reformatters.noaa.hrrr.virtual_region_job import (
@@ -87,8 +88,8 @@ class NoaaHrrrForecast18HourVirtualSourceFileCoord(
 
 
 class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
-    """Reads the NOMADS mirror when NODD does not have a file yet, and keeps offering a
-    file the store holds while the mirror still lists it, so its refs are rewritten
+    """Takes a file from NODD, or from the NOMADS mirror while NODD does not have it,
+    and keeps offering every file the mirror still holds so its refs are rewritten
     from NODD once NODD publishes it (an idempotent rewrite when they already point
     there). See "NOMADS mirror" in docs/virtual_datasets.md."""
 
@@ -147,17 +148,49 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
         candidates: Sequence[NoaaHrrrForecastVirtualSourceFileCoord],
         store: IcechunkStore,
     ) -> list[NoaaHrrrForecastVirtualSourceFileCoord]:
-        absent = super().filter_already_present(candidates, store)
         if not self.repoint_mirrored:
-            return absent
+            return super().filter_already_present(candidates, store)
+        mirrored = self._mirror_listing()
+        # A file the mirror still holds can be repointed for as long as the mirror
+        # keeps it, so the work is not bounded by the update window's candidates.
+        known = {mirror_key(c) for c in candidates}
+        recovery = [
+            coord
+            for key in sorted(mirrored)
+            if key not in known and (coord := self._coord_for_mirror_key(key))
+        ]
+        all_candidates = [*candidates, *recovery]
+        absent = super().filter_already_present(all_candidates, store)
         absent_ids = {id(coord) for coord in absent}
-        mirrored = self._mirror_listing(candidates)
         present_in_mirror = []
-        for coord in candidates:
+        for coord in all_candidates:
             if id(coord) not in absent_ids and mirror_key(coord) in mirrored:
                 _routed(coord).mark_present()
                 present_in_mirror.append(coord)
         return [*absent, *present_in_mirror]
+
+    def _coord_for_mirror_key(
+        self, key: str
+    ) -> NoaaHrrrForecast18HourVirtualSourceFileCoord | None:
+        """The coord for a mirrored data file this job could write, or None for a key
+        outside the template's coordinates or with no variables in the file."""
+        parsed = parse_mirror_key(key)
+        if parsed is None:
+            return None
+        init_time, lead_time, file_type = parsed
+        root = self.template_ds.to_dataset()
+        if init_time not in root.get_index(
+            "init_time"
+        ) or lead_time not in root.get_index("lead_time"):
+            return None
+        region_ds = root[["init_time", "lead_time"]].sel(
+            init_time=[init_time], lead_time=[lead_time]
+        )
+        coords = self.generate_source_file_coords(
+            region_ds,
+            [v for v in self.data_vars if v.internal_attrs.hrrr_file_type == file_type],
+        )
+        return _routed(coords[0]) if coords else None
 
     def discover_available(
         self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
@@ -197,16 +230,12 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
                 coord.route_to("nodd")
         return [*on_nodd, *on_mirror]
 
-    def _mirror_listing(
-        self, candidates: Sequence[NoaaHrrrForecastVirtualSourceFileCoord]
-    ) -> set[str]:
-        prefixes = sorted({mirror_key(c).rsplit("/", 1)[0] + "/" for c in candidates})
+    def _mirror_listing(self) -> set[str]:
+        """Every data-file key the mirror holds with its index."""
         try:
-            store = self.mirror_store()
-            return {
+            listing = {
                 meta["path"]
-                for prefix in prefixes
-                for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
+                for batch in obstore.list(self.mirror_store(), chunk_size=10_000)
                 for meta in batch
             }
         except Exception:
@@ -214,6 +243,7 @@ class NoaaHrrrForecast18HourVirtualRegionJob(NoaaHrrrForecastVirtualRegionJob):
                 "Cannot list the NOMADS mirror; repoints wait for a later fire"
             )
             return set()
+        return {key for key in listing if key + ".idx" in listing}
 
 
 def _routed(

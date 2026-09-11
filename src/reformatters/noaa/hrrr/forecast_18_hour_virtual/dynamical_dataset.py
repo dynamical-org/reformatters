@@ -1,9 +1,11 @@
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 
+import obstore
+import pandas as pd
 from pydantic import Field
 
-from reformatters.common import validation
+from reformatters.common import download, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.storage import (
@@ -12,7 +14,10 @@ from reformatters.common.storage import (
 )
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.nomads_mirror import mirror_store, parse_mirror_key
+from reformatters.noaa.hrrr.region_job import NODD_BUCKET_REGION
 from reformatters.noaa.hrrr.virtual_region_job import (
+    S3_LOCATION_PREFIX,
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
 
@@ -21,6 +26,58 @@ from .region_job import (
     hrrr_18_hour_virtual_chunk_containers,
 )
 from .template_config import NoaaHrrrForecast18HourVirtualTemplateConfig
+
+
+class CheckMirroredFilesReachNodd(validation.Validator):
+    """Fail when a file the NOMADS mirror has held for longer than `max_age` is still
+    not on NODD: its refs can only point at the mirror, and the mirror expires it
+    after three days, so this is the warning before those refs break."""
+
+    max_age: timedelta = timedelta(hours=36)
+
+    def check(
+        self,
+        context: validation.ValidationContext,  # noqa: ARG002 - the buckets, not the store, are checked
+    ) -> validation.ValidationResult:
+        now = pd.Timestamp.now("UTC")
+        old = {
+            key: written
+            for key, written in self.mirror_listing().items()
+            if parse_mirror_key(key) is not None and now - written > self.max_age
+        }
+        missing = sorted(
+            key for key in old if key not in self.nodd_listing(sorted(old))
+        )
+        if missing:
+            return validation.ValidationResult(
+                passed=False,
+                message=f"{len(missing)} files older than {self.max_age} on the NOMADS "
+                f"mirror are not on NODD; their refs break when the mirror expires them: "
+                f"{missing[:10]}",
+                checked_count=len(old),
+            )
+        return validation.ValidationResult(
+            passed=True,
+            message=f"every mirrored file older than {self.max_age} is on NODD",
+            checked_count=len(old),
+        )
+
+    def mirror_listing(self) -> dict[str, datetime]:
+        return {
+            meta["path"]: meta["last_modified"]
+            for batch in obstore.list(mirror_store(write=False), chunk_size=10_000)
+            for meta in batch
+        }
+
+    def nodd_listing(self, keys: Sequence[str]) -> set[str]:
+        store = download.s3_store(S3_LOCATION_PREFIX, region=NODD_BUCKET_REGION)
+        prefixes = sorted({key.rsplit("/", 1)[0] + "/" for key in keys})
+        return {
+            meta["path"]
+            for prefix in prefixes
+            for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
+            for meta in batch
+        }
 
 
 class NoaaHrrrForecast18HourVirtualDataset(
@@ -103,4 +160,5 @@ class NoaaHrrrForecast18HourVirtualDataset(
                 min_present_fraction=(0.05, 1.0)
             ),
             validation.CheckVirtualDecodeHealth(),
+            CheckMirroredFilesReachNodd(),
         )

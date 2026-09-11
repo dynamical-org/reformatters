@@ -1,7 +1,7 @@
 """The NOMADS mirror: a cron that copies each hourly HRRR init's files (GRIB and NOAA's
 `.idx` sidecar, as published) from NOMADS into `s3://dynamical-noaa-hrrr-nomads-mirror/`
 under the same keys NODD uses, minutes before NODD lists them. The 18-hour virtual
-dataset reads the mirror first; see "NOMADS mirror" in docs/virtual_datasets.md.
+dataset reads the mirror when NODD does not have a file yet; see "NOMADS mirror" in docs/virtual_datasets.md.
 """
 
 import re
@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Final, NamedTuple
+from typing import Annotated, Final, NamedTuple, cast
 
 import obstore
 import obstore.store
@@ -46,6 +46,24 @@ _GRIB_END_MARKER = b"7777"
 def mirror_key(coord: NoaaHrrrSourceFileCoord) -> str:
     """The mirror object key for coord's data file: identical to its NODD key."""
     return coord.relative_path()
+
+
+_MIRROR_KEY_PATTERN = re.compile(
+    r"hrrr\.(?P<date>\d{8})/conus/hrrr\.t(?P<hour>\d{2})z\.wrf(?P<file_type>sfc|prs|nat)f(?P<lead>\d{2})\.grib2"
+)
+
+
+def parse_mirror_key(
+    key: str,
+) -> tuple[pd.Timestamp, pd.Timedelta, NoaaHrrrFileType] | None:
+    """The (init_time, lead_time, file_type) a data file key names, or None for any
+    other key (an index, another product)."""
+    match = _MIRROR_KEY_PATTERN.fullmatch(key)
+    if match is None:
+        return None
+    init_time = pd.Timestamp(f"{match['date']}T{match['hour']}:00")
+    file_type = cast("NoaaHrrrFileType", match["file_type"])
+    return init_time, pd.Timedelta(hours=int(match["lead"])), file_type
 
 
 def mirror_store(*, write: bool) -> obstore.store.S3Store:
@@ -138,22 +156,27 @@ def mirror_init_time(
         for is_index in (False, True)
     ]
     day_prefix = mirror_key(files[0].coord).rsplit("/", 1)[0] + "/"
-    in_mirror = {
-        meta["path"]
+    in_mirror: dict[str, int] = {
+        meta["path"]: meta["size"]
         for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
         for meta in batch
     }
     pending = [file for file in files if file.key not in in_mirror]
     directory_url = files[0].url.rsplit("/", 1)[0] + "/"
+    offsets_by_key: dict[str, list[int]] = {}
     result = MirrorResult([], [])
     while pending and pd.Timestamp.now("UTC") < deadline:
         poll_start = time.monotonic()
         listed = list_directory(directory_url)
         for file in [f for f in pending if f.name in listed]:
-            if file.is_index and mirror_key(file.coord) not in in_mirror:
+            data_key = mirror_key(file.coord)
+            if file.is_index and data_key not in in_mirror:
                 continue
-            if _copy(file, mirror, fetch):
-                in_mirror.add(file.key)
+            if file.is_index:
+                copied = _copy_index(file, mirror, fetch, in_mirror, offsets_by_key)
+            else:
+                copied = _copy_data(file, mirror, fetch, in_mirror, offsets_by_key)
+            if copied:
                 pending.remove(file)
                 result.copied.append(file.key)
                 log.info(f"Mirrored {file.key}")
@@ -168,44 +191,112 @@ def mirror_init_time(
     return result
 
 
-def _copy(
-    file: _MirrorFile, mirror: obstore.store.ObjectStore, fetch: Callable[[str], Path]
+def _copy_data(
+    file: _MirrorFile,
+    mirror: obstore.store.ObjectStore,
+    fetch: Callable[[str], Path],
+    in_mirror: dict[str, int],
+    offsets_by_key: dict[str, list[int]],
 ) -> bool:
     path = fetch(file.url)
     try:
-        if file.is_index:
-            valid = bool(parse_grib_index_lines(path))
-        else:
-            valid = is_whole_grib2(path)
-        if not valid:
-            log.warning(f"{file.name} is not complete on NOMADS yet; will retry")
+        offsets = grib_message_offsets(path)
+        if offsets is None:
+            log.warning(f"{file.name} is not whole GRIB2 on NOMADS yet; will retry")
             return False
         with path.open("rb") as data:
             obstore.put(mirror, file.key, data)
+        in_mirror[file.key] = path.stat().st_size
+        offsets_by_key[file.key] = offsets
         return True
     finally:
         path.unlink()
 
 
+def _copy_index(
+    file: _MirrorFile,
+    mirror: obstore.store.ObjectStore,
+    fetch: Callable[[str], Path],
+    in_mirror: dict[str, int],
+    offsets_by_key: dict[str, list[int]],
+) -> bool:
+    """Copy an index once it agrees with the mirrored data file: every message it lists
+    must start inside the file and, when this run copied the file, at the offsets the
+    file was scanned to have. A data file copied while NOMADS was still appending
+    messages passes the whole-GRIB2 check, so on disagreement the data file is fetched
+    again and replaced before the index is exposed."""
+    data_key = mirror_key(file.coord)
+    path = fetch(file.url)
+    try:
+        index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
+        if not index_offsets:
+            log.warning(f"{file.name} is empty on NOMADS; will retry")
+            return False
+        if not _index_matches(
+            index_offsets, in_mirror[data_key], offsets_by_key.get(data_key)
+        ):
+            log.warning(
+                f"{file.name} lists messages the mirrored data file lacks; "
+                "re-copying the data file"
+            )
+            data_file = _MirrorFile(file.coord, is_index=False)
+            if not _copy_data(data_file, mirror, fetch, in_mirror, offsets_by_key):
+                return False
+            if not _index_matches(
+                index_offsets, in_mirror[data_key], offsets_by_key[data_key]
+            ):
+                log.warning(
+                    f"{file.name} still disagrees with its data file; will retry"
+                )
+                return False
+        with path.open("rb") as data:
+            obstore.put(mirror, file.key, data)
+        in_mirror[file.key] = path.stat().st_size
+        return True
+    finally:
+        path.unlink()
+
+
+def _index_matches(
+    index_offsets: list[int], data_size: int, data_offsets: list[int] | None
+) -> bool:
+    if data_offsets is not None:
+        return index_offsets == data_offsets
+    return index_offsets[-1] < data_size
+
+
 def is_whole_grib2(path: Path) -> bool:
-    """Whether the file is a sequence of complete GRIB2 messages that tile it exactly:
-    a file NOMADS is still writing fails this."""
+    """Whether the file is a non-empty sequence of complete GRIB2 messages that tile it
+    exactly. A file cut inside a message fails; one cut between messages does not,
+    which is what the index check at copy time is for."""
+    return grib_message_offsets(path) is not None
+
+
+def grib_message_offsets(path: Path) -> list[int] | None:
+    """The start byte of every GRIB2 message in the file, or None if the file is not a
+    non-empty sequence of complete edition-2 messages tiling it exactly."""
     size = path.stat().st_size
     offset = 0
+    offsets: list[int] = []
     with path.open("rb") as f:
         while offset < size:
             f.seek(offset)
             header = f.read(_GRIB_SECTION_0_BYTES)
-            if len(header) < _GRIB_SECTION_0_BYTES or header[:4] != b"GRIB":
-                return False
+            if (
+                len(header) < _GRIB_SECTION_0_BYTES
+                or header[:4] != b"GRIB"
+                or header[7] != 2
+            ):
+                return None
             (length,) = struct.unpack(">Q", header[8:_GRIB_SECTION_0_BYTES])
             if length < _GRIB_SECTION_0_BYTES or offset + length > size:
-                return False
+                return None
             f.seek(offset + length - len(_GRIB_END_MARKER))
             if f.read(len(_GRIB_END_MARKER)) != _GRIB_END_MARKER:
-                return False
+                return None
+            offsets.append(offset)
             offset += length
-    return offset == size
+    return offsets if offsets and offset == size else None
 
 
 def _coord(
@@ -236,7 +327,7 @@ def mirror_window(
 
 class NoaaHrrrNomadsMirror(OperationalResources):
     """Copies each hourly HRRR init's files from NOMADS into the mirror bucket ahead of
-    NOAA's AWS copy; the 18-hour virtual dataset reads the mirror first."""
+    NOAA's AWS copy; the 18-hour virtual dataset reads it when NODD lags."""
 
     @property
     def dataset_id(self) -> str:
