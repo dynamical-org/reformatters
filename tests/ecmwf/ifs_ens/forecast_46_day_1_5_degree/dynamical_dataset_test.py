@@ -62,7 +62,7 @@ def test_validators_check_masked_variables_are_not_all_nan(
     assert validators[2].spatial_sampling == "quarter"
 
 
-def test_operational_cron_jobs_are_not_suspended(
+def test_renamed_operational_cron_jobs_are_suspended(
     dataset: EcmwfIfsEnsForecast46Day15DegreeDataset,
 ) -> None:
     update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
@@ -70,13 +70,16 @@ def test_operational_cron_jobs_are_not_suspended(
     )
 
     assert update_cron_job.name == "ecmwf-ifs-ens-46-day-daily-update"
-    assert update_cron_job.suspend is False
+    assert update_cron_job.suspend is True
     assert validation_cron_job.name == "ecmwf-ifs-ens-46-day-daily-validate"
-    assert validation_cron_job.suspend is False
+    assert validation_cron_job.suspend is True
     for cron_job in (update_cron_job, validation_cron_job):
-        command = cron_job.as_kubernetes_object()["spec"]["jobTemplate"]["spec"][
-            "template"
-        ]["spec"]["containers"][0]["command"]
+        manifest = cron_job.as_kubernetes_object()
+        assert manifest["metadata"]["name"] == cron_job.name
+        assert manifest["spec"]["suspend"] is True
+        command = manifest["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+            "containers"
+        ][0]["command"]
         assert command[2] == "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree"
 
 
