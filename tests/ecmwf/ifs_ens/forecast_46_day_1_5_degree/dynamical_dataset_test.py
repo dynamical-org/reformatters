@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
 from reformatters.common.types import DatetimeLike
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
@@ -20,6 +21,32 @@ def dataset() -> EcmwfIfsEnsForecast46Day15DegreeDataset:
     return EcmwfIfsEnsForecast46Day15DegreeDataset(
         primary_storage_config=NOOP_STORAGE_CONFIG
     )
+
+
+def test_daily_identity_matches_registry_template_and_storage() -> None:
+    dataset = next(
+        dataset
+        for dataset in DYNAMICAL_DATASETS
+        if isinstance(dataset, EcmwfIfsEnsForecast46Day15DegreeDataset)
+    )
+    dataset_id = "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree"
+    assert dataset.dataset_id == dataset_id
+    assert "ecmwf-ifs-ens-forecast-46-day-1-5-degree" not in {
+        dataset.dataset_id for dataset in DYNAMICAL_DATASETS
+    }
+    assert dataset.store_factory.primary_url() == (
+        f"s3://dynamical-ecmwf-ifs-ens/{dataset_id}/v0.2.0.icechunk"
+    )
+    config = dataset.template_config
+    template = config.get_template(
+        config.append_dim_start + config.append_dim_frequency
+    )
+    for node in template.subtree:
+        assert node.attrs["dataset_id"] == dataset_id
+        assert node.attrs["name"] == "ECMWF IFS ENS forecast, 46 day, daily, 1.5 degree"
+        np.testing.assert_array_equal(
+            node["lead_time"], pd.timedelta_range("0h", "1104h", freq="24h")
+        )
 
 
 def test_validators_check_masked_variables_are_not_all_nan(
@@ -42,10 +69,15 @@ def test_operational_cron_jobs_are_not_suspended(
         "test-image-tag"
     )
 
-    assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    assert update_cron_job.name == "ecmwf-ifs-ens-46-day-daily-update"
     assert update_cron_job.suspend is False
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
+    assert validation_cron_job.name == "ecmwf-ifs-ens-46-day-daily-validate"
     assert validation_cron_job.suspend is False
+    for cron_job in (update_cron_job, validation_cron_job):
+        command = cron_job.as_kubernetes_object()["spec"]["jobTemplate"]["spec"][
+            "template"
+        ]["spec"]["containers"][0]["command"]
+        assert command[2] == "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree"
 
 
 def test_archive_contains_every_dataset_source_variable(

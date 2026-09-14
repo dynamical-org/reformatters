@@ -1273,7 +1273,7 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     (
         "total_cloud_cover_atmosphere",
         "step_type",
-        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+        "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     ),
     # GEFS publishes window-average upward radiation fluxes, while HRRR publishes
     # them at the valid time.
@@ -1471,22 +1471,22 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     (
         "snow_water_equivalent_surface",
         "step_type",
-        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+        "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     ),
     (
         "skin_temperature_surface",
         "step_type",
-        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+        "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     ),
     (
         "sea_surface_temperature",
         "step_type",
-        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+        "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     ),
     (
         "total_column_water_atmosphere",
         "step_type",
-        "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+        "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     ),
     # MRMS, IFS ENS, and HRDPS use source-defined precipitation-type code tables.
     (
