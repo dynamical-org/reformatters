@@ -2,7 +2,7 @@
 
 _Report issues to feedback@dynamical.org._
 
-For each dataset an update (`-update`) CronJob runs first, followed by a validation (`-validate`) CronJob. Names may shorten the dataset ID to fit Kubernetes' length limit; use the generated choices in "Create job from cronjob" below. The ECMWF 46-day daily product uses `ecmwf-ifs-ens-46-day-daily-update` and `ecmwf-ifs-ens-46-day-daily-validate`.
+For each dataset an update (`-update`) CronJob runs first, followed by a validation (`-validate`) CronJob. Names may shorten the dataset ID to fit Kubernetes' length limit; use the generated choices in "Create job from cronjob" below.
 
 ## Sentry monitoring
 _Requires sentry organization invitation._
