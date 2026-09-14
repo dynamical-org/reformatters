@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
+from datetime import timedelta
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
@@ -48,6 +49,8 @@ class MaterializedRegionJob(
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
     # will be pipelined within a region job.
     max_vars_per_download_group: ClassVar[int | None] = None
+
+    expected_missing_window: ClassVar[timedelta] = timedelta(hours=48)
 
     # Subclasses can override this to control download parallelism
     # This particularly useful of the data source cannot handle a large number of concurrent requests
@@ -305,15 +308,8 @@ class MaterializedRegionJob(
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
-                # For recent files, we expect some files to not exist yet, just log the path
-                # else, log exception so it is caught by error reporting but doesn't stop processing
-                append_dim_coord = coord.append_dim_coord
-                two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
-                if (
-                    is_not_found(e)
-                    and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-                    and append_dim_coord > two_days_ago
-                ):
+                # Expected missing files log quietly; other failures reach error reporting.
+                if is_not_found(e) and self.is_expected_missing(coord):
                     log.info(" ".join(str(e).split("\n")[:2]))
                 else:
                     log.exception(f"Download failed {coord.get_url()}")
@@ -325,6 +321,15 @@ class MaterializedRegionJob(
             max_workers=self.download_parallelism
         ) as download_executor:
             return list(download_executor.map(_call_download_file, source_file_coords))
+
+    def is_expected_missing(self, coord: SOURCE_FILE_COORD) -> bool:
+        """Whether a not-found for `coord` is expected rather than an error."""
+        append_dim_coord = coord.append_dim_coord
+        expected_after = pd.Timestamp.now() - self.expected_missing_window
+        return (
+            isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+            and append_dim_coord > expected_after
+        )
 
     def _read_into_data_array(
         self,

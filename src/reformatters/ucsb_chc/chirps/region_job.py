@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -75,6 +75,13 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     product: ChirpsProduct
 
     download_parallelism: int = 8
+    # Days the source never published are skipped by the contiguity scan but still downloaded.
+    known_missing_days: ClassVar[frozenset[pd.Timestamp]] = frozenset()
+
+    def is_expected_missing(self, coord: UcsbChcChirpsAnalysisSourceFileCoord) -> bool:
+        return (
+            super().is_expected_missing(coord) or coord.time in self.known_missing_days
+        )
 
     def generate_source_file_coords(
         self,
@@ -110,7 +117,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.DataTree:
-        """Trim the template before the first day not successfully read."""
+        """Trim before the first unread day, skipping days never published."""
         # A day whose download failed is absent from the results, so a Succeeded
         # status is the only evidence a day was read.
         read_times = {
@@ -122,9 +129,11 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         times = self.template_ds.coords[self.append_dim].values
         stop = self.region.start
         for i in range(self.region.start, len(times)):
-            if pd.Timestamp(times[i]) not in read_times:
+            time = pd.Timestamp(times[i])
+            if time in read_times:
+                stop = i + 1
+            elif time not in self.known_missing_days:
                 break
-            stop = i + 1
         return self.template_ds.isel({self.append_dim: slice(None, stop)})
 
     @classmethod
@@ -143,9 +152,8 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
-        # Reprocess the store's newest day so the update always has at least one
-        # available source file and trims, rather than publishing, the days beyond
-        # the source's leading edge.
+        # Include the newest stored day so its shard is selected even when no later
+        # day is available.
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)

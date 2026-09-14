@@ -42,15 +42,17 @@ SOURCE_FILL_VALUE = -9999.0
 _DESCRIPTIONS: dict[ChirpsProduct, str] = {
     "final": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
-        "with Stations (CHIRPS) version 3.0 final product, which incorporates station "
-        "observations and splits each pentad total into days using ERA5."
+        "with Stations (CHIRPS) version 3.0 final product (rnl variant), which "
+        "incorporates quality controlled station observations and splits each pentad "
+        "total into days using ERA5."
     ),
     "preliminary": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
         "with Stations (CHIRPS) version 3.0 preliminary product, a lower latency "
-        "satellite estimate which splits each pentad total into days using IMERG "
-        "rather than ERA5, so it differs from the final product in its daily "
-        "distribution as well as its inputs."
+        "estimate that blends satellite precipitation with the station observations "
+        "available in near real time and splits each pentad total into days using "
+        "IMERG, so it differs from the final (rnl) product in its station inputs and "
+        "daily distribution."
     ),
 }
 
@@ -191,21 +193,16 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
     @computed_field
     @property
     def data_vars(self) -> Sequence[DataVar[BaseInternalAttrs]]:
-        # Time-optimized: a year of days per chunk with a small 2.5 x 2.5 degree
-        # spatial chunk, so a time series read pulls little wasted spatial data.
-        # ~3.5 MB uncompressed, ~1 MB compressed over land at the measured 3.3:1 and
-        # far less over the structurally empty ocean. Deliberately under the chunk
-        # layout tool's 2.5 MB compressed target, which assumes data that compresses
-        # less well.
+        # Small spatial chunks limit overfetch for point time series.
         var_chunks: dict[Dim, int] = {
             "time": 365,
-            "latitude": 50,  # 48 chunks over 2400
-            "longitude": 50,  # 144 chunks over 7200
+            "latitude": 50,
+            "longitude": 50,
         }
         var_shards: dict[Dim, int] = {
             "time": var_chunks["time"],
-            "latitude": var_chunks["latitude"] * 24,  # 2 shards over 2400
-            "longitude": var_chunks["longitude"] * 36,  # 4 shards over 7200
+            "latitude": var_chunks["latitude"] * 24,
+            "longitude": var_chunks["longitude"] * 36,
         }
         return [
             DataVar(

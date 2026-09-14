@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -10,11 +11,15 @@ import zarr.storage
 from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
 from reformatters.ucsb_chc.chirps.analysis_preliminary import (
     UcsbChcChirpsAnalysisPreliminaryDataset,
+)
+from reformatters.ucsb_chc.chirps.analysis_preliminary.region_job import (
+    UcsbChcChirpsAnalysisPreliminaryRegionJob,
 )
 from reformatters.ucsb_chc.chirps.dynamical_dataset import (
     UcsbChcChirpsAnalysisMaterializedDataset,
@@ -135,8 +140,7 @@ def _patch_source(
     available: Callable[[pd.Timestamp], bool],
     requested_urls: list[str],
 ) -> None:
-    """Serve one constant-valued grid per day `available` accepts and report every
-    other day as missing, without any listing of what the source holds."""
+    """Serve a fresh constant grid for available days and report all others missing."""
 
     def fake_download(url: str, dataset_id: str) -> Path:
         requested_urls.append(url)
@@ -150,7 +154,7 @@ def _patch_source(
     values = np.full((GRID_LAT_SIZE, GRID_LON_SIZE), 24.0, dtype=np.float32)
     values[0, 0] = np.float32(SOURCE_FILL_VALUE)
     reader = MagicMock()
-    reader.read.return_value = values
+    reader.read.side_effect = lambda *args, **kwargs: values.copy()
     reader.__enter__ = lambda self: self
     reader.__exit__ = lambda self, *args: None
 
@@ -158,6 +162,15 @@ def _patch_source(
         "reformatters.ucsb_chc.chirps.region_job.http_download_to_disk", fake_download
     )
     monkeypatch.setattr("rasterio.open", lambda _path: reader)
+
+
+def _assert_constant_land_values(ds: xr.Dataset) -> None:
+    land = ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
+    assert_allclose(
+        land.values,
+        np.full(land.shape, 24.0 * MM_PER_DAY_TO_KG_M2_S, dtype=np.float32),
+        rtol=1e-2,
+    )
 
 
 @pytest.mark.slow
@@ -191,8 +204,7 @@ def test_update_trims_to_last_day_with_data(
 
     updated_ds = _open_store(dataset)
     assert_array_equal(updated_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
-    land = updated_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
-    assert np.isfinite(land.values).all()
+    _assert_constant_land_values(updated_ds)
 
     requested_days = sorted(url.removesuffix(".tif")[-10:] for url in requested_urls)
     # Every day from the store's newest through now is requested outright; nothing
@@ -244,8 +256,148 @@ def test_update_stops_before_an_unread_day_and_fills_it_in_later(
 
     updated_ds = _open_store(dataset)
     assert_array_equal(updated_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
-    land = updated_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
-    assert np.isfinite(land.values).all()
+    _assert_constant_land_values(updated_ds)
+
+
+@pytest.mark.slow
+def test_update_skips_a_known_gap_until_it_arrives(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dataset = _preliminary_dataset()
+    _shrink_template(monkeypatch, dataset)
+    gap = pd.Timestamp("2025-01-03")
+    monkeypatch.setattr(
+        UcsbChcChirpsAnalysisPreliminaryRegionJob,
+        "known_missing_days",
+        frozenset({gap}),
+    )
+    available_days = set(pd.date_range("2025-01-01", "2025-01-02"))
+    requested_urls: list[str] = []
+    _patch_source(
+        monkeypatch,
+        tmp_path,
+        lambda day: day in available_days,
+        requested_urls,
+    )
+
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-03"))
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
+    )
+
+    requested_urls.clear()
+    dataset.update("test-listed-gap-at-leading-edge")
+    trailing_gap_ds = _open_store(dataset)
+    assert_array_equal(
+        trailing_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-02")
+    )
+    assert any("2025.01.03" in url for url in requested_urls)
+
+    available_days.add(pd.Timestamp("2025-01-04"))
+    requested_urls.clear()
+    dataset.update("test-listed-gap-interior")
+    interior_gap_ds = _open_store(dataset)
+    assert_array_equal(
+        interior_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04")
+    )
+    assert pd.Timestamp(interior_gap_ds["time"].max().item()) == pd.Timestamp(
+        "2025-01-04"
+    )
+    land = interior_gap_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
+    assert np.isnan(land.sel(time=gap).item())
+    assert_allclose(
+        land.sel(time="2025-01-04").item(),
+        24.0 * MM_PER_DAY_TO_KG_M2_S,
+        rtol=1e-2,
+    )
+    assert any("2025.01.03" in url for url in requested_urls)
+
+    available_days.add(pd.Timestamp("2025-01-05"))
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-06T12:00")),
+    )
+    requested_urls.clear()
+    dataset.update("test-listed-gap-replayed")
+    replayed_gap_ds = _open_store(dataset)
+    assert_array_equal(
+        replayed_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-05")
+    )
+    assert np.isnan(
+        replayed_gap_ds.sel({**_LAND_POINT, "time": gap}, method="nearest")[
+            "precipitation_surface"
+        ].item()
+    )
+    assert_allclose(
+        replayed_gap_ds.sel({**_LAND_POINT, "time": "2025-01-05"}, method="nearest")[
+            "precipitation_surface"
+        ].item(),
+        24.0 * MM_PER_DAY_TO_KG_M2_S,
+        rtol=1e-2,
+    )
+    assert any("2025.01.03" in url for url in requested_urls)
+
+    available_days.add(gap)
+    requested_urls.clear()
+    dataset.update("test-listed-gap-restored")
+    restored_ds = _open_store(dataset)
+    assert_allclose(
+        restored_ds.sel({**_LAND_POINT, "time": gap}, method="nearest")[
+            "precipitation_surface"
+        ].item(),
+        24.0 * MM_PER_DAY_TO_KG_M2_S,
+        rtol=1e-2,
+    )
+    assert any("2025.01.03" in url for url in requested_urls)
+
+
+@pytest.mark.slow
+def test_update_rejects_a_failed_reread_without_changing_the_icechunk_store(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dataset = UcsbChcChirpsAnalysisPreliminaryDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    _shrink_template(monkeypatch, dataset)
+    failed_days: set[pd.Timestamp] = set()
+    requested_urls: list[str] = []
+
+    def available(day: pd.Timestamp) -> bool:
+        if day in failed_days:
+            raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
+        return day <= pd.Timestamp("2025-01-03")
+
+    _patch_source(monkeypatch, tmp_path, available, requested_urls)
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-04"))
+    before = _open_store(dataset)
+    before_time = before["time"].values.copy()
+    before_land = before.sel(_LAND_POINT, method="nearest")[
+        "precipitation_surface"
+    ].values.copy()
+    primary_repo, _ = dataset.store_factory.icechunk_primary_and_replica_repos()
+    before_snapshot = primary_repo.lookup_branch("main")
+
+    failed_days.add(pd.Timestamp("2025-01-02"))
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
+    )
+    with pytest.raises(ValueError, match="retract"):
+        dataset.update("test-failed-reread")
+
+    after = _open_store(dataset)
+    assert_array_equal(after["time"].values, before_time)
+    assert_allclose(
+        after.sel(_LAND_POINT, method="nearest")["precipitation_surface"].values,
+        before_land,
+    )
+    assert primary_repo.lookup_branch("main") == before_snapshot
 
 
 @pytest.mark.slow
@@ -274,8 +426,7 @@ def test_update_spanning_two_time_shards_extends_through_the_second(
 
     updated_ds = _open_store(dataset)
     assert_array_equal(updated_ds["time"], pd.date_range("2025-01-01", "2025-01-06"))
-    land = updated_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
-    assert np.isfinite(land.values).all()
+    _assert_constant_land_values(updated_ds)
 
 
 def test_operational_kubernetes_resources() -> None:
@@ -293,19 +444,41 @@ def test_operational_kubernetes_resources() -> None:
 
 
 @pytest.mark.parametrize(
-    "dataset",
+    ("dataset", "expected_delay"),
     [
-        UcsbChcChirpsAnalysisFinalDataset(primary_storage_config=NOOP_STORAGE_CONFIG),
-        UcsbChcChirpsAnalysisPreliminaryDataset(
-            primary_storage_config=NOOP_STORAGE_CONFIG
+        pytest.param(
+            UcsbChcChirpsAnalysisFinalDataset(
+                primary_storage_config=NOOP_STORAGE_CONFIG
+            ),
+            timedelta(days=60),
+            id="final",
+        ),
+        pytest.param(
+            UcsbChcChirpsAnalysisPreliminaryDataset(
+                primary_storage_config=NOOP_STORAGE_CONFIG
+            ),
+            timedelta(days=10),
+            id="preliminary",
         ),
     ],
-    ids=["final", "preliminary"],
 )
-def test_validators(dataset: UcsbChcChirpsAnalysisMaterializedDataset) -> None:
+def test_validators(
+    dataset: UcsbChcChirpsAnalysisMaterializedDataset,
+    expected_delay: timedelta,
+) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 2
     assert all(isinstance(v, validation.Validator) for v in validators)
+    current_data = next(
+        validator
+        for validator in validators
+        if isinstance(validator, validation.CheckCurrentData)
+    )
+    assert (
+        current_data.max_delay
+        == dataset.region_job_class.expected_missing_window
+        == expected_delay
+    )
 
 
 def _nan_check_dataset(missing_newest: bool) -> xr.Dataset:

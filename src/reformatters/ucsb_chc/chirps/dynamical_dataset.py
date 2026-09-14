@@ -19,7 +19,6 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
 
     update_schedule: ClassVar[str]
     validate_schedule: ClassVar[str]
-    max_expected_delay: ClassVar[timedelta]
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
@@ -50,12 +49,12 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=self.max_expected_delay),
+            validation.CheckCurrentData(
+                max_delay=self.region_job_class.expected_missing_window
+            ),
             validation.CheckRecentNans(
-                # Random point sampling drops the 71.9% of the grid that is ocean,
-                # NaN on every day, leaving land, where a day is either wholly read
-                # or missing. 40 points makes an all-ocean sample, which fails the
-                # check for want of signal, vanishingly unlikely.
+                # About 72% of grid cells are structurally NaN over ocean and marginal
+                # seas.
                 max_nan_fraction=0.05,
                 sampled_points=40,
                 append_dim_window=3,

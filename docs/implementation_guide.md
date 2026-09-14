@@ -136,6 +136,8 @@ Kubernetes resource values, materialized (fan-out across indexed jobs):
 
 For virtual updates, use `workers_total = 1` and `parallelism = 1` (they are single-writer); `cpu="1.7"` and `memory="7G"` are good starting points. See [Operational updates](virtual_datasets.md#operational-updates-single-writer), and [Manifest splitting](virtual_datasets.md#manifest-splitting) for sizing the manifest split the storage config needs.
 
+For a materialized source whose publication lag exceeds 48 hours, set `expected_missing_window` on its region job so not-yet-published days log at info. Set the dataset's `CheckCurrentData.max_delay` to include any additional update latency.
+
 The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
 
 #### Integration test with snapshot values

@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -125,6 +126,70 @@ def test_download_file_propagates_missing_file(
 
     with pytest.raises(FileNotFoundError):
         _job().download_file(coord)
+
+
+def test_known_missing_day_logs_info_but_old_unlisted_day_logs_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    listed = pd.Timestamp.now() - pd.Timedelta(days=30)
+    unlisted = listed - pd.Timedelta(days=1)
+    listed_runtime_error = listed - pd.Timedelta(days=2)
+    monkeypatch.setattr(
+        UcsbChcChirpsAnalysisPreliminaryRegionJob,
+        "known_missing_days",
+        frozenset({listed, listed_runtime_error}),
+    )
+
+    errors = {
+        listed: FileNotFoundError("listed missing"),
+        unlisted: FileNotFoundError("unlisted missing"),
+        listed_runtime_error: RuntimeError("unexpected failure"),
+    }
+
+    def fake_download(
+        self: UcsbChcChirpsAnalysisPreliminaryRegionJob,
+        coord: UcsbChcChirpsAnalysisSourceFileCoord,
+    ) -> Path:
+        raise errors[coord.time]
+
+    monkeypatch.setattr(
+        UcsbChcChirpsAnalysisPreliminaryRegionJob,
+        "download_file",
+        fake_download,
+    )
+    job = _job("preliminary")
+
+    for day, expected_level in (
+        (listed, logging.INFO),
+        (unlisted, logging.ERROR),
+        (listed_runtime_error, logging.ERROR),
+    ):
+        caplog.clear()
+        coord = UcsbChcChirpsAnalysisSourceFileCoord(product="preliminary", time=day)
+        with caplog.at_level(
+            logging.DEBUG, logger="reformatters.common.materialized_region_job"
+        ):
+            job._download_processing_group([coord], ["precipitation_surface"])
+        levels = [
+            record.levelno
+            for record in caplog.records
+            if record.name == "reformatters.common.materialized_region_job"
+            and not record.message.startswith("Downloading ")
+        ]
+        assert levels == [expected_level]
+
+
+@pytest.mark.slow
+def test_known_missing_preliminary_days_remain_absent() -> None:
+    job = _job("preliminary")
+    assert job.known_missing_days == frozenset(
+        pd.date_range("2025-02-26", "2025-02-28")
+    ) | frozenset(pd.date_range("2025-03-26", "2025-03-31"))
+
+    for day in sorted(job.known_missing_days):
+        coord = UcsbChcChirpsAnalysisSourceFileCoord(product="preliminary", time=day)
+        with pytest.raises(FileNotFoundError):
+            job.download_file(coord)
 
 
 def test_generate_source_file_coords() -> None:

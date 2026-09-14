@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import Sequence
+from datetime import timedelta
 from itertools import batched, pairwise
 from pathlib import Path
 from typing import ClassVar
@@ -1243,6 +1244,18 @@ class TestDownloadErrorLogging:
             job, _make_http_status_error(404), monkeypatch, caplog
         )
         assert levels == [logging.ERROR]
+
+    def test_httpx_404_within_overridden_window_logs_info(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setattr(
+            ExampleRegionJob, "expected_missing_window", timedelta(days=7)
+        )
+        job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
+        levels = self._download_and_get_log_levels(
+            job, _make_http_status_error(404), monkeypatch, caplog
+        )
+        assert levels == [logging.INFO]
 
     def test_file_not_found_recent_logs_info(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

@@ -3,7 +3,7 @@
     "dataset_id": "ucsb-chc-chirps-analysis-preliminary",
     "dataset_version": "0.1.0",
     "name": "UCSB CHC CHIRPS analysis preliminary",
-    "description": "Daily precipitation from the Climate Hazards Center Infrared Precipitation with Stations (CHIRPS) version 3.0 preliminary product, a lower latency satellite estimate which splits each pentad total into days using IMERG rather than ERA5, so it differs from the final product in its daily distribution as well as its inputs.",
+    "description": "Daily precipitation from the Climate Hazards Center Infrared Precipitation with Stations (CHIRPS) version 3.0 preliminary product, a lower latency estimate that blends satellite precipitation with the station observations available in near real time and splits each pentad total into days using IMERG, so it differs from the final (rnl) product in its station inputs and daily distribution.",
     "attribution": "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by dynamical.org from the Climate Hazards Center data archive. Cite Funk, C., Peterson, P., Harrison, L. et al. The Climate Hazards Center Infrared Precipitation with Stations, Version 3. Sci Data 13, 718 (2026), data https://doi.org/10.15780/G2JQ0P.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Global land, 60 degrees north to 60 degrees south",
