@@ -1,8 +1,8 @@
 {
   "attributes": {
-    "dataset_id": "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    "dataset_id": "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
     "dataset_version": "0.2.0",
-    "name": "ECMWF IFS ENS forecast, 46 day, 1.5 degree",
+    "name": "ECMWF IFS ENS forecast, 46 day, daily, 1.5 degree",
     "description": "Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
     "attribution": "ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
     "license": "CC-BY-4.0",

@@ -5,7 +5,7 @@ from tests.common import datasets_cf_compliance_test as compliance
 UNRESOLVED_CLOUD_COVER_EXCEPTION = (
     "total_cloud_cover_atmosphere",
     "step_type",
-    "ecmwf-ifs-ens-forecast-46-day-1-5-degree",
+    "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
 )
 
 
@@ -14,7 +14,7 @@ def _cloud_cover_metadata() -> dict[
 ]:
     return {
         "total_cloud_cover_atmosphere": {
-            "ecmwf-ifs-ens-forecast-46-day-1-5-degree": {"step_type": "avg"},
+            "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree": {"step_type": "avg"},
             "conforming-dataset": {"step_type": "instant"},
         }
     }

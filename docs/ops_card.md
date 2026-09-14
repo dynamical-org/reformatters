@@ -2,7 +2,7 @@
 
 _Report issues to feedback@dynamical.org._
 
-For each dataset there are two workflows: `{dataset-id}-update` runs first, followed by `{dataset-id}-validate`.
+For each dataset an update (`-update`) CronJob runs first, followed by a validation (`-validate`) CronJob. Names may shorten the dataset ID to fit Kubernetes' length limit; use the generated choices in "Create job from cronjob" below.
 
 ## Sentry monitoring
 _Requires sentry organization invitation._
