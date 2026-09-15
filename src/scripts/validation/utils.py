@@ -172,6 +172,8 @@ class VariableStats:
     positions_complete: int | None = None
     first_incomplete: str | None = None
     last_incomplete: str | None = None
+    # Caveat on how this variable's availability was measured, shown in the report.
+    availability_note: str | None = None
 
     # Null value counts at the two run points (materialized stores only)
     null_count_p1: int | None = None

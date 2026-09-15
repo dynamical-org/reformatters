@@ -210,6 +210,8 @@ def _availability_line(stats: VariableStats) -> str:
             f"; nulls P1 {_fmt_count(stats.null_count_p1, stats.total_count_p1)}, "
             f"P2 {_fmt_count(stats.null_count_p2, stats.total_count_p2)}"
         )
+    if stats.availability_note:
+        detail += f" ({stats.availability_note})"
     return f"**Availability** — {detail}"
 
 

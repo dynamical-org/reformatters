@@ -364,6 +364,39 @@ def _co_ingested_availability(
     )
 
 
+def _scan_point_availability(
+    ctx: RunContext, var: str, template_var: DataVar[Any] | None
+) -> None:
+    """Record `var`'s availability from the cached point data's null fractions."""
+    stats = ctx.stats_for(var)
+    da_p1, da_p2 = ctx.loaded_point_data[var]
+
+    has_hour_0 = stores_hour_0_values(template_var, da_p1)
+    null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(
+        da_p1, has_hour_0=has_hour_0
+    )
+    null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(
+        da_p2, has_hour_0=has_hour_0
+    )
+
+    stats.unavailable_timestamps_p1 = unavailable_p1
+    stats.unavailable_timestamps_p2 = unavailable_p2
+    stats.null_count_p1 = n_p1
+    stats.null_count_p2 = n_p2
+    stats.total_count_p1 = total_p1
+    stats.total_count_p2 = total_p2
+
+    time_dim = next(d for d in ("time", "init_time") if d in null_p1.dims)
+    fraction = 1.0 - (null_p1.values + null_p2.values) / 2.0
+    ctx.availability[var] = AvailabilitySeries(
+        positions=null_p1[time_dim].values, fraction=fraction
+    )
+
+    p1_fmt = _format_unavailable_summary(unavailable_p1)
+    p2_fmt = _format_unavailable_summary(unavailable_p2)
+    log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
+
+
 def _apply_semantic_missing_availability(
     ctx: RunContext,
     semantic_missing_vars: list[str],
@@ -371,14 +404,15 @@ def _apply_semantic_missing_availability(
 ) -> None:
     for var in semantic_missing_vars:
         series = _co_ingested_availability(ctx, var, template_vars)
-        if series is None:
-            log.info(
-                f"  nulls {var}: not measured (semantic missing values, "
-                "nothing co-ingested scanned)"
-            )
+        if series is not None:
+            ctx.availability[var] = series
+            log.info(f"  nulls {var}: measured via co-ingested variables")
             continue
-        ctx.availability[var] = series
-        log.info(f"  nulls {var}: measured via co-ingested variables")
+        _scan_point_availability(ctx, var, template_vars.get(var))
+        ctx.stats_for(var).availability_note = (
+            "scanned from this variable's own values; a semantic missing value at a "
+            "run point is indistinguishable from unavailable data"
+        )
 
 
 def run_value_availability(ctx: RunContext) -> None:
@@ -419,30 +453,7 @@ def run_value_availability(ctx: RunContext) -> None:
         if var in semantic_missing_vars:
             continue
 
-        has_hour_0 = stores_hour_0_values(template_vars.get(var), da_p1)
-        null_p1, unavailable_p1, n_p1, total_p1 = _compute_nulls_for_point(
-            da_p1, has_hour_0=has_hour_0
-        )
-        null_p2, unavailable_p2, n_p2, total_p2 = _compute_nulls_for_point(
-            da_p2, has_hour_0=has_hour_0
-        )
-
-        stats.unavailable_timestamps_p1 = unavailable_p1
-        stats.unavailable_timestamps_p2 = unavailable_p2
-        stats.null_count_p1 = n_p1
-        stats.null_count_p2 = n_p2
-        stats.total_count_p1 = total_p1
-        stats.total_count_p2 = total_p2
-
-        time_dim = next(d for d in ("time", "init_time") if d in null_p1.dims)
-        fraction = 1.0 - (null_p1.values + null_p2.values) / 2.0
-        ctx.availability[var] = AvailabilitySeries(
-            positions=null_p1[time_dim].values, fraction=fraction
-        )
-
-        p1_fmt = _format_unavailable_summary(unavailable_p1)
-        p2_fmt = _format_unavailable_summary(unavailable_p2)
-        log.info(f"  nulls {var}: P1 unavailable={p1_fmt} | P2 unavailable={p2_fmt}")
+        _scan_point_availability(ctx, var, template_vars.get(var))
 
     _apply_semantic_missing_availability(ctx, semantic_missing_vars, template_vars)
 

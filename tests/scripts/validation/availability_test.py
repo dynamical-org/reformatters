@@ -267,8 +267,8 @@ def test_run_value_availability_sentinel_masked_uses_co_ingested(
 def test_run_value_availability_sentinel_masked_unregistered_store(
     tmp_path: Path,
 ) -> None:
-    """Without a registered dataset there is nothing co-ingested to measure through;
-    the variable reports n/a instead of a fabricated number."""
+    """Without a registered dataset there is nothing co-ingested to measure through,
+    so the variable falls back to its own nulls, flagged as ambiguous."""
     ds = _forecast_dataset()
     ds["percent_frozen_precipitation_surface"] = (
         ds["temperature_2m"].dims,
@@ -281,8 +281,52 @@ def test_run_value_availability_sentinel_masked_unregistered_store(
     run_value_availability(ctx)
 
     stats = ctx.stats["percent_frozen_precipitation_surface"]
-    assert stats.positions_total is None
-    assert "percent_frozen_precipitation_surface" not in ctx.availability
+    assert stats.positions_total == 6
+    assert stats.positions_complete == 0
+    assert stats.availability_note is not None
+    np.testing.assert_allclose(
+        ctx.availability["percent_frozen_precipitation_surface"].fraction, np.zeros(6)
+    )
+
+
+def test_run_value_availability_sentinel_masked_alone_in_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single-variable dataset's masked-sentinel variable has no co-member to measure
+    through, so it is value-scanned like any other variable and flagged as ambiguous."""
+    time = pd.date_range("2020-01-01", periods=6, freq="D")
+    values = np.ones((time.size, 2, 2))
+    values[2] = np.nan
+    ds = xr.Dataset(
+        {"precipitation_surface": (("time", "latitude", "longitude"), values)},
+        coords={
+            "time": time,
+            "latitude": np.array([10.0, 20.0]),
+            "longitude": np.array([30.0, 40.0]),
+        },
+    )
+    ds["precipitation_surface"].attrs["step_type"] = "avg"
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var(
+                "precipitation_surface", stores_hour_0=True, source_fill_value=-9999.0
+            )
+        ],
+    )
+    ctx = _ctx(ds, tmp_path)
+    ctx.variables = ["precipitation_surface"]
+
+    run_value_availability(ctx)
+
+    stats = ctx.stats["precipitation_surface"]
+    assert stats.positions_complete == 5
+    assert stats.positions_total == 6
+    assert stats.availability_note is not None
+    np.testing.assert_allclose(
+        ctx.availability["precipitation_surface"].fraction, [1, 1, 0, 1, 1, 1]
+    )
+    assert "2020-01-03" in (tmp_path / "unavailable_timestamps.txt").read_text()
 
 
 def test_run_value_availability_source_mask_uses_co_ingested(
