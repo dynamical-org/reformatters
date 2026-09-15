@@ -29,12 +29,14 @@ def test_dataset_ids_and_names() -> None:
     final = UcsbChcChirpsAnalysisFinalTemplateConfig()
     preliminary = UcsbChcChirpsAnalysisPreliminaryTemplateConfig()
     assert final.dataset_attributes.dataset_id == "ucsb-chc-chirps-analysis-final"
-    assert final.dataset_attributes.name == "UCSB CHC CHIRPS analysis final"
+    assert final.dataset_attributes.name == "UCSB CHC CHIRPS analysis, final"
     assert (
         preliminary.dataset_attributes.dataset_id
         == "ucsb-chc-chirps-analysis-preliminary"
     )
-    assert preliminary.dataset_attributes.name == "UCSB CHC CHIRPS analysis preliminary"
+    assert (
+        preliminary.dataset_attributes.name == "UCSB CHC CHIRPS analysis, preliminary"
+    )
 
 
 def test_append_dim_starts() -> None:

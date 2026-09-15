@@ -396,6 +396,30 @@ def test_operational_kubernetes_resources() -> None:
 
 
 @pytest.mark.parametrize(
+    "make_dataset", [_final_dataset, _preliminary_dataset], ids=["final", "preliminary"]
+)
+@pytest.mark.parametrize(
+    "now",
+    [
+        pd.Timestamp("2026-01-31T23:30"),
+        pd.Timestamp("2026-02-28T23:30"),
+        pd.Timestamp("2024-02-29T23:30"),
+        pd.Timestamp("2026-04-30T23:30"),
+    ],
+)
+def test_validation_follows_update_after_active_deadline(
+    make_dataset: Callable[[], UcsbChcChirpsAnalysisMaterializedDataset],
+    now: pd.Timestamp,
+) -> None:
+    update, validate = make_dataset().operational_kubernetes_resources("test-image-tag")
+    deadline = update.pod_active_deadline
+
+    assert validate.previous_fire_time(now + deadline) == (
+        update.previous_fire_time(now) + deadline
+    )
+
+
+@pytest.mark.parametrize(
     ("dataset", "expected_delay"),
     [
         pytest.param(

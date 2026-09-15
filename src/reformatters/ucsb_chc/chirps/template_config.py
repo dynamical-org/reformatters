@@ -74,7 +74,7 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
         return DatasetAttributes(
             dataset_id=f"ucsb-chc-chirps-analysis-{self.product}",
             dataset_version="0.1.0",
-            name=f"UCSB CHC CHIRPS analysis {self.product}",
+            name=f"UCSB CHC CHIRPS analysis, {self.product}",
             description=_DESCRIPTIONS[self.product],
             attribution=(
                 "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by "

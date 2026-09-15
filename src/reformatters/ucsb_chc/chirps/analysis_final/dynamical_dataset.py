@@ -19,5 +19,5 @@ class UcsbChcChirpsAnalysisFinalDataset(UcsbChcChirpsAnalysisMaterializedDataset
         UcsbChcChirpsAnalysisFinalRegionJob
     )
 
-    update_schedule: ClassVar[str] = "0 23 */3 * *"
-    validate_schedule: ClassVar[str] = "0 0 * * *"
+    update_schedule: ClassVar[str] = "0 0 */3 * *"
+    validate_schedule: ClassVar[str] = "0 1 */3 * *"

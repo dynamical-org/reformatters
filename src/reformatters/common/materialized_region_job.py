@@ -308,7 +308,7 @@ class MaterializedRegionJob(
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
-                # Recently unavailable files log quietly; other failures reach error reporting.
+                # Recent unavailable files log quietly; older file failures reach error reporting.
                 append_dim_coord = coord.append_dim_coord
                 expected_after = pd.Timestamp.now() - self.expected_unavailable_window
                 is_expected_unavailable = (
