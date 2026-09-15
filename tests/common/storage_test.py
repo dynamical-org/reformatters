@@ -20,6 +20,7 @@ from reformatters.common.storage import (
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
     _repository_config_and_credentials,
+    anonymous_virtual_chunk_credentials,
     commit_if_icechunk,
     manifest_append_dim_split,
 )
@@ -493,9 +494,20 @@ class TestIcechunkVirtualConfig:
         assert containers is not None
         assert set(containers) == {"https://example.com/"}
 
-    def test_unsupported_container_rejected(self) -> None:
+    def test_gcs_container_gets_anonymous_gcs_credentials(self) -> None:
         gcs_container = icechunk.VirtualChunkContainer(
             "gs://bucket/", icechunk.gcs_store()
+        )
+        s3_container = icechunk.VirtualChunkContainer(
+            "s3://bucket/", icechunk.s3_store(region="us-east-1")
+        )
+        credentials = anonymous_virtual_chunk_credentials([gcs_container, s3_container])
+        assert isinstance(credentials["gs://bucket/"], icechunk.Credentials.Gcs)
+        assert isinstance(credentials["s3://bucket/"], icechunk.Credentials.S3)
+
+    def test_unsupported_container_rejected(self) -> None:
+        azure_container = icechunk.VirtualChunkContainer(
+            "az://account/container/", icechunk.ObjectStoreConfig.Azure({})
         )
         factory = StoreFactory(
             primary_storage_config=StorageConfig(
@@ -504,7 +516,7 @@ class TestIcechunkVirtualConfig:
             dataset_id="test-dataset",
             template_config_version="v1.0",
             icechunk_virtual_config=IcechunkVirtualConfig(
-                containers=(gcs_container,),
+                containers=(azure_container,),
                 manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
             ),
         )

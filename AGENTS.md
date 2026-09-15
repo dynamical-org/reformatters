@@ -265,9 +265,15 @@ repo.ancestry(branch="main")  # Iterator[SnapshotInfo]
 Virtual datasets also require `authorize_virtual_chunk_access`. Build it from the STAC asset and pass it to `Repository.open`:
 
 ```python
+anonymous_credentials = {
+    "s3": icechunk.s3_anonymous_credentials,
+    "gs": lambda: icechunk.gcs_credentials(anonymous=True),
+}
 authorize = icechunk.containers_credentials(
     {
-        container["url_prefix"]: icechunk.s3_anonymous_credentials()
+        container["url_prefix"]: anonymous_credentials[
+            container["url_prefix"].split("://")[0]
+        ]()
         for container in asset["icechunk:virtual_chunk_containers"]
     }
 )

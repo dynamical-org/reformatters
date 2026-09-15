@@ -145,7 +145,7 @@ A virtual dataset requires every storage config to use the `ICECHUNK` format and
 A virtual chunk container is more than anonymous credentials — refs are stored *relative* to the registered container prefix:
 
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
-- **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
+- **No repoint.** icechunk resolves each ref by its full source URL, matched against the registered prefixes. Re-registering a container, even under the same name with a new `url_prefix`, does not move existing refs; they fail to resolve once no container matches them. Moving a dataset to another source bucket means rewriting its refs, e.g. by backfilling a new store version, and keeping the old container registered until then.
 
 Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 

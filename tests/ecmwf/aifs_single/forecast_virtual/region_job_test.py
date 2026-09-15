@@ -1,7 +1,7 @@
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 from unittest.mock import Mock
 
 import pandas as pd
@@ -92,13 +92,21 @@ def _index_line(
     return json.dumps(entry) + "\n"
 
 
-def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+def _fake_index(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+) -> list[str]:
+    """Serve `content` as every index download; returns the downloaded URLs."""
+    downloaded: list[str] = []
+
+    def fake_download(url: str, dataset_id: str, **_kwargs: str) -> Path:
+        downloaded.append(url)
         path = tmp_path / (url.rsplit("/", 1)[-1])
         path.write_text(content)
         return path
 
+    monkeypatch.setattr(region_job_module, "gcs_download_to_disk", fake_download)
     monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    return downloaded
 
 
 # --- URLs and out_loc ---
@@ -106,6 +114,19 @@ def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -
 
 def test_source_file_coord_url_era1_uses_aifs_path() -> None:
     coord = _coord([get_var("temperature_2m")], init_time=_ERA1_INIT)
+    assert coord.get_url() == (
+        "gs://ecmwf-open-data/20240601/00z/aifs/0p25/oper/"
+        "20240601000000-6h-oper-fc.grib2"
+    )
+    assert coord.get_index_url() == (
+        "gs://ecmwf-open-data/20240601/00z/aifs/0p25/oper/"
+        "20240601000000-6h-oper-fc.index"
+    )
+
+
+def test_source_file_coord_url_s3_source_uses_same_key_in_s3_bucket() -> None:
+    coord = _coord([get_var("temperature_2m")], init_time=_ERA1_INIT)
+    coord.fall_back_to_s3()
     assert coord.get_url() == (
         "s3://ecmwf-forecasts/20240601/00z/aifs/0p25/oper/"
         "20240601000000-6h-oper-fc.grib2"
@@ -123,7 +144,7 @@ def test_source_file_coord_url_era2_uses_aifs_single_path() -> None:
         lead_time=pd.Timedelta("360h"),
     )
     assert coord.get_url() == (
-        "s3://ecmwf-forecasts/20250301/12z/aifs-single/0p25/oper/"
+        "gs://ecmwf-open-data/20250301/12z/aifs-single/0p25/oper/"
         "20250301120000-360h-oper-fc.grib2"
     )
 
@@ -144,7 +165,7 @@ def test_source_file_coord_url_spans_the_three_source_stream_paths(
     coord = _coord([get_var("temperature_2m")], init_time=pd.Timestamp(init_time))
     stamp = pd.Timestamp(init_time)
     assert coord.get_url() == (
-        f"s3://ecmwf-forecasts/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/"
+        f"gs://ecmwf-open-data/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/"
         f"{expected_stream_path}/"
         f"{stamp.strftime('%Y%m%d%H')}0000-6h-oper-fc.grib2"
     )
@@ -207,9 +228,25 @@ def test_file_refs_routes_root_and_soil_messages(
     for ref in refs:
         assert ref.out_loc == {"init_time": _ERA2_INIT, "lead_time": _LEAD_6H}
         assert ref.location == (
-            "s3://ecmwf-forecasts/20250301/00z/aifs-single/0p25/oper/"
+            "gs://ecmwf-open-data/20250301/00z/aifs-single/0p25/oper/"
             "20250301000000-6h-oper-fc.grib2"
         )
+
+
+def test_file_refs_s3_source_reads_index_and_points_refs_at_s3(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    downloaded = _fake_index(monkeypatch, tmp_path, _index_line("2t", "sfc", 0, 1000))
+    data_vars = [get_var("temperature_2m")]
+    coord = _coord(data_vars)
+    coord.fall_back_to_s3()
+    job = make_job(template_ds, data_vars=data_vars)
+
+    (ref,) = job.file_refs(coord, file_size=1000)
+
+    assert downloaded == [coord.get_index_url()]
+    assert downloaded[0].startswith("s3://ecmwf-forecasts/")
+    assert ref.location.startswith("s3://ecmwf-forecasts/")
 
 
 def test_file_refs_pressure_group_routes_each_level(
@@ -258,31 +295,98 @@ def test_file_refs_skips_stale_index_past_eof(
 # --- discover_available ---
 
 
-def test_discover_available_lists_source_bucket_requiring_index(
-    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    data_vars = [get_var("temperature_2m")]
-    coord = _coord(data_vars)
-    captured: dict[str, object] = {}
+_NOW = pd.Timestamp("2025-03-10T00:00")
+
+
+class _ListingCall(NamedTuple):
+    location_prefix: str
+    require_index: bool
+    urls: list[str]
+
+
+def _fake_listing(
+    monkeypatch: pytest.MonkeyPatch, listed_urls: set[str]
+) -> list[_ListingCall]:
+    """List exactly `listed_urls` on both buckets; returns every listing call."""
+    calls: list[_ListingCall] = []
 
     def fake(
-        pending: list[EcmwfAifsSingleForecastVirtualSourceFileCoord], **kwargs: object
+        pending: list[EcmwfAifsSingleForecastVirtualSourceFileCoord],
+        *,
+        store: object,
+        location_prefix: str,
+        require_index: bool,
     ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
-        captured.update(kwargs)
-        return [(pending[0], 9000)]
+        urls = [coord.get_url() for coord in pending]
+        calls.append(_ListingCall(location_prefix, require_index, urls))
+        return [(coord, 9000) for coord in pending if coord.get_url() in listed_urls]
 
     monkeypatch.setattr(
         region_job_module, "discover_available_by_obstore_listing", fake
     )
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: _NOW))
+    return calls
+
+
+def test_discover_available_lists_gcs_requiring_index(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    coord = _coord(data_vars)
+    calls = _fake_listing(monkeypatch, {coord.get_url()})
     job = make_job(template_ds, data_vars=data_vars)
 
     result = job.discover_available([coord])
 
-    assert len(result) == 1
+    assert result == [(coord, 9000)]
     assert result[0][0] is coord
+    assert coord.source == "gcs"
+    (gcs_call,) = calls
     # AIFS data files always land with a .index sidecar; a file isn't ready until both exist.
-    assert captured["require_index"] is True
-    assert captured["location_prefix"] == "s3://ecmwf-forecasts/"
+    assert gcs_call.require_index is True
+    assert gcs_call.location_prefix == "gs://ecmwf-open-data/"
+
+
+def test_discover_available_falls_back_to_s3_for_old_files_gcs_lacks(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    on_gcs = _coord(data_vars, lead_time=pd.Timedelta("0h"))
+    gcs_gap = _coord(data_vars, lead_time=pd.Timedelta("6h"))
+    on_neither = _coord(data_vars, lead_time=pd.Timedelta("12h"))
+    s3_url = gcs_gap.get_url().replace("gs://ecmwf-open-data/", "s3://ecmwf-forecasts/")
+    calls = _fake_listing(monkeypatch, {on_gcs.get_url(), s3_url})
+    job = make_job(template_ds, data_vars=data_vars)
+
+    result = job.discover_available([on_gcs, gcs_gap, on_neither])
+
+    assert result == [(on_gcs, 9000), (gcs_gap, 9000)]
+    # The loop drops discovered coords by identity, so the S3 fallback returns the
+    # pending coord itself, switched to S3.
+    assert result[1][0] is gcs_gap
+    assert (on_gcs.source, gcs_gap.source, on_neither.source) == ("gcs", "s3", "gcs")
+    assert gcs_gap.get_url() == s3_url
+    _gcs_call, s3_call = calls
+    assert s3_call.location_prefix == "s3://ecmwf-forecasts/"
+    assert s3_call.require_index is True
+    # Only the two files GCS lacks are looked up on S3.
+    assert len(s3_call.urls) == 2
+
+
+def test_discover_available_waits_for_gcs_on_recent_inits(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    recent = _coord(data_vars, init_time=_NOW - pd.Timedelta("1D"))
+    s3_url = recent.get_url().replace("gs://ecmwf-open-data/", "s3://ecmwf-forecasts/")
+    calls = _fake_listing(monkeypatch, {s3_url})
+    job = make_job(template_ds, data_vars=data_vars)
+
+    # GCS trails S3 by under a minute, so a recent file missing from GCS stays pending
+    # rather than being pinned to S3 for good.
+    assert job.discover_available([recent]) == []
+    assert recent.source == "gcs"
+    assert [call.location_prefix for call in calls] == ["gs://ecmwf-open-data/"]
 
 
 # --- generate_source_file_coords ---

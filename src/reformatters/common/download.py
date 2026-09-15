@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -102,6 +102,24 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     )
 
 
+_BUCKET_STORE_OPTIONS: dict[str, Any] = {
+    "client_options": {
+        "connect_timeout": "4 seconds",
+        "timeout": "120 seconds",
+    },
+    "retry_config": {
+        "max_retries": 16,
+        "backoff": {
+            "base": 2,
+            "init_backoff": timedelta(seconds=1),
+            "max_backoff": timedelta(seconds=16),
+        },
+        # A backstop, shouldn't hit this with the above backoff settings
+        "retry_timeout": timedelta(minutes=5),
+    },
+}
+
+
 @functools.cache
 def s3_store(
     bucket_url: str, region: str, skip_signature: bool = True
@@ -110,22 +128,19 @@ def s3_store(
         bucket_url,
         region=region,
         skip_signature=skip_signature,
-        client_options={
-            "connect_timeout": "4 seconds",
-            "timeout": "120 seconds",
-        },
-        retry_config={
-            "max_retries": 16,
-            "backoff": {
-                "base": 2,
-                "init_backoff": timedelta(seconds=1),
-                "max_backoff": timedelta(seconds=16),
-            },
-            # A backstop, shouldn't hit this with the above backoff settings
-            "retry_timeout": timedelta(minutes=5),
-        },
+        **_BUCKET_STORE_OPTIONS,
     )
     assert isinstance(store, obstore.store.S3Store)
+    return store
+
+
+@functools.cache
+def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
+    """An anonymous obstore store for a public gs://bucket."""
+    store = obstore.store.from_url(
+        bucket_url, skip_signature=True, **_BUCKET_STORE_OPTIONS
+    )
+    assert isinstance(store, obstore.store.GCSStore)
     return store
 
 
@@ -170,6 +185,19 @@ def s3_download_to_disk(
         local_path,
         disk_cache=disk_cache,
         byte_ranges=byte_ranges,
+    )
+    return local_path
+
+
+def gcs_download_to_disk(url: str, dataset_id: str) -> Path:
+    """Download gs://bucket/key to disk via the cached anonymous obstore GCS store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "gs", url
+    local_path = get_local_path(dataset_id, parsed_url.path)
+    download_to_disk(
+        gcs_store(f"gs://{parsed_url.netloc}"),
+        parsed_url.path.removeprefix("/"),
+        local_path,
     )
     return local_path
 

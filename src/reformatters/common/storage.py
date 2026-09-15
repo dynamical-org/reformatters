@@ -609,7 +609,7 @@ def anonymous_virtual_chunk_credentials(
 ) -> dict[str, Any]:
     """Anonymous authorize map for virtual chunk containers, keyed by url prefix.
 
-    Our S3 and S3-compatible sources (NOAA NODD, ECMWF, Source Coop) are all
+    Our S3, S3-compatible and GCS sources (NOAA NODD, ECMWF, Source Coop) are all
     anonymous-read; authenticated transform proxies use HTTP; local-filesystem
     containers (dev/test) need no credentials. Each container gets the credential kind
     its store accepts -- an S3 credential handed to an HTTP container is an error, not a
@@ -628,6 +628,10 @@ def anonymous_virtual_chunk_credentials(
             credentials_by_prefix[container.url_prefix] = (
                 icechunk.s3_anonymous_credentials()
             )
+        elif isinstance(container.store, icechunk.ObjectStoreConfig.Gcs):
+            credentials_by_prefix[container.url_prefix] = icechunk.gcs_credentials(
+                anonymous=True
+            )
         elif isinstance(container.store, icechunk.ObjectStoreConfig.LocalFileSystem):
             credentials_by_prefix[container.url_prefix] = (
                 icechunk.credentials.LocalFileSystemAccess  # local files: no creds
@@ -639,8 +643,8 @@ def anonymous_virtual_chunk_credentials(
         else:
             raise AssertionError(
                 f"Virtual chunk container {container.url_prefix} uses an unsupported "
-                f"store ({type(container.store).__name__}); only S3-compatible "
-                "(anonymous), HTTP and local-filesystem sources are supported. Add "
+                f"store ({type(container.store).__name__}); only S3-compatible and "
+                "GCS (anonymous), HTTP and local-filesystem sources are supported. Add "
                 "explicit credentials to IcechunkVirtualConfig."
             )
 
