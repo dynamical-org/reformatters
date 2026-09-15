@@ -200,6 +200,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="eastward_wind",
                     units="m s-1",
                     step_type="instant",
+                    comment="Instantaneous value at each valid time, not a mean over the previous 24 hours.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="10_m_u_component_of_wind",
@@ -218,6 +219,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="northward_wind",
                     units="m s-1",
                     step_type="instant",
+                    comment="Instantaneous value at each valid time, not a mean over the previous 24 hours.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="10_m_v_component_of_wind",
@@ -282,7 +284,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="snowfall_flux",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average snowfall water equivalent rate over the previous 24 hours. Units equivalent to mm/s.",
+                    comment="Average snowfall water equivalent rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="snow_fall_water_equivalent",
@@ -305,7 +307,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="surface_runoff_flux",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Land points only; sea points are missing.",
+                    comment="Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed runoff_water_equivalent_surface. Land points only; sea points are missing.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="surface_runoff",

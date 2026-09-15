@@ -75,7 +75,7 @@
     "short_name": "surfror",
     "standard_name": "surface_runoff_flux",
     "units": "kg m-2 s-1",
-    "comment": "Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Land points only; sea points are missing.",
+    "comment": "Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed runoff_water_equivalent_surface. Land points only; sea points are missing.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

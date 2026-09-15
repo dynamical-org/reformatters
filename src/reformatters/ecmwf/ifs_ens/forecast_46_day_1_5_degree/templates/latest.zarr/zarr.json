@@ -3304,7 +3304,7 @@
           "short_name": "surfror",
           "standard_name": "surface_runoff_flux",
           "units": "kg m-2 s-1",
-          "comment": "Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Land points only; sea points are missing.",
+          "comment": "Average surface runoff rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed runoff_water_equivalent_surface. Land points only; sea points are missing.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4046,7 +4046,7 @@
           "short_name": "tsrwe",
           "standard_name": "snowfall_flux",
           "units": "kg m-2 s-1",
-          "comment": "Average snowfall water equivalent rate over the previous 24 hours. Units equivalent to mm/s.",
+          "comment": "Average snowfall water equivalent rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4802,6 +4802,7 @@
           "short_name": "10u",
           "standard_name": "eastward_wind",
           "units": "m s-1",
+          "comment": "Instantaneous value at each valid time, not a mean over the previous 24 hours.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4894,6 +4895,7 @@
           "short_name": "10v",
           "standard_name": "northward_wind",
           "units": "m s-1",
+          "comment": "Instantaneous value at each valid time, not a mean over the previous 24 hours.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
