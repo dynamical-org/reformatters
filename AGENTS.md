@@ -268,6 +268,7 @@ Virtual datasets also require `authorize_virtual_chunk_access`. Build it from th
 anonymous_credentials = {
     "s3": icechunk.s3_anonymous_credentials,
     "gs": lambda: icechunk.gcs_credentials(anonymous=True),
+    "https": icechunk.Credentials.HttpAccess,
 }
 authorize = icechunk.containers_credentials(
     {

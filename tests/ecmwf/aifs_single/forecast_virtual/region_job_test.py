@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 from unittest.mock import Mock
 
+import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
@@ -98,7 +99,7 @@ def _fake_index(
     """Serve `content` as every index download; returns the downloaded URLs."""
     downloaded: list[str] = []
 
-    def fake_download(url: str, dataset_id: str, **_kwargs: str) -> Path:
+    def fake_download(url: str, dataset_id: str) -> Path:
         downloaded.append(url)
         path = tmp_path / (url.rsplit("/", 1)[-1])
         path.write_text(content)
@@ -188,7 +189,7 @@ def test_file_refs_routes_root_and_soil_messages(
         + _index_line("sot", "sol", 1500, 500, levelist="2")
         + _index_line("skt", "sfc", 2000, 1000)  # not in data_vars -> not emitted
     )
-    _fake_index(monkeypatch, tmp_path, index)
+    downloaded = _fake_index(monkeypatch, tmp_path, index)
     data_vars = [
         get_var("temperature_2m"),
         get_var("soil_temperature_layer_1"),
@@ -197,6 +198,12 @@ def test_file_refs_routes_root_and_soil_messages(
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(_coord(data_vars), file_size=3000)
 
+    assert downloaded == [
+        (
+            "gs://ecmwf-open-data/20250301/00z/aifs-single/0p25/oper/"
+            "20250301000000-6h-oper-fc.index"
+        )
+    ]
     by_name = {r.data_var.name: r for r in refs}
     assert set(by_name) == {
         "temperature_2m",
@@ -290,6 +297,7 @@ def test_discover_available_lists_gcs_requiring_index(
     # AIFS data files always land with a .index sidecar; a file isn't ready until both exist.
     assert captured["require_index"] is True
     assert captured["location_prefix"] == "gs://ecmwf-open-data/"
+    assert isinstance(captured["store"], obstore.store.GCSStore)
 
 
 # --- generate_source_file_coords ---
