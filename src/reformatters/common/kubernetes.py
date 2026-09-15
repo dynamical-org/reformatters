@@ -244,11 +244,11 @@ class CronJob(Job):
         Every pod of one fire derives the same value, including a replacement pod
         started after an eviction, which its own start time would not give.
         """
-        minute, hours = _parse_schedule(self.schedule)
+        minute, hours, days_of_month = _parse_schedule(self.schedule)
         fire_time = now.normalize() + timedelta(hours=now.hour, minutes=minute)
         if fire_time > now:
             fire_time -= timedelta(hours=1)
-        while fire_time.hour not in hours:
+        while fire_time.hour not in hours or fire_time.day not in days_of_month:
             fire_time -= timedelta(hours=1)
         return fire_time
 
@@ -341,35 +341,41 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     return image
 
 
-# The daily `<minute> <hours> * * *` shape every operational schedule here uses, with
-# hours as `*`, `*/N`, `A-B/N`, or a comma separated list.
+# Operational schedules use fixed minutes, selected hours, and either every day or
+# every Nth day of the month.
 _SCHEDULE_PATTERN = re.compile(
-    r"(?P<minute>\d{1,2}) (?P<hours>\*|\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) \* \* \*"
+    r"(?P<minute>\d{1,2}) "
+    r"(?P<hours>\*|\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) "
+    r"(?P<days_of_month>\*|\*/\d{1,2}) \* \*"
 )
 
 
-def _parse_schedule(schedule: str) -> tuple[int, frozenset[int]]:
-    """The minute and hours of day a cron schedule fires at."""
+def _parse_schedule(schedule: str) -> tuple[int, frozenset[int], frozenset[int]]:
+    """The minute, hours, and days of month a cron schedule fires at."""
     match = _SCHEDULE_PATTERN.fullmatch(schedule)
     assert match is not None, (
-        f"Unsupported cron schedule {schedule!r}, expected `<minute> <hours> * * *` "
-        "with hours as `*`, `*/N`, `A-B/N`, or a comma separated list"
+        f"Unsupported cron schedule {schedule!r}, expected "
+        "`<minute> <hours> <days-of-month> * *` with hours as `*`, `*/N`, "
+        "`A-B/N`, or a comma separated list and days-of-month as `*` or `*/N`"
     )
-    minute, hours = int(match["minute"]), _parse_hours(match["hours"])
+    minute = int(match["minute"])
+    hours = _parse_schedule_field(match["hours"], 0, 23)
+    days_of_month = _parse_schedule_field(match["days_of_month"], 1, 31)
     assert minute <= 59, f"Cron schedule {schedule!r} has a minute above 59"
     assert hours, f"Cron schedule {schedule!r} selects no hours"
     assert max(hours) <= 23, f"Cron schedule {schedule!r} has an hour above 23"
-    return minute, hours
+    assert days_of_month, f"Cron schedule {schedule!r} selects no days of month"
+    return minute, hours, days_of_month
 
 
-def _parse_hours(field: str) -> frozenset[int]:
+def _parse_schedule_field(field: str, start: int, end: int) -> frozenset[int]:
     spec, _, step = field.partition("/")
     if "," in spec:
-        return frozenset(int(hour) for hour in spec.split(","))
+        return frozenset(int(value) for value in spec.split(","))
     if spec == "*":
-        start, end = 0, 23
+        selected_start, selected_end = start, end
     elif "-" in spec:
-        start, end = (int(bound) for bound in spec.split("-"))
+        selected_start, selected_end = (int(bound) for bound in spec.split("-"))
     else:
         return frozenset({int(spec)})
-    return frozenset(range(start, end + 1, int(step) if step else 1))
+    return frozenset(range(selected_start, selected_end + 1, int(step) if step else 1))

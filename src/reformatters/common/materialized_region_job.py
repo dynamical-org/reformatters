@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
+from datetime import timedelta
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from typing import Any, ClassVar, Generic, cast
@@ -48,6 +49,8 @@ class MaterializedRegionJob(
     # If value is less than len(data_vars), downloading, reading/recompressing, and writing steps
     # will be pipelined within a region job.
     max_vars_per_download_group: ClassVar[int | None] = None
+
+    expected_unavailable_window: ClassVar[timedelta] = timedelta(hours=48)
 
     # Subclasses can override this to control download parallelism
     # This particularly useful of the data source cannot handle a large number of concurrent requests
@@ -310,15 +313,14 @@ class MaterializedRegionJob(
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
-                # For recent files, we expect some files to not exist yet, just log the path
-                # else, log exception so it is caught by error reporting but doesn't stop processing
+                # Recent unavailable files log quietly; older file failures reach error reporting.
                 append_dim_coord = coord.append_dim_coord
-                two_days_ago = pd.Timestamp.now() - pd.Timedelta(hours=48)
-                if (
-                    is_not_found(e)
-                    and isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-                    and append_dim_coord > two_days_ago
-                ):
+                expected_after = pd.Timestamp.now() - self.expected_unavailable_window
+                is_expected_unavailable = (
+                    isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+                    and append_dim_coord > expected_after
+                )
+                if is_not_found(e) and is_expected_unavailable:
                     log.info(" ".join(str(e).split("\n")[:2]))
                 else:
                     log.exception(f"Download failed {coord.get_url()}")
