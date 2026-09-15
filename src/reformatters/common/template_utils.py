@@ -342,7 +342,7 @@ def assert_no_append_dim_retraction(
     if retractions:
         raise ValueError(
             "Update template would retract already-published data. Operational updates "
-            "only ever extend the published store; run a backfill to shrink it. "
+            "only ever extend the published store; shrinking requires an explicit store repair. "
             "Retractions:\n" + "\n".join(f"- {r}" for r in retractions)
         )
 

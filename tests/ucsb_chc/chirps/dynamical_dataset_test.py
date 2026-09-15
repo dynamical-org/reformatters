@@ -11,6 +11,7 @@ import zarr.storage
 from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
@@ -27,6 +28,7 @@ from reformatters.ucsb_chc.chirps.template_config import (
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
 )
+from scripts.trim_chirps import trim_store
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
@@ -393,6 +395,42 @@ def test_operational_kubernetes_resources() -> None:
         assert update_cron_job.secret_names == [
             dataset.primary_storage_config.k8s_secret_name
         ]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("make_dataset", [_final_dataset, _preliminary_dataset])
+def test_update_after_trimming_backfill_tail(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    make_dataset: Callable[[], UcsbChcChirpsAnalysisMaterializedDataset],
+) -> None:
+    dataset = replace(
+        make_dataset(),
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        ),
+    )
+    _shrink_template(monkeypatch, dataset)
+    first_day = dataset.template_config.append_dim_start
+    last_available = first_day + pd.Timedelta(days=2)
+    _patch_source(monkeypatch, tmp_path, lambda day: day <= last_available, [])
+    dataset.backfill_local(append_dim_end=first_day + pd.Timedelta(days=5))
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: first_day + pd.Timedelta(days=4, hours=12)),
+    )
+    with pytest.raises(ValueError, match="retract"):
+        dataset.update("padded-tail")
+    repo, _ = dataset.store_factory.icechunk_primary_and_replica_repos()
+    assert trim_store(repo, dataset.dataset_id, commit=True).after_size == 3
+    dataset.update("after-trim")
+    assert _open_store(dataset).sizes["time"] == 3
+    last_available = first_day + pd.Timedelta(days=3)
+    dataset.update("new-source-day")
+    updated = _open_store(dataset)
+    assert updated.sizes["time"] == 4
+    _assert_constant_land_values(updated)
 
 
 @pytest.mark.parametrize(
