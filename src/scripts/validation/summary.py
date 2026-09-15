@@ -321,6 +321,18 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         lines.append("")
         lines.append(f"![availability heatmap]({ctx.combined_availability_plot})")
         lines.append("")
+    unmeasured = [
+        var
+        for var in ctx.variables
+        if var not in ctx.stats or ctx.stats[var].positions_total is None
+    ]
+    if unmeasured:
+        lines.append(
+            "Availability could not be measured for "
+            + ", ".join(f"`{var}`" for var in unmeasured)
+            + "."
+        )
+        lines.append("")
     incomplete = [
         ctx.stats[var]
         for var in ctx.variables
@@ -328,9 +340,13 @@ def write_summary_md(ctx: RunContext) -> Path:  # noqa: PLR0915
         and ctx.stats[var].positions_total is not None
         and ctx.stats[var].positions_complete != ctx.stats[var].positions_total
     ]
-    if not incomplete:
-        lines.append("Every variable is complete at every scanned position.")
-    else:
+    if not incomplete and len(unmeasured) < len(ctx.variables):
+        lines.append(
+            "Every measured variable is complete at every scanned position."
+            if unmeasured
+            else "Every variable is complete at every scanned position."
+        )
+    elif incomplete:
         lines.append(
             "| Variable | Complete positions | Incomplete % "
             "| First incomplete | Last incomplete |"

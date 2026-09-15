@@ -205,6 +205,9 @@ def write_availability_artifacts(
 
 def apply_availability(ctx: RunContext) -> None:
     """Render availability artifacts from ctx.availability and record them on ctx.stats."""
+    if not ctx.availability:
+        log.info("availability: no variable could be measured, no artifacts written")
+        return
     heatmap, summaries = write_availability_artifacts(ctx.output_dir, ctx.availability)
     ctx.combined_availability_plot = heatmap
     for var, summary in summaries.items():
@@ -364,21 +367,72 @@ def _co_ingested_availability(
     )
 
 
+def _all_point_null_availability(
+    point_das: tuple[xr.DataArray, xr.DataArray],
+) -> tuple[AvailabilitySeries, list[str]] | None:
+    """Availability of a semantic-NaN variable from its own values at the run points.
+
+    A NaN at one point may be the variable's valid missing state, so only a position
+    NaN at *every* run point counts as unavailable. Points NaN at every position (an
+    ocean point for a land-only variable) carry no signal and are dropped; None when
+    none remain. Coarser than a plain null scan — a position written over part of the
+    grid still reads as available — so it is the fallback when nothing was co-ingested.
+    """
+    time_dim = next(d for d in ("time", "init_time") if d in point_das[0].dims)
+    null_masks = []
+    for da in point_das:
+        null = da.isnull()
+        other_dims = [d for d in null.dims if d != time_dim]
+        all_null = null.all(dim=other_dims) if other_dims else null
+        if bool(all_null.all()):
+            continue
+        null_masks.append(all_null)
+    if not null_masks:
+        return None
+
+    unavailable = xr.concat(null_masks, dim="_point").all(dim="_point")
+    series = AvailabilitySeries(
+        positions=unavailable[time_dim].values,
+        fraction=1.0 - unavailable.values.astype(np.float64),
+    )
+    timestamps = (
+        unavailable[time_dim]
+        .where(unavailable, drop=True)
+        .dt.strftime("%Y-%m-%dT%H:%M:%S")
+        .values.tolist()
+    )
+    return series, timestamps
+
+
 def _apply_semantic_missing_availability(
     ctx: RunContext,
     semantic_missing_vars: list[str],
     template_vars: dict[str, DataVar[Any]],
 ) -> None:
     for var in semantic_missing_vars:
-        series = _co_ingested_availability(ctx, var, template_vars)
-        if series is None:
+        co_ingested = _co_ingested_availability(ctx, var, template_vars)
+        if co_ingested is not None:
+            ctx.availability[var] = co_ingested
+            log.info(f"  nulls {var}: measured via co-ingested variables")
+            continue
+
+        scanned = _all_point_null_availability(ctx.loaded_point_data[var])
+        if scanned is None:
             log.info(
                 f"  nulls {var}: not measured (semantic missing values, "
-                "nothing co-ingested scanned)"
+                "nothing co-ingested scanned and no run point carries the variable)"
             )
             continue
+        series, timestamps = scanned
         ctx.availability[var] = series
-        log.info(f"  nulls {var}: measured via co-ingested variables")
+        # True at each point individually, so each point's retry list carries them.
+        stats = ctx.stats_for(var)
+        stats.unavailable_timestamps_p1 = timestamps
+        stats.unavailable_timestamps_p2 = timestamps
+        log.info(
+            f"  nulls {var}: measured as positions NaN at every run point "
+            f"(semantic missing values); unavailable={_format_unavailable_summary(timestamps)}"
+        )
 
 
 def run_value_availability(ctx: RunContext) -> None:

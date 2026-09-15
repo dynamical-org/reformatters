@@ -332,3 +332,80 @@ def test_heatmap_xticks_short_archive_ticks_every_year() -> None:
     _, labels = _heatmap_xticks(positions, n_columns=500)
 
     assert labels == ["2020", "2021"]
+
+
+def _analysis_dataset(values: np.ndarray, time: pd.DatetimeIndex) -> xr.Dataset:
+    ds = xr.Dataset(
+        {"precipitation_surface": (("time", "latitude", "longitude"), values)},
+        coords={
+            "time": time,
+            "latitude": np.array([10.0, 20.0]),
+            "longitude": np.array([30.0, 40.0]),
+        },
+    )
+    ds["precipitation_surface"].attrs["step_type"] = "avg"
+    return ds
+
+
+def test_run_value_availability_sole_semantic_missing_var_scans_run_points(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A masked-sentinel var with no co-ingested co-member falls back to its own values:
+    only a position NaN at every run point is unavailable, and a point that is NaN
+    throughout (an ocean point for a land-only variable) is dropped rather than read as
+    a whole-archive gap."""
+    time = pd.date_range("2020-01-01", periods=6, freq="D")
+    values = np.ones((time.size, 2, 2))
+    values[:, 0, 0] = np.nan  # point 1: ocean, never carries the variable
+    values[4, :, :] = np.nan  # a position with no source file at all
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var(
+                "precipitation_surface", stores_hour_0=True, source_fill_value=-9999.0
+            )
+        ],
+    )
+    ctx = _ctx(_analysis_dataset(values, time), tmp_path)
+    ctx.variables = ["precipitation_surface"]
+
+    run_value_availability(ctx)
+
+    np.testing.assert_allclose(
+        ctx.availability["precipitation_surface"].fraction, [1, 1, 1, 1, 0, 1]
+    )
+    stats = ctx.stats["precipitation_surface"]
+    assert stats.positions_complete == 5
+    assert stats.positions_total == 6
+    assert stats.first_incomplete == stats.last_incomplete == "2020-01-05T00:00"
+    # No per-point null counts: the point scan cannot separate semantic NaNs from gaps.
+    assert stats.null_count_p1 is None
+    assert (
+        "2020-01-05T00:00:00" in (tmp_path / "unavailable_timestamps.txt").read_text()
+    )
+    assert (tmp_path / HEATMAP_FILENAME).exists()
+
+
+def test_run_value_availability_renders_nothing_when_no_var_is_measurable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every run point NaN throughout leaves nothing to measure — the run reports n/a
+    rather than asserting on an empty set of availability series."""
+    time = pd.date_range("2020-01-01", periods=6, freq="D")
+    _stub_registry(
+        monkeypatch,
+        [
+            _stub_var(
+                "precipitation_surface", stores_hour_0=True, source_fill_value=-9999.0
+            )
+        ],
+    )
+    ctx = _ctx(_analysis_dataset(np.full((time.size, 2, 2), np.nan), time), tmp_path)
+    ctx.variables = ["precipitation_surface"]
+
+    run_value_availability(ctx)
+
+    assert ctx.availability == {}
+    assert ctx.combined_availability_plot is None
+    assert ctx.stats["precipitation_surface"].positions_total is None
+    assert not (tmp_path / HEATMAP_FILENAME).exists()
