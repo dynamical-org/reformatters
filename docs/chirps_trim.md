@@ -1,9 +1,10 @@
 # Repair a CHIRPS store's trailing missing days
 
-`src/scripts/trim_chirps.py` removes only the trailing times for which every
-time-dependent data variable is entirely NaN. It scans the store, not the source
-archive; zero precipitation counts as data, and interior missing days remain.
-An entirely missing store is rejected rather than emptied.
+`src/scripts/trim_chirps.py` reads the last 90 days of precipitation at an Amazon
+land point (latitude -1.975, longitude -60.025) and trims to its latest non-NaN
+date. The point serves as a proxy for product-wide availability. Zero rainfall
+counts as data; interior missing days remain. If the sample has no non-NaN values,
+the script refuses to trim.
 
 Run one dataset at a time, supplying its Icechunk URI explicitly. The default is
 a read-only dry run, using anonymous access for S3. For example:
@@ -23,15 +24,12 @@ to each invocation. S3 writes use the AWS credential environment, without loadin
 Kubernetes secrets. A local Icechunk directory can replace the S3 URI for testing.
 The script checks the stored dataset ID against the requested one.
 
-Scanning proceeds backward in time, visiting every spatial chunk in the candidate
-time block until the latest non-NaN day is established. It reads one logical chunk
-at a time; CHIRPS chunks span 365 days, so inspecting a short tail can still require
-reading a year's chunks across the grid. This is an exhaustive scan, not a few
-sampled points.
+Only the selected point's last 90 time steps are requested. Zarr decodes the
+underlying chunks that contain that selection; no other spatial tiles are scanned.
 
 The repair resizes every array carrying `time`, including coordinates, in one
-Icechunk session and commits atomically to `main`. Arrays without `time`, retained
-values, attributes, and encodings are preserved. Icechunk does not support a
+Icechunk session and commits atomically to `main`. Arrays without `time`, values
+within the retained extent, attributes, and encodings are preserved. Icechunk does not support a
 separate consolidated-metadata write. Existing snapshots remain available; the
 script does not expire snapshots or garbage collect storage. A second invocation
 at the same extent creates no commit.

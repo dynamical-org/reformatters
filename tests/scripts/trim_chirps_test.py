@@ -10,10 +10,12 @@ import zarr
 from scripts.trim_chirps import DATASET_IDS, main, trim_store
 
 
-def _create_store(path: Path, last: int | None = 6) -> icechunk.Repository:
+def _create_store(
+    path: Path, last: int | None = 6, periods: int = 10
+) -> icechunk.Repository:
     repo = icechunk.Repository.create(icechunk.local_filesystem_storage(str(path)))
     session = repo.writable_session("main")
-    data = np.full((10, 4, 4), np.nan, dtype=np.float32)
+    data = np.full((periods, 4, 4), np.nan, dtype=np.float32)
     if last is not None:
         data[:last, :, :] = 0
         data[last, -1, -1] = 0
@@ -22,10 +24,10 @@ def _create_store(path: Path, last: int | None = 6) -> icechunk.Repository:
     ds = xr.Dataset(
         {"precipitation_surface": (("time", "latitude", "longitude"), data)},
         coords={
-            "time": pd.date_range("2025-01-01", periods=10),
-            "latitude": np.arange(4),
-            "longitude": np.arange(4),
-            "quality": ("time", np.arange(10)),
+            "time": pd.date_range("2025-01-01", periods=periods),
+            "latitude": [2.0, 1.0, 0.0, -1.975],
+            "longitude": [-63.0, -62.0, -61.0, -60.025],
+            "quality": ("time", np.arange(periods)),
         },
         attrs={"dataset_id": DATASET_IDS[0], "description": "Preserve metadata"},
     )
@@ -75,25 +77,25 @@ def test_trim_preserves_values_metadata_and_old_snapshot(
     assert trim_store(repo, DATASET_IDS[0], commit=True).after_snapshot is None
 
 
-def test_last_day_is_union_of_data_variables(tmp_path: Path) -> None:
+def test_trims_other_time_variables(tmp_path: Path) -> None:
     repo = _create_store(tmp_path / "store", 3)
     session = repo.writable_session("main")
     root = zarr.open_group(session.store, use_consolidated=False)
     values = np.full(10, np.nan, dtype=np.float32)
-    values[7] = 0
+    values[2] = 0
     root.create_array(
         "other", data=values, chunks=(2,), dimension_names=("time",), fill_value=np.nan
     )
     session.commit("second variable")
-    assert trim_store(repo, DATASET_IDS[0], commit=True).after_size == 8
+    assert trim_store(repo, DATASET_IDS[0], commit=True).after_size == 4
     after = xr.open_zarr(repo.readonly_session("main").store, chunks=None)
-    assert after.other.size == after.precipitation_surface.sizes["time"] == 8
+    assert after.other.size == after.precipitation_surface.sizes["time"] == 4
 
 
 def test_rejects_empty_or_wrong_dataset(tmp_path: Path) -> None:
     repo = _create_store(tmp_path / "store", None)
     before = repo.lookup_branch("main")
-    with pytest.raises(AssertionError, match="refusing to empty"):
+    with pytest.raises(AssertionError, match="refusing to trim"):
         trim_store(repo, DATASET_IDS[0], commit=True)
     with pytest.raises(AssertionError):
         trim_store(repo, DATASET_IDS[1], commit=True)
@@ -148,3 +150,11 @@ def test_cli_defaults_to_dry_run(tmp_path: Path) -> None:
     assert repo.lookup_branch("main") == before
     main([DATASET_IDS[0], str(path), "--commit"])
     assert repo.lookup_branch("main") != before
+
+
+def test_does_not_search_before_last_90_days(tmp_path: Path) -> None:
+    repo = _create_store(tmp_path / "store", last=5, periods=100)
+    before = repo.lookup_branch("main")
+    with pytest.raises(AssertionError, match="last 90 days"):
+        trim_store(repo, DATASET_IDS[0], commit=True)
+    assert repo.lookup_branch("main") == before

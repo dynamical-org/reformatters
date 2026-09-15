@@ -1,8 +1,7 @@
-"""Remove an entirely NaN tail from a CHIRPS Icechunk store."""
+"""Trim a CHIRPS store to the latest non-NaN day at an Amazon land point."""
 
 import argparse
 from dataclasses import dataclass
-from itertools import product
 
 import icechunk
 import numpy as np
@@ -32,43 +31,6 @@ class TrimResult:
     after_end: pd.Timestamp
 
 
-def last_non_nan_index(array: zarr.Array, time_axis: int) -> int | None:
-    """Find the last time with any non-NaN cell, reading at most one logical chunk at a time."""
-    assert np.issubdtype(array.dtype, np.floating), array.path
-    assert np.isnan(array.fill_value), f"{array.path}: expected NaN fill value"
-    size = array.shape[time_axis]
-    time_chunk = array.chunks[time_axis]
-    spatial_axes = [axis for axis in range(array.ndim) if axis != time_axis]
-    spatial_starts = [
-        range(0, array.shape[axis], array.chunks[axis]) for axis in spatial_axes
-    ]
-    for start in reversed(range(0, size, time_chunk)):
-        stop = min(start + time_chunk, size)
-        last = None
-        for starts in product(*spatial_starts):
-            selection = [
-                slice(start, stop) if axis == time_axis else slice(None)
-                for axis in range(array.ndim)
-            ]
-            for axis, offset in zip(spatial_axes, starts, strict=True):
-                selection[axis] = slice(
-                    offset, min(offset + array.chunks[axis], array.shape[axis])
-                )
-            values = np.asarray(array[tuple(selection)])
-            present = np.flatnonzero(
-                np.any(~np.isnan(values), axis=tuple(spatial_axes))
-            )
-            if present.size:
-                last = max(
-                    last if last is not None else start, start + int(present[-1])
-                )
-                if last == stop - 1:
-                    return last
-        if last is not None:
-            return last
-    return None
-
-
 def trim_store(
     repo: icechunk.Repository, dataset_id: str, *, commit: bool = False
 ) -> TrimResult:
@@ -94,18 +56,20 @@ def trim_store(
     assert all(
         arrays[name].shape[axis] == len(times) for name, axis in time_axes.items()
     )
-    last_indices = []
-    for name, var in ds.data_vars.items():
-        if "time" not in var.dims:
-            continue
-        log.info(
-            f"Scanning {dataset_id}/{name} from the end of snapshot {session.snapshot_id}"
-        )
-        last = last_non_nan_index(arrays[str(name)], time_axes[str(name)])
-        if last is not None:
-            last_indices.append(last)
-    assert last_indices, "No non-NaN data found; refusing to empty the store"
-    new_size = max(last_indices) + 1
+    sample = (
+        ds["precipitation_surface"]
+        .isel(time=slice(-90, None))
+        .sel(latitude=-1.975, longitude=-60.025, method="nearest")
+    )
+    log.info(
+        f"Reading {sample.sizes['time']} days at latitude={float(sample.latitude)}, "
+        f"longitude={float(sample.longitude)} from snapshot {session.snapshot_id}"
+    )
+    present = np.flatnonzero(~np.isnan(sample.values))
+    assert present.size, (
+        "No non-NaN precipitation at the land point in the last 90 days; refusing to trim"
+    )
+    new_size = len(times) - sample.sizes["time"] + int(present[-1]) + 1
     after_snapshot = None
     if commit and new_size < len(times):
         writable = repo.writable_session("main")
@@ -123,7 +87,7 @@ def trim_store(
             array.resize(tuple(shape))
         # No rebase: a concurrent update invalidates the scanned extent.
         after_snapshot = writable.commit(
-            f"Trim {dataset_id} all-NaN tail: {times[-1].isoformat()} -> {times[new_size - 1].isoformat()}"
+            f"Trim {dataset_id} tail using land-point availability: {times[-1].isoformat()} -> {times[new_size - 1].isoformat()}"
         )
     result = TrimResult(
         session.snapshot_id,
