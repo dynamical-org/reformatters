@@ -14,6 +14,8 @@ from reformatters.common.download import (
     _httpx_get_with_retry,
     _parse_multipart_byteranges,
     download_to_disk,
+    gcs_download_to_disk,
+    gcs_store,
     get_local_path,
     http_download_to_disk,
     http_status_code,
@@ -139,6 +141,34 @@ def test_http_store_is_cached() -> None:
 def test_s3_store_returns_s3_store() -> None:
     store = s3_store("s3://noaa-gefs-pds", region="us-east-1", skip_signature=True)
     assert isinstance(store, obstore.store.S3Store)
+
+
+def test_gcs_store_returns_gcs_store() -> None:
+    store = gcs_store("gs://ecmwf-open-data")
+    assert isinstance(store, obstore.store.GCSStore)
+
+
+def test_gcs_download_to_disk_calls_download(tmp_path: Path) -> None:
+    captured: list[dict] = []
+
+    def fake_download_to_disk(store: object, path: str, local_path: Path) -> None:
+        captured.append({"store": store, "path": path})
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(b"data")
+
+    with patch.object(download_module, "download_to_disk", fake_download_to_disk):
+        result = gcs_download_to_disk("gs://test-bucket/data/file.index", "my-dataset")
+
+    assert len(captured) == 1
+    assert isinstance(captured[0]["store"], obstore.store.GCSStore)
+    # Leading slash stripped: GCS object names are bucket-relative.
+    assert captured[0]["path"] == "data/file.index"
+    assert result == get_local_path("my-dataset", "/data/file.index")
+
+
+def test_gcs_download_to_disk_rejects_non_gcs_url() -> None:
+    with pytest.raises(AssertionError):
+        gcs_download_to_disk("s3://test-bucket/file.index", "my-dataset")
 
 
 def test_download_to_disk_skips_if_exists_and_disk_cache(tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal
 from unittest.mock import Mock
 
+import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
@@ -92,13 +93,20 @@ def _index_line(
     return json.dumps(entry) + "\n"
 
 
-def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -> None:
-    def fake_download(url: str, dataset_id: str, *, region: str) -> Path:
+def _fake_index(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+) -> list[str]:
+    """Serve `content` as every index download; returns the downloaded URLs."""
+    downloaded: list[str] = []
+
+    def fake_download(url: str, dataset_id: str) -> Path:
+        downloaded.append(url)
         path = tmp_path / (url.rsplit("/", 1)[-1])
         path.write_text(content)
         return path
 
-    monkeypatch.setattr(region_job_module, "s3_download_to_disk", fake_download)
+    monkeypatch.setattr(region_job_module, "gcs_download_to_disk", fake_download)
+    return downloaded
 
 
 # --- URLs and out_loc ---
@@ -107,11 +115,11 @@ def _fake_index(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str) -
 def test_source_file_coord_url_era1_uses_aifs_path() -> None:
     coord = _coord([get_var("temperature_2m")], init_time=_ERA1_INIT)
     assert coord.get_url() == (
-        "s3://ecmwf-forecasts/20240601/00z/aifs/0p25/oper/"
+        "gs://ecmwf-open-data/20240601/00z/aifs/0p25/oper/"
         "20240601000000-6h-oper-fc.grib2"
     )
     assert coord.get_index_url() == (
-        "s3://ecmwf-forecasts/20240601/00z/aifs/0p25/oper/"
+        "gs://ecmwf-open-data/20240601/00z/aifs/0p25/oper/"
         "20240601000000-6h-oper-fc.index"
     )
 
@@ -123,7 +131,7 @@ def test_source_file_coord_url_era2_uses_aifs_single_path() -> None:
         lead_time=pd.Timedelta("360h"),
     )
     assert coord.get_url() == (
-        "s3://ecmwf-forecasts/20250301/12z/aifs-single/0p25/oper/"
+        "gs://ecmwf-open-data/20250301/12z/aifs-single/0p25/oper/"
         "20250301120000-360h-oper-fc.grib2"
     )
 
@@ -144,7 +152,7 @@ def test_source_file_coord_url_spans_the_three_source_stream_paths(
     coord = _coord([get_var("temperature_2m")], init_time=pd.Timestamp(init_time))
     stamp = pd.Timestamp(init_time)
     assert coord.get_url() == (
-        f"s3://ecmwf-forecasts/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/"
+        f"gs://ecmwf-open-data/{stamp.strftime('%Y%m%d')}/{stamp.strftime('%H')}z/"
         f"{expected_stream_path}/"
         f"{stamp.strftime('%Y%m%d%H')}0000-6h-oper-fc.grib2"
     )
@@ -181,7 +189,7 @@ def test_file_refs_routes_root_and_soil_messages(
         + _index_line("sot", "sol", 1500, 500, levelist="2")
         + _index_line("skt", "sfc", 2000, 1000)  # not in data_vars -> not emitted
     )
-    _fake_index(monkeypatch, tmp_path, index)
+    downloaded = _fake_index(monkeypatch, tmp_path, index)
     data_vars = [
         get_var("temperature_2m"),
         get_var("soil_temperature_layer_1"),
@@ -190,6 +198,12 @@ def test_file_refs_routes_root_and_soil_messages(
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(_coord(data_vars), file_size=3000)
 
+    assert downloaded == [
+        (
+            "gs://ecmwf-open-data/20250301/00z/aifs-single/0p25/oper/"
+            "20250301000000-6h-oper-fc.index"
+        )
+    ]
     by_name = {r.data_var.name: r for r in refs}
     assert set(by_name) == {
         "temperature_2m",
@@ -207,7 +221,7 @@ def test_file_refs_routes_root_and_soil_messages(
     for ref in refs:
         assert ref.out_loc == {"init_time": _ERA2_INIT, "lead_time": _LEAD_6H}
         assert ref.location == (
-            "s3://ecmwf-forecasts/20250301/00z/aifs-single/0p25/oper/"
+            "gs://ecmwf-open-data/20250301/00z/aifs-single/0p25/oper/"
             "20250301000000-6h-oper-fc.grib2"
         )
 
@@ -258,7 +272,7 @@ def test_file_refs_skips_stale_index_past_eof(
 # --- discover_available ---
 
 
-def test_discover_available_lists_source_bucket_requiring_index(
+def test_discover_available_lists_gcs_requiring_index(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     data_vars = [get_var("temperature_2m")]
@@ -282,7 +296,8 @@ def test_discover_available_lists_source_bucket_requiring_index(
     assert result[0][0] is coord
     # AIFS data files always land with a .index sidecar; a file isn't ready until both exist.
     assert captured["require_index"] is True
-    assert captured["location_prefix"] == "s3://ecmwf-forecasts/"
+    assert captured["location_prefix"] == "gs://ecmwf-open-data/"
+    assert isinstance(captured["store"], obstore.store.GCSStore)
 
 
 # --- generate_source_file_coords ---

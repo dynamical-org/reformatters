@@ -65,9 +65,6 @@ def dataset(tmp_path: Path) -> EcmwfAifsSingleForecastVirtualDataset:
 
 
 @pytest.mark.slow
-@pytest.mark.skip(
-    reason="Temporary (2026-08-26): s3://ecmwf-forecasts answers reads with 503 SlowDown too often. Must be re-enabled before ecmwf-aifs-single-forecast-virtual ships to production."
-)
 def test_backfill_local_and_operational_update(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -166,9 +163,9 @@ def test_backfill_local_and_operational_update(
     assert -60.0 < t6 < 60.0  # plausible Celsius
 
     # Sample the decode-health validator down to one lead time and one level: every
-    # sampled chunk is a range request to s3://ecmwf-forecasts, which answers reads with
-    # 503 SlowDown often enough to flake CI. All three variables are still decoded, and
-    # the production sampling config is asserted in test_validators below.
+    # sampled chunk is a source range request that downloads and decodes a global
+    # field. All three variables are still decoded, and the production sampling config
+    # is asserted in test_validators below.
     orig_validators = type(dataset).validators
     monkeypatch.setattr(
         type(dataset),
@@ -250,4 +247,4 @@ def test_virtual_container_matches_ref_prefix(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "s3://ecmwf-forecasts/"
+    assert container.url_prefix == "gs://ecmwf-open-data/"

@@ -6,7 +6,7 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.config_models import ROOT
-from reformatters.common.download import s3_download_to_disk, s3_store
+from reformatters.common.download import gcs_download_to_disk, gcs_store
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -29,8 +29,7 @@ from .template_config import (
 
 log = get_logger(__name__)
 
-SOURCE_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
-SOURCE_REGION = "eu-central-1"
+SOURCE_LOCATION_PREFIX = "gs://ecmwf-open-data/"
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -39,9 +38,7 @@ def aifs_single_virtual_chunk_containers() -> tuple[
     """Fresh container objects per call; icechunk containers can't be shared
     pydantic defaults."""
     return (
-        icechunk.VirtualChunkContainer(
-            SOURCE_LOCATION_PREFIX, icechunk.s3_store(region=SOURCE_REGION)
-        ),
+        icechunk.VirtualChunkContainer(SOURCE_LOCATION_PREFIX, icechunk.gcs_store()),
     )
 
 
@@ -122,7 +119,7 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
     ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
         return discover_available_by_obstore_listing(
             pending,
-            store=s3_store(SOURCE_LOCATION_PREFIX, region=SOURCE_REGION),
+            store=gcs_store(SOURCE_LOCATION_PREFIX),
             location_prefix=SOURCE_LOCATION_PREFIX,
             require_index=True,
         )
@@ -132,9 +129,7 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         coord: EcmwfAifsSingleForecastVirtualSourceFileCoord,
         file_size: int,
     ) -> list[VirtualRef]:
-        index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=SOURCE_REGION
-        )
+        index_path = gcs_download_to_disk(coord.get_index_url(), self.dataset_id)
         try:
             index_df = parse_index_file(index_path, ensemble=False)
         finally:

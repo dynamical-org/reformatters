@@ -56,10 +56,9 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         # Run once per 6h cycle just before the files publish: all 61 leads land in
-        # a ~2 minute burst ~init+5h25m to init+6h03m (S3 LastModified; p99
-        # ~init+6h10m). Fire at init+5h20m and poll; the 1h deadline covers p99,
-        # bounds waiting on a cycle that never publishes, and keeps fires from
-        # overlapping.
+        # a ~2 minute burst ~init+5h25m to init+6h03m (p99 ~init+6h10m). Fire at
+        # init+5h20m and poll; the 1h deadline covers p99, bounds waiting on a cycle
+        # that never publishes, and keeps fires from overlapping.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="20 5,11,17,23 * * *",

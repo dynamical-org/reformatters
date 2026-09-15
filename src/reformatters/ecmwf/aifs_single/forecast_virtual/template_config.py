@@ -87,7 +87,7 @@ class EcmwfAifsSingleForecastVirtualTemplateConfig(
     def dataset_attributes(self) -> DatasetAttributes:
         return DatasetAttributes(
             dataset_id="ecmwf-aifs-single-forecast-virtual",
-            dataset_version="0.1.0",
+            dataset_version="0.2.0",
             name="ECMWF AIFS Single forecast, virtual",
             description="Weather forecasts from the ECMWF Artificial Intelligence Forecasting System (AIFS) Single model.",
             attribution="ECMWF AIFS Single forecast data processed by dynamical.org from ECMWF Open Data.",
