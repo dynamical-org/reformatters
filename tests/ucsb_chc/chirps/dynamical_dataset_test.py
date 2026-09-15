@@ -388,8 +388,8 @@ def test_operational_kubernetes_resources() -> None:
         )
         assert update_cron_job.name == f"{dataset.dataset_id}-update"
         assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-        assert update_cron_job.suspend
-        assert validation_cron_job.suspend
+        assert not update_cron_job.suspend
+        assert not validation_cron_job.suspend
         assert update_cron_job.secret_names == [
             dataset.primary_storage_config.k8s_secret_name
         ]
