@@ -259,7 +259,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="convective_precipitation_flux",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface, as it does in the ECMWF source accumulations.",
+                    comment="Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface, as can rates derived by differencing the ECMWF source accumulations.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="convective_precipitation",

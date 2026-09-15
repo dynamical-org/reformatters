@@ -75,7 +75,7 @@
     "short_name": "cpr",
     "standard_name": "convective_precipitation_flux",
     "units": "kg m-2 s-1",
-    "comment": "Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface, as it does in the ECMWF source accumulations.",
+    "comment": "Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface, as can rates derived by differencing the ECMWF source accumulations.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
