@@ -1,5 +1,5 @@
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import Annotated, ClassVar, Final
@@ -24,10 +24,12 @@ from .template_config import DwdIconEuDataVar, DwdIconEuForecast5DayTemplateConf
 log = get_logger(__name__)
 
 ARCHIVE_GRIB_FILES_DEADLINE: Final[timedelta] = timedelta(hours=4)
-MIN_TIME_FOR_ICOSAHEDRAL_PHASE: Final[timedelta] = timedelta(minutes=30)
-ICOSAHEDRAL_NWP_INIT_HOURS: Final[tuple[int, ...]] = (0, 6, 12, 18)
-# DWD `lvt1` level types archived alongside single-level parameters.
-ICOSAHEDRAL_LEVEL_TYPES: Final[tuple[int, ...]] = (106,)
+# Kept free at the end of the deadline for the icosahedral run in progress to finish.
+ICOSAHEDRAL_RUN_ALLOWANCE: Final[timedelta] = timedelta(minutes=30)
+ICOSAHEDRAL_NWP_INIT_HOURS: Final[tuple[int, ...]] = (0, 3, 6, 9, 12, 15, 18, 21)
+# DWD `lvt1` level types archived alongside single-level parameters: pressure and soil.
+# Model levels (150) are excluded for their storage cost.
+ICOSAHEDRAL_LEVEL_TYPES: Final[tuple[int, ...]] = (100, 106)
 
 
 class DwdIconEuForecast5DayDataset(
@@ -137,8 +139,8 @@ class DwdIconEuForecast5DayDataset(
         checkers: int = 32,
         stats_logging_freq: str = "1m",
     ) -> None:
-        """Restructure DWD GRIB files from FTP to a timestamped directory structure: first the
-        regular lat/lon files, then the icosahedral files.
+        """Restructure DWD GRIB files from DWD's HTTPS server to a timestamped directory
+        structure: first the regular lat/lon files, then the icosahedral files.
 
         Args:
             dst_root_path: The destination root directory. e.g. for S3, the dst_root could be: ':s3:bucket/foo/bar'
@@ -182,8 +184,8 @@ class DwdIconEuForecast5DayDataset(
                 s3_credentials_env_vars_for_rclone = None
 
             started = time.monotonic()
-            regular_lat_lon_error: Exception | None = None
-            try:
+
+            def copy_regular_lat_lon() -> None:
                 for nwp_init_hour in nwp_init_hours:
                     src_root_path = PurePosixPath(
                         f"/weather/nwp/icon-eu/grib/{nwp_init_hour:02d}"
@@ -197,40 +199,52 @@ class DwdIconEuForecast5DayDataset(
                         stats_logging_freq=stats_logging_freq,
                         env_vars=s3_credentials_env_vars_for_rclone,
                     )
-            except Exception as e:
-                # DWD keeps the icosahedral files for about a day, so copy them regardless.
-                log.exception("Regular lat/lon phase failed")
-                regular_lat_lon_error = e
 
-            regular_lat_lon_elapsed = timedelta(seconds=time.monotonic() - started)
-            log.info(f"Regular lat/lon phase took {regular_lat_lon_elapsed}")
-            remaining = ARCHIVE_GRIB_FILES_DEADLINE - regular_lat_lon_elapsed
-            if remaining < MIN_TIME_FOR_ICOSAHEDRAL_PHASE:
-                raise RuntimeError(
-                    f"Skipped the icosahedral phase: the regular lat/lon phase took"
-                    f" {regular_lat_lon_elapsed}, leaving {remaining} of the"
-                    f" {ARCHIVE_GRIB_FILES_DEADLINE} deadline."
-                ) from regular_lat_lon_error
+            def copy_icosahedral() -> None:
+                elapsed = timedelta(seconds=time.monotonic() - started)
+                copy_icosahedral_files_from_dwd_https(
+                    dst_root_path=icosahedral_dst_root_path,
+                    nwp_init_hours=icosahedral_nwp_init_hours,
+                    level_types=icosahedral_level_types,
+                    params=icosahedral_params,
+                    time_budget=ARCHIVE_GRIB_FILES_DEADLINE
+                    - ICOSAHEDRAL_RUN_ALLOWANCE
+                    - elapsed,
+                    transfer_parallelism=transfer_parallelism,
+                    checkers=checkers,
+                    stats_logging_freq=stats_logging_freq,
+                    env_vars=s3_credentials_env_vars_for_rclone,
+                )
 
-            copy_icosahedral_files_from_dwd_https(
-                dst_root_path=icosahedral_dst_root_path,
-                nwp_init_hours=icosahedral_nwp_init_hours,
-                level_types=icosahedral_level_types,
-                params=icosahedral_params,
-                transfer_parallelism=transfer_parallelism,
-                checkers=checkers,
-                stats_logging_freq=stats_logging_freq,
-                env_vars=s3_credentials_env_vars_for_rclone,
-            )
-            log.info(
-                "Icosahedral phase took"
-                f" {timedelta(seconds=time.monotonic() - started) - regular_lat_lon_elapsed}"
-            )
-            if regular_lat_lon_error is not None:
-                raise regular_lat_lon_error
+            # DWD keeps each run for about a day, so one phase failing must not stop the other.
+            errors = [
+                error
+                for error in (
+                    _run_phase("Regular lat/lon", copy_regular_lat_lon),
+                    _run_phase("Icosahedral", copy_icosahedral),
+                )
+                if error is not None
+            ]
+            if len(errors) == 1:
+                raise errors[0]
+            if errors:
+                raise ExceptionGroup("Both ICON-EU archive phases failed", errors)
 
     def get_cli(self) -> typer.Typer:
         """Create a CLI app with dataset commands."""
         app = super().get_cli()
         app.command()(self.archive_grib_files)
         return app
+
+
+def _run_phase(name: str, phase: Callable[[], None]) -> Exception | None:
+    """Run `phase`, logging how long it took, and return the exception it raised, if any."""
+    started = time.monotonic()
+    try:
+        phase()
+    except Exception as e:
+        log.exception(f"{name} phase failed")
+        return e
+    finally:
+        log.info(f"{name} phase took {timedelta(seconds=time.monotonic() - started)}")
+    return None

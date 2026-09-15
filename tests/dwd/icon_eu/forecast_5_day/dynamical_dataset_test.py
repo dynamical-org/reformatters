@@ -16,7 +16,7 @@ from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
     ARCHIVE_GRIB_FILES_DEADLINE,
     ICOSAHEDRAL_LEVEL_TYPES,
     ICOSAHEDRAL_NWP_INIT_HOURS,
-    MIN_TIME_FOR_ICOSAHEDRAL_PHASE,
+    ICOSAHEDRAL_RUN_ALLOWANCE,
     DwdIconEuForecast5DayDataset,
 )
 from tests.common.dynamical_dataset_test import (
@@ -232,16 +232,17 @@ MODULE = "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset"
 
 def _archive_grib_files(
     dataset: DwdIconEuForecast5DayDataset,
+    phases: Mock | None = None,
     secret: dict[str, str] | None = None,
-    elapsed_seconds: Sequence[float] = (0.0,),
+    monotonic_seconds: Sequence[float] = (0.0,),
 ) -> Mock:
     """Run `archive_grib_files` with both copy phases mocked, returning the mock
     whose `regular_lat_lon` and `icosahedral` children recorded the calls in order.
-    `elapsed_seconds` are successive `time.monotonic()` readings; the last repeats."""
-    phases = Mock()
+    `monotonic_seconds` are successive `time.monotonic()` readings; the last repeats."""
+    phases = phases or Mock()
     monotonic = Mock(
         side_effect=itertools.chain(
-            elapsed_seconds, itertools.repeat(elapsed_seconds[-1])
+            monotonic_seconds, itertools.repeat(monotonic_seconds[-1])
         )
     )
     with (
@@ -277,6 +278,7 @@ def test_archive_grib_files_copies_regular_lat_lon_then_icosahedral(
         nwp_init_hours=ICOSAHEDRAL_NWP_INIT_HOURS,
         level_types=ICOSAHEDRAL_LEVEL_TYPES,
         params=(),
+        time_budget=ARCHIVE_GRIB_FILES_DEADLINE - ICOSAHEDRAL_RUN_ALLOWANCE,
         transfer_parallelism=64,
         checkers=32,
         stats_logging_freq="1m",
@@ -299,14 +301,20 @@ def test_archive_grib_files_passes_s3_credentials(
         assert env_vars["RCLONE_S3_PROVIDER"] == "AWS"
 
 
-def test_archive_grib_files_skips_icosahedral_phase_without_enough_time(
+def test_archive_grib_files_gives_icosahedral_phase_the_time_left_before_the_deadline(
     dataset: DwdIconEuForecast5DayDataset,
 ) -> None:
-    too_late = (
-        ARCHIVE_GRIB_FILES_DEADLINE - MIN_TIME_FOR_ICOSAHEDRAL_PHASE
-    ).total_seconds() + 60
-    with pytest.raises(RuntimeError, match="Skipped the icosahedral phase"):
-        _archive_grib_files(dataset, elapsed_seconds=(0.0, too_late))
+    regular_lat_lon_seconds = timedelta(hours=3, minutes=31).total_seconds()
+    # Readings: job start, regular lat/lon phase start, then its end, which repeats.
+    phases = _archive_grib_files(
+        dataset, monotonic_seconds=(0.0, 0.0, regular_lat_lon_seconds)
+    )
+
+    assert phases.icosahedral.call_args.kwargs["time_budget"] == (
+        ARCHIVE_GRIB_FILES_DEADLINE
+        - ICOSAHEDRAL_RUN_ALLOWANCE
+        - timedelta(hours=3, minutes=31)
+    )
 
 
 def test_archive_grib_files_runs_icosahedral_phase_when_regular_lat_lon_fails(
@@ -314,15 +322,25 @@ def test_archive_grib_files_runs_icosahedral_phase_when_regular_lat_lon_fails(
 ) -> None:
     phases = Mock()
     phases.regular_lat_lon.side_effect = RuntimeError("DWD lat/lon listing failed")
-    with (
-        patch(f"{MODULE}.copy_files_from_dwd_https", phases.regular_lat_lon),
-        patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
-        patch(f"{MODULE}.kubernetes.load_secret", return_value={}),
-        pytest.raises(RuntimeError, match="DWD lat/lon listing failed"),
-    ):
-        dataset.archive_grib_files(reformat_job_name="test")
+    with pytest.raises(RuntimeError, match="DWD lat/lon listing failed"):
+        _archive_grib_files(dataset, phases=phases)
 
     phases.icosahedral.assert_called_once()
+
+
+def test_archive_grib_files_raises_both_errors_when_both_phases_fail(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    phases = Mock()
+    phases.regular_lat_lon.side_effect = RuntimeError("lat/lon failed")
+    phases.icosahedral.side_effect = RuntimeError("icosahedral failed")
+    with pytest.raises(ExceptionGroup) as exc_info:
+        _archive_grib_files(dataset, phases=phases)
+
+    assert [str(e) for e in exc_info.value.exceptions] == [
+        "lat/lon failed",
+        "icosahedral failed",
+    ]
 
 
 def test_get_cli_has_archive_command(

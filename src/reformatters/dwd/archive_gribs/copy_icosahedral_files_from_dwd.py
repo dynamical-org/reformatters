@@ -13,16 +13,21 @@ Our layout, relative to the destination root:
     <YYYY-MM-DDTHH>/<PARAM>/lvt1/<typeOfFirstFixedSurface>/lv1/<level>/<step>.grib2
 
 `rclone copy` only preserves relative paths and the run sits below the parameter and level,
-so we list the source once, map each path, and `rclone copyurl` the files missing from the
-destination.
+so we list the source once, map each path, and `rclone copyurl` each run's files that are
+missing from the destination.
 """
 
 import re
+import time
 from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import PurePosixPath
 from typing import Any, Final
 from urllib.parse import quote
 
+import pandas as pd
+
+from reformatters.common.iterating import group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.rclone import copy_urls, list_files
 from reformatters.common.retry import retry
@@ -33,6 +38,9 @@ DWD_HOST: Final[str] = "https://opendata.dwd.de"
 SRC_ROOT_PATH: Final[str] = "/weather/nwp/v1/m/icon-eu/p/"
 # The listing reads one index page per parameter, level, run and step directory.
 LIST_TIMEOUT_SECONDS: Final[float] = 30 * 60
+# DWD publishes a run's last file by about init+3h20m. Younger runs may still be publishing,
+# and DWD's index pages give rclone no modification times to filter single files by.
+MIN_RUN_AGE: Final[timedelta] = timedelta(hours=4)
 
 _RUN_DIR_REGEX: Final = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}):00")
 
@@ -42,13 +50,17 @@ def copy_icosahedral_files_from_dwd_https(
     nwp_init_hours: Sequence[int],
     level_types: Sequence[int],
     params: Sequence[str],
+    time_budget: timedelta,
     transfer_parallelism: int,
     checkers: int,
     stats_logging_freq: str,
     env_vars: dict[str, Any] | None = None,
 ) -> None:
-    """Copy every file of the selected runs still on DWD's server that is missing from
-    `dst_root_path`.
+    """Copy the files missing from `dst_root_path` of every selected run on DWD's server
+    that is at least `MIN_RUN_AGE` old, one run at a time, oldest first.
+
+    Raises if DWD lists no files, or if a run with files to copy would start after
+    `time_budget` has elapsed.
 
     Args:
         dst_root_path: The destination root directory, in the format `rclone` expects,
@@ -57,61 +69,76 @@ def copy_icosahedral_files_from_dwd_https(
         level_types: DWD `lvt1` level types to copy in addition to single-level
             parameters: 100 pressure levels, 106 soil levels, 150 model levels.
         params: DWD parameter names to copy, e.g. ("T_2M",). Empty copies all of them.
+        time_budget: How long after this call a run may still start copying. A run that
+            has started is not interrupted.
         transfer_parallelism: Passed to `rclone --transfers`.
         checkers: Passed to `rclone --checkers`.
         stats_logging_freq: The period between each stats log, e.g. "1m".
         env_vars: Environment variables to add to this process's environment for `rclone`.
     """
+    deadline = time.monotonic() + time_budget.total_seconds()
     if not dst_root_path.endswith("/"):
         dst_root_path += "/"
 
-    def copy_missing_files() -> None:
-        src_paths = list_files(
+    src_paths = retry(
+        lambda: list_files(
             path=f":http:{SRC_ROOT_PATH}",
             checkers=checkers,
             rclone_args=(
                 f"--http-url={DWD_HOST}",
                 "--http-no-head",
-                "--min-age=1m",  # Ignore files that are so young they might be incomplete.
                 *icosahedral_include_filters(nwp_init_hours, level_types, params),
             ),
             env_vars=env_vars,
             timeout_seconds=LIST_TIMEOUT_SECONDS,
-        )
-        dst_paths = {src_path: icosahedral_dst_path(src_path) for src_path in src_paths}
+        ),
+        max_attempts=3,
+    )
+    if not src_paths:
+        raise RuntimeError(f"Found no icosahedral files on {DWD_HOST}{SRC_ROOT_PATH}")
 
-        already_on_dst: set[PurePosixPath] = set()
-        for run_dir in sorted({dst_path.parts[0] for dst_path in dst_paths.values()}):
-            already_on_dst.update(
-                run_dir / path
-                for path in list_files(
+    newest_run_dir = (pd.Timestamp.now("UTC") - MIN_RUN_AGE).strftime("%Y-%m-%dT%H")
+    src_and_dst_paths = sorted(
+        ((src_path, icosahedral_dst_path(src_path)) for src_path in src_paths),
+        key=lambda src_and_dst_path: src_and_dst_path[1],
+    )
+    # Oldest run first: DWD deletes the oldest run when it publishes the next one.
+    for run in group_by(src_and_dst_paths, lambda src_and_dst: src_and_dst[1].parts[0]):
+        run_dir = run[0][1].parts[0]
+        if run_dir > newest_run_dir:
+            log.info(f"Skipping run {run_dir}, which is younger than {MIN_RUN_AGE}.")
+            continue
+
+        already_on_dst = set(
+            retry(
+                lambda run_dir=run_dir: list_files(
                     path=f"{dst_root_path}{run_dir}/",
                     checkers=checkers,
                     env_vars=env_vars,
-                )
+                ),
+                max_attempts=3,
             )
-
-        # Oldest run first: DWD deletes the oldest run when it publishes the next one.
-        to_copy = sorted(
-            (
-                (f"{DWD_HOST}{SRC_ROOT_PATH}{quote(str(src_path))}", dst_path)
-                for src_path, dst_path in dst_paths.items()
-                if dst_path not in already_on_dst
-            ),
-            key=lambda url_and_dst_path: url_and_dst_path[1],
         )
-        log.info(f"Planning to copy {len(to_copy):,d} of {len(dst_paths):,d} files.")
-        if to_copy:
-            copy_urls(
-                sources_and_dst_paths=to_copy,
-                dst_root_path=dst_root_path,
-                transfer_parallelism=transfer_parallelism,
-                checkers=checkers,
-                stats_logging_freq=stats_logging_freq,
-                env_vars=env_vars,
+        to_copy = [
+            (f"{DWD_HOST}{SRC_ROOT_PATH}{quote(str(src_path))}", dst_path)
+            for src_path, dst_path in run
+            if dst_path.relative_to(run_dir) not in already_on_dst
+        ]
+        log.info(f"Run {run_dir}: {len(to_copy):,d} of {len(run):,d} files to copy.")
+        if not to_copy:
+            continue
+        if time.monotonic() > deadline:
+            raise RuntimeError(
+                f"Stopped before copying run {run_dir}: the {time_budget} time budget ran out."
             )
-
-    retry(copy_missing_files, max_attempts=2)
+        copy_urls(
+            sources_and_dst_paths=to_copy,
+            dst_root_path=dst_root_path,
+            transfer_parallelism=transfer_parallelism,
+            checkers=checkers,
+            stats_logging_freq=stats_logging_freq,
+            env_vars=env_vars,
+        )
 
 
 def icosahedral_include_filters(

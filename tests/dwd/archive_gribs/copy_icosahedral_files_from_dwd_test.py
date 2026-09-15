@@ -1,6 +1,9 @@
+from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import PurePosixPath
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from reformatters.dwd.archive_gribs.copy_icosahedral_files_from_dwd import (
@@ -88,69 +91,92 @@ def test_icosahedral_include_filters_single_level_only_for_selected_params() -> 
     ) == ["--include=/{T_2M,CLAT}/r/*T{03}:00/s/*.grib2"]
 
 
-def _fake_list_files(
-    files_by_path: dict[str, list[str]],
-) -> MagicMock:
+NOW = pd.Timestamp("2026-09-15T12:00Z")
+SRC_ROOT = ":http:/weather/nwp/v1/m/icon-eu/p/"
+URL_ROOT = "https://opendata.dwd.de/weather/nwp/v1/m/icon-eu/p"
+
+
+def _fake_list_files(files_by_path: dict[str, list[str]]) -> MagicMock:
     def list_files(path: str, **_kwargs: object) -> list[PurePosixPath]:
         return [PurePosixPath(p) for p in files_by_path[path]]
 
     return MagicMock(side_effect=list_files)
 
 
-@patch(f"{MODULE}.copy_urls")
-def test_copy_icosahedral_files_copies_only_files_missing_from_dst(
-    mock_copy_urls: MagicMock,
+def _copy(
+    mock_list_files: MagicMock,
+    nwp_init_hours: Sequence[int] = (0, 3),
+    time_budget: timedelta = timedelta(hours=1),
+    now: pd.Timestamp = NOW,
 ) -> None:
-    mock_list_files = _fake_list_files(
-        {
-            ":http:/weather/nwp/v1/m/icon-eu/p/": [
-                "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
-                "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
-                "T/lvt1/100/lv1/85000/r/2026-09-15T00:00/s/PT000H00M.grib2",
-                "T_2M/r/2026-09-15T03:00/s/PT000H00M.grib2",
-            ],
-            ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
-            ":s3:bucket/icosahedral/2026-09-15T03/": [],
-        }
-    )
-    with patch(f"{MODULE}.list_files", mock_list_files):
+    with (
+        patch(f"{MODULE}.list_files", mock_list_files),
+        patch("pandas.Timestamp.now", return_value=now),
+    ):
         copy_icosahedral_files_from_dwd_https(
             dst_root_path=":s3:bucket/icosahedral",
-            nwp_init_hours=[0, 3],
+            nwp_init_hours=nwp_init_hours,
             level_types=[100],
             params=[],
+            time_budget=time_budget,
             transfer_parallelism=8,
             checkers=4,
             stats_logging_freq="1m",
         )
 
+
+TWO_RUNS_ON_DWD = [
+    "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
+    "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
+    "T/lvt1/100/lv1/85000/r/2026-09-15T00:00/s/PT000H00M.grib2",
+    "T_2M/r/2026-09-15T03:00/s/PT000H00M.grib2",
+]
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_copies_missing_files_one_run_at_a_time_oldest_first(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: TWO_RUNS_ON_DWD,
+            ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
+            ":s3:bucket/icosahedral/2026-09-15T03/": [],
+        }
+    )
+    _copy(mock_list_files)
+
     src_listing = mock_list_files.call_args_list[0]
-    assert src_listing.kwargs["path"] == ":http:/weather/nwp/v1/m/icon-eu/p/"
+    assert src_listing.kwargs["path"] == SRC_ROOT
     rclone_args = src_listing.kwargs["rclone_args"]
     assert "--http-url=https://opendata.dwd.de" in rclone_args
     assert "--http-no-head" in rclone_args
-    assert "--min-age=1m" in rclone_args
     assert "--include=/*/lvt1/100/lv1/*/r/*T{00,03}:00/s/*.grib2" in rclone_args
+    # DWD's index pages carry no modification times, so an age filter would match everything.
+    assert not any(arg.startswith("--min-age") for arg in rclone_args)
 
-    url_root = "https://opendata.dwd.de/weather/nwp/v1/m/icon-eu/p"
-    mock_copy_urls.assert_called_once()
-    assert mock_copy_urls.call_args.kwargs["dst_root_path"] == (
+    assert [c.kwargs["dst_root_path"] for c in mock_copy_urls.call_args_list] == [
         ":s3:bucket/icosahedral/"
-    )
-    # Ordered by destination path, so the oldest run is copied first.
-    assert mock_copy_urls.call_args.kwargs["sources_and_dst_paths"] == [
-        (
-            f"{url_root}/T/lvt1/100/lv1/85000/r/2026-09-15T00%3A00/s/PT000H00M.grib2",
-            PurePosixPath("2026-09-15T00/T/lvt1/100/lv1/85000/PT000H00M.grib2"),
-        ),
-        (
-            f"{url_root}/T_2M/r/2026-09-15T00%3A00/s/PT001H00M.grib2",
-            PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2"),
-        ),
-        (
-            f"{url_root}/T_2M/r/2026-09-15T03%3A00/s/PT000H00M.grib2",
-            PurePosixPath("2026-09-15T03/T_2M/PT000H00M.grib2"),
-        ),
+    ] * 2
+    assert [
+        c.kwargs["sources_and_dst_paths"] for c in mock_copy_urls.call_args_list
+    ] == [
+        [
+            (
+                f"{URL_ROOT}/T/lvt1/100/lv1/85000/r/2026-09-15T00%3A00/s/PT000H00M.grib2",
+                PurePosixPath("2026-09-15T00/T/lvt1/100/lv1/85000/PT000H00M.grib2"),
+            ),
+            (
+                f"{URL_ROOT}/T_2M/r/2026-09-15T00%3A00/s/PT001H00M.grib2",
+                PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2"),
+            ),
+        ],
+        [
+            (
+                f"{URL_ROOT}/T_2M/r/2026-09-15T03%3A00/s/PT000H00M.grib2",
+                PurePosixPath("2026-09-15T03/T_2M/PT000H00M.grib2"),
+            ),
+        ],
     ]
 
 
@@ -160,21 +186,62 @@ def test_copy_icosahedral_files_is_a_no_op_when_dst_is_complete(
 ) -> None:
     mock_list_files = _fake_list_files(
         {
-            ":http:/weather/nwp/v1/m/icon-eu/p/": [
-                "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
-            ],
-            "/dst/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
+            SRC_ROOT: ["T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2"],
+            ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
         }
     )
-    with patch(f"{MODULE}.list_files", mock_list_files):
-        copy_icosahedral_files_from_dwd_https(
-            dst_root_path="/dst/",
-            nwp_init_hours=[0],
-            level_types=[],
-            params=[],
-            transfer_parallelism=8,
-            checkers=4,
-            stats_logging_freq="1m",
-        )
+    _copy(mock_list_files, nwp_init_hours=[0])
 
     mock_copy_urls.assert_not_called()
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_skips_runs_that_may_still_be_publishing(
+    mock_copy_urls: MagicMock,
+) -> None:
+    # No destination listing for the 03 run: listing it would raise KeyError.
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: TWO_RUNS_ON_DWD,
+            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+        }
+    )
+    _copy(mock_list_files, now=pd.Timestamp("2026-09-15T06:59Z"))
+
+    mock_copy_urls.assert_called_once()
+    assert {
+        dst_path.parts[0]
+        for _url, dst_path in mock_copy_urls.call_args.kwargs["sources_and_dst_paths"]
+    } == {"2026-09-15T00"}
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_raises_when_dwd_lists_no_files(
+    mock_copy_urls: MagicMock,
+) -> None:
+    with pytest.raises(RuntimeError, match="Found no icosahedral files"):
+        _copy(_fake_list_files({SRC_ROOT: []}))
+
+    mock_copy_urls.assert_not_called()
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: TWO_RUNS_ON_DWD,
+            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+            ":s3:bucket/icosahedral/2026-09-15T03/": [],
+        }
+    )
+    # Readings: when the budget starts, before the 00 run, then before the 03 run.
+    monotonic = MagicMock(side_effect=[0.0, 0.0, 7200.0])
+    with (
+        patch(f"{MODULE}.time.monotonic", monotonic),
+        pytest.raises(RuntimeError, match="Stopped before copying run 2026-09-15T03"),
+    ):
+        _copy(mock_list_files, time_budget=timedelta(hours=1))
+
+    mock_copy_urls.assert_called_once()
