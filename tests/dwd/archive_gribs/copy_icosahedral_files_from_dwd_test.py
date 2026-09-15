@@ -10,6 +10,7 @@ from reformatters.dwd.archive_gribs.copy_icosahedral_files_from_dwd import (
     copy_icosahedral_files_from_dwd_https,
     icosahedral_dst_path,
     icosahedral_include_filters,
+    incomplete_runs,
 )
 
 MODULE = "reformatters.dwd.archive_gribs.copy_icosahedral_files_from_dwd"
@@ -106,6 +107,7 @@ def _fake_list_files(files_by_path: dict[str, list[str]]) -> MagicMock:
 def _copy(
     mock_list_files: MagicMock,
     nwp_init_hours: Sequence[int] = (0, 3),
+    level_types: Sequence[int] = (100,),
     time_budget: timedelta = timedelta(hours=1),
     now: pd.Timestamp = NOW,
 ) -> None:
@@ -116,7 +118,7 @@ def _copy(
         copy_icosahedral_files_from_dwd_https(
             dst_root_path=":s3:bucket/icosahedral",
             nwp_init_hours=nwp_init_hours,
-            level_types=[100],
+            level_types=level_types,
             params=[],
             time_budget=time_budget,
             transfer_parallelism=8,
@@ -125,11 +127,13 @@ def _copy(
         )
 
 
+# A main run (00) and an intermediate run (03), which are not compared with each other.
 TWO_RUNS_ON_DWD = [
     "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
     "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
     "T/lvt1/100/lv1/85000/r/2026-09-15T00:00/s/PT000H00M.grib2",
     "T_2M/r/2026-09-15T03:00/s/PT000H00M.grib2",
+    "T/lvt1/100/lv1/85000/r/2026-09-15T03:00/s/PT000H00M.grib2",
 ]
 
 
@@ -173,6 +177,10 @@ def test_copy_icosahedral_files_copies_missing_files_one_run_at_a_time_oldest_fi
         ],
         [
             (
+                f"{URL_ROOT}/T/lvt1/100/lv1/85000/r/2026-09-15T03%3A00/s/PT000H00M.grib2",
+                PurePosixPath("2026-09-15T03/T/lvt1/100/lv1/85000/PT000H00M.grib2"),
+            ),
+            (
                 f"{URL_ROOT}/T_2M/r/2026-09-15T03%3A00/s/PT000H00M.grib2",
                 PurePosixPath("2026-09-15T03/T_2M/PT000H00M.grib2"),
             ),
@@ -190,7 +198,7 @@ def test_copy_icosahedral_files_is_a_no_op_when_dst_is_complete(
             ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
         }
     )
-    _copy(mock_list_files, nwp_init_hours=[0])
+    _copy(mock_list_files, nwp_init_hours=[0], level_types=[])
 
     mock_copy_urls.assert_not_called()
 
@@ -226,6 +234,18 @@ def test_copy_icosahedral_files_raises_when_dwd_lists_no_files(
 
 
 @patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_does_not_list_dwd_with_no_time_budget(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files({})
+    with pytest.raises(RuntimeError, match="Stopped before listing DWD's files"):
+        _copy(mock_list_files, time_budget=timedelta(0))
+
+    mock_list_files.assert_not_called()
+    mock_copy_urls.assert_not_called()
+
+
+@patch(f"{MODULE}.copy_urls")
 def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out(
     mock_copy_urls: MagicMock,
 ) -> None:
@@ -236,8 +256,8 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
             ":s3:bucket/icosahedral/2026-09-15T03/": [],
         }
     )
-    # Readings: when the budget starts, before the 00 run, then before the 03 run.
-    monotonic = MagicMock(side_effect=[0.0, 0.0, 7200.0])
+    # Readings: budget start, before the listing, before the 00 run, before the 03 run.
+    monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 7200.0])
     with (
         patch(f"{MODULE}.time.monotonic", monotonic),
         pytest.raises(RuntimeError, match="Stopped before copying run 2026-09-15T03"),
@@ -245,3 +265,82 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
         _copy(mock_list_files, time_budget=timedelta(hours=1))
 
     mock_copy_urls.assert_called_once()
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_copies_an_incomplete_run_then_raises(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: [
+                "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
+                "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
+                "T_2M/r/2026-09-15T06:00/s/PT000H00M.grib2",
+            ],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+            ":s3:bucket/icosahedral/2026-09-15T06/": [],
+        }
+    )
+    with pytest.raises(RuntimeError, match="2026-09-15T06 lacks 1 files"):
+        _copy(mock_list_files, nwp_init_hours=[0, 6], level_types=[])
+
+    assert mock_copy_urls.call_count == 2
+
+
+def _runs(*runs: Sequence[str]) -> list[list[PurePosixPath]]:
+    return [[PurePosixPath(path) for path in run] for run in runs]
+
+
+def test_incomplete_runs_compares_main_and_intermediate_runs_separately() -> None:
+    main_run = [
+        "T_2M/PT000H00M.grib2",
+        "T_2M/PT120H00M.grib2",
+        "T/lvt1/100/lv1/500/PT000H00M.grib2",
+    ]
+    runs = _runs(
+        [f"2026-09-15T00/{path}" for path in main_run],
+        [
+            "2026-09-15T03/T_2M/PT000H00M.grib2",
+            "2026-09-15T03/T/lvt1/100/lv1/500/PT000H00M.grib2",
+        ],
+        [f"2026-09-15T06/{path}" for path in main_run],
+    )
+    assert incomplete_runs(runs, level_types=[100], params=[]) == []
+
+
+def test_incomplete_runs_reports_files_another_run_of_its_kind_has() -> None:
+    runs = _runs(
+        ["2026-09-15T00/T_2M/PT000H00M.grib2", "2026-09-15T00/T_2M/PT120H00M.grib2"],
+        ["2026-09-15T06/T_2M/PT000H00M.grib2"],
+    )
+    assert incomplete_runs(runs, level_types=[], params=[]) == [
+        (
+            "2026-09-15T06 lacks 1 files that other runs of its kind have,"
+            " e.g. T_2M/PT120H00M.grib2"
+        )
+    ]
+
+
+def test_incomplete_runs_reports_a_selected_level_type_missing_from_every_run() -> None:
+    runs = _runs(
+        [
+            "2026-09-15T00/T_2M/PT000H00M.grib2",
+            "2026-09-15T00/T/lvt1/100/lv1/500/PT000H00M.grib2",
+        ],
+        [
+            "2026-09-15T06/T_2M/PT000H00M.grib2",
+            "2026-09-15T06/T/lvt1/100/lv1/500/PT000H00M.grib2",
+        ],
+    )
+    assert incomplete_runs(runs, level_types=[100, 106], params=[]) == [
+        "2026-09-15T00 has no lvt1/106 files",
+        "2026-09-15T06 has no lvt1/106 files",
+    ]
+
+
+def test_incomplete_runs_reports_a_requested_param_but_not_level_types() -> None:
+    runs = _runs(["2026-09-15T00/T_2M/PT000H00M.grib2"])
+    assert incomplete_runs(runs, level_types=[100], params=["T_2M", "TYPO"]) == [
+        "2026-09-15T00 has no TYPO files"
+    ]

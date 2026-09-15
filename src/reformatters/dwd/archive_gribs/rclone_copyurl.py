@@ -31,5 +31,7 @@ def run_rclone_copyurl(
         "--quiet",  # Only output logs at error level.
         "--stats-one-line",  # Output stats as a single line.
     )
-    run_command_with_concurrent_logging(cmd, env_vars=env_vars)
+    return_code = run_command_with_concurrent_logging(cmd, env_vars=env_vars)
     csv_file.unlink()
+    if return_code != 0:
+        raise RuntimeError(f"rclone copyurl exited with code {return_code}")

@@ -24,7 +24,7 @@ from .template_config import DwdIconEuDataVar, DwdIconEuForecast5DayTemplateConf
 log = get_logger(__name__)
 
 ARCHIVE_GRIB_FILES_DEADLINE: Final[timedelta] = timedelta(hours=4)
-# Kept free at the end of the deadline for the icosahedral run in progress to finish.
+# The icosahedral phase starts no run within this long of the deadline.
 ICOSAHEDRAL_RUN_ALLOWANCE: Final[timedelta] = timedelta(minutes=30)
 ICOSAHEDRAL_NWP_INIT_HOURS: Final[tuple[int, ...]] = (0, 3, 6, 9, 12, 15, 18, 21)
 # DWD `lvt1` level types archived alongside single-level parameters: pressure and soil.

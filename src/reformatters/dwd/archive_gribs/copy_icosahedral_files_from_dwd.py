@@ -36,8 +36,7 @@ log = get_logger(__name__)
 
 DWD_HOST: Final[str] = "https://opendata.dwd.de"
 SRC_ROOT_PATH: Final[str] = "/weather/nwp/v1/m/icon-eu/p/"
-# The listing reads one index page per parameter, level, run and step directory.
-LIST_TIMEOUT_SECONDS: Final[float] = 30 * 60
+LIST_TIMEOUT_SECONDS: Final[float] = 10 * 60
 # DWD publishes a run's last file by about init+3h20m. Younger runs may still be publishing,
 # and DWD's index pages give rclone no modification times to filter single files by.
 MIN_RUN_AGE: Final[timedelta] = timedelta(hours=4)
@@ -59,8 +58,8 @@ def copy_icosahedral_files_from_dwd_https(
     """Copy the files missing from `dst_root_path` of every selected run on DWD's server
     that is at least `MIN_RUN_AGE` old, one run at a time, oldest first.
 
-    Raises if DWD lists no files, or if a run with files to copy would start after
-    `time_budget` has elapsed.
+    Raises if DWD lists no files, or if `time_budget` runs out before the listing or a
+    run starts. After copying, also raises if a run is incomplete (see `incomplete_runs`).
 
     Args:
         dst_root_path: The destination root directory, in the format `rclone` expects,
@@ -69,17 +68,25 @@ def copy_icosahedral_files_from_dwd_https(
         level_types: DWD `lvt1` level types to copy in addition to single-level
             parameters: 100 pressure levels, 106 soil levels, 150 model levels.
         params: DWD parameter names to copy, e.g. ("T_2M",). Empty copies all of them.
-        time_budget: How long after this call a run may still start copying. A run that
-            has started is not interrupted.
+        time_budget: How long after this call the listing or a run may still start. A
+            run that has started is not interrupted.
         transfer_parallelism: Passed to `rclone --transfers`.
         checkers: Passed to `rclone --checkers`.
         stats_logging_freq: The period between each stats log, e.g. "1m".
         env_vars: Environment variables to add to this process's environment for `rclone`.
     """
     deadline = time.monotonic() + time_budget.total_seconds()
+
+    def raise_if_out_of_time(before: str) -> None:
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"Stopped before {before}: the {time_budget} time budget ran out."
+            )
+
     if not dst_root_path.endswith("/"):
         dst_root_path += "/"
 
+    raise_if_out_of_time("listing DWD's files")
     src_paths = retry(
         lambda: list_files(
             path=f":http:{SRC_ROOT_PATH}",
@@ -92,7 +99,7 @@ def copy_icosahedral_files_from_dwd_https(
             env_vars=env_vars,
             timeout_seconds=LIST_TIMEOUT_SECONDS,
         ),
-        max_attempts=3,
+        max_attempts=2,
     )
     if not src_paths:
         raise RuntimeError(f"Found no icosahedral files on {DWD_HOST}{SRC_ROOT_PATH}")
@@ -102,6 +109,7 @@ def copy_icosahedral_files_from_dwd_https(
         ((src_path, icosahedral_dst_path(src_path)) for src_path in src_paths),
         key=lambda src_and_dst_path: src_and_dst_path[1],
     )
+    copied_runs: list[list[PurePosixPath]] = []
     # Oldest run first: DWD deletes the oldest run when it publishes the next one.
     for run in group_by(src_and_dst_paths, lambda src_and_dst: src_and_dst[1].parts[0]):
         run_dir = run[0][1].parts[0]
@@ -109,6 +117,7 @@ def copy_icosahedral_files_from_dwd_https(
             log.info(f"Skipping run {run_dir}, which is younger than {MIN_RUN_AGE}.")
             continue
 
+        raise_if_out_of_time(f"copying run {run_dir}")
         already_on_dst = set(
             retry(
                 lambda run_dir=run_dir: list_files(
@@ -125,20 +134,66 @@ def copy_icosahedral_files_from_dwd_https(
             if dst_path.relative_to(run_dir) not in already_on_dst
         ]
         log.info(f"Run {run_dir}: {len(to_copy):,d} of {len(run):,d} files to copy.")
-        if not to_copy:
-            continue
-        if time.monotonic() > deadline:
-            raise RuntimeError(
-                f"Stopped before copying run {run_dir}: the {time_budget} time budget ran out."
+        if to_copy:
+            copy_urls(
+                sources_and_dst_paths=to_copy,
+                dst_root_path=dst_root_path,
+                transfer_parallelism=transfer_parallelism,
+                checkers=checkers,
+                stats_logging_freq=stats_logging_freq,
+                env_vars=env_vars,
             )
-        copy_urls(
-            sources_and_dst_paths=to_copy,
-            dst_root_path=dst_root_path,
-            transfer_parallelism=transfer_parallelism,
-            checkers=checkers,
-            stats_logging_freq=stats_logging_freq,
-            env_vars=env_vars,
+        copied_runs.append([dst_path for _src_path, dst_path in run])
+
+    if problems := incomplete_runs(copied_runs, level_types, params):
+        raise RuntimeError(
+            "Incomplete icosahedral runs on DWD's server: " + "; ".join(problems)
         )
+
+
+def incomplete_runs(
+    dst_paths_by_run: Sequence[Sequence[PurePosixPath]],
+    level_types: Sequence[int],
+    params: Sequence[str],
+) -> list[str]:
+    """Describe each run that lacks files another run of its kind (main 00/06/12/18 UTC, or
+    intermediate) has, or that lacks any file of an explicitly requested parameter or, when
+    every parameter is requested, of a requested level type."""
+    files_by_run_dir = {
+        paths[0].parts[0]: {path.relative_to(path.parts[0]) for path in paths}
+        for paths in dst_paths_by_run
+    }
+
+    def is_main_run(run_dir: str) -> bool:
+        return int(run_dir[-2:]) % 6 == 0
+
+    files_by_kind: dict[bool, set[PurePosixPath]] = {}
+    for run_dir, files in files_by_run_dir.items():
+        files_by_kind.setdefault(is_main_run(run_dir), set()).update(files)
+
+    problems = []
+    for run_dir, files in files_by_run_dir.items():
+        if missing := files_by_kind[is_main_run(run_dir)] - files:
+            problems.append(
+                f"{run_dir} lacks {len(missing):,d} files that other runs of its kind"
+                f" have, e.g. {min(missing)}"
+            )
+        present_params = {file.parts[0] for file in files}
+        problems += [
+            f"{run_dir} has no {param} files"
+            for param in params
+            if param not in present_params
+        ]
+        if not params:
+            present_level_types = {
+                file.parts[2] for file in files if len(file.parts) == 6
+            }
+            problems += [
+                f"{run_dir} has no lvt1/{level_type} files"
+                for level_type in level_types
+                if str(level_type) not in present_level_types
+            ]
+    return problems
 
 
 def icosahedral_include_filters(

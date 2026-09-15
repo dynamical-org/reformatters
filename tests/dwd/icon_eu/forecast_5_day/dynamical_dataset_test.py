@@ -351,3 +351,35 @@ def test_get_cli_has_archive_command(
         getattr(cmd.callback, "__name__", None) for cmd in cli.registered_commands
     ]
     assert "archive_grib_files" in callback_names
+
+
+def test_archive_grib_files_fails_when_regular_lat_lon_copyurl_fails(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    phases = Mock()
+    copier = "reformatters.dwd.archive_gribs.copy_files_from_dwd"
+    with (
+        patch(
+            f"{copier}.list_grib_files_on_dwd_https",
+            return_value=[
+                PurePosixPath(
+                    "t_2m/icon-eu_europe_regular-lat-lon_single-level_2026091500_000_T_2M.grib2.bz2"
+                )
+            ],
+        ),
+        patch(
+            f"{copier}.list_files_on_dst_for_all_nwp_runs_available_from_dwd",
+            return_value=set(),
+        ),
+        patch(
+            "reformatters.dwd.archive_gribs.rclone_copyurl.run_command_with_concurrent_logging",
+            return_value=1,
+        ) as run_rclone,
+        patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
+        patch(f"{MODULE}.kubernetes.load_secret", return_value={}),
+        pytest.raises(RuntimeError, match="rclone copyurl exited with code 1"),
+    ):
+        dataset.archive_grib_files(reformat_job_name="test", nwp_init_hours=[0])
+
+    assert run_rclone.call_count == 2  # copy_files_from_dwd_https retries once
+    phases.icosahedral.assert_called_once()

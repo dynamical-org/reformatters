@@ -31,8 +31,9 @@ phases, one after the other in the same pod, so the two copies never load DWD's 
 Both phases list the source and destination, then copy only the missing files with
 `rclone copyurl`, so a run interrupted part way through is completed by the next one. The
 icosahedral phase copies one run at a time, oldest first, and skips runs younger than 4 hours,
-which may still be publishing. It starts no run within 30 minutes of the job's deadline; the job
-fails instead, so the deadline only interrupts a run that is already copying.
+which may still be publishing. It starts neither its listing nor a run within 30 minutes of the
+job's deadline, failing the job instead. After copying, it also fails the job if a run lacks files
+that other runs of its kind (main or intermediate) have, or lacks a selected level type.
 
 This code uses [`rclone`](https://rclone.org) under the hood. `rclone copyurl --urls` needs a
 newer `rclone` than Ubuntu's package; the Docker image copies it from `rclone/rclone:latest`, and
