@@ -1,5 +1,4 @@
 import json
-import logging
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -136,9 +135,7 @@ def test_registered_dataset_schedules_are_parseable() -> None:
 
 def test_console_entrypoint_dispatch_installs_sigterm_logger(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    caplog.set_level(logging.INFO)
     entrypoint = next(
         entrypoint
         for entrypoint in distribution("reformatters").entry_points
@@ -148,13 +145,15 @@ def test_console_entrypoint_dispatch_installs_sigterm_logger(
 
     install_sigterm_logger = Mock()
     monkeypatch.setattr(monitoring, "install_sigterm_logger", install_sigterm_logger)
+    log_peak_memory = Mock()
+    monkeypatch.setattr(monitoring, "log_peak_memory", log_peak_memory)
     result = CliRunner().invoke(
         entrypoint.load(), ["noaa-hrrr-analysis-virtual", "dataset-urls"]
     )
 
     assert result.exit_code == 0, result.exception
     install_sigterm_logger.assert_called_once_with()
-    assert "Peak memory:" in caplog.text
+    log_peak_memory.assert_called_once_with()
 
 
 def test_direct_file_dispatch_installs_sigterm_logger() -> None:
@@ -167,6 +166,8 @@ from reformatters.common import monitoring
 
 install_sigterm_logger = Mock()
 monitoring.install_sigterm_logger = install_sigterm_logger
+log_peak_memory = Mock()
+monitoring.log_peak_memory = log_peak_memory
 sys.argv = [
     "src/reformatters/__main__.py",
     "noaa-hrrr-analysis-virtual",
@@ -177,6 +178,7 @@ try:
 except SystemExit as error:
     assert error.code == 0
 install_sigterm_logger.assert_called_once_with()
+log_peak_memory.assert_called_once_with()
 """
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code],
@@ -185,7 +187,6 @@ install_sigterm_logger.assert_called_once_with()
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert "Peak memory:" in result.stderr
 
 
 class TestDeployCommandsRegistered:

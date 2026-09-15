@@ -38,11 +38,11 @@ def test_log_cgroup_peak_memory(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    files = {
-        "/sys/fs/cgroup/memory.peak": str(3 * 2**29) + "\n",
-        "/proc/self/status": "VmHWM:\t262144 kB\n",
-    }
-    monkeypatch.setattr(Path, "read_text", lambda path: files[str(path)])
+    def read_text(path: Path) -> str:
+        assert path == Path("/sys/fs/cgroup/memory.peak")
+        return str(3 * 2**29) + "\n"
+
+    monkeypatch.setattr(Path, "read_text", read_text)
 
     with caplog.at_level(logging.INFO):
         log_peak_memory()
@@ -52,41 +52,20 @@ def test_log_cgroup_peak_memory(
     ]
 
 
-@pytest.mark.parametrize(
-    "counter", [FileNotFoundError, PermissionError, "not-a-number", ""]
-)
-def test_log_peak_memory_process_fallback(
+@pytest.mark.parametrize("error", [FileNotFoundError, PermissionError, OSError])
+def test_log_peak_memory_unreadable(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
-    counter: str | type[OSError],
+    error: type[OSError],
 ) -> None:
-    def read_text(path: Path) -> str:
-        if str(path) == "/sys/fs/cgroup/memory.peak":
-            if not isinstance(counter, str):
-                raise counter(path)
-            return counter
-        assert str(path) == "/proc/self/status"
-        return "Name:\tpython\nVmHWM:\t1572864 kB\n"
-
+    read_text = Mock(side_effect=error)
     monkeypatch.setattr(Path, "read_text", read_text)
 
     with caplog.at_level(logging.INFO):
         log_peak_memory()
 
-    assert caplog.messages == [
-        "Peak memory: 1.500 GiB (process RSS only, /proc/self/status VmHWM)"
-    ]
-
-
-def test_log_peak_memory_unavailable(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setattr(Path, "read_text", Mock(side_effect=FileNotFoundError))
-
-    with caplog.at_level(logging.INFO):
-        log_peak_memory()
-
-    assert caplog.messages == ["Peak memory: unavailable"]
+    assert caplog.messages == []
+    read_text.assert_called_once_with()
 
 
 @pytest.mark.parametrize(
