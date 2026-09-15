@@ -259,7 +259,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="convective_precipitation_flux",
                     units="kg m-2 s-1",
                     step_type="avg",
-                    comment="Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s.",
+                    comment="Average convective precipitation rate over the previous 24 hours. Units equivalent to mm/s. Can slightly exceed precipitation_surface, as can rates derived by differencing the ECMWF source accumulations.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="convective_precipitation",
@@ -864,7 +864,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                     standard_name="atmosphere_convective_available_potential_energy",
                     units="J kg-1",
                     step_type="avg",
-                    comment="Mean convective available potential energy over the previous 24 hours.",
+                    comment="Mean convective available potential energy over the previous 24 hours. At each time ECMWF takes the largest CAPE among air parcels lifted from model levels below 350 hPa.",
                 ),
                 internal_attrs=EcmwfIfsEns46DayInternalAttrs(
                     ecds_variable="convective_available_potential_energy",

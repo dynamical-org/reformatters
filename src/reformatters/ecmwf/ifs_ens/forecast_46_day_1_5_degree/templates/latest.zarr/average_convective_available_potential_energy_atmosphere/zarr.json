@@ -75,7 +75,7 @@
     "short_name": "cape",
     "standard_name": "atmosphere_convective_available_potential_energy",
     "units": "J kg-1",
-    "comment": "Mean convective available potential energy over the previous 24 hours.",
+    "comment": "Mean convective available potential energy over the previous 24 hours. At each time ECMWF takes the largest CAPE among air parcels lifted from model levels below 350 hPa.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length ingested_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
