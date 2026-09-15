@@ -40,6 +40,8 @@ LIST_TIMEOUT_SECONDS: Final[float] = 10 * 60
 # DWD publishes a run's last file by about init+3h20m. Younger runs may still be publishing,
 # and DWD's index pages give rclone no modification times to filter single files by.
 MIN_RUN_AGE: Final[timedelta] = timedelta(hours=4)
+# DWD keeps about 21 hours of runs, so every selected run younger than this should be listed.
+MAX_EXPECTED_RUN_AGE: Final[timedelta] = timedelta(hours=18)
 
 _RUN_DIR_REGEX: Final = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}):00")
 
@@ -59,7 +61,8 @@ def copy_icosahedral_files_from_dwd_https(
     that is at least `MIN_RUN_AGE` old, one run at a time, oldest first.
 
     Raises if DWD lists no files, or if `time_budget` runs out before the listing or a
-    run starts. After copying, also raises if a run is incomplete (see `incomplete_runs`).
+    run starts. After copying, also raises if a selected run between `MIN_RUN_AGE` and
+    `MAX_EXPECTED_RUN_AGE` old is missing, or a run is incomplete (see `incomplete_runs`).
 
     Args:
         dst_root_path: The destination root directory, in the format `rclone` expects,
@@ -104,7 +107,17 @@ def copy_icosahedral_files_from_dwd_https(
     if not src_paths:
         raise RuntimeError(f"Found no icosahedral files on {DWD_HOST}{SRC_ROOT_PATH}")
 
-    newest_run_dir = (pd.Timestamp.now("UTC") - MIN_RUN_AGE).strftime("%Y-%m-%dT%H")
+    now = pd.Timestamp.now("UTC")
+    newest_run_dir = (now - MIN_RUN_AGE).strftime("%Y-%m-%dT%H")
+    expected_run_dirs = {
+        init_time.strftime("%Y-%m-%dT%H")
+        for init_time in pd.date_range(
+            (now - MAX_EXPECTED_RUN_AGE).ceil("h"),
+            (now - MIN_RUN_AGE).floor("h"),
+            freq="h",
+        )
+        if init_time.hour in nwp_init_hours
+    }
     src_and_dst_paths = sorted(
         ((src_path, icosahedral_dst_path(src_path)) for src_path in src_paths),
         key=lambda src_and_dst_path: src_and_dst_path[1],
@@ -117,7 +130,7 @@ def copy_icosahedral_files_from_dwd_https(
             log.info(f"Skipping run {run_dir}, which is younger than {MIN_RUN_AGE}.")
             continue
 
-        raise_if_out_of_time(f"copying run {run_dir}")
+        raise_if_out_of_time(f"run {run_dir}")
         already_on_dst = set(
             retry(
                 lambda run_dir=run_dir: list_files(
@@ -135,6 +148,7 @@ def copy_icosahedral_files_from_dwd_https(
         ]
         log.info(f"Run {run_dir}: {len(to_copy):,d} of {len(run):,d} files to copy.")
         if to_copy:
+            raise_if_out_of_time(f"copying run {run_dir}")
             copy_urls(
                 sources_and_dst_paths=to_copy,
                 dst_root_path=dst_root_path,
@@ -145,7 +159,12 @@ def copy_icosahedral_files_from_dwd_https(
             )
         copied_runs.append([dst_path for _src_path, dst_path in run])
 
-    if problems := incomplete_runs(copied_runs, level_types, params):
+    listed_run_dirs = {run[0].parts[0] for run in copied_runs}
+    missing_runs = [
+        f"{run_dir} is not on DWD's server"
+        for run_dir in sorted(expected_run_dirs - listed_run_dirs)
+    ]
+    if problems := missing_runs + incomplete_runs(copied_runs, level_types, params):
         raise RuntimeError(
             "Incomplete icosahedral runs on DWD's server: " + "; ".join(problems)
         )
@@ -158,7 +177,7 @@ def incomplete_runs(
 ) -> list[str]:
     """Describe each run that lacks files another run of its kind (main 00/06/12/18 UTC, or
     intermediate) has, or that lacks any file of an explicitly requested parameter or, when
-    every parameter is requested, of a requested level type."""
+    every parameter is requested, of single-level parameters or of a requested level type."""
     files_by_run_dir = {
         paths[0].parts[0]: {path.relative_to(path.parts[0]) for path in paths}
         for paths in dst_paths_by_run
@@ -185,6 +204,8 @@ def incomplete_runs(
             if param not in present_params
         ]
         if not params:
+            if not any(len(file.parts) == 2 for file in files):
+                problems.append(f"{run_dir} has no single-level files")
             present_level_types = {
                 file.parts[2] for file in files if len(file.parts) == 6
             }

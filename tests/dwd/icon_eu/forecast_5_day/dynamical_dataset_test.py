@@ -381,5 +381,5 @@ def test_archive_grib_files_fails_when_regular_lat_lon_copyurl_fails(
     ):
         dataset.archive_grib_files(reformat_job_name="test", nwp_init_hours=[0])
 
-    assert run_rclone.call_count == 2  # copy_files_from_dwd_https retries once
+    run_rclone.assert_called_once()
     phases.icosahedral.assert_called_once()

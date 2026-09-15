@@ -32,8 +32,10 @@ Both phases list the source and destination, then copy only the missing files wi
 `rclone copyurl`, so a run interrupted part way through is completed by the next one. The
 icosahedral phase copies one run at a time, oldest first, and skips runs younger than 4 hours,
 which may still be publishing. It starts neither its listing nor a run within 30 minutes of the
-job's deadline, failing the job instead. After copying, it also fails the job if a run lacks files
-that other runs of its kind (main or intermediate) have, or lacks a selected level type.
+job's deadline, failing the job instead. After copying, it also fails the job if a selected run
+between 4 and 18 hours old is missing, if a run lacks files that other listed runs of its kind
+(main or intermediate) have, or if a run lacks single-level files or a selected level type. A
+parameter missing from every run at once is not detected.
 
 This code uses [`rclone`](https://rclone.org) under the hood. `rclone copyurl --urls` needs a
 newer `rclone` than Ubuntu's package; the Docker image copies it from `rclone/rclone:latest`, and

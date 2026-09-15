@@ -256,13 +256,51 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
             ":s3:bucket/icosahedral/2026-09-15T03/": [],
         }
     )
-    # Readings: budget start, before the listing, before the 00 run, before the 03 run.
+    # Readings: budget start, before the listing, before the 00 run and its copy, then
+    # before the 03 run.
+    monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 0.0, 7200.0])
+    with (
+        patch(f"{MODULE}.time.monotonic", monotonic),
+        pytest.raises(RuntimeError, match="Stopped before run 2026-09-15T03"),
+    ):
+        _copy(mock_list_files, time_budget=timedelta(hours=1))
+
+    mock_copy_urls.assert_called_once()
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_does_not_start_a_copy_once_the_time_budget_runs_out(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: TWO_RUNS_ON_DWD,
+            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+        }
+    )
+    # The budget runs out while the 00 run's destination is listed.
     monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 7200.0])
     with (
         patch(f"{MODULE}.time.monotonic", monotonic),
-        pytest.raises(RuntimeError, match="Stopped before copying run 2026-09-15T03"),
+        pytest.raises(RuntimeError, match="Stopped before copying run 2026-09-15T00"),
     ):
         _copy(mock_list_files, time_budget=timedelta(hours=1))
+
+    mock_copy_urls.assert_not_called()
+
+
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_copies_then_raises_when_an_expected_run_is_missing(
+    mock_copy_urls: MagicMock,
+) -> None:
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: TWO_RUNS_ON_DWD[:3],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+        }
+    )
+    with pytest.raises(RuntimeError, match="2026-09-15T03 is not on DWD's server"):
+        _copy(mock_list_files)
 
     mock_copy_urls.assert_called_once()
 
@@ -343,4 +381,15 @@ def test_incomplete_runs_reports_a_requested_param_but_not_level_types() -> None
     runs = _runs(["2026-09-15T00/T_2M/PT000H00M.grib2"])
     assert incomplete_runs(runs, level_types=[100], params=["T_2M", "TYPO"]) == [
         "2026-09-15T00 has no TYPO files"
+    ]
+
+
+def test_incomplete_runs_reports_runs_without_single_level_files() -> None:
+    runs = _runs(
+        ["2026-09-15T00/T/lvt1/100/lv1/500/PT000H00M.grib2"],
+        ["2026-09-15T06/T/lvt1/100/lv1/500/PT000H00M.grib2"],
+    )
+    assert incomplete_runs(runs, level_types=[100], params=[]) == [
+        "2026-09-15T00 has no single-level files",
+        "2026-09-15T06 has no single-level files",
     ]
