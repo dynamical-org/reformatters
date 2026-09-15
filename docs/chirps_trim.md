@@ -20,8 +20,9 @@ uv run python -m scripts.trim_chirps \
 ```
 
 After reviewing the reported extents, an authorized operator can add `--commit`
-to each invocation. S3 writes use the AWS credential environment, without loading
-Kubernetes secrets. A local Icechunk directory can replace the S3 URI for testing.
+and run with `DYNAMICAL_ENV=prod`. S3 writes use `load_secret` to load the
+`aws-open-data-icechunk-storage-options-key` Kubernetes secret, from its mounted
+file or the Kubernetes API when running locally. A local Icechunk directory can replace the S3 URI for testing.
 The script checks the stored dataset ID against the requested one.
 
 Only the selected point's last 90 time steps are requested. Zarr decodes the

@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     repo = (
-        open_repo(args.store, "env" if args.commit else "anonymous")
+        open_repo(args.store, "secret" if args.commit else "anonymous")
         if args.store.startswith("s3://")
         else icechunk.Repository.open(icechunk.local_filesystem_storage(args.store))
     )

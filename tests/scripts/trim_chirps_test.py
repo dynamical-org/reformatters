@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import icechunk
 import numpy as np
@@ -158,3 +159,31 @@ def test_does_not_search_before_last_90_days(tmp_path: Path) -> None:
     with pytest.raises(AssertionError, match="last 90 days"):
         trim_store(repo, DATASET_IDS[0], commit=True)
     assert repo.lookup_branch("main") == before
+
+
+@pytest.mark.parametrize("commit", [False, True])
+def test_s3_credentials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, commit: bool
+) -> None:
+    path = tmp_path / "store"
+    repo = _create_store(path)
+    before = repo.lookup_branch("main")
+    load_secret = MagicMock(return_value={"region": "us-west-2"})
+    s3_storage = MagicMock(return_value=icechunk.local_filesystem_storage(str(path)))
+    monkeypatch.setattr("scripts.icechunk_utils.load_secret", load_secret)
+    monkeypatch.setattr(icechunk, "s3_storage", s3_storage)
+    main([DATASET_IDS[0], "s3://example/chirps", *(["--commit"] if commit else [])])
+    if commit:
+        load_secret.assert_called_once_with(
+            "aws-open-data-icechunk-storage-options-key"
+        )
+        s3_storage.assert_called_once_with(
+            bucket="example", prefix="chirps", region="us-west-2"
+        )
+        assert repo.lookup_branch("main") != before
+    else:
+        load_secret.assert_not_called()
+        s3_storage.assert_called_once_with(
+            bucket="example", prefix="chirps", anonymous=True
+        )
+        assert repo.lookup_branch("main") == before
