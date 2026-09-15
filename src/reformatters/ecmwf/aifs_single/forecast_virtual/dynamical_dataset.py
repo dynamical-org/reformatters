@@ -68,7 +68,6 @@ class EcmwfAifsSingleForecastVirtualDataset(
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
@@ -80,7 +79,6 @@ class EcmwfAifsSingleForecastVirtualDataset(
             cpu="1.3",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
