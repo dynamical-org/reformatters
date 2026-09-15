@@ -1,10 +1,12 @@
 import subprocess
-from pathlib import PurePosixPath
+from collections.abc import Sequence
+from pathlib import Path, PurePosixPath
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from reformatters.common.rclone import _tidy_stats, list_files
+from reformatters.common.rclone import RCLONE, _tidy_stats, copy_urls, list_files
 
 
 def test_tidy_stats_valid() -> None:
@@ -68,3 +70,59 @@ def test_list_files_other_error(mock_run: MagicMock) -> None:
 
     with pytest.raises(subprocess.CalledProcessError):
         list_files(path="/error/path", checkers=4)
+
+
+@patch("reformatters.common.rclone.run_command_with_concurrent_logging")
+def test_copy_urls_passes_a_csv_of_urls_and_dst_paths_to_copyurl(
+    mock_run_cmd: MagicMock,
+) -> None:
+    csv_contents: list[str] = []
+
+    def run(cmd: Sequence[str], env_vars: dict[str, Any] | None = None) -> int:
+        csv_contents.append(Path(cmd[cmd.index("--urls") + 1]).read_text())
+        return 0
+
+    mock_run_cmd.side_effect = run
+
+    copy_urls(
+        sources_and_dst_paths=[
+            (
+                "https://host/p/T_2M/r/2026-09-15T00%3A00/s/PT000H00M.grib2",
+                PurePosixPath("2026-09-15T00/T_2M/PT000H00M.grib2"),
+            ),
+            (
+                "https://host/p/T_2M/r/2026-09-15T00%3A00/s/PT001H00M.grib2",
+                PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2"),
+            ),
+        ],
+        dst_root_path=":s3:bucket/root/",
+        transfer_parallelism=8,
+        checkers=4,
+        stats_logging_freq="1m",
+    )
+
+    cmd = mock_run_cmd.call_args[0][0]
+    assert cmd[:2] == (RCLONE, "copyurl")
+    assert cmd[cmd.index("--urls") + 2] == ":s3:bucket/root/"
+    assert "--transfers=8" in cmd
+    assert "--checkers=4" in cmd
+    assert csv_contents == [
+        (
+            "https://host/p/T_2M/r/2026-09-15T00%3A00/s/PT000H00M.grib2,2026-09-15T00/T_2M/PT000H00M.grib2\n"
+            "https://host/p/T_2M/r/2026-09-15T00%3A00/s/PT001H00M.grib2,2026-09-15T00/T_2M/PT001H00M.grib2\n"
+        )
+    ]
+
+
+@patch("reformatters.common.rclone.run_command_with_concurrent_logging")
+def test_copy_urls_raises_when_rclone_fails(mock_run_cmd: MagicMock) -> None:
+    mock_run_cmd.return_value = 1
+
+    with pytest.raises(RuntimeError, match="exited with code 1"):
+        copy_urls(
+            sources_and_dst_paths=[("https://host/a.grib2", PurePosixPath("a.grib2"))],
+            dst_root_path="/dst/",
+            transfer_parallelism=8,
+            checkers=4,
+            stats_logging_freq="1m",
+        )

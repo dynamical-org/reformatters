@@ -1,3 +1,6 @@
+import itertools
+from collections.abc import Sequence
+from datetime import timedelta
 from pathlib import PurePosixPath
 from unittest.mock import Mock, call, patch
 
@@ -10,6 +13,10 @@ from numpy.testing import assert_array_equal
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
+    ARCHIVE_GRIB_FILES_DEADLINE,
+    ICOSAHEDRAL_LEVEL_TYPES,
+    ICOSAHEDRAL_NWP_INIT_HOURS,
+    MIN_TIME_FOR_ICOSAHEDRAL_PHASE,
     DwdIconEuForecast5DayDataset,
 )
 from tests.common.dynamical_dataset_test import (
@@ -199,6 +206,10 @@ def test_operational_kubernetes_resources(
     archive_job, update_cron_job, validation_cron_job = cron_jobs
 
     assert archive_job.name == f"{dataset.dataset_id}-archive-grib-files"
+    assert archive_job.pod_active_deadline == ARCHIVE_GRIB_FILES_DEADLINE
+    # The next fire is 6h later, and the CronJob's concurrencyPolicy is Replace.
+    assert archive_job.pod_active_deadline < timedelta(hours=6)
+    assert archive_job.schedule == "0 4,10,16,22 * * *"
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 
@@ -216,26 +227,43 @@ def test_validators(dataset: DwdIconEuForecast5DayDataset) -> None:
     assert all(isinstance(v, validation.Validator) for v in validators)
 
 
-def test_archive_grib_files_calls_copy_for_each_init_hour(
+MODULE = "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset"
+
+
+def _archive_grib_files(
     dataset: DwdIconEuForecast5DayDataset,
-) -> None:
-    mock_copy = Mock()
+    secret: dict[str, str] | None = None,
+    elapsed_seconds: Sequence[float] = (0.0,),
+) -> Mock:
+    """Run `archive_grib_files` with both copy phases mocked, returning the mock
+    whose `regular_lat_lon` and `icosahedral` children recorded the calls in order.
+    `elapsed_seconds` are successive `time.monotonic()` readings; the last repeats."""
+    phases = Mock()
+    monotonic = Mock(
+        side_effect=itertools.chain(
+            elapsed_seconds, itertools.repeat(elapsed_seconds[-1])
+        )
+    )
     with (
-        patch(
-            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.copy_files_from_dwd_https",
-            mock_copy,
-        ),
-        patch(
-            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.kubernetes.load_secret",
-            return_value={},
-        ),
+        patch(f"{MODULE}.copy_files_from_dwd_https", phases.regular_lat_lon),
+        patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
+        patch(f"{MODULE}.kubernetes.load_secret", return_value=secret or {}),
+        patch(f"{MODULE}.time.monotonic", monotonic),
     ):
         dataset.archive_grib_files(reformat_job_name="test")
+    return phases
 
-    assert mock_copy.call_count == 4
+
+def test_archive_grib_files_copies_regular_lat_lon_then_icosahedral(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    phases = _archive_grib_files(dataset)
+
+    assert [name for name, _args, _kwargs in phases.mock_calls] == [
+        "regular_lat_lon"
+    ] * 4 + ["icosahedral"]
     for i, init_hour in enumerate([0, 6, 12, 18]):
-        call_kwargs = mock_copy.call_args_list[i]
-        assert call_kwargs == call(
+        assert phases.regular_lat_lon.call_args_list[i] == call(
             src_host="https://opendata.dwd.de",
             src_root_path=PurePosixPath(f"/weather/nwp/icon-eu/grib/{init_hour:02d}"),
             dst_root_path=PurePosixPath(dataset.dynamical_grib_archive_rclone_root),
@@ -244,32 +272,57 @@ def test_archive_grib_files_calls_copy_for_each_init_hour(
             stats_logging_freq="1m",
             env_vars=None,
         )
+    phases.icosahedral.assert_called_once_with(
+        dst_root_path=dataset.dynamical_icosahedral_grib_archive_rclone_root,
+        nwp_init_hours=ICOSAHEDRAL_NWP_INIT_HOURS,
+        level_types=ICOSAHEDRAL_LEVEL_TYPES,
+        params=(),
+        transfer_parallelism=64,
+        checkers=32,
+        stats_logging_freq="1m",
+        env_vars=None,
+    )
 
 
 def test_archive_grib_files_passes_s3_credentials(
     dataset: DwdIconEuForecast5DayDataset,
 ) -> None:
-    mock_copy = Mock()
     secret = {"key": "test-key", "secret": "test-secret"}
-    with (
-        patch(
-            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.copy_files_from_dwd_https",
-            mock_copy,
-        ),
-        patch(
-            "reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset.kubernetes.load_secret",
-            return_value=secret,
-        ),
-    ):
-        dataset.archive_grib_files(reformat_job_name="test")
+    phases = _archive_grib_files(dataset, secret=secret)
 
-    # All calls should include S3 credentials
-    for c in mock_copy.call_args_list:
-        env_vars = c.kwargs["env_vars"]
+    assert len(phases.mock_calls) == 5
+    for _name, _args, kwargs in phases.mock_calls:
+        env_vars = kwargs["env_vars"]
         assert env_vars is not None
         assert env_vars["RCLONE_S3_ACCESS_KEY_ID"] == "test-key"
         assert env_vars["RCLONE_S3_SECRET_ACCESS_KEY"] == "test-secret"  # noqa: S105
         assert env_vars["RCLONE_S3_PROVIDER"] == "AWS"
+
+
+def test_archive_grib_files_skips_icosahedral_phase_without_enough_time(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    too_late = (
+        ARCHIVE_GRIB_FILES_DEADLINE - MIN_TIME_FOR_ICOSAHEDRAL_PHASE
+    ).total_seconds() + 60
+    with pytest.raises(RuntimeError, match="Skipped the icosahedral phase"):
+        _archive_grib_files(dataset, elapsed_seconds=(0.0, too_late))
+
+
+def test_archive_grib_files_runs_icosahedral_phase_when_regular_lat_lon_fails(
+    dataset: DwdIconEuForecast5DayDataset,
+) -> None:
+    phases = Mock()
+    phases.regular_lat_lon.side_effect = RuntimeError("DWD lat/lon listing failed")
+    with (
+        patch(f"{MODULE}.copy_files_from_dwd_https", phases.regular_lat_lon),
+        patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
+        patch(f"{MODULE}.kubernetes.load_secret", return_value={}),
+        pytest.raises(RuntimeError, match="DWD lat/lon listing failed"),
+    ):
+        dataset.archive_grib_files(reformat_job_name="test")
+
+    phases.icosahedral.assert_called_once()
 
 
 def test_get_cli_has_archive_command(
