@@ -192,9 +192,9 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.pod_active_deadline < timedelta(hours=6)
-    assert update_cron_job.suspend is False
+    assert update_cron_job.suspend is True
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.suspend is False
+    assert validation_cron_job.suspend is True
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -243,11 +243,8 @@ def test_manifest_split_size_resolves_per_group(
     assert _resolved_split_size(split, "/temperature_2m") == 600
 
 
-def test_virtual_containers_match_ref_prefixes(
+def test_virtual_container_matches_ref_prefix(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
-    # GCS for new refs, S3 for files the GCS mirror lacks.
-    assert [c.url_prefix for c in dataset.icechunk_virtual_config.containers] == [
-        "gs://ecmwf-open-data/",
-        "s3://ecmwf-forecasts/",
-    ]
+    (container,) = dataset.icechunk_virtual_config.containers
+    assert container.url_prefix == "gs://ecmwf-open-data/"
