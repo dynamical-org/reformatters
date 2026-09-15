@@ -1,4 +1,5 @@
 import json
+import logging
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -135,7 +136,9 @@ def test_registered_dataset_schedules_are_parseable() -> None:
 
 def test_console_entrypoint_dispatch_installs_sigterm_logger(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    caplog.set_level(logging.INFO)
     entrypoint = next(
         entrypoint
         for entrypoint in distribution("reformatters").entry_points
@@ -151,6 +154,7 @@ def test_console_entrypoint_dispatch_installs_sigterm_logger(
 
     assert result.exit_code == 0, result.exception
     install_sigterm_logger.assert_called_once_with()
+    assert "Peak memory:" in caplog.text
 
 
 def test_direct_file_dispatch_installs_sigterm_logger() -> None:
@@ -181,6 +185,7 @@ install_sigterm_logger.assert_called_once_with()
         text=True,
     )
     assert result.returncode == 0, result.stderr
+    assert "Peak memory:" in result.stderr
 
 
 class TestDeployCommandsRegistered:

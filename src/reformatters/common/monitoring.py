@@ -2,6 +2,7 @@ import os
 import signal
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from types import FrameType
 from typing import Literal, NoReturn
 
@@ -14,6 +15,36 @@ from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _read_memory_file(path: Path) -> str:
+    try:
+        return path.read_text()
+    except OSError:
+        return ""
+
+
+def log_peak_memory() -> None:
+    """Log the container lifetime memory peak, falling back to this process's peak RSS."""
+    path = Path("/sys/fs/cgroup/memory.peak")
+    value = _read_memory_file(path).strip()
+    if value.isdecimal():
+        log.info(
+            "Peak memory: %.3f GiB (container cgroup, %s)", int(value) / 2**30, path
+        )
+        return
+
+    for line in _read_memory_file(Path("/proc/self/status")).splitlines():
+        if line.startswith("VmHWM:"):
+            value = line.split()[1]
+            if value.isdecimal():
+                log.info(
+                    "Peak memory: %.3f GiB (process RSS only, /proc/self/status VmHWM)",
+                    int(value) / 2**20,
+                )
+                return
+
+    log.info("Peak memory: unavailable")
 
 
 def install_sigterm_logger() -> None:
