@@ -1249,7 +1249,7 @@ class TestDownloadErrorLogging:
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         monkeypatch.setattr(
-            ExampleRegionJob, "expected_missing_window", timedelta(days=7)
+            ExampleRegionJob, "expected_unavailable_window", timedelta(days=7)
         )
         job = self._make_job(pd.Timestamp.now() - pd.Timedelta(days=5))
         levels = self._download_and_get_log_levels(

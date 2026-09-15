@@ -50,7 +50,7 @@ class MaterializedRegionJob(
     # will be pipelined within a region job.
     max_vars_per_download_group: ClassVar[int | None] = None
 
-    expected_missing_window: ClassVar[timedelta] = timedelta(hours=48)
+    expected_unavailable_window: ClassVar[timedelta] = timedelta(hours=48)
 
     # Subclasses can override this to control download parallelism
     # This particularly useful of the data source cannot handle a large number of concurrent requests
@@ -308,8 +308,14 @@ class MaterializedRegionJob(
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
-                # Expected missing files log quietly; other failures reach error reporting.
-                if is_not_found(e) and self.is_expected_missing(coord):
+                # Recently unavailable files log quietly; other failures reach error reporting.
+                append_dim_coord = coord.append_dim_coord
+                expected_after = pd.Timestamp.now() - self.expected_unavailable_window
+                is_expected_unavailable = (
+                    isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
+                    and append_dim_coord > expected_after
+                )
+                if is_not_found(e) and is_expected_unavailable:
                     log.info(" ".join(str(e).split("\n")[:2]))
                 else:
                     log.exception(f"Download failed {coord.get_url()}")
@@ -321,15 +327,6 @@ class MaterializedRegionJob(
             max_workers=self.download_parallelism
         ) as download_executor:
             return list(download_executor.map(_call_download_file, source_file_coords))
-
-    def is_expected_missing(self, coord: SOURCE_FILE_COORD) -> bool:
-        """Whether a not-found for `coord` is expected rather than an error."""
-        append_dim_coord = coord.append_dim_coord
-        expected_after = pd.Timestamp.now() - self.expected_missing_window
-        return (
-            isinstance(append_dim_coord, np.datetime64 | pd.Timestamp)
-            and append_dim_coord > expected_after
-        )
 
     def _read_into_data_array(
         self,

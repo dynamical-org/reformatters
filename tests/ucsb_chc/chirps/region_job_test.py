@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -128,70 +127,6 @@ def test_download_file_propagates_missing_file(
         _job().download_file(coord)
 
 
-def test_known_missing_day_logs_info_but_old_unlisted_day_logs_error(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    listed = pd.Timestamp.now() - pd.Timedelta(days=30)
-    unlisted = listed - pd.Timedelta(days=1)
-    listed_runtime_error = listed - pd.Timedelta(days=2)
-    monkeypatch.setattr(
-        UcsbChcChirpsAnalysisPreliminaryRegionJob,
-        "known_missing_days",
-        frozenset({listed, listed_runtime_error}),
-    )
-
-    errors = {
-        listed: FileNotFoundError("listed missing"),
-        unlisted: FileNotFoundError("unlisted missing"),
-        listed_runtime_error: RuntimeError("unexpected failure"),
-    }
-
-    def fake_download(
-        self: UcsbChcChirpsAnalysisPreliminaryRegionJob,
-        coord: UcsbChcChirpsAnalysisSourceFileCoord,
-    ) -> Path:
-        raise errors[coord.time]
-
-    monkeypatch.setattr(
-        UcsbChcChirpsAnalysisPreliminaryRegionJob,
-        "download_file",
-        fake_download,
-    )
-    job = _job("preliminary")
-
-    for day, expected_level in (
-        (listed, logging.INFO),
-        (unlisted, logging.ERROR),
-        (listed_runtime_error, logging.ERROR),
-    ):
-        caplog.clear()
-        coord = UcsbChcChirpsAnalysisSourceFileCoord(product="preliminary", time=day)
-        with caplog.at_level(
-            logging.DEBUG, logger="reformatters.common.materialized_region_job"
-        ):
-            job._download_processing_group([coord], ["precipitation_surface"])
-        levels = [
-            record.levelno
-            for record in caplog.records
-            if record.name == "reformatters.common.materialized_region_job"
-            and not record.message.startswith("Downloading ")
-        ]
-        assert levels == [expected_level]
-
-
-@pytest.mark.slow
-def test_known_missing_preliminary_days_remain_absent() -> None:
-    job = _job("preliminary")
-    assert job.known_missing_days == frozenset(
-        pd.date_range("2025-02-26", "2025-02-28")
-    ) | frozenset(pd.date_range("2025-03-26", "2025-03-31"))
-
-    for day in sorted(job.known_missing_days):
-        coord = UcsbChcChirpsAnalysisSourceFileCoord(product="preliminary", time=day)
-        with pytest.raises(FileNotFoundError):
-            job.download_file(coord)
-
-
 def test_generate_source_file_coords() -> None:
     times = pd.date_range("2025-01-01", "2025-01-03", freq="1D")
     processing_region_ds = xr.Dataset(coords={"time": times})
@@ -210,7 +145,7 @@ def test_read_data_masks_fill_value_and_converts_to_rate(
     raw[0, 0] = np.float32(SOURCE_FILL_VALUE)
 
     reader = MagicMock()
-    reader.read.return_value = raw
+    reader.read.side_effect = lambda *args, **kwargs: raw.copy()
     reader.__enter__ = lambda self: self
     reader.__exit__ = lambda self, *args: None
     monkeypatch.setattr("rasterio.open", lambda _path: reader)
@@ -230,3 +165,7 @@ def test_read_data_masks_fill_value_and_converts_to_rate(
     assert np.isnan(data[0, 0])
     np.testing.assert_allclose(data[0, 1], 36.0 * MM_PER_DAY_TO_KG_M2_S, rtol=1e-6)
     assert np.isfinite(data).mean() > 0.999
+
+    other_data = job.read_data(coord, replace(precip, name="other"))
+    assert np.isnan(other_data[0, 0])
+    np.testing.assert_allclose(other_data[0, 1], 36.0, rtol=1e-6)

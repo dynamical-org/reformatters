@@ -74,9 +74,10 @@ def test_precipitation_surface_metadata() -> None:
     assert precip.attrs.standard_name == "precipitation_flux"
     assert precip.attrs.units == "kg m-2 s-1"
     assert precip.attrs.step_type == "avg"
-    assert precip.attrs.comment is not None
-    assert "24 hours starting at the time coordinate" in precip.attrs.comment
-    assert "the ocean and marginal seas" in precip.attrs.comment
+    assert precip.attrs.comment == (
+        "Average precipitation rate over the 24 hours starting at the time coordinate. "
+        "Units equivalent to mm/s. NaN over oceans."
+    )
     assert precip.internal_attrs.keep_mantissa_bits == 8
     assert precip.internal_attrs.source_fill_value == SOURCE_FILL_VALUE
     assert np.isnan(precip.encoding.fill_value)

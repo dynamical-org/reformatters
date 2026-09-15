@@ -32,8 +32,7 @@ _LAT_SOUTH = -59.975
 _LON_WEST = -179.975
 _LON_EAST = 179.975
 
-# mm/day -> kg m-2 s-1 (= mm/s): 1 mm/day of water is 1 kg m-2 per 86400 s.
-MM_PER_DAY_TO_KG_M2_S = 1.0 / 86400.0
+MM_PER_DAY_TO_KG_M2_S = 1.0 / (24 * 60 * 60)
 
 # Marks the ocean and marginal seas, where CHIRPS makes no estimate. The source files
 # set no GDAL nodata tag, so it arrives as a plain value.
@@ -42,17 +41,11 @@ SOURCE_FILL_VALUE = -9999.0
 _DESCRIPTIONS: dict[ChirpsProduct, str] = {
     "final": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
-        "with Stations (CHIRPS) version 3.0 final product (rnl variant), which "
-        "incorporates quality controlled station observations and splits each pentad "
-        "total into days using ERA5."
+        "with Stations (CHIRPS) version 3.0 final product."
     ),
     "preliminary": (
         "Daily precipitation from the Climate Hazards Center Infrared Precipitation "
-        "with Stations (CHIRPS) version 3.0 preliminary product, a lower latency "
-        "estimate that blends satellite precipitation with the station observations "
-        "available in near real time and splits each pentad total into days using "
-        "IMERG, so it differs from the final (rnl) product in its station inputs and "
-        "daily distribution."
+        "with Stations (CHIRPS) version 3.0 preliminary product."
     ),
 }
 
@@ -85,7 +78,7 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
             description=_DESCRIPTIONS[self.product],
             attribution=(
                 "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by "
-                "dynamical.org from the Climate Hazards Center data archive. Cite "
+                "dynamical.org from the Climate Hazards Center data archive. "
                 "Funk, C., Peterson, P., Harrison, L. et al. The Climate Hazards "
                 "Center Infrared Precipitation with Stations, Version 3. Sci Data 13, "
                 "718 (2026), data https://doi.org/10.15780/G2JQ0P."
@@ -193,16 +186,18 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
     @computed_field
     @property
     def data_vars(self) -> Sequence[DataVar[BaseInternalAttrs]]:
-        # Small spatial chunks limit overfetch for point time series.
+        # Estimates use a 2025 final/rnl wet-land sample; ocean chunks are smaller.
+        # Chunks: 5.26 MB raw, ~1.1-1.7 MB compressed; shards: 3.15 GB raw,
+        # ~0.94 GB compressed.
         var_chunks: dict[Dim, int] = {
             "time": 365,
-            "latitude": 50,
-            "longitude": 50,
+            "latitude": 60,
+            "longitude": 60,
         }
         var_shards: dict[Dim, int] = {
-            "time": var_chunks["time"],
-            "latitude": var_chunks["latitude"] * 24,
-            "longitude": var_chunks["longitude"] * 36,
+            "time": 365,
+            "latitude": 1200,
+            "longitude": 1800,
         }
         return [
             DataVar(
@@ -222,9 +217,7 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
                     step_type="avg",
                     comment=(
                         "Average precipitation rate over the 24 hours starting at "
-                        "the time coordinate. Units equivalent to mm/s. NaN where "
-                        "CHIRPS makes no estimate, which is the ocean and marginal "
-                        "seas; large lakes carry values."
+                        "the time coordinate. Units equivalent to mm/s. NaN over oceans."
                     ),
                 ),
                 internal_attrs=BaseInternalAttrs(

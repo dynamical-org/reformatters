@@ -8,6 +8,4 @@ from reformatters.ucsb_chc.chirps.region_job import (
 
 class UcsbChcChirpsAnalysisFinalRegionJob(UcsbChcChirpsAnalysisMaterializedRegionJob):
     product: ChirpsProduct = "final"
-    # Monthly batches arrive in the third week of the following month, so the first
-    # day of a month has the longest publication delay.
-    expected_missing_window = timedelta(days=60)
+    expected_unavailable_window = timedelta(days=60)

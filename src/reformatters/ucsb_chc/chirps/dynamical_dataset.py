@@ -27,8 +27,8 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
             pod_active_deadline=timedelta(minutes=60),
             image=image_tag,
             dataset_id=self.dataset_id,
-            cpu="7",
-            memory="38G",
+            cpu="3.5",
+            memory="50G",
             shared_memory="25.5G",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
@@ -50,11 +50,10 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(
-                max_delay=self.region_job_class.expected_missing_window
+                max_delay=self.region_job_class.expected_unavailable_window
             ),
             validation.CheckRecentNans(
-                # About 72% of grid cells are structurally NaN over ocean and marginal
-                # seas.
+                # Points that are NaN throughout the sampled window are excluded.
                 max_nan_fraction=0.05,
                 sampled_points=40,
                 append_dim_window=3,

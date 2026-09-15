@@ -39,7 +39,7 @@ Before any writes, worker 0 of an operational update asserts that the update tem
 
 `RegionJob.update_template_with_results` trims the update template to what the run actually processed, and when nothing was processed the default trims to the start of the trailing shard — inside data readers can already see. Before publishing that template, finalization asserts it is no shorter along the append dim than the published store (`template_utils.assert_no_append_dim_retraction`), so a source outage fails the update instead of dropping whole shards from the published extent. Shrinking a store on purpose requires a backfill.
 
-This guards the published extent, not the chunks: workers write their whole region before finalization runs, and a region whose source files were all missing writes fill values over whatever those chunks held (`write_shard_to_zarr` passes `write_empty_chunks=True`, so an all-fill shard is persisted rather than skipped). A dataset's NaN-fraction validator is what catches that.
+This guards the published extent, not stored values: workers write their whole region before finalization, so an interior download failure can overwrite existing values with fill when a later success preserves the extent. A NaN-fraction validator detects this only when its window covers the affected position. Rereading the region fills data restored at the source; for regions outside the update window, use a targeted `--overwrite-chunks` backfill.
 
 ### Overwrite guard (backfills into an existing store)
 

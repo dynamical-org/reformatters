@@ -18,9 +18,6 @@ from reformatters.ucsb_chc.chirps.analysis_final import (
 from reformatters.ucsb_chc.chirps.analysis_preliminary import (
     UcsbChcChirpsAnalysisPreliminaryDataset,
 )
-from reformatters.ucsb_chc.chirps.analysis_preliminary.region_job import (
-    UcsbChcChirpsAnalysisPreliminaryRegionJob,
-)
 from reformatters.ucsb_chc.chirps.dynamical_dataset import (
     UcsbChcChirpsAnalysisMaterializedDataset,
 )
@@ -173,6 +170,27 @@ def _assert_constant_land_values(ds: xr.Dataset) -> None:
     )
 
 
+def _icechunk_dataset_with_three_days(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[UcsbChcChirpsAnalysisPreliminaryDataset, set[pd.Timestamp]]:
+    dataset = UcsbChcChirpsAnalysisPreliminaryDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    _shrink_template(monkeypatch, dataset)
+    failed_days: set[pd.Timestamp] = set()
+
+    def available(day: pd.Timestamp) -> bool:
+        if day in failed_days:
+            raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
+        return day <= pd.Timestamp("2025-01-03")
+
+    _patch_source(monkeypatch, tmp_path, available, [])
+    dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-04"))
+    return dataset, failed_days
+
+
 @pytest.mark.slow
 def test_update_trims_to_last_day_with_data(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -222,7 +240,7 @@ def test_update_trims_to_last_day_with_data(
 
 
 @pytest.mark.slow
-def test_update_stops_before_an_unread_day_and_fills_it_in_later(
+def test_update_advances_past_an_unread_day_and_fills_it_in_later(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     dataset = _preliminary_dataset()
@@ -245,10 +263,14 @@ def test_update_stops_before_an_unread_day_and_fills_it_in_later(
     )
     dataset.update("test-update")
 
-    # 2025-01-04 was read, but publishing it would publish the unread 2025-01-03 as
-    # NaN, so the store stops before the gap.
-    assert_array_equal(
-        _open_store(dataset)["time"], pd.date_range("2025-01-01", "2025-01-02")
+    gap_ds = _open_store(dataset)
+    assert_array_equal(gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
+    gap_land = gap_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
+    assert np.isnan(gap_land.sel(time=gap).item())
+    assert_allclose(
+        gap_land.sel(time="2025-01-04").item(),
+        24.0 * MM_PER_DAY_TO_KG_M2_S,
+        rtol=1e-2,
     )
 
     missing_gap.clear()
@@ -260,120 +282,50 @@ def test_update_stops_before_an_unread_day_and_fills_it_in_later(
 
 
 @pytest.mark.slow
-def test_update_skips_a_known_gap_until_it_arrives(
+def test_failed_reread_before_a_later_success_writes_nan_then_refills(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = _preliminary_dataset()
-    _shrink_template(monkeypatch, dataset)
-    gap = pd.Timestamp("2025-01-03")
-    monkeypatch.setattr(
-        UcsbChcChirpsAnalysisPreliminaryRegionJob,
-        "known_missing_days",
-        frozenset({gap}),
-    )
-    available_days = set(pd.date_range("2025-01-01", "2025-01-02"))
-    requested_urls: list[str] = []
-    _patch_source(
-        monkeypatch,
-        tmp_path,
-        lambda day: day in available_days,
-        requested_urls,
-    )
-
-    dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-03"))
+    dataset, failed_days = _icechunk_dataset_with_three_days(monkeypatch, tmp_path)
+    failed_day = pd.Timestamp("2025-01-02")
+    failed_days.add(failed_day)
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
 
-    requested_urls.clear()
-    dataset.update("test-listed-gap-at-leading-edge")
-    trailing_gap_ds = _open_store(dataset)
+    dataset.update("test-failed-reread")
+    failed_reread_ds = _open_store(dataset)
     assert_array_equal(
-        trailing_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-02")
+        failed_reread_ds["time"], pd.date_range("2025-01-01", "2025-01-03")
     )
-    assert any("2025.01.03" in url for url in requested_urls)
-
-    available_days.add(pd.Timestamp("2025-01-04"))
-    requested_urls.clear()
-    dataset.update("test-listed-gap-interior")
-    interior_gap_ds = _open_store(dataset)
-    assert_array_equal(
-        interior_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04")
-    )
-    assert pd.Timestamp(interior_gap_ds["time"].max().item()) == pd.Timestamp(
-        "2025-01-04"
-    )
-    land = interior_gap_ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
-    assert np.isnan(land.sel(time=gap).item())
+    failed_land = failed_reread_ds.sel(_LAND_POINT, method="nearest")[
+        "precipitation_surface"
+    ]
+    assert np.isnan(failed_land.sel(time=failed_day).item())
     assert_allclose(
-        land.sel(time="2025-01-04").item(),
+        failed_land.sel(time="2025-01-03").item(),
         24.0 * MM_PER_DAY_TO_KG_M2_S,
         rtol=1e-2,
     )
-    assert any("2025.01.03" in url for url in requested_urls)
 
-    available_days.add(pd.Timestamp("2025-01-05"))
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-06T12:00")),
-    )
-    requested_urls.clear()
-    dataset.update("test-listed-gap-replayed")
-    replayed_gap_ds = _open_store(dataset)
-    assert_array_equal(
-        replayed_gap_ds["time"], pd.date_range("2025-01-01", "2025-01-05")
-    )
-    assert np.isnan(
-        replayed_gap_ds.sel({**_LAND_POINT, "time": gap}, method="nearest")[
-            "precipitation_surface"
-        ].item()
-    )
-    assert_allclose(
-        replayed_gap_ds.sel({**_LAND_POINT, "time": "2025-01-05"}, method="nearest")[
-            "precipitation_surface"
-        ].item(),
-        24.0 * MM_PER_DAY_TO_KG_M2_S,
-        rtol=1e-2,
-    )
-    assert any("2025.01.03" in url for url in requested_urls)
-
-    available_days.add(gap)
-    requested_urls.clear()
-    dataset.update("test-listed-gap-restored")
+    failed_days.clear()
+    dataset.update("test-reread-restored")
     restored_ds = _open_store(dataset)
     assert_allclose(
-        restored_ds.sel({**_LAND_POINT, "time": gap}, method="nearest")[
+        restored_ds.sel({**_LAND_POINT, "time": failed_day}, method="nearest")[
             "precipitation_surface"
         ].item(),
         24.0 * MM_PER_DAY_TO_KG_M2_S,
         rtol=1e-2,
     )
-    assert any("2025.01.03" in url for url in requested_urls)
 
 
 @pytest.mark.slow
-def test_update_rejects_a_failed_reread_without_changing_the_icechunk_store(
+def test_update_rejects_retraction_after_a_failed_reread(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = UcsbChcChirpsAnalysisPreliminaryDataset(
-        primary_storage_config=StorageConfig(
-            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-        )
-    )
-    _shrink_template(monkeypatch, dataset)
-    failed_days: set[pd.Timestamp] = set()
-    requested_urls: list[str] = []
-
-    def available(day: pd.Timestamp) -> bool:
-        if day in failed_days:
-            raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
-        return day <= pd.Timestamp("2025-01-03")
-
-    _patch_source(monkeypatch, tmp_path, available, requested_urls)
-    dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-04"))
+    dataset, failed_days = _icechunk_dataset_with_three_days(monkeypatch, tmp_path)
     before = _open_store(dataset)
     before_time = before["time"].values.copy()
     before_land = before.sel(_LAND_POINT, method="nearest")[
@@ -382,7 +334,7 @@ def test_update_rejects_a_failed_reread_without_changing_the_icechunk_store(
     primary_repo, _ = dataset.store_factory.icechunk_primary_and_replica_repos()
     before_snapshot = primary_repo.lookup_branch("main")
 
-    failed_days.add(pd.Timestamp("2025-01-02"))
+    failed_days.add(pd.Timestamp("2025-01-03"))
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -476,7 +428,7 @@ def test_validators(
     )
     assert (
         current_data.max_delay
-        == dataset.region_job_class.expected_missing_window
+        == dataset.region_job_class.expected_unavailable_window
         == expected_delay
     )
 

@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, NamedTuple
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -19,8 +19,6 @@ from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
     SourceFileCoord,
-    SourceFileResult,
-    SourceFileStatus,
 )
 from reformatters.common.types import (
     AppendDim,
@@ -75,13 +73,6 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
     product: ChirpsProduct
 
     download_parallelism: int = 8
-    # Days the source never published are skipped by the contiguity scan but still downloaded.
-    known_missing_days: ClassVar[frozenset[pd.Timestamp]] = frozenset()
-
-    def is_expected_missing(self, coord: UcsbChcChirpsAnalysisSourceFileCoord) -> bool:
-        return (
-            super().is_expected_missing(coord) or coord.time in self.known_missing_days
-        )
 
     def generate_source_file_coords(
         self,
@@ -111,30 +102,9 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
             f"unexpected source grid shape {data.shape} in {coord.get_url()}"
         )
         mask_source_fill_value_inplace(data, data_var.internal_attrs)
-        data *= np.float32(MM_PER_DAY_TO_KG_M2_S)
+        if data_var.name == "precipitation_surface":
+            data *= np.float32(MM_PER_DAY_TO_KG_M2_S)
         return data
-
-    def update_template_with_results(
-        self, process_results: Mapping[str, Sequence[SourceFileResult]]
-    ) -> xr.DataTree:
-        """Trim before the first unread day, skipping days never published."""
-        # A day whose download failed is absent from the results, so a Succeeded
-        # status is the only evidence a day was read.
-        read_times = {
-            result.out_loc[self.append_dim]
-            for results in process_results.values()
-            for result in results
-            if result.status == SourceFileStatus.Succeeded
-        }
-        times = self.template_ds.coords[self.append_dim].values
-        stop = self.region.start
-        for i in range(self.region.start, len(times)):
-            time = pd.Timestamp(times[i])
-            if time in read_times:
-                stop = i + 1
-            elif time not in self.known_missing_days:
-                break
-        return self.template_ds.isel({self.append_dim: slice(None, stop)})
 
     @classmethod
     def operational_update_jobs(
@@ -152,8 +122,6 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
-        # Include the newest stored day so its shard is selected even when no later
-        # day is available.
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
         append_dim_end = pd.Timestamp.now()
         template_ds = get_template_fn(append_dim_end)
