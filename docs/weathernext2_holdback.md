@@ -22,7 +22,7 @@ An aging forecast can disappear from the restricted set without any deletion. Th
 
 These are operator actions, not part of running tests or merging a draft. Keep both operational crons suspended in code until remediation is complete. Every deployment applies all cron definitions, so a cluster-only suspension can be undone by an unrelated merge. One operator must exclusively own `holdback-purge` from creation through publication and branch cleanup; the main-pointer CAS does not lock that temporary branch. Suspension prevents new jobs; also wait for already-running update and backfill jobs to finish before recording the starting snapshot.
 
-1. Deploy the holdback implementation with both operational crons suspended. Verify their images, schedules, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
+1. Set `suspend=True` on both operational crons and deploy the holdback implementation. Verify their images, schedules, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
 
 ```sh
 kubectl patch cronjob google-wn2-forecast-operational-virtual-update --type=merge -p '{"spec":{"suspend":true}}'
