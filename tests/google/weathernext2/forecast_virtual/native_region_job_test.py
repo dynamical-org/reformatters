@@ -20,6 +20,7 @@ from reformatters.google.weathernext2.forecast_virtual import (
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OBJECTS_LOCATION,
     PROXY_LOCATION_PREFIX,
+    PUBLICATION_HOLDBACK,
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
@@ -211,32 +212,58 @@ def test_operational_refs_keep_singleton_member_and_level_chunks(
     )
 
 
-def test_operational_generation_enforces_strict_init_time_cutoff() -> None:
-    init_time = pd.Timestamp("2025-03-01T00:00")
+def _lead_times_published_at(
+    fire_time: pd.Timestamp, init_time: pd.Timestamp
+) -> list[pd.Timedelta]:
     template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
     var = _var(OPERATIONAL, "temperature_2m")
     region = template.to_dataset().sel(init_time=[init_time])
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        template,
+        [var],
+        publication_cutoff=fire_time - PUBLICATION_HOLDBACK,
+    )
+    return [coord.lead_time for coord in job.generate_source_file_coords(region, [var])]
+
+
+def test_publication_holdback_is_one_hour_after_valid_time() -> None:
+    assert PUBLICATION_HOLDBACK == pd.Timedelta("1h")
+    init_time = pd.Timestamp("2025-03-01T00:00")
+    valid_time = init_time + pd.Timedelta("12h")
+    one_second = pd.Timedelta("1s")
+
+    assert _lead_times_published_at(valid_time + pd.Timedelta("1h"), init_time) == [
+        pd.Timedelta("6h"),
+        pd.Timedelta("12h"),
+    ]
+    assert _lead_times_published_at(
+        valid_time + pd.Timedelta("1h") - one_second, init_time
+    ) == [pd.Timedelta("6h")]
+    assert _lead_times_published_at(
+        valid_time + pd.Timedelta("1h") + one_second, init_time
+    ) == [pd.Timedelta("6h"), pd.Timedelta("12h")]
+
+
+def test_publication_holdback_ignores_initialization_age() -> None:
+    init_time = pd.Timestamp("2025-03-01T00:00")
     all_lead_times = list(OPERATIONAL.dimension_coordinates()["lead_time"])
 
-    def coords_with_cutoff(cutoff: pd.Timestamp) -> list[pd.Timedelta]:
-        job = _job(
-            GoogleWeathernext2ForecastOperationalVirtualRegionJob,
-            OPERATIONAL,
-            template,
-            [var],
-            publication_cutoff=cutoff,
-        )
-        return [
-            coord.lead_time for coord in job.generate_source_file_coords(region, [var])
-        ]
-
-    # An initialization before the cutoff publishes every lead time, however far ahead
-    # it forecasts; one at the cutoff publishes nothing.
     assert (
-        coords_with_cutoff(init_time + OPERATIONAL.append_dim_frequency)
+        _lead_times_published_at(init_time + pd.Timedelta("48h"), init_time)
+        == all_lead_times[:7]
+    )
+    assert _lead_times_published_at(init_time + pd.Timedelta("6h"), init_time) == []
+    assert _lead_times_published_at(
+        init_time + pd.Timedelta("6h") + PUBLICATION_HOLDBACK, init_time
+    ) == [pd.Timedelta("6h")]
+    assert (
+        _lead_times_published_at(
+            init_time + pd.Timedelta("360h") + PUBLICATION_HOLDBACK, init_time
+        )
         == all_lead_times
     )
-    assert coords_with_cutoff(init_time) == []
 
 
 def test_source_file_coords_are_independent_per_variable() -> None:
@@ -265,16 +292,13 @@ def test_source_file_coords_are_independent_per_variable() -> None:
     }
 
 
-def test_operational_backfill_jobs_share_strict_init_time_cutoff(
+def test_backfill_jobs_apply_the_holdback_to_the_current_clock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_time = pd.Timestamp("2025-01-01T00:00")
-    cutoff = init_time + pd.Timedelta("12h")
-    monkeypatch.setattr(
-        region_job_module,
-        "_current_publication_cutoff",
-        lambda: cutoff,
-    )
+    now = init_time + pd.Timedelta("18h") + PUBLICATION_HOLDBACK
+    clock = Mock(side_effect=[now, now + pd.Timedelta("1h")])
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
     template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
 
     [job] = GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
@@ -285,18 +309,27 @@ def test_operational_backfill_jobs_share_strict_init_time_cutoff(
         reformat_job_name="test",
     )
 
-    assert job.publication_cutoff == cutoff
+    assert clock.call_count == 1
+    assert job.publication_cutoff == init_time + pd.Timedelta("18h")
     region = template.to_dataset().isel(init_time=job.region)
     coords = job.generate_source_file_coords(
         region,
         [_var(OPERATIONAL, "temperature_2m")],
     )
-    assert [coord.lead_time for coord in coords] == list(
-        OPERATIONAL.dimension_coordinates()["lead_time"]
-    )
+    assert [coord.lead_time for coord in coords] == [
+        pd.Timedelta("6h"),
+        pd.Timedelta("12h"),
+        pd.Timedelta("18h"),
+    ]
 
 
-def test_historical_validation_job_uses_final_fixed_window() -> None:
+def test_historical_validation_job_uses_final_fixed_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_clock_read() -> pd.Timestamp:
+        raise AssertionError("historical jobs must not read the clock")
+
+    monkeypatch.setattr(region_job_module, "_utc_now", fail_if_clock_read)
     jobs, template = (
         GoogleWeathernext2ForecastHistoricalVirtualRegionJob.operational_update_jobs(
             primary_store=MemoryStore(),
@@ -316,9 +349,96 @@ def test_historical_validation_job_uses_final_fixed_window() -> None:
     )
     source_coords = job.source_file_coords()
     assert source_coords
-    assert max(coord.init_time for coord in source_coords) == pd.Timestamp(
-        "2024-12-31T18:00"
+    last_init = pd.Timestamp("2024-12-31T18:00")
+    assert max(coord.init_time for coord in source_coords) == last_init
+    var = HISTORICAL.data_vars[0]
+    assert [
+        coord.lead_time
+        for coord in source_coords
+        if coord.init_time == last_init and coord.data_vars == (var,)
+    ] == list(HISTORICAL.dimension_coordinates()["lead_time"])
+
+
+def test_operational_update_publishes_diagonal_window() -> None:
+    fire_time = pd.Timestamp("2025-03-20T13:05")
+    var = _var(OPERATIONAL, "temperature_2m")
+
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=[var],
+            reformat_job_name="test",
+            job_fire_time=fire_time,
+        )
     )
+
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    cutoff = fire_time - PUBLICATION_HOLDBACK
+    assert job.publication_cutoff == cutoff
+    assert template.to_dataset().get_index("init_time")[-1] == pd.Timestamp(
+        "2025-03-20T06:00"
+    )
+
+    coords = job.source_file_coords()
+    valid_times = {coord.init_time + coord.lead_time for coord in coords}
+    assert max(valid_times) == pd.Timestamp("2025-03-20T12:00")
+    init_times = template.to_dataset().get_index("init_time")
+    window_start = init_times[-1] + pd.Timedelta("6h") - pd.Timedelta("17D")
+    expected = {
+        (init_time, lead_time)
+        for init_time in init_times[init_times >= window_start]
+        for lead_time in OPERATIONAL.dimension_coordinates()["lead_time"]
+        if init_time + lead_time <= cutoff
+    }
+    assert {(coord.init_time, coord.lead_time) for coord in coords} == expected
+    oldest_init = min(coord.init_time for coord in coords)
+    newest_init = max(coord.init_time for coord in coords)
+    assert oldest_init < cutoff - pd.Timedelta("360h")
+    assert [
+        coord.lead_time for coord in coords if coord.init_time == oldest_init
+    ] == list(OPERATIONAL.dimension_coordinates()["lead_time"])
+    assert [coord.lead_time for coord in coords if coord.init_time == newest_init] == [
+        pd.Timedelta("6h")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("fire_time", "newest_init"),
+    [
+        (pd.Timestamp("2025-03-20T13:00"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T12:59:59"), pd.Timestamp("2025-03-20T00:00")),
+        (pd.Timestamp("2025-03-20T13:05"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T18:59"), pd.Timestamp("2025-03-20T06:00")),
+    ],
+)
+def test_operational_update_template_ends_at_newest_publishable_init(
+    fire_time: pd.Timestamp, newest_init: pd.Timestamp
+) -> None:
+    var = _var(OPERATIONAL, "temperature_2m")
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=[var],
+            reformat_job_name="test",
+            job_fire_time=fire_time,
+        )
+    )
+
+    assert template.to_dataset().get_index("init_time")[-1] == newest_init
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    coords = job.source_file_coords()
+    assert max(coord.init_time for coord in coords) == newest_init
+    assert [coord.lead_time for coord in coords if coord.init_time == newest_init] == [
+        pd.Timedelta("6h")
+    ]
 
 
 def test_direct_operational_update_uses_utc_clock(
@@ -327,7 +447,7 @@ def test_direct_operational_update_uses_utc_clock(
     now = pd.Timestamp("2025-03-20T12:00")
     monkeypatch.setattr(region_job_module, "_utc_now", lambda: now)
 
-    jobs, template = (
+    jobs, _template = (
         GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
             primary_store=MemoryStore(),
             tmp_store=Path("unused.zarr"),
@@ -340,15 +460,7 @@ def test_direct_operational_update_uses_utc_clock(
 
     [job] = jobs
     assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
-    assert job.publication_cutoff == now - pd.Timedelta("48h")
-    # The newest initialization kept is the newest one outside the publication lag.
-    last_init = template.to_dataset().get_index("init_time")[-1]
-    assert last_init < job.publication_cutoff
-    assert last_init + OPERATIONAL.append_dim_frequency >= job.publication_cutoff
-    window_start = job.publication_cutoff - pd.Timedelta("24h")
-    oldest_init = min(coord.init_time for coord in job.source_file_coords())
-    assert oldest_init >= window_start
-    assert oldest_init - OPERATIONAL.append_dim_frequency < window_start
+    assert job.publication_cutoff == now - PUBLICATION_HOLDBACK
 
 
 def test_object_listing_retries_transient_response() -> None:

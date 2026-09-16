@@ -30,6 +30,8 @@ from reformatters.common.types import (
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
 from .template_config import (
+    INIT_TIME_FREQUENCY,
+    LEAD_TIMES,
     PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
@@ -42,7 +44,7 @@ OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-_PUBLICATION_LAG = pd.Timedelta("48h")
+PUBLICATION_HOLDBACK = pd.Timedelta("1h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
@@ -162,7 +164,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         )
         if cls.source_layout == "historical":
             return jobs
-        cutoff = _current_publication_cutoff()
+        cutoff = _utc_now() - PUBLICATION_HOLDBACK
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -194,8 +196,12 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        fire_time = job_fire_time or _utc_now()
-        publication_cutoff = fire_time - _PUBLICATION_LAG
+        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
+        latest_publishable_valid_time = (
+            publication_cutoff
+            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+        )
+        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -203,7 +209,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=publication_cutoff,
+            job_fire_time=newest_publishable_init + INIT_TIME_FREQUENCY,
         )
         (job,) = jobs
         assert isinstance(job, cls)
@@ -216,6 +222,23 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[GoogleWeathernext2DataVar],
     ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
+        return self._step_coords(processing_region_ds, data_var_group, publishable=True)
+
+    def held_back_source_file_coords(
+        self,
+    ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
+        """Return every held-back source step in this job's processing region."""
+        return self._step_coords(
+            self._processing_region_ds(), self.data_vars, publishable=False
+        )
+
+    def _step_coords(
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[GoogleWeathernext2DataVar],
+        *,
+        publishable: bool,
+    ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
         coords = []
         for init_time_value in processing_region_ds["init_time"].values:
             init_time = pd.Timestamp(init_time_value)
@@ -223,13 +246,11 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 self.source_layout == "operational"
             ):
                 continue
-            if (
-                self.source_layout == "operational"
-                and init_time >= self.publication_cutoff
-            ):
-                continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
+                is_publishable = init_time + lead_time <= self.publication_cutoff
+                if is_publishable is not publishable:
+                    continue
                 coords.extend(
                     GoogleWeathernext2ForecastVirtualSourceFileCoord(
                         source_layout=self.source_layout,
@@ -406,7 +427,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     source_layout: ClassVar[SourceLayout] = "operational"
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")
 
 
 def _store_key(url: str) -> str:
@@ -415,10 +436,6 @@ def _store_key(url: str) -> str:
 
 def _utc_now() -> Timestamp:
     return pd.Timestamp.now(tz="UTC").tz_localize(None)
-
-
-def _current_publication_cutoff() -> Timestamp:
-    return _utc_now() - _PUBLICATION_LAG
 
 
 def _list_objects(
