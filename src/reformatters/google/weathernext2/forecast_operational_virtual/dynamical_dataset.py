@@ -62,7 +62,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
+            suspend=False,
         )
         validate = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
@@ -73,7 +73,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             cpu="1.3",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
+            suspend=False,
         )
         return [update, validate]
 
