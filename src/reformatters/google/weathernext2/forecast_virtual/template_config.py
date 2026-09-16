@@ -35,6 +35,9 @@ _GRID_NLON = 1440
 PRESSURE_LEVELS = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
 
 PER_INIT_STORE_DATE = pd.Timestamp("2025-01-01T00:00")
+INIT_TIME_FREQUENCY = pd.Timedelta("6h")
+# The source publishes no lead time 0.
+LEAD_TIMES = pd.timedelta_range("6h", "360h", freq="6h")
 _SPATIAL_REF_WKT = 'GEOGCS["unknown",DATUM["unknown",SPHEROID["unknown",6371229,0]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Longitude",EAST],AXIS["Latitude",NORTH]]'
 
 
@@ -79,6 +82,10 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     dataset_id_value: ClassVar[str]
     dataset_name_value: ClassVar[str]
     time_domain_end: ClassVar[str]
+    dataset_description: ClassVar[str] = (
+        "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble "
+        "model."
+    )
     init_time_statistics_max: ClassVar[str] = "Present"
     valid_time_statistics_max: ClassVar[str] = "Present + 15 days"
 
@@ -101,7 +108,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     }
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp = pd.Timestamp("2022-01-01T00:00")
-    append_dim_frequency: Timedelta = pd.Timedelta("6h")
+    append_dim_frequency: Timedelta = INIT_TIME_FREQUENCY
 
     @computed_field
     @property
@@ -110,7 +117,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             dataset_id=self.dataset_id_value,
             dataset_version="0.1.0",
             name=self.dataset_name_value,
-            description="Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
+            description=self.dataset_description,
             attribution=(
                 "Google requires this attribution: © 2025 DeepMind Technologies "
                 "Limited's machine learning models "
@@ -143,8 +150,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             self.append_dim: self.append_dim_coordinates(
                 self.append_dim_start + self.append_dim_frequency
             ),
-            # The source publishes no lead time 0.
-            "lead_time": pd.timedelta_range("6h", "360h", freq="6h"),
+            "lead_time": LEAD_TIMES,
             "ensemble_member": np.arange(64),
             "y": np.arange(-90, 90.25, 0.25),
             "x": np.arange(0, 360, 0.25),

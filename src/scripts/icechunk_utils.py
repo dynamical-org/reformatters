@@ -26,11 +26,13 @@ def parse_older_than(value: str) -> datetime.datetime:
     return dt
 
 
-def load_storage_options() -> dict[str, Any]:
-    return load_secret(K8S_SECRET_NAME)
+def load_storage_options(k8s_secret: str) -> dict[str, Any]:
+    return load_secret(k8s_secret)
 
 
-def open_repo(s3_uri: str, auth: AuthMode) -> icechunk.Repository:
+def open_repo(
+    s3_uri: str, auth: AuthMode, k8s_secret: str = K8S_SECRET_NAME
+) -> icechunk.Repository:
     parsed = urlparse(s3_uri)
     bucket = parsed.netloc
     prefix = parsed.path.strip("/")
@@ -41,7 +43,9 @@ def open_repo(s3_uri: str, auth: AuthMode) -> icechunk.Repository:
             storage = icechunk.s3_storage(bucket=bucket, prefix=prefix)
         case "secret":
             storage = icechunk.s3_storage(
-                bucket=bucket, prefix=prefix, **load_storage_options()
+                bucket=bucket,
+                prefix=prefix,
+                **load_storage_options(k8s_secret),
             )
     return icechunk.Repository.open(storage)
 
@@ -65,7 +69,12 @@ def get_repos(repo_uri: str | None, catalog_url: str) -> list[str]:
 
 
 def expire(
-    repos: list[str], older_than: datetime.datetime, force: bool, *, auth: AuthMode
+    repos: list[str],
+    older_than: datetime.datetime,
+    force: bool,
+    *,
+    auth: AuthMode,
+    k8s_secret: str = K8S_SECRET_NAME,
 ) -> None:
     if not force:
         print(
@@ -83,13 +92,18 @@ def expire(
         print(f"Older than: {older_than.isoformat()}")
         print(f"{'=' * 60}")
 
-        repo = open_repo(uri, auth)
+        repo = open_repo(uri, auth, k8s_secret)
         expired = repo.expire_snapshots(older_than)
         print(f"Expired {len(expired)} snapshots")
 
 
 def garbage_collect(
-    repos: list[str], older_than: datetime.datetime, force: bool, *, auth: AuthMode
+    repos: list[str],
+    older_than: datetime.datetime,
+    force: bool,
+    *,
+    auth: AuthMode,
+    k8s_secret: str = K8S_SECRET_NAME,
 ) -> None:
     for uri in repos:
         print(f"\n{'=' * 60}")
@@ -97,7 +111,7 @@ def garbage_collect(
         print(f"Deleting objects older than: {older_than.isoformat()}")
         print(f"{'=' * 60}")
 
-        repo = open_repo(uri, auth)
+        repo = open_repo(uri, auth, k8s_secret)
         dry_run = not force
         summary = repo.garbage_collect(older_than, dry_run=dry_run)
         prefix = "Would delete" if dry_run else "Deleted"
@@ -114,16 +128,24 @@ def garbage_collect(
             print("Dry run (pass --force to actually delete).")
 
 
-def count_snapshots(repos: list[str], *, auth: AuthMode) -> None:
+def count_snapshots(
+    repos: list[str], *, auth: AuthMode, k8s_secret: str = K8S_SECRET_NAME
+) -> None:
     for uri in repos:
-        repo = open_repo(uri, auth)
+        repo = open_repo(uri, auth, k8s_secret)
         count = sum(1 for _ in repo.ancestry(branch="main"))
         print(f"{count:>8,}  {uri}")
 
 
-def list_snapshots(repos: list[str], *, verbose: bool, auth: AuthMode) -> None:
+def list_snapshots(
+    repos: list[str],
+    *,
+    verbose: bool,
+    auth: AuthMode,
+    k8s_secret: str = K8S_SECRET_NAME,
+) -> None:
     for uri in repos:
-        repo = open_repo(uri, auth)
+        repo = open_repo(uri, auth, k8s_secret)
         snapshots = list(repo.ancestry(branch="main"))
         print(f"{uri}  ({len(snapshots)} snapshots)")
         if verbose:
@@ -154,6 +176,11 @@ def main() -> None:
         type=str,
         default=DEFAULT_STAC_CATALOG_URL,
         help=f"STAC catalog URL to discover icechunk repos from (default: {DEFAULT_STAC_CATALOG_URL})",
+    )
+    parser.add_argument(
+        "--k8s-secret",
+        default=K8S_SECRET_NAME,
+        help=f"Kubernetes storage-options secret (default: {K8S_SECRET_NAME})",
     )
     auth_group = parser.add_mutually_exclusive_group()
     auth_group.add_argument(
@@ -211,13 +238,30 @@ def main() -> None:
 
     match args.command:
         case "expire":
-            expire(repos, args.older_than, args.force, auth=auth)
+            expire(
+                repos,
+                args.older_than,
+                args.force,
+                auth=auth,
+                k8s_secret=args.k8s_secret,
+            )
         case "garbage-collect":
-            garbage_collect(repos, args.older_than, args.force, auth=auth)
+            garbage_collect(
+                repos,
+                args.older_than,
+                args.force,
+                auth=auth,
+                k8s_secret=args.k8s_secret,
+            )
         case "count":
-            count_snapshots(repos, auth=auth)
+            count_snapshots(repos, auth=auth, k8s_secret=args.k8s_secret)
         case "list":
-            list_snapshots(repos, verbose=args.verbose, auth=auth)
+            list_snapshots(
+                repos,
+                verbose=args.verbose,
+                auth=auth,
+                k8s_secret=args.k8s_secret,
+            )
 
 
 if __name__ == "__main__":

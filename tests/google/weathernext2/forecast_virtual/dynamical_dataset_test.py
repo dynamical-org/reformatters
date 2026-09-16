@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import icechunk
+import pandas as pd
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -11,6 +12,9 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 )
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_virtual.validation import (
+    CheckNoRefsInsideHoldback,
 )
 
 
@@ -52,6 +56,10 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
         isinstance(item, validation.CheckVirtualDecodeHealth)
         for item in dataset.validators()
     )
+    assert not any(
+        isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
+    )
+    assert "partial" not in dataset.template_config.dataset_attributes.description
     # The historical layout packs 4 members and all 13 levels per chunk, so both array
     # groups hold the same refs per init and take one coarse split.
     split = dataset.icechunk_virtual_config.manifest_split
@@ -59,24 +67,47 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
     assert _resolved_split_size(split, "/temperature_2m") == 128
 
 
-def test_operational_product_has_lag_aware_crons_and_splits(tmp_path: Path) -> None:
+def test_operational_product_has_holdback_aware_crons_and_splits(
+    tmp_path: Path,
+) -> None:
     dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
         primary_storage_config=_storage(tmp_path)
     )
 
     update, validate = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
+    assert update.schedule == "5 1,7,13,19 * * *"
+    assert validate.schedule == "5 2,8,14,20 * * *"
+    assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
+        "2026-09-04T01:05"
+    )
+    assert update.previous_fire_time(pd.Timestamp("2026-09-04T00:59")) == pd.Timestamp(
+        "2026-09-03T19:05"
+    )
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
-    assert update.suspend is False
-    assert validate.suspend is False
+    assert update.suspend is True
+    assert validate.suspend is True
     (current,) = [
         item
         for item in dataset.validators()
         if isinstance(item, validation.CheckCurrentData)
     ]
-    assert current.max_delay == timedelta(hours=60)
+    assert current.max_delay == timedelta(hours=12)
+    assert any(
+        isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
+    )
+    (decode,) = [
+        item
+        for item in dataset.validators()
+        if isinstance(item, validation.CheckVirtualDecodeHealth)
+    ]
+    assert decode.positions == "all"
+    assert decode.max_positions == 2
+    assert dataset.region_job_class.operational_update_window == timedelta(days=17)
+    description = dataset.template_config.dataset_attributes.description
+    assert "recent initialization times are intentionally partial" in description
     split = dataset.icechunk_virtual_config.manifest_split
     assert _resolved_split_size(split, "/pressure_level/temperature") == 4
     assert _resolved_split_size(split, "/temperature_2m") == 32

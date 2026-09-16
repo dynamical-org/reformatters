@@ -17,6 +17,9 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
 )
+from reformatters.google.weathernext2.forecast_virtual.validation import (
+    CheckNoRefsInsideHoldback,
+)
 
 from .template_config import (
     GoogleWeathernext2ForecastOperationalVirtualTemplateConfig,
@@ -52,29 +55,32 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
         update = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="55 0,6,12,18 * * *",
+            schedule="5 1,7,13,19 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
         validate = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
-            schedule="55 1,7,13,19 * * *",
+            schedule="5 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.3",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
         return [update, validate]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=60)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckVirtualManifestCompleteness(),
-            validation.CheckVirtualDecodeHealth(),
+            CheckNoRefsInsideHoldback(),
+            validation.CheckVirtualDecodeHealth(positions="all", max_positions=2),
         )
