@@ -333,6 +333,16 @@ class TestCoordinationFiles:
         assert len(factory.read_all_coordination_files("test-job", "setup")) == 1
         assert len(factory.read_all_coordination_files("test-job", "results")) == 1
 
+    def test_delete_removes_one_file(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.write_coordination_file("test-job", "a", b"")
+        factory.write_coordination_file("test-job", "b", b"")
+        assert factory.list_coordination_files("test-job", "") == ["a", "b"]
+
+        factory.delete_coordination_file("test-job", "a")
+
+        assert factory.list_coordination_files("test-job", "") == ["b"]
+
     def test_clear_removes_all_files(self, tmp_path: str) -> None:
         factory = _local_factory(tmp_path)
         factory.write_coordination_file("test-job", "results/worker-0.json", b"data")

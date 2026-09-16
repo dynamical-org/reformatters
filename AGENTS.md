@@ -267,7 +267,11 @@ Virtual datasets also require `authorize_virtual_chunk_access`. Build it from th
 ```python
 authorize = icechunk.containers_credentials(
     {
-        container["url_prefix"]: icechunk.s3_anonymous_credentials()
+        container["url_prefix"]: (
+            icechunk.Credentials.HttpAccess()
+            if container["url_prefix"].startswith("https://")
+            else icechunk.s3_anonymous_credentials()
+        )
         for container in asset["icechunk:virtual_chunk_containers"]
     }
 )

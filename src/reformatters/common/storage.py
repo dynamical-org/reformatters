@@ -307,6 +307,10 @@ class StoreFactory(FrozenBaseModel):
         except FileNotFoundError:
             return []
 
+    def delete_coordination_file(self, job_name: str, key: str) -> None:
+        path = f"{self._coordination_base_path()}/{job_name}/{key}"
+        self._coordination_fs().rm(path)
+
     def clear_coordination_files(self, job_name: str) -> None:
         path = f"{self._coordination_base_path()}/{job_name}"
         fs = self._coordination_fs()
