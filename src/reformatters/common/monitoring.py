@@ -2,6 +2,7 @@ import os
 import signal
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from types import FrameType
 from typing import Literal, NoReturn
 
@@ -14,6 +15,16 @@ from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def log_peak_memory() -> None:
+    path = Path("/sys/fs/cgroup/memory.peak")
+    try:
+        peak_bytes = int(path.read_text())
+    except OSError:
+        return
+
+    log.info("Peak memory: %.3f GiB (container cgroup, %s)", peak_bytes / 2**30, path)
 
 
 def install_sigterm_logger() -> None:

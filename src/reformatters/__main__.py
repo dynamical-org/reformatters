@@ -382,7 +382,8 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 @app.callback()
-def startup() -> None:
+def startup(ctx: typer.Context) -> None:
+    ctx.call_on_close(monitoring.log_peak_memory)
     monitoring.install_sigterm_logger()
 
 
