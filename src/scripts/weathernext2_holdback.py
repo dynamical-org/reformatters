@@ -107,6 +107,7 @@ def _coordinate_values(
     assert init_array.dtype == np.dtype("int64")
     assert lead_array.dtype == np.dtype("float64")
     assert str(init_array.attrs["units"]).startswith("seconds since 1970-01-01")
+    assert lead_array.attrs["units"] == "seconds", lead_array.path
     init_values = cast("NDArray[np.int64]", init_array[:])
     lead_values = cast("NDArray[np.float64]", lead_array[:])
     init_seconds = [int(value) for value in init_values]
@@ -252,10 +253,8 @@ def _manifest_window(
     return chunk.var_path, init_indexes[group_path][chunk.init_time] // split
 
 
-def _snapshot_is_on_branch(
-    repo: icechunk.Repository, branch: str, snapshot_id: str
-) -> bool:
-    return any(snapshot.id == snapshot_id for snapshot in repo.ancestry(branch=branch))
+def _snapshot_descends_from(repo: icechunk.Repository, tip: str, ancestor: str) -> bool:
+    return any(snapshot.id == ancestor for snapshot in repo.ancestry(snapshot_id=tip))
 
 
 def _operational_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
@@ -456,11 +455,11 @@ def _run_delete(
     main_start = repo.lookup_branch("main")
     branch_tip: str | None = None
     if _PURGE_BRANCH in repo.list_branches():
-        if not _snapshot_is_on_branch(repo, _PURGE_BRANCH, main_start):
+        branch_tip = repo.lookup_branch(_PURGE_BRANCH)
+        if not _snapshot_descends_from(repo, branch_tip, main_start):
             raise typer.BadParameter(
                 f"{_PURGE_BRANCH} does not descend from current main {main_start}"
             )
-        branch_tip = repo.lookup_branch(_PURGE_BRANCH)
 
     if not force:
         read_snapshot = branch_tip or main_start
@@ -544,7 +543,7 @@ def _run_publish(
     if _PURGE_BRANCH not in repo.list_branches():
         raise typer.BadParameter(f"Branch {_PURGE_BRANCH!r} does not exist")
     branch_tip = repo.lookup_branch(_PURGE_BRANCH)
-    if not _snapshot_is_on_branch(repo, _PURGE_BRANCH, from_snapshot):
+    if not _snapshot_descends_from(repo, branch_tip, from_snapshot):
         raise typer.BadParameter(
             f"{_PURGE_BRANCH} tip {branch_tip} does not descend from "
             f"--from-snapshot {from_snapshot}"

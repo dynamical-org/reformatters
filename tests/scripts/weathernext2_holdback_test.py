@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 import typer
 import zarr
+from click import unstyle
+from typer import rich_utils
 from typer.testing import CliRunner
 
 from scripts import icechunk_utils, weathernext2_holdback
@@ -193,12 +195,16 @@ def test_parse_cutoff_requires_offset_and_normalizes_to_naive_utc() -> None:
     assert result.tz is None
 
 
-def test_delete_and_publish_require_explicit_cutoff() -> None:
+def test_delete_and_publish_require_explicit_cutoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", True)
     runner = CliRunner()
 
     delete_result = runner.invoke(
         weathernext2_holdback.app,
         ["delete", "google-weathernext2-forecast-operational-virtual"],
+        color=True,
     )
     publish_result = runner.invoke(
         weathernext2_holdback.app,
@@ -208,12 +214,13 @@ def test_delete_and_publish_require_explicit_cutoff() -> None:
             "--from-snapshot",
             "snapshot-id",
         ],
+        color=True,
     )
 
     assert delete_result.exit_code == 2
-    assert "--cutoff" in delete_result.output
+    assert "--cutoff" in unstyle(delete_result.output)
     assert publish_result.exit_code == 2
-    assert "--cutoff" in publish_result.output
+    assert "--cutoff" in unstyle(publish_result.output)
 
 
 def test_destructive_commands_reject_non_operational_dataset(
@@ -640,3 +647,41 @@ def test_icechunk_utils_parses_k8s_secret(monkeypatch: pytest.MonkeyPatch) -> No
             "weathernext2-storage-options-key",
         )
     ]
+
+
+def test_audit_rejects_nonsecond_lead_units(holdback_repo: HoldbackRepo) -> None:
+    session = holdback_repo.repo.writable_session("main")
+    group = zarr.open_group(session.store, mode="r+")
+    group["lead_time"].attrs["units"] = "hours"
+    with pytest.raises(AssertionError, match="lead_time"):
+        list(forbidden_chunk_keys(group, holdback_repo.cutoff))
+
+
+def test_publish_checks_captured_tip_ancestry(
+    holdback_repo: HoldbackRepo,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = holdback_repo.repo
+    old_main = repo.lookup_branch("main")
+    session = repo.writable_session("main")
+    group = zarr.open_group(session.store, mode="r+")
+    group.attrs["new-main"] = True
+    expected_main = session.commit("advance main")
+    repo.create_branch("holdback-purge", expected_main)
+    real_lookup = repo.lookup_branch
+
+    def lookup_branch(branch: str) -> str:
+        return old_main if branch == "holdback-purge" else real_lookup(branch)
+
+    monkeypatch.setattr(repo, "lookup_branch", lookup_branch)
+    with pytest.raises(typer.BadParameter, match="does not descend"):
+        _run_publish(
+            repo,
+            "test.icechunk",
+            expected_main,
+            holdback_repo.cutoff,
+            tmp_path,
+            force=True,
+        )
+    assert real_lookup("main") == expected_main

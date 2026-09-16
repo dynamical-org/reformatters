@@ -8,6 +8,7 @@ import pytest
 import xarray as xr
 from zarr.storage import MemoryStore
 
+from reformatters.common.iterating import get_worker_jobs
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -495,3 +496,54 @@ def test_object_listing_retries_transient_response() -> None:
         )
     }
     assert client.get.call_count == 2
+
+
+def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = pd.Timestamp("2025-01-02T00:59:59")
+    after = pd.Timestamp("2025-01-02T01:00:01")
+    clock = Mock(side_effect=[before, after])
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
+    template = OPERATIONAL.get_template(pd.Timestamp("2025-01-03"))
+    job_sets = [
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+            tmp_store=Path("unused.zarr"),
+            template_ds=template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="test",
+        )
+        for _ in range(2)
+    ]
+
+    def partitions(
+        jobs: Sequence[GoogleWeathernext2ForecastOperationalVirtualRegionJob],
+    ) -> list[tuple[slice, tuple[str, ...]]]:
+        return [(job.region, tuple(var.path for var in job.data_vars)) for job in jobs]
+
+    assert clock.call_count == 2
+    assert partitions(job_sets[0]) == partitions(job_sets[1])
+    for worker_index in range(2):
+        assignments = [
+            get_worker_jobs(jobs, worker_index, 2, worker_assignment="contiguous")
+            for jobs in job_sets
+        ]
+        assert partitions(assignments[0]) == partitions(assignments[1])
+
+    coord_sets = []
+    for now, jobs in zip((before, after), job_sets, strict=True):
+        cutoff = now - PUBLICATION_HOLDBACK
+        assert {job.publication_cutoff for job in jobs} == {cutoff}
+        coords = {
+            (coord.init_time, coord.lead_time, coord.data_vars[0].path)
+            for job in jobs
+            for coord in job.source_file_coords()
+        }
+        assert all(init + lead <= cutoff for init, lead, _ in coords)
+        coord_sets.append(coords)
+    assert coord_sets[0] < coord_sets[1]
+    assert all(
+        before - PUBLICATION_HOLDBACK < init + lead <= after - PUBLICATION_HOLDBACK
+        for init, lead, _ in coord_sets[1] - coord_sets[0]
+    )
