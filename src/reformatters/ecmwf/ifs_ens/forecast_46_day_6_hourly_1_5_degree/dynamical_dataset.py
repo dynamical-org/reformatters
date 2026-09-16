@@ -30,7 +30,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         update = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-6-hourly-update",
             schedule="0 10 * * *",
-            suspend=True,
+            suspend=False,
             pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -45,7 +45,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         validate = ValidationCronJob(
             name="ecmwf-ifs-ens-46-day-6-hourly-validate",
             schedule="20 10 * * *",
-            suspend=True,
+            suspend=False,
             pod_active_deadline=timedelta(minutes=15),
             image=image_tag,
             dataset_id=self.dataset_id,
