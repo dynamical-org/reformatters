@@ -6,7 +6,7 @@ from pydantic import computed_field
 
 from reformatters.common.config_models import ROOT, DatasetAttributes, Encoding
 from reformatters.common.pydantic import replace
-from reformatters.common.types import Dim, Dims, Timedelta
+from reformatters.common.types import Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
     EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
@@ -46,6 +46,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig(
         )
     }
 
+    append_dim_start: Timestamp = pd.Timestamp("2026-01-01T00:00")
     lead_time_frequency: Timedelta = pd.Timedelta("6h")
 
     @computed_field

@@ -74,8 +74,14 @@ def test_extremes_are_native_six_hour_windows() -> None:
 
 
 def test_dataset_metadata_identifies_the_six_hourly_product() -> None:
-    attrs = EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig().dataset_attributes
+    config = EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig()
+    attrs = config.dataset_attributes
 
     assert attrs.dataset_id == ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree")
     assert attrs.name == "ECMWF IFS ENS forecast, 46 day, 6 hourly, 1.5 degree"
     assert attrs.forecast_resolution == "6 hourly"
+    assert attrs.dataset_version == "0.1.0"
+    assert config.append_dim_start == pd.Timestamp("2026-01-01T00:00")
+    assert (
+        attrs.time_domain == "Forecasts initialized 2026-01-01 00:00:00 UTC to Present"
+    )

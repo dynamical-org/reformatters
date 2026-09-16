@@ -8,7 +8,7 @@
     "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "1.5 degrees (~165km)",
-    "time_domain": "Forecasts initialized 2023-06-28 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2026-01-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours",
     "forecast_domain": "Forecast lead time 0-1104 hours (0-46 days) ahead",
     "forecast_resolution": "6 hourly"
@@ -81,7 +81,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              6205
+              5110
             ]
           }
         },
@@ -136,7 +136,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              6205
+              5110
             ]
           }
         },
@@ -191,7 +191,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              6205
+              5110
             ]
           }
         },
@@ -224,7 +224,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2023-06-28T00:00:00",
+            "min": "2026-01-01T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -743,7 +743,7 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              6205,
+              5110,
               185
             ]
           }
@@ -777,7 +777,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2023-06-28T00:00:00",
+            "min": "2026-01-01T00:00:00",
             "max": "Present + 46 days"
           },
           "units": "seconds since 1970-01-01",
