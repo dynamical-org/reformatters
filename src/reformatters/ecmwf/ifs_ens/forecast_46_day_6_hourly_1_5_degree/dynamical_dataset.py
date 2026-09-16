@@ -31,7 +31,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
             name="ecmwf-ifs-ens-46-day-6-hourly-update",
             schedule="0 10 * * *",
             suspend=True,
-            pod_active_deadline=timedelta(hours=3),
+            pod_active_deadline=timedelta(minutes=20),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -44,13 +44,13 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         )
         validate = ValidationCronJob(
             name="ecmwf-ifs-ens-46-day-6-hourly-validate",
-            schedule="0 13 * * *",
+            schedule="20 10 * * *",
             suspend=True,
-            pod_active_deadline=timedelta(minutes=30),
+            pod_active_deadline=timedelta(minutes=15),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1",
-            memory="30G",
+            memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         return [update, validate]

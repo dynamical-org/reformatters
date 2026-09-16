@@ -12,8 +12,8 @@
     "configuration": {
       "chunk_shape": [
         1,
-        185,
-        101,
+        186,
+        102,
         128,
         120
       ]
@@ -32,8 +32,8 @@
       "configuration": {
         "chunk_shape": [
           1,
-          37,
-          101,
+          93,
+          51,
           32,
           30
         ],

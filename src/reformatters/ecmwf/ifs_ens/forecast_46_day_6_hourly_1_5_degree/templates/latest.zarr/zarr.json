@@ -11,7 +11,7 @@
     "time_domain": "Forecasts initialized 2023-06-28 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 24 hours",
     "forecast_domain": "Forecast lead time 0-1104 hours (0-46 days) ahead",
-    "forecast_resolution": "Forecast step 6 hourly"
+    "forecast_resolution": "6 hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {
@@ -419,8 +419,8 @@
           "configuration": {
             "chunk_shape": [
               1,
-              185,
-              101,
+              186,
+              102,
               128,
               120
             ]
@@ -439,8 +439,8 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                37,
-                101,
+                93,
+                51,
                 32,
                 30
               ],
@@ -512,8 +512,8 @@
           "configuration": {
             "chunk_shape": [
               1,
-              185,
-              101,
+              186,
+              102,
               128,
               120
             ]
@@ -532,8 +532,8 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                37,
-                101,
+                93,
+                51,
                 32,
                 30
               ],
@@ -605,8 +605,8 @@
           "configuration": {
             "chunk_shape": [
               1,
-              185,
-              101,
+              186,
+              102,
               128,
               120
             ]
@@ -625,8 +625,8 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                37,
-                101,
+                93,
+                51,
                 32,
                 30
               ],
@@ -805,8 +805,8 @@
           "configuration": {
             "chunk_shape": [
               1,
-              185,
-              101,
+              186,
+              102,
               128,
               120
             ]
@@ -825,8 +825,8 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                37,
-                101,
+                93,
+                51,
                 32,
                 30
               ],
@@ -897,8 +897,8 @@
           "configuration": {
             "chunk_shape": [
               1,
-              185,
-              101,
+              186,
+              102,
               128,
               120
             ]
@@ -917,8 +917,8 @@
             "configuration": {
               "chunk_shape": [
                 1,
-                37,
-                101,
+                93,
+                51,
                 32,
                 30
               ],

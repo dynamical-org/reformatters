@@ -30,12 +30,12 @@ def test_template_has_the_native_six_hourly_axis_and_variables() -> None:
     }
 
 
-def test_template_uses_the_layout_derived_for_185_lead_times() -> None:
+def test_template_shards_one_full_forecast_per_initialization() -> None:
     config = EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig()
 
     for data_var in config.data_vars:
-        assert data_var.encoding.chunks == (1, 37, 101, 32, 30)
-        assert data_var.encoding.shards == (1, 185, 101, 128, 120)
+        assert data_var.encoding.chunks == (1, 93, 51, 32, 30)
+        assert data_var.encoding.shards == (1, 186, 102, 128, 120)
 
 
 def test_precipitation_is_a_six_hour_rate_from_a_running_total() -> None:
@@ -78,4 +78,4 @@ def test_dataset_metadata_identifies_the_six_hourly_product() -> None:
 
     assert attrs.dataset_id == ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree")
     assert attrs.name == "ECMWF IFS ENS forecast, 46 day, 6 hourly, 1.5 degree"
-    assert attrs.forecast_resolution == "Forecast step 6 hourly"
+    assert attrs.forecast_resolution == "6 hourly"

@@ -63,23 +63,26 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig(
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-1104 hours (0-46 days) ahead",
-            forecast_resolution="Forecast step 6 hourly",
+            forecast_resolution="6 hourly",
         )
 
     @computed_field
     @property
     def data_vars(self) -> Sequence[EcmwfIfsEns46DayDataVar]:
+        # ~17.4MB uncompressed, ~3.5MB compressed
         chunks: dict[Dim, int] = {
             "init_time": 1,
-            "lead_time": 37,
-            "ensemble_member": 101,
+            "lead_time": 93,  # 2 chunks over 185 lead times
+            "ensemble_member": 51,  # 2 chunks over 101 members
             "latitude": 32,
             "longitude": 30,
         }
+        # ~1112MB uncompressed, ~222MB compressed
         shards: dict[Dim, int] = {
             "init_time": chunks["init_time"],
-            "lead_time": chunks["lead_time"] * 5,
-            "ensemble_member": chunks["ensemble_member"],
+            "lead_time": chunks["lead_time"] * 2,  # 1 shard over 185 lead times
+            "ensemble_member": chunks["ensemble_member"]
+            * 2,  # 1 shard over 101 members
             "latitude": chunks["latitude"] * 4,
             "longitude": chunks["longitude"] * 4,
         }
