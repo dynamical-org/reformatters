@@ -140,16 +140,13 @@ def copy_files_from_dwd_https(
         src_host_and_root_path=f"{src_host}{src_root_path}",
     )
 
-    retry(
-        lambda: run_rclone_copyurl(
-            "\n".join(csv_of_files_to_transfer),
-            dst_root_path=dst_root_path,
-            transfer_parallelism=transfer_parallelism,
-            checkers=checkers,
-            env_vars=env_vars,
-            stats_logging_freq=stats_logging_freq,
-        ),
-        max_attempts=2,
+    run_rclone_copyurl(
+        "\n".join(csv_of_files_to_transfer),
+        dst_root_path=dst_root_path,
+        transfer_parallelism=transfer_parallelism,
+        checkers=checkers,
+        env_vars=env_vars,
+        stats_logging_freq=stats_logging_freq,
     )
 
 

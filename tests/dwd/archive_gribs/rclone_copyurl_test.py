@@ -1,6 +1,8 @@
 from pathlib import PurePosixPath
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reformatters.dwd.archive_gribs.rclone_copyurl import run_rclone_copyurl
 
 
@@ -12,6 +14,7 @@ from reformatters.dwd.archive_gribs.rclone_copyurl import run_rclone_copyurl
 def test_run_rclone_copyurl(
     mock_unlink: MagicMock, mock_write_text: MagicMock, mock_run_cmd: MagicMock
 ) -> None:
+    mock_run_cmd.return_value = 0
     csv_content = "src1,dst1\nsrc2,dst2"
     dst_root = PurePosixPath("/dst")
 
@@ -33,3 +36,25 @@ def test_run_rclone_copyurl(
     assert "--transfers=4" in cmd
     assert "--checkers=4" in cmd
     assert "--stats=1m" in cmd
+
+
+@patch(
+    "reformatters.dwd.archive_gribs.rclone_copyurl.run_command_with_concurrent_logging"
+)
+@patch("pathlib.Path.write_text")
+@patch("pathlib.Path.unlink")
+def test_run_rclone_copyurl_raises_when_rclone_fails(
+    mock_unlink: MagicMock, mock_write_text: MagicMock, mock_run_cmd: MagicMock
+) -> None:
+    mock_run_cmd.return_value = 1
+
+    with pytest.raises(RuntimeError, match="exited with code 1"):
+        run_rclone_copyurl(
+            csv_of_files_to_transfer="src1,dst1",
+            dst_root_path=PurePosixPath("/dst"),
+            transfer_parallelism=4,
+            checkers=4,
+            stats_logging_freq="1m",
+        )
+
+    mock_unlink.assert_called_once()

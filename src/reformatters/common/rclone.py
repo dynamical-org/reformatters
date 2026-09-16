@@ -2,8 +2,10 @@
 See `reformatters.dwd.archive_gribs`, `reformatters.eccc.hrdps.archive_gribs` and
 `reformatters.ecmwf.archive_gribs`."""
 
+import csv
 import os
 import subprocess
+import tempfile
 import threading
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
@@ -212,6 +214,45 @@ def copy_local_file(
     if return_code != 0:
         raise RuntimeError(
             f"rclone copyto exited with code {return_code} for '{src_path}' -> '{dst_path}'"
+        )
+
+
+def copy_urls(
+    sources_and_dst_paths: Sequence[tuple[str, PurePosixPath]],
+    dst_root_path: str,
+    transfer_parallelism: int,
+    checkers: int,
+    stats_logging_freq: str,
+    env_vars: dict[str, Any] | None = None,
+) -> None:
+    """Copy each source URL to its path under `dst_root_path`, which must be in the form
+    `rclone` expects. Uses `rclone copyurl --urls`: https://rclone.org/commands/rclone_copyurl
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        urls_csv = Path(tmp_dir) / "urls.csv"
+        with urls_csv.open("w", newline="") as f:
+            csv.writer(f, lineterminator="\n").writerows(
+                (url, str(dst_path)) for url, dst_path in sources_and_dst_paths
+            )
+        cmd = (
+            RCLONE,
+            "copyurl",
+            "--urls",
+            str(urls_csv),
+            dst_root_path,
+            "--s3-no-check-bucket",  # Workaround for reformatters issue #428
+            f"--transfers={transfer_parallelism:d}",
+            f"--checkers={checkers:d}",
+            f"--stats={stats_logging_freq}",
+            "--stats-log-level=ERROR",  # Output stats to stderr.
+            "--quiet",  # Only output logs at error level.
+            "--stats-one-line",
+        )
+        return_code = run_command_with_concurrent_logging(cmd, env_vars=env_vars)
+    if return_code != 0:
+        raise RuntimeError(
+            f"rclone copyurl exited with code {return_code} copying"
+            f" {len(sources_and_dst_paths):,d} URLs to '{dst_root_path}'"
         )
 
 
