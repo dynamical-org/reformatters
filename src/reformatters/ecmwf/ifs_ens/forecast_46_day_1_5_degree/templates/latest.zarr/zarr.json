@@ -18,7 +18,7 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
-      "average_convective_available_potential_energy_atmosphere": {
+      "average_convective_available_potential_energy_surface": {
         "shape": [
           1,
           47,

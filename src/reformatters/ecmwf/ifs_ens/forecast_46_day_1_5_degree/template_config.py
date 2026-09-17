@@ -856,7 +856,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                 ),
             ),
             EcmwfIfsEns46DayDataVar(
-                name="average_convective_available_potential_energy_atmosphere",
+                name="average_convective_available_potential_energy_surface",
                 encoding=encoding_float32_default,
                 attrs=DataVarAttrs(
                     short_name="cape",
