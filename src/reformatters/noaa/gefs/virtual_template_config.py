@@ -161,20 +161,17 @@ _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
 _DOBSON_UNITS_TO_M = ScaleOffset(offset=0.0, scale=1e5).to_dict()
 
 _MAX_WIND_SEARCH_LAYER = (
-    "The source finds this level by searching a bounded layer rather than the "
-    "whole column, so the column wind maximum can lie above it."
+    "The source searches only 500 to 100 hPa for this level, so stronger wind "
+    "can lie outside that layer."
 )
 
 _PRESSURE_DIFFERENCE_LAYER = (
     "The {layer} in the name are pressure differences from the surface, not "
-    "isobaric levels, so this layer sits just above the ground rather than in "
-    "the upper troposphere."
+    "isobaric levels."
 )
 
 _CONVECTIVE_INHIBITION = (
-    "Negative where there is inhibition and at or near zero where there is "
-    "none, so distinguish the two with a tolerance rather than an exact "
-    "comparison."
+    "Negative where there is inhibition and at or near zero where there is none."
 )
 
 _SOIL_MOISTURE_LAND_ICE = (
@@ -1086,7 +1083,6 @@ def _s_file_data_vars(
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
-            comment="The model's standard mean sea level reduction, an alternative to pressure_reduced_to_mean_sea_level_eta_model in this dataset.",
         ),
     ]
 
@@ -1413,7 +1409,6 @@ def _a_b_root_data_vars(
             long_name="Pressure reduced to MSL",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
-            comment="The model's standard mean sea level reduction, one of this dataset's three mean-sea-level products alongside pressure_reduced_to_mean_sea_level_eta_model and pressure_mean_sea_level.",
         ),
         var(
             "pressure_mean_sea_level",
@@ -1467,10 +1462,6 @@ def _a_b_root_data_vars(
             short_name="VRATE",
             long_name="Ventilation Rate",
             units="m2 s-1",
-            comment=(
-                "Source precision can be as coarse as 1,000 m2 s-1, so a decoded 0 is a "
-                "small value rounded down rather than missing data."
-            ),
         ),
         var(
             "wind_gust_surface",
@@ -1500,7 +1491,10 @@ def _a_b_root_data_vars(
             short_name="hindex",
             long_name="Haines Index",
             units="1",
-            comment="Fire-weather index of lower-atmosphere stability and dryness, an ordinal value from 2 (very low potential) to 6 (high potential) for large plume-dominated fire growth. NaN over open water and over high terrain such as Antarctica and Tibet; sea ice is populated.",
+            comment=(
+                "Fire-weather index of lower-atmosphere stability and dryness for large "
+                "plume-dominated fire growth. NaN over open water."
+            ),
             flag_values=(2, 3, 4, 5, 6),
             flag_meanings=(
                 "very_low_potential very_low_potential low_potential "
@@ -1696,7 +1690,10 @@ def _a_b_root_data_vars(
             short_name="aptmp",
             long_name="Apparent temperature",
             units="degree_Celsius",
-            comment="Equal to temperature_2m in mild conditions, wind chill when colder and heat index when hotter, so the distribution is discontinuous at the switchovers rather than corrupt.",
+            comment=(
+                "Equal to temperature_2m in mild conditions, wind chill when colder and "
+                "heat index when hotter."
+            ),
         ),
         var(
             "percent_frozen_precipitation_surface",
@@ -2232,11 +2229,7 @@ def _a_b_root_data_vars(
             short_name="ustm",
             long_name="U-component storm motion",
             units="m s-1",
-            comment=(
-                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
-                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
-                "the mean wind itself."
-            ),
+            comment=("The Bunkers right-moving supercell motion."),
         ),
         var(
             "v_component_storm_motion_6000_0m",
@@ -2246,11 +2239,7 @@ def _a_b_root_data_vars(
             short_name="vstm",
             long_name="V-component storm motion",
             units="m s-1",
-            comment=(
-                "The Bunkers right-moving supercell motion: the 0-6 km mean wind plus a "
-                "fixed 7.5 m s-1 deviation to the right of the 0-6 km shear vector, not "
-                "the mean wind itself."
-            ),
+            comment=("The Bunkers right-moving supercell motion."),
         ),
         var(
             "pressure_tropopause",
@@ -2578,10 +2567,6 @@ def _a_b_root_data_vars(
             long_name="Precipitable water",
             units="kg m-2",
             standard_name="mass_content_of_water_vapor_in_atmosphere_layer",
-            comment=(
-                "Integrated over the 30 mb layer above ground, not the whole column; "
-                "precipitable_water_atmosphere carries the column total."
-            ),
         ),
         var(
             "parcel_lifted_index_30_0mb",
@@ -3920,7 +3905,7 @@ def _a_b_pressure_data_vars(
             short_name="icip",
             long_name="Icing probability",
             units="1",
-            comment="Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
+            comment=("NaN where the terrain is above this level."),
         ),
         var(
             "icing_severity",
@@ -3931,7 +3916,7 @@ def _a_b_pressure_data_vars(
             units="1",
             flag_values=(0, 1, 2, 3, 4, 5),
             flag_meanings="none light moderate severe trace heavy",
-            comment="Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
+            comment=("NaN where the terrain is above this level."),
         ),
     ]
 
