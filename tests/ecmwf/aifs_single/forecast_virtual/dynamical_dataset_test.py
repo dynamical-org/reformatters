@@ -243,8 +243,10 @@ def test_manifest_split_size_resolves_per_group(
     assert _resolved_split_size(split, "/temperature_2m") == 600
 
 
-def test_virtual_container_matches_ref_prefix(
+def test_virtual_containers_cover_both_ref_prefixes(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
-    (container,) = dataset.icechunk_virtual_config.containers
-    assert container.url_prefix == "gs://ecmwf-open-data/"
+    assert [c.url_prefix for c in dataset.icechunk_virtual_config.containers] == [
+        "gs://ecmwf-open-data/",
+        "s3://ecmwf-forecasts/",
+    ]

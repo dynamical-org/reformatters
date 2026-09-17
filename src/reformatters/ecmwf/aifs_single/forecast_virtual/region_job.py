@@ -1,12 +1,18 @@
 from collections.abc import Mapping, Sequence
-from typing import ClassVar
+from typing import ClassVar, Final, assert_never
 
 import icechunk
 import pandas as pd
 import xarray as xr
+from pydantic import PrivateAttr
 
 from reformatters.common.config_models import ROOT
-from reformatters.common.download import gcs_download_to_disk, gcs_store
+from reformatters.common.download import (
+    gcs_download_to_disk,
+    gcs_store,
+    s3_download_to_disk,
+    s3_store,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -22,6 +28,7 @@ from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
+from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
 
 from .template_config import (
     EcmwfAifsSingleVirtualDataVar,
@@ -29,7 +36,12 @@ from .template_config import (
 
 log = get_logger(__name__)
 
-SOURCE_LOCATION_PREFIX = "gs://ecmwf-open-data/"
+GCS_LOCATION_PREFIX = "gs://ecmwf-open-data/"
+S3_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
+S3_REGION = "eu-central-1"
+# Inits before this date may reference s3://ecmwf-forecasts/ for files the GCS
+# mirror lacks; inits on or after it reference GCS only.
+S3_FALLBACK_BEFORE: Final = pd.Timestamp("2025-03-01")
 
 
 def aifs_single_virtual_chunk_containers() -> tuple[
@@ -38,7 +50,10 @@ def aifs_single_virtual_chunk_containers() -> tuple[
     """Fresh container objects per call; icechunk containers can't be shared
     pydantic defaults."""
     return (
-        icechunk.VirtualChunkContainer(SOURCE_LOCATION_PREFIX, icechunk.gcs_store()),
+        icechunk.VirtualChunkContainer(GCS_LOCATION_PREFIX, icechunk.gcs_store()),
+        icechunk.VirtualChunkContainer(
+            S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_REGION)
+        ),
     )
 
 
@@ -46,13 +61,34 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
     """One AIFS Single forecast file (init_time, lead_time) and the vars it packs."""
 
     data_vars: Sequence[EcmwfAifsSingleVirtualDataVar]
+    # Private so discover_available can switch the source of the pending coord
+    # itself; the write loop tracks pending coords by identity.
+    _source: EcmwfOpenDataSource = PrivateAttr(default="gcs")
+
+    @property
+    def source(self) -> EcmwfOpenDataSource:
+        return self._source
+
+    def fall_back_to_s3(self) -> None:
+        self._source = "s3"
 
     def _get_base_url(self) -> str:
+        match self.source:
+            case "gcs":
+                location_prefix = GCS_LOCATION_PREFIX
+            case "s3":
+                assert self.init_time < S3_FALLBACK_BEFORE, (
+                    f"{self.init_time} is on or after {S3_FALLBACK_BEFORE}; only "
+                    "older inits may reference S3"
+                )
+                location_prefix = S3_LOCATION_PREFIX
+            case _ as unreachable:
+                assert_never(unreachable)
         stream_path = aifs_single_stream_path(self.init_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
         return (
-            f"{SOURCE_LOCATION_PREFIX}{init_date_str}/{init_hour_str}z/"
+            f"{location_prefix}{init_date_str}/{init_hour_str}z/"
             f"{stream_path}/"
             f"{init_date_str}{init_hour_str}0000-{whole_hours(self.lead_time)}h-oper-fc"
         )
@@ -117,19 +153,62 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
     def discover_available(
         self, pending: list[EcmwfAifsSingleForecastVirtualSourceFileCoord]
     ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
-        return discover_available_by_obstore_listing(
+        """Files GCS can serve (data and index listed), plus, for inits before
+        S3_FALLBACK_BEFORE, files S3 can serve that GCS cannot; a fallback coord
+        is switched to its S3 URL in place. `pending` must be GCS-sourced: a coord
+        already switched to S3 is never offered again."""
+        available = discover_available_by_obstore_listing(
             pending,
-            store=gcs_store(SOURCE_LOCATION_PREFIX),
-            location_prefix=SOURCE_LOCATION_PREFIX,
+            store=gcs_store(GCS_LOCATION_PREFIX),
+            location_prefix=GCS_LOCATION_PREFIX,
             require_index=True,
         )
+        on_gcs = {id(coord) for coord, _ in available}
+        # S3 is listed through copies so a coord GCS lacks and S3 also lacks keeps
+        # its GCS URL and stays pending.
+        s3_probes: dict[
+            int,
+            tuple[
+                EcmwfAifsSingleForecastVirtualSourceFileCoord,
+                EcmwfAifsSingleForecastVirtualSourceFileCoord,
+            ],
+        ] = {}
+        for coord in pending:
+            if id(coord) in on_gcs or coord.init_time >= S3_FALLBACK_BEFORE:
+                continue
+            s3_probe = coord.model_copy()
+            s3_probe.fall_back_to_s3()
+            s3_probes[id(s3_probe)] = (s3_probe, coord)
+        if not s3_probes:
+            return available
+        on_s3 = discover_available_by_obstore_listing(
+            [s3_probe for s3_probe, _ in s3_probes.values()],
+            store=s3_store(S3_LOCATION_PREFIX, region=S3_REGION),
+            location_prefix=S3_LOCATION_PREFIX,
+            require_index=True,
+        )
+        for s3_probe, file_size in on_s3:
+            _, coord = s3_probes[id(s3_probe)]
+            coord.fall_back_to_s3()
+            available.append((coord, file_size))
+        return available
 
     def file_refs(
         self,
         coord: EcmwfAifsSingleForecastVirtualSourceFileCoord,
         file_size: int,
     ) -> list[VirtualRef]:
-        index_path = gcs_download_to_disk(coord.get_index_url(), self.dataset_id)
+        match coord.source:
+            case "gcs":
+                index_path = gcs_download_to_disk(
+                    coord.get_index_url(), self.dataset_id
+                )
+            case "s3":
+                index_path = s3_download_to_disk(
+                    coord.get_index_url(), self.dataset_id, region=S3_REGION
+                )
+            case _ as unreachable:
+                assert_never(unreachable)
         try:
             index_df = parse_index_file(index_path, ensemble=False)
         finally:
