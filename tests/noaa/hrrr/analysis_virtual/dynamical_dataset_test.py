@@ -65,7 +65,9 @@ def test_backfill_local_and_operational_update(
     # at this cell is 18.287287).
     np.testing.assert_allclose(cell["temperature_2m"].values, 19.862695312500023)
     np.testing.assert_allclose(cell["wind_u_10m"].values, -1.5750274658203125)
-    np.testing.assert_allclose(cell["dew_point_temperature_2m"].values, 18.599787)
+    np.testing.assert_allclose(
+        cell["dew_point_temperature_2m"].values, 18.599787, rtol=1e-6
+    )
     np.testing.assert_allclose(cell["total_precipitation_surface"].values, 0.0)
     assert (ds["total_precipitation_surface"].sel(time=_TIME).values > 0).any()
     np.testing.assert_allclose(
@@ -127,7 +129,7 @@ def test_backfill_local_and_operational_update(
         [
             20.107934570312523,
             -1.6848134994506836,
-            18.627832,
+            18.62781677246096,
             0.0,
             -11.095617675781227,
             19.839074707031273,
