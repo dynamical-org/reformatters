@@ -22,7 +22,7 @@ An aging forecast can disappear from the restricted set without any deletion. Th
 
 These are operator actions, not part of running tests or merging a draft. Keep both operational crons suspended in code until remediation is complete. Every deployment applies all cron definitions, so a cluster-only suspension can be undone by an unrelated merge. One operator must exclusively own `holdback-purge` from creation through publication and branch cleanup; the main-pointer CAS does not lock that temporary branch. Suspension prevents new jobs; also wait for already-running update and backfill jobs to finish before recording the starting snapshot.
 
-1. Deploy the holdback implementation with both operational crons suspended. Verify their images, schedules, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
+1. Set `suspend=True` on both operational crons and deploy the holdback implementation. Verify their images, schedules, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
 
 ```sh
 kubectl patch cronjob google-wn2-forecast-operational-virtual-update --type=merge -p '{"spec":{"suspend":true}}'
@@ -81,7 +81,7 @@ kubectl logs -f job/wn2-holdback-first-validate
 
 Run validation promptly after the update completes, before the next update schedule slot changes its expected set. Record presence-probe count, manifests rewritten, commit time, peak RSS, and validation duration against the 30-minute deadline. Completeness and decode health each probe the 17-day window; the no-extra-refs guard adds its own representative probes. Use measurements before changing manifest splits or sharing presence results. If log streaming is unavailable, inspect job completion and the monitoring paths in [ops_card.md](ops_card.md). A whole-archive completeness scan uses its own wall-clock cutoff and can report newly eligible steps missing until the next update; it does not share an earlier worker cutoff.
 
-7. Restore both schedules with a follow-up code change setting `suspend=False`, then verify deployment and subsequent scheduled fires. Unsuspension can immediately trigger a missed schedule. Update staging STAC wording and examples at the same time: use an eligible lead (such as 6h after a successful update), explain partial initializations, and remove claims of a 48-hour valid-time boundary. A latest-init lead-240h example is intentionally unfilled under this rule.
+7. Restore both schedules with a follow-up code change setting `suspend=False`, then verify deployment and subsequent scheduled fires. Unsuspension can immediately trigger both missed schedules together. Complete the deployment before the next update fire after the controlled update; if that window is missed, repeat the controlled update and validation for the new window before resuming, so catch-up validation sees the expected data. Update staging STAC wording and examples at the same time: use an eligible lead (such as 6h after a successful update), explain partial initializations, and remove claims of a 48-hour valid-time boundary. A latest-init lead-240h example is intentionally unfilled under this rule.
 
 ## Release boundary
 
