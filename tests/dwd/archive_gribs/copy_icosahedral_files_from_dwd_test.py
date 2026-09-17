@@ -204,6 +204,44 @@ def test_copy_icosahedral_files_is_a_no_op_when_dst_is_complete(
 
 
 @patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_retries_a_failed_copy_with_only_the_files_still_missing(
+    mock_copy_urls: MagicMock,
+) -> None:
+    dst_listings = iter([[], ["T_2M/PT000H00M.grib2"]])
+    mock_list_files = MagicMock(
+        side_effect=lambda path, **_kwargs: [
+            PurePosixPath(p)
+            for p in (
+                [
+                    "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
+                    "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
+                ]
+                if path == SRC_ROOT
+                else next(dst_listings)
+            )
+        ]
+    )
+    mock_copy_urls.side_effect = [
+        RuntimeError("rclone copyurl exited with code 1"),
+        None,
+    ]
+
+    with patch("reformatters.common.retry.time.sleep"):
+        _copy(mock_list_files, nwp_init_hours=[0], level_types=[])
+
+    assert [
+        [dst for _url, dst in c.kwargs["sources_and_dst_paths"]]
+        for c in mock_copy_urls.call_args_list
+    ] == [
+        [
+            PurePosixPath("2026-09-15T00/T_2M/PT000H00M.grib2"),
+            PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2"),
+        ],
+        [PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2")],
+    ]
+
+
+@patch(f"{MODULE}.copy_urls")
 def test_copy_icosahedral_files_skips_runs_that_may_still_be_publishing(
     mock_copy_urls: MagicMock,
 ) -> None:
@@ -256,9 +294,8 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
             ":s3:bucket/icosahedral/2026-09-15T03/": [],
         }
     )
-    # Readings: budget start, before the listing, before the 00 run and its copy, then
-    # before the 03 run.
-    monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 0.0, 7200.0])
+    # Readings: budget start, before the listing, before the 00 run, before the 03 run.
+    monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 7200.0])
     with (
         patch(f"{MODULE}.time.monotonic", monotonic),
         pytest.raises(RuntimeError, match="Stopped before run 2026-09-15T03"),
@@ -266,27 +303,6 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
         _copy(mock_list_files, time_budget=timedelta(hours=1))
 
     mock_copy_urls.assert_called_once()
-
-
-@patch(f"{MODULE}.copy_urls")
-def test_copy_icosahedral_files_does_not_start_a_copy_once_the_time_budget_runs_out(
-    mock_copy_urls: MagicMock,
-) -> None:
-    mock_list_files = _fake_list_files(
-        {
-            SRC_ROOT: TWO_RUNS_ON_DWD,
-            ":s3:bucket/icosahedral/2026-09-15T00/": [],
-        }
-    )
-    # The budget runs out while the 00 run's destination is listed.
-    monotonic = MagicMock(side_effect=[0.0, 0.0, 0.0, 7200.0])
-    with (
-        patch(f"{MODULE}.time.monotonic", monotonic),
-        pytest.raises(RuntimeError, match="Stopped before copying run 2026-09-15T00"),
-    ):
-        _copy(mock_list_files, time_budget=timedelta(hours=1))
-
-    mock_copy_urls.assert_not_called()
 
 
 @patch(f"{MODULE}.copy_urls")

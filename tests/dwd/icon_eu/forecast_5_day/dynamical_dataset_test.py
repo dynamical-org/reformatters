@@ -372,14 +372,15 @@ def test_archive_grib_files_fails_when_regular_lat_lon_copyurl_fails(
             return_value=set(),
         ),
         patch(
-            "reformatters.dwd.archive_gribs.rclone_copyurl.run_command_with_concurrent_logging",
+            "reformatters.common.rclone.run_command_with_concurrent_logging",
             return_value=1,
         ) as run_rclone,
         patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
         patch(f"{MODULE}.kubernetes.load_secret", return_value={}),
+        patch("reformatters.common.retry.time.sleep"),
         pytest.raises(RuntimeError, match="rclone copyurl exited with code 1"),
     ):
         dataset.archive_grib_files(reformat_job_name="test", nwp_init_hours=[0])
 
-    run_rclone.assert_called_once()
+    assert run_rclone.call_count == 3
     phases.icosahedral.assert_called_once()

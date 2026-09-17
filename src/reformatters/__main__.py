@@ -372,6 +372,8 @@ if Config.is_sentry_enabled:
         default_integrations=True,
         # Connection idles cause us to lose events after quiet periods
         keep_alive=True,
+        # Truncate long values so Sentry doesn't reject the event
+        max_value_length=16 * 1024,
         before_send_log=before_log,
         integrations=[
             LoggingIntegration(capture_sentry_logs=True),

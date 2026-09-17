@@ -227,6 +227,9 @@ def copy_urls(
 ) -> None:
     """Copy each source URL to its path under `dst_root_path`, which must be in the form
     `rclone` expects. Uses `rclone copyurl --urls`: https://rclone.org/commands/rclone_copyurl
+
+    Makes a single attempt per URL (beyond rclone's low-level request retries). Callers
+    retry by listing the destination again and passing only the URLs still missing.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         urls_csv = Path(tmp_dir) / "urls.csv"
@@ -241,6 +244,8 @@ def copy_urls(
             str(urls_csv),
             dst_root_path,
             "--s3-no-check-bucket",  # Workaround for reformatters issue #428
+            # An rclone retry of copyurl downloads every URL again, not just the failed ones.
+            "--retries=1",
             f"--transfers={transfer_parallelism:d}",
             f"--checkers={checkers:d}",
             f"--stats={stats_logging_freq}",

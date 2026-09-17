@@ -39,8 +39,8 @@ persists, no matter if we use `regex=` or `command=` with `rclone copy --name-tr
 
 Consequently, rclone cannot dynamically create new directory levels based on filename content.
 
-Instead, we do the name transformation in Python, and pass a CSV file mapping from full source URL
-to destination path, using `rclone copyurl --urls <csv_file>`.
+Instead, we do the name transformation in Python and hand each source URL and its
+destination path to `rclone copyurl --urls`.
 
 ## REFERENCES
 
@@ -52,6 +52,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from reformatters.common.logging import get_logger
+from reformatters.common.rclone import copy_urls
 from reformatters.common.retry import retry
 
 from .list_files import (
@@ -59,7 +60,6 @@ from .list_files import (
     list_grib_files_on_dwd_https,
 )
 from .path_conversion import convert_src_path_to_dst_path
-from .rclone_copyurl import run_rclone_copyurl
 
 log = get_logger(__name__)
 
@@ -123,44 +123,37 @@ def copy_files_from_dwd_https(
         max_attempts=3,
     )
 
-    files_already_on_dst = retry(
-        lambda: list_files_on_dst_for_all_nwp_runs_available_from_dwd(
+    def copy_files_missing_from_dst() -> None:
+        files_already_on_dst = list_files_on_dst_for_all_nwp_runs_available_from_dwd(
             src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
             src_root_path_ending_with_init_hour=src_root_path,
             dst_root_path_without_init_dt=dst_root_path,
             checkers=checkers,
             env_vars=env_vars,
-        ),
-        max_attempts=3,
-    )
+        )
+        copy_urls(
+            sources_and_dst_paths=compute_which_files_still_need_to_be_transferred(
+                src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
+                files_already_on_dst=files_already_on_dst,
+                src_host_and_root_path=f"{src_host}{src_root_path}",
+            ),
+            dst_root_path=str(dst_root_path),
+            transfer_parallelism=transfer_parallelism,
+            checkers=checkers,
+            stats_logging_freq=stats_logging_freq,
+            env_vars=env_vars,
+        )
 
-    csv_of_files_to_transfer = compute_which_files_still_need_to_be_transferred(
-        src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
-        files_already_on_dst=files_already_on_dst,
-        src_host_and_root_path=f"{src_host}{src_root_path}",
-    )
-
-    run_rclone_copyurl(
-        "\n".join(csv_of_files_to_transfer),
-        dst_root_path=dst_root_path,
-        transfer_parallelism=transfer_parallelism,
-        checkers=checkers,
-        env_vars=env_vars,
-        stats_logging_freq=stats_logging_freq,
-    )
+    retry(copy_files_missing_from_dst, max_attempts=3)
 
 
 def compute_which_files_still_need_to_be_transferred(
     src_paths_starting_with_nwp_var: Sequence[PurePosixPath],
     files_already_on_dst: set[PurePosixPath],
     src_host_and_root_path: str,
-) -> list[str]:
-    """Returns list of strings, each of which is a row of a CSV with two columns:
-
-    1. The full source path, e.g. `https://opendata.dwd.de/.../filename.grib2.bz2`.
-    2. The destination path, from the NWP init datetime onwards.
-
-    This is the format required by `rclone copyurls`.
+) -> list[tuple[str, PurePosixPath]]:
+    """Returns each file's full source URL, e.g. `https://opendata.dwd.de/.../filename.grib2.bz2`,
+    and its destination path from the NWP init datetime onwards.
 
     Args
         src_paths_starting_with_nwp_var: Paths must not start with a forwards slash.
@@ -172,7 +165,7 @@ def compute_which_files_still_need_to_be_transferred(
             f"src_host_and_root_path must not end with a slash. {src_host_and_root_path=}"
         )
 
-    csv_of_files_to_transfer: list[str] = []  # Each list item is one line of the CSV.
+    files_to_transfer: list[tuple[str, PurePosixPath]] = []
     for i, src_path in enumerate(src_paths_starting_with_nwp_var):
         if src_path.is_absolute():
             raise ValueError(
@@ -181,7 +174,6 @@ def compute_which_files_still_need_to_be_transferred(
             )
         dst_path = convert_src_path_to_dst_path(src_path)
         if dst_path not in files_already_on_dst:
-            full_src_path = f"{src_host_and_root_path}/{src_path}"
-            csv_of_files_to_transfer.append(f"{full_src_path},{dst_path}")
-    log.info(f"Planning to transfer {len(csv_of_files_to_transfer):,d} files.")
-    return csv_of_files_to_transfer
+            files_to_transfer.append((f"{src_host_and_root_path}/{src_path}", dst_path))
+    log.info(f"Planning to transfer {len(files_to_transfer):,d} files.")
+    return files_to_transfer

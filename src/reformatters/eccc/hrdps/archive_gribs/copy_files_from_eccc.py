@@ -68,7 +68,7 @@ def copy_files_from_eccc_https(
                     stats_logging_freq=stats_logging_freq,
                     env_vars=env_vars,
                 ),
-                max_attempts=2,
+                max_attempts=3,
             )
 
 
