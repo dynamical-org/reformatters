@@ -37,7 +37,7 @@ build-backend = "hatchling.build"
 # remove this exception after 2026-09-22, once the release clears the 5-day exclude-newer window.
 [tool.uv]
 exclude-newer = "5 days"
-exclude-newer-package = { icechunk = "2026-09-18" }
+exclude-newer-package = { icechunk = "2026-09-18T00:00:00Z" }
 
 
 [project.scripts]
