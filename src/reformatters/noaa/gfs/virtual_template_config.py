@@ -1990,6 +1990,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective available potential energy",
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
+            comment=(
+                "Energy released by a parcel lifted from the most unstable of six 30 "
+                "hPa layers in the lowest 180 hPa, rather than from one parcel averaged "
+                "over that depth."
+            ),
         ),
         root_var(
             "convective_inhibition_180_0mb",
@@ -2125,6 +2130,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Convective available potential energy",
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
+            comment=(
+                "Energy released by a parcel lifted from the most unstable level in the "
+                "lowest 300 hPa. The source labels the record 255 hPa but searches 300."
+            ),
         ),
         root_var(
             "convective_inhibition_255_0mb",

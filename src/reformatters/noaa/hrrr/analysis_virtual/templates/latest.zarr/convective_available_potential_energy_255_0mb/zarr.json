@@ -37,6 +37,7 @@
     "short_name": "cape",
     "standard_name": "atmosphere_convective_available_potential_energy",
     "units": "J kg-1",
+    "comment": "Energy released by a parcel lifted from the most unstable level in the lowest 300 hPa. The source labels the record 255 hPa but searches 300.",
     "step_type": "instant",
     "coordinates": "latitude longitude spatial_ref",
     "_FillValue": "AAAAAAAA+H8="

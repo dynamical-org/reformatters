@@ -37,6 +37,7 @@
     "short_name": "cape",
     "standard_name": "atmosphere_convective_available_potential_energy",
     "units": "J kg-1",
+    "comment": "Energy released by a parcel lifted from the most unstable of six 30 hPa layers in the lowest 180 hPa, rather than from one parcel averaged over that depth.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
