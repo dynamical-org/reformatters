@@ -33,8 +33,11 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# icechunk 2.2.2 (2026-09-17) reviewed and approved for immediate use;
+# remove this exception after 2026-09-22, once the release clears the 5-day exclude-newer window.
 [tool.uv]
 exclude-newer = "5 days"
+exclude-newer-package = { icechunk = "2026-09-18" }
 
 
 [project.scripts]
