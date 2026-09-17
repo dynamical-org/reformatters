@@ -1,7 +1,6 @@
 """The NOMADS mirror: a cron that copies each hourly HRRR init's files (GRIB and NOAA's
 `.idx` sidecar, as published) from NOMADS into an R2 bucket. The
-`noaa-hrrr-forecast-18-hour-virtual-fast` product reads only this mirror; see "NOMADS
-mirror" in docs/virtual_datasets.md.
+`noaa-hrrr-forecast-18-hour-virtual-fast` product reads only this mirror.
 """
 
 import re

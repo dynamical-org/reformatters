@@ -49,7 +49,7 @@ class NoaaHrrrForecast18HourVirtualFastSourceFileCoord(
 
 class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJob):
     """Reads only the NOMADS mirror, which expires its files, so the store keeps a
-    moving window of recent inits. See "NOMADS mirror" in docs/virtual_datasets.md."""
+    moving window of recent inits. See "Moving window" in docs/virtual_datasets.md."""
 
     # Every position of the template, whose newest label is up to an hour before its end.
     operational_update_window: ClassVar[Timedelta] = RETENTION + pd.Timedelta("1h")
