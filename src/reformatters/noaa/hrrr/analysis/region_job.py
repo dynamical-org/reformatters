@@ -33,7 +33,6 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         cls,
         data_vars: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
-        """Group by the inputs of analysis_lead_time, so a group shares one lead at every time of a region."""
         return group_by(
             data_vars,
             lambda v: (

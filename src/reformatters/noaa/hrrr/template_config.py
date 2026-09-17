@@ -27,7 +27,8 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrInternalAttrs,
 )
 
-# HRRRv3's first cycle.
+# HRRRv3's first cycle. From v3 on, hour 0 carries scattered pixels of collapsed near-surface
+# moisture (dew point down to -81 C, relative humidity 1 %, specific humidity 0).
 HRRR_V3_START = pd.Timestamp("2018-07-12T12:00")
 
 

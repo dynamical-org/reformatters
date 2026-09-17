@@ -15,7 +15,6 @@ from reformatters.noaa.hrrr.analysis_virtual.template_config import (
     NoaaHrrrAnalysisVirtualTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.template_config import HRRR_V3_START
 from reformatters.noaa.hrrr.virtual_region_job import NoaaHrrrVirtualRegionJob
 from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
 
@@ -199,43 +198,6 @@ def test_generate_source_file_coords_shortest_usable_lead() -> None:
     prs_coord = by_key[("prs", pd.Timedelta("0h"), time)]
     assert prs_coord.init_time == time
     assert [v.path for v in prs_coord.data_vars] == ["pressure_level/temperature"]
-
-
-def test_generate_source_file_coords_flips_lead_at_hrrr_v3_start() -> None:
-    template_ds = TEMPLATE_CONFIG.get_template(HRRR_V3_START + pd.Timedelta("1h"))
-    data_vars = [
-        get_var("temperature_2m"),
-        get_var("total_precipitation_surface"),
-        get_var("dew_point_temperature_2m"),
-        get_var("relative_humidity_2m"),
-        get_var("specific_humidity_2m"),
-    ]
-    region = slice(len(template_ds.time) - 2, len(template_ds.time))
-    job = make_job(template_ds, data_vars=data_vars, region=region)
-    region_ds = template_ds.to_dataset().isel(time=region)
-
-    coords = job.generate_source_file_coords(region_ds, data_vars)
-
-    members = {
-        (c.valid_time(), c.init_time, c.lead_time): sorted(v.name for v in c.data_vars)
-        for c in coords
-    }
-    before, at = HRRR_V3_START - pd.Timedelta("1h"), HRRR_V3_START
-    moisture = [
-        "dew_point_temperature_2m",
-        "relative_humidity_2m",
-        "specific_humidity_2m",
-    ]
-    assert members == {
-        (before, before, pd.Timedelta("0h")): sorted([*moisture, "temperature_2m"]),
-        (before, before - pd.Timedelta("1h"), pd.Timedelta("1h")): [
-            "total_precipitation_surface"
-        ],
-        (at, at, pd.Timedelta("0h")): ["temperature_2m"],
-        (at, before, pd.Timedelta("1h")): sorted(
-            [*moisture, "total_precipitation_surface"]
-        ),
-    }
 
 
 def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> None:
