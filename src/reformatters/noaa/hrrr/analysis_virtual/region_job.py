@@ -34,7 +34,7 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisVirtualSourceFileCoord]:
-        """Use the shortest present lead for each variable: f00 if available, f01 otherwise.
+        """Use the shortest usable lead for each variable: f00 if usable, f01 otherwise.
 
         A variable contributes no coord before its `analysis_usable_from`, so the store holds no
         ref there and readers get NaN.
@@ -42,13 +42,12 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         times = pd.to_datetime(processing_region_ds["time"].values)
         var_groups = group_by(
             data_var_group,
-            lambda v: (v.internal_attrs.hrrr_file_type, v.has_hour_0_values()),
+            lambda v: (v.internal_attrs.hrrr_file_type, v.analysis_lead_time()),
         )
         coords = []
         for vars_in_file in var_groups:
             file_type = item({v.internal_attrs.hrrr_file_type for v in vars_in_file})
-            has_hour_0_values = item({v.has_hour_0_values() for v in vars_in_file})
-            lead_time = pd.Timedelta("0h") if has_hour_0_values else pd.Timedelta("1h")
+            lead_time = item({v.analysis_lead_time() for v in vars_in_file})
             for time in times:
                 usable_vars = [
                     var

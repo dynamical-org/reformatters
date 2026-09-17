@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.iterating import item
+from reformatters.common.iterating import group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -28,6 +28,16 @@ class NoaaHrrrAnalysisSourceFileCoord(NoaaHrrrSourceFileCoord):
 class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
     """Region job for HRRR analysis data processing."""
 
+    @classmethod
+    def source_file_var_groups(
+        cls,
+        data_vars: Sequence[NoaaHrrrDataVar],
+    ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
+        return group_by(
+            data_vars,
+            lambda v: (v.internal_attrs.hrrr_file_type, v.analysis_lead_time()),
+        )
+
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
         return slice(max(0, self.region.start - 1), self.region.stop)
@@ -38,34 +48,25 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisSourceFileCoord]:
         times = pd.to_datetime(processing_region_ds["time"].values)
-        group_has_hour_0 = item({var.has_hour_0_values() for var in data_var_group})
-
-        if group_has_hour_0:
-            init_times = times
-            lead_time = pd.Timedelta("0h")
-        else:
-            init_times = times - pd.Timedelta(hours=1)
-            lead_time = pd.Timedelta("1h")
-
+        lead_time = item({var.analysis_lead_time() for var in data_var_group})
         file_type = item({var.internal_attrs.hrrr_file_type for var in data_var_group})
 
         return [
             NoaaHrrrAnalysisSourceFileCoord(
-                init_time=init_time,
+                init_time=time - lead_time,
                 lead_time=lead_time,
                 domain="conus",
                 file_type=file_type,
                 data_vars=data_var_group,
             )
-            for init_time in init_times
+            for time in times
         ]
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
     ) -> xr.DataTree:
-        # Remove the last hour. We pull accumulated variables (precipitation) from the 1 hour lead time,
-        # but use the 0 hour lead time for other variables. This results in one additional
-        # hour of data for accumulated variables. Trim it off so we aren't left with nans for
+        # Remove the last hour. Variables read from the 1 hour lead time reach one hour
+        # further than those read from hour 0. Trim it off so we aren't left with nans for
         # most variables in the final step.
         return (
             super()
