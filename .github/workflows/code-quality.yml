@@ -9,8 +9,8 @@ on:
   push:
     branches: [main]
 
-# Newest run per branch wins. Concurrent runs on main can finish out of commit
-# order, and each finish deploys its commit, so the older commit would deploy last.
+# Concurrent runs on main can finish out of commit order, and each successful
+# finish deploys its commit, so the older commit would deploy last.
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true

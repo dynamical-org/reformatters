@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 # Prevent concurrent runs since this is deploying to the K8S cluster. Queued runs
-# apply in trigger order; Code Quality's concurrency group keeps that commit order.
+# apply in trigger order, which Code Quality's concurrency group makes equal to commit order.
 concurrency:
   group: "deploy"
   cancel-in-progress: false
