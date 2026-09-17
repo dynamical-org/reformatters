@@ -1686,6 +1686,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Relative humidity",
             units="percent",
             standard_name="relative_humidity",
+            analysis_hour_0_unusable=True,
         ),
         root_var(
             "pressure_0c_isotherm",

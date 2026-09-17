@@ -171,6 +171,7 @@ def test_generate_source_file_coords_shortest_available_lead(
         get_var("dew_point_temperature_2m"),  # sfc, hour 0 present but unusable
         get_var("relative_humidity_2m"),  # sfc, hour 0 present but unusable
         get_var("specific_humidity_2m"),  # sfc, hour 0 present but unusable
+        get_var("relative_humidity_0c_isotherm"),  # sfc, hour 0 present but unusable
         get_var("pressure_level/temperature"),  # prs, has hour-0 values
     ]
     job = make_job(template_ds, data_vars=data_vars, region=slice(0, 2))
@@ -193,6 +194,7 @@ def test_generate_source_file_coords_shortest_available_lead(
         "dew_point_temperature_2m",
         "relative_humidity_2m",
         "specific_humidity_2m",
+        "relative_humidity_0c_isotherm",
     }
 
     prs_coord = by_key[("prs", pd.Timedelta("0h"), time)]
