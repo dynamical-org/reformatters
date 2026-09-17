@@ -590,6 +590,11 @@ class VirtualRegionJob(
             self.append_dim,
             tmp_store,
             consolidated=self.consolidated_metadata,
+            aligned_size=(
+                self.assert_aligned_to_template
+                if self.drops_before_template_start
+                else None
+            ),
         )
 
     def drop_before_template_start(self, store_factory: storage.StoreFactory) -> None:

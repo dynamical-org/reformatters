@@ -7,6 +7,7 @@ import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
+from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
 from reformatters.common.storage import (
@@ -31,6 +32,9 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.template_config import
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.nomads_mirror import MIRROR_LOCATION_PREFIX, mirror_key
+from reformatters.noaa.hrrr.virtual_region_job import (
+    NoaaHrrrForecastVirtualSourceFileCoord,
+)
 
 TEMPLATE_CONFIG = NoaaHrrrForecast18HourVirtualFastTemplateConfig()
 FIXTURES = Path(__file__).parents[2] / "fixtures"
@@ -111,30 +115,60 @@ def test_discover_available_lists_only_mirror_and_requires_index(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = make_job(tmp_path, [get_var("composite_reflectivity")])
-    newest = job.template_ds.to_dataset().get_index("init_time")[-1]
-    old = coord(init_time=newest - job.poll_window)
-    recent = coord(
-        init_time=newest - job.poll_window + pd.Timedelta("1h"),
-        lead_time=pd.Timedelta("1h"),
-    )
-    captured: list[tuple[list[object], dict[str, object]]] = []
+    pending: list[NoaaHrrrForecastVirtualSourceFileCoord] = [coord()]
+    captured: list[dict[str, object]] = []
 
     def fake(pending: list[object], **kwargs: object) -> list[tuple[object, int]]:
-        captured.append((list(pending), kwargs))
+        captured.append(kwargs)
         return [(candidate, 100) for candidate in pending]
 
     monkeypatch.setattr(
         region_job_module, "discover_available_by_obstore_listing", fake
     )
 
-    assert [item[0] for item in job.discover_available([old, recent])] == [old, recent]
-    assert [item[0] for item in job.discover_available([old, recent])] == [recent]
-    assert captured[0][1] == {
-        "store": job.mirror_store(),
-        "location_prefix": MIRROR_LOCATION_PREFIX,
-        "require_index": True,
-    }
-    assert captured[1][0] == [recent]
+    assert job.discover_available(pending) == [(pending[0], 100)]
+    assert captured == [
+        {
+            "store": job.mirror_store(),
+            "location_prefix": MIRROR_LOCATION_PREFIX,
+            "require_index": True,
+        }
+    ]
+
+
+def test_update_sweeps_whole_window_once_then_polls_only_recent_inits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = make_job(tmp_path, [get_var("composite_reflectivity")]).model_copy(
+        update={"poll_deadline": pd.Timestamp.now() + pd.Timedelta("10s")}
+    )
+    job_class = type(job)
+    monkeypatch.setattr(job_class, "tick_interval", pd.Timedelta(0))
+    newest = job.template_ds.to_dataset().get_index("init_time")[-1]
+    old_never_arrives = coord(init_time=newest - job.poll_window)
+    recent_arrives_late = coord(init_time=newest)
+    offered: list[list[object]] = []
+
+    def fake_discover(
+        pending: list[NoaaHrrrForecast18HourVirtualFastSourceFileCoord],
+    ) -> list[tuple[NoaaHrrrForecast18HourVirtualFastSourceFileCoord, int]]:
+        offered.append(list(pending))
+        # Nothing is there on the first two sweeps; the recent file then arrives.
+        return [(c, 100) for c in pending if len(offered) > 2]
+
+    monkeypatch.setattr(
+        job_class, "discover_available", lambda self, p: fake_discover(p)
+    )
+    monkeypatch.setattr(job_class, "file_refs", lambda self, c, size: [object()])
+
+    batches = list(job.process_virtual_refs([old_never_arrives, recent_arrives_late]))
+
+    assert offered == [
+        [old_never_arrives, recent_arrives_late],
+        [recent_arrives_late],
+        [recent_arrives_late],
+    ]
+    assert [[c for c, _ in batch] for batch in batches] == [[recent_arrives_late]]
 
 
 def test_index_and_data_reads_use_signed_mirror_store(
@@ -178,8 +212,27 @@ def test_region_job_maintains_the_template_retention_window() -> None:
     assert NoaaHrrrForecast18HourVirtualFastRegionJob.drops_before_template_start
     assert (
         NoaaHrrrForecast18HourVirtualFastRegionJob.operational_update_window
-        == RETENTION
+        == RETENTION + pd.Timedelta("1h")
     )
+
+
+def test_operational_update_region_covers_every_template_position(
+    tmp_path: Path,
+) -> None:
+    fire_time = pd.Timestamp("2026-09-10T11:50")
+    jobs, template_ds = (
+        NoaaHrrrForecast18HourVirtualFastRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=tmp_path / "tmp.zarr",
+            get_template_fn=TEMPLATE_CONFIG.get_template,
+            append_dim="init_time",
+            all_data_vars=TEMPLATE_CONFIG.data_vars,
+            reformat_job_name="test",
+            job_fire_time=fire_time,
+        )
+    )
+    assert template_ds.sizes["init_time"] == 73
+    assert [job.region for job in jobs] == [slice(0, 73)]
 
 
 def test_operational_update_decodes_fixture_after_window_moves(

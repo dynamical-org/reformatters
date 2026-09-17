@@ -322,8 +322,8 @@ def mirror_window(
 
 
 class NoaaHrrrNomadsMirror(OperationalResources):
-    """Copies each hourly HRRR init's files from NOMADS into the mirror bucket ahead of
-    NOAA's AWS copy; the 18-hour virtual dataset reads it when NODD lags."""
+    """Copies each hourly HRRR init's files from NOMADS into the mirror bucket, the only
+    source of noaa-hrrr-forecast-18-hour-virtual-fast."""
 
     @property
     def dataset_id(self) -> str:
@@ -370,7 +370,7 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 init_time.tz_localize(None), mirror_store(), deadline=deadline
             )
             log.info(
-                f"Mirrored {len(result.copied)} files, {len(result.pending)} left to NODD"
+                f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored"
             )
 
     def get_cli(self) -> typer.Typer:

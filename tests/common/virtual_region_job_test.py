@@ -2564,3 +2564,18 @@ def test_moving_window_validation_job_requires_aligned_store(tmp_path: Path) -> 
     )
     with pytest.raises(AssertionError, match="this fire's drop has not run"):
         _moving_window_job(_window_template(1, 6)).assert_aligned_to_template(store)
+
+
+def test_moving_window_stale_metadata_refresh_refuses_after_another_writer_drops(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    stale = _moving_window_job(_window_template(0, 5))
+    _moving_window_job(_window_template(2, 5)).drop_before_template_start(
+        dataset.store_factory
+    )
+
+    with pytest.raises(AssertionError, match="another writer moved the window"):
+        stale.refresh_metadata(dataset.store_factory, tmp_path / "refresh-tmp.zarr")
+    _assert_window_values(dataset, 2, 4)

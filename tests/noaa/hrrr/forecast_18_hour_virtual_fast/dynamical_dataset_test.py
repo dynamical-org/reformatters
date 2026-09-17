@@ -9,19 +9,14 @@ import xarray as xr
 
 from reformatters.common import template_utils, validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast import (
-    dynamical_dataset as dynamical_dataset_module,
-)
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.dynamical_dataset import (
     CheckMirrorWindow,
     NoaaHrrrForecast18HourVirtualFastDataset,
-    _mirror_failure,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.region_job import (
     NoaaHrrrForecast18HourVirtualFastRegionJob,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.template_config import (
-    RETENTION,
     NoaaHrrrForecast18HourVirtualFastTemplateConfig,
 )
 from reformatters.noaa.hrrr.nomads_mirror import (
@@ -43,18 +38,6 @@ def make_dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualFastDataset:
 @pytest.fixture
 def dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualFastDataset:
     return make_dataset(tmp_path)
-
-
-def mirror_location(
-    init_time: pd.Timestamp,
-    *,
-    file_type: str = "sfc",
-    lead: int = 0,
-) -> str:
-    return (
-        f"{MIRROR_LOCATION_PREFIX}hrrr.{init_time:%Y%m%d}/conus/"
-        f"hrrr.t{init_time:%H}z.wrf{file_type}f{lead:02d}.grib2"
-    )
 
 
 def test_operational_kubernetes_resources(
@@ -133,153 +116,80 @@ def test_virtual_validation_region_is_the_last_poll_window(
     assert init_times[job.region].equals(init_times[-6:])
 
 
-class FakeSession:
-    def __init__(self, locations: list[str]) -> None:
-        self._locations = locations
-
-    def all_virtual_chunk_locations(self) -> list[str]:
-        return self._locations
-
-
-class FakeIcechunkStore:
-    def __init__(self, locations: list[str]) -> None:
-        self.session = FakeSession(locations)
+VALIDATED_PATHS = (
+    "composite_reflectivity",
+    "pressure_level/temperature",
+    "model_level/temperature",
+)
 
 
-def mirror_validation_context(locations: list[str]) -> validation.ValidationContext:
+def mirror_validation_context(
+    first_init_with_data: dict[str, int],
+) -> validation.ValidationContext:
+    """Three inits; each path is NaN (no ref) before its first init with data."""
     init_times = pd.date_range("2026-09-10T10:00", periods=3, freq="1h")
-    lead_times = pd.timedelta_range("0h", periods=5, freq="1h")
-    paths = (
-        "composite_reflectivity",
-        "pressure_level/temperature",
-        "model_level/temperature",
-    )
-    shape = (len(init_times), len(lead_times), 1, 1)
+    lead_times = pd.timedelta_range("0h", periods=2, freq="1h")
+    data = {}
+    for path in VALIDATED_PATHS:
+        values = np.ones((len(init_times), len(lead_times), 1, 1))
+        values[: first_init_with_data.get(path, len(init_times))] = np.nan
+        data[path] = (("init_time", "lead_time", "y", "x"), values)
     ds = xr.Dataset(
-        {
-            path: (("init_time", "lead_time", "y", "x"), np.ones(shape))
-            for path in paths
-        },
-        coords={
-            "init_time": init_times,
-            "lead_time": lead_times,
-            "y": [0],
-            "x": [0],
-        },
+        data,
+        coords={"init_time": init_times, "lead_time": lead_times, "y": [0], "x": [0]},
     )
     configured = {var.path: var for var in TEMPLATE_CONFIG.data_vars}
     return validation.ValidationContext(
-        store=cast(Any, FakeIcechunkStore(locations)),
+        store=cast("Any", None),
         ds=ds,
         append_dim="init_time",
-        data_vars=tuple(configured[path] for path in paths),
+        data_vars=tuple(configured[path] for path in VALIDATED_PATHS),
     )
 
 
-def test_mirror_window_checks_each_file_types_smallest_lead_at_oldest_ref_init(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    oldest_ref_init = pd.Timestamp("2026-09-10T11:00")
-    locations = [
-        mirror_location(pd.Timestamp("2026-09-10T12:00"), lead=0),
-        mirror_location(oldest_ref_init, file_type="sfc", lead=3),
-        mirror_location(oldest_ref_init, file_type="sfc", lead=1),
-        mirror_location(oldest_ref_init, file_type="prs", lead=4),
-        mirror_location(oldest_ref_init, file_type="prs", lead=2),
-        mirror_location(oldest_ref_init, file_type="nat", lead=3),
-    ]
-    context = mirror_validation_context(locations)
-    loaded: list[tuple[str | None, pd.Timestamp, pd.Timedelta]] = []
-
-    def load(chunk: xr.DataArray, **kwargs: object) -> xr.DataArray:
-        loaded.append(
-            (
-                str(chunk.name) if chunk.name is not None else None,
-                pd.Timestamp(chunk["init_time"].item()),
-                pd.Timedelta(chunk["lead_time"].item()),
-            )
-        )
-        return chunk
-
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda cls, *args: pd.Timestamp("2026-09-10T12:00")),
+def test_mirror_window_passes_when_each_file_types_oldest_data_decodes() -> None:
+    context = mirror_validation_context(
+        {
+            "composite_reflectivity": 0,
+            "pressure_level/temperature": 1,
+            "model_level/temperature": 2,
+        }
     )
-    monkeypatch.setattr(dynamical_dataset_module, "IcechunkStore", FakeIcechunkStore)
-    monkeypatch.setattr(xr.DataArray, "load", load)
 
     result = CheckMirrorWindow().check(context)
 
-    assert result.passed
-    assert result.checked_count == len(locations)
-    assert set(loaded) == {
-        ("composite_reflectivity", oldest_ref_init, pd.Timedelta("1h")),
-        ("pressure_level/temperature", oldest_ref_init, pd.Timedelta("2h")),
-        ("model_level/temperature", oldest_ref_init, pd.Timedelta("3h")),
-    }
+    assert result.passed, result.message
+    assert "composite_reflectivity at 2026-09-10 10:00:00" in result.message
+    assert "pressure_level/temperature at 2026-09-10 11:00:00" in result.message
+    assert "model_level/temperature at 2026-09-10 12:00:00" in result.message
 
 
-def test_window_failure_rejects_empty_store() -> None:
-    assert CheckMirrorWindow()._window_failure(pd.DatetimeIndex([])) == (
-        "Dataset has no init_time positions"
-    )
-    assert _mirror_failure(mirror_validation_context([]), []) == (
-        "The store references no files"
+def test_mirror_window_fails_when_a_file_type_has_no_data() -> None:
+    context = mirror_validation_context(
+        {"composite_reflectivity": 0, "pressure_level/temperature": 0}
     )
 
+    result = CheckMirrorWindow().check(context)
 
-def test_window_failure_rejects_old_first_init(
+    assert not result.passed
+    assert "of 3 file types" in result.message
+
+
+def test_mirror_window_fails_when_the_oldest_chunk_does_not_decode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    now = pd.Timestamp("2026-09-10T12:00")
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *args: now))
-    init_times = pd.date_range(
-        now - RETENTION - timedelta(hours=4), periods=72, freq="1h"
-    )
+    context = mirror_validation_context(dict.fromkeys(VALIDATED_PATHS, 0))
+    loaded: list[pd.Timestamp] = []
 
-    failure = CheckMirrorWindow()._window_failure(init_times)
+    def expired(self: xr.DataArray, **kwargs: object) -> xr.DataArray:
+        loaded.append(pd.Timestamp(self["init_time"].item()))
+        raise OSError("404 Not Found")
 
-    assert failure is not None
-    assert "before" in failure
+    monkeypatch.setattr(xr.DataArray, "load", expired)
 
+    result = CheckMirrorWindow().check(context)
 
-def test_window_failure_rejects_too_many_positions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = pd.Timestamp("2026-09-10T12:00")
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *args: now))
-    init_times = pd.date_range(end=now, periods=74, freq="1h")
-
-    failure = CheckMirrorWindow()._window_failure(init_times)
-
-    assert failure is not None
-    assert "74 init_time positions exceed" in failure
-
-
-def test_mirror_failure_rejects_location_outside_mirror() -> None:
-    foreign = "s3://noaa-hrrr-bdp-pds/hrrr.20260910/conus/file.grib2"
-
-    locations = [mirror_location(pd.Timestamp("2026-09-10")), foreign]
-    failure = _mirror_failure(mirror_validation_context(locations), locations)
-
-    assert failure is not None
-    assert foreign in failure
-
-
-def test_mirror_failure_reports_read_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    location = mirror_location(pd.Timestamp("2026-09-10T11:00"), lead=2)
-    context = mirror_validation_context([location])
-
-    def fail_load(chunk: xr.DataArray, **kwargs: object) -> xr.DataArray:
-        raise RuntimeError("expired mirror object")
-
-    monkeypatch.setattr(xr.DataArray, "load", fail_load)
-    failure = _mirror_failure(context, [location])
-
-    assert failure is not None
-    assert "composite_reflectivity" in failure
-    assert "lead 0 days 02:00:00" in failure
-    assert "expired mirror object" in failure
+    assert not result.passed
+    assert loaded == [pd.Timestamp("2026-09-10T10:00")]
+    assert "does not decode" in result.message
+    assert "404 Not Found" in result.message

@@ -1,3 +1,4 @@
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import ClassVar
 
@@ -50,17 +51,17 @@ class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJo
     """Reads only the NOMADS mirror, which expires its files, so the store keeps a
     moving window of recent inits. See "NOMADS mirror" in docs/virtual_datasets.md."""
 
-    operational_update_window: ClassVar[Timedelta] = RETENTION
+    # Every position of the template, whose newest label is up to an hour before its end.
+    operational_update_window: ClassVar[Timedelta] = RETENTION + pd.Timedelta("1h")
     drops_before_template_start: ClassVar[bool] = True
     source_file_coord_class: ClassVar[
         type[NoaaHrrrForecast18HourVirtualFastSourceFileCoord]
     ] = NoaaHrrrForecast18HourVirtualFastSourceFileCoord
 
-    # The first sweep of a run offers every missing file in the window; later sweeps
-    # poll only for inits this recent, so a file that never arrives costs no listings.
+    # An update sweeps the whole window once, then polls only for inits this recent,
+    # so a file that never arrives neither costs listings nor holds the run open.
     poll_window: ClassVar[Timedelta] = pd.Timedelta("6h")
 
-    _sweeps: int = pydantic.PrivateAttr(default=0)
     _mirror_store: obstore.store.ObjectStore | None = pydantic.PrivateAttr(default=None)
 
     def mirror_store(self) -> obstore.store.ObjectStore:
@@ -70,13 +71,35 @@ class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJo
             self._mirror_store = store  # ty: ignore[invalid-assignment] - private cache
         return store
 
+    def process_virtual_refs(
+        self,
+        remaining: Sequence[NoaaHrrrForecastVirtualSourceFileCoord],
+    ) -> Iterator[
+        Sequence[tuple[NoaaHrrrForecastVirtualSourceFileCoord, Sequence[VirtualRef]]]
+    ]:
+        if self.processing_mode != "update":
+            yield from super().process_virtual_refs(remaining)
+            return
+        single_sweep = self.model_copy(update={"processing_mode": "backfill"})
+        swept: set[int] = set()
+        for batch in super(
+            NoaaHrrrForecast18HourVirtualFastRegionJob, single_sweep
+        ).process_virtual_refs(remaining):
+            swept.update(id(coord) for coord, _ in batch)
+            yield batch
+        newest = self.template_ds.to_dataset().get_index(self.append_dim)[-1]
+        yield from super().process_virtual_refs(
+            [
+                coord
+                for coord in remaining
+                if id(coord) not in swept
+                and coord.init_time > newest - self.poll_window
+            ]
+        )
+
     def discover_available(
         self, pending: list[NoaaHrrrForecastVirtualSourceFileCoord]
     ) -> list[tuple[NoaaHrrrForecastVirtualSourceFileCoord, int]]:
-        self._sweeps += 1
-        if self._sweeps > 1:
-            newest = self.template_ds.to_dataset().get_index(self.append_dim)[-1]
-            pending = [c for c in pending if c.init_time > newest - self.poll_window]
         return discover_available_by_obstore_listing(
             pending,
             store=self.mirror_store(),
