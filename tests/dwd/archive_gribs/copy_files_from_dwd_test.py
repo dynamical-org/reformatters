@@ -23,12 +23,12 @@ def test_compute_which_files_still_need_to_be_transferred() -> None:
         src_paths, files_already_on_dst, src_host_and_root_path
     )
 
-    assert len(result) == 1
-    expected_full_src = (
-        f"{src_host_and_root_path}/alb_rad/file2_2026011400_000.grib2.bz2"
-    )
-    expected_dst = "2026-01-14T00/alb_rad/file2_2026011400_000.grib2.bz2"
-    assert result[0] == f"{expected_full_src},{expected_dst}"
+    assert result == [
+        (
+            f"{src_host_and_root_path}/alb_rad/file2_2026011400_000.grib2.bz2",
+            PurePosixPath("2026-01-14T00/alb_rad/file2_2026011400_000.grib2.bz2"),
+        )
+    ]
 
 
 def test_copy_files_from_dwd_https_input_validation() -> None:
@@ -49,7 +49,7 @@ def test_copy_files_from_dwd_https_input_validation() -> None:
 @patch(
     "reformatters.dwd.archive_gribs.copy_files_from_dwd.list_files_on_dst_for_all_nwp_runs_available_from_dwd"
 )
-@patch("reformatters.dwd.archive_gribs.copy_files_from_dwd.run_rclone_copyurl")
+@patch("reformatters.dwd.archive_gribs.copy_files_from_dwd.copy_urls")
 def test_copy_files_from_dwd_https_strips_trailing_slash(
     mock_run: MagicMock, mock_list_dst: MagicMock, mock_list_src: MagicMock
 ) -> None:

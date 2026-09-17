@@ -372,7 +372,7 @@ def test_archive_grib_files_fails_when_regular_lat_lon_copyurl_fails(
             return_value=set(),
         ),
         patch(
-            "reformatters.dwd.archive_gribs.rclone_copyurl.run_command_with_concurrent_logging",
+            "reformatters.common.rclone.run_command_with_concurrent_logging",
             return_value=1,
         ) as run_rclone,
         patch(f"{MODULE}.copy_icosahedral_files_from_dwd_https", phases.icosahedral),
