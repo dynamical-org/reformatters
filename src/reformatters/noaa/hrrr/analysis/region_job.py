@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.iterating import group_by, item
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -14,6 +14,7 @@ from reformatters.common.types import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
+    analysis_source_file_var_groups,
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrRegionJob, NoaaHrrrSourceFileCoord
 
@@ -33,10 +34,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         cls,
         data_vars: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
-        return group_by(
-            data_vars,
-            lambda v: (v.internal_attrs.hrrr_file_type, v.analysis_lead_time()),
-        )
+        return analysis_source_file_var_groups(data_vars)
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""

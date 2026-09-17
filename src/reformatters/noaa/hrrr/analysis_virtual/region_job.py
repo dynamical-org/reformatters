@@ -5,11 +5,14 @@ from typing import ClassVar
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.iterating import group_by, item
+from reformatters.common.iterating import item
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta, Timestamp
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from reformatters.noaa.hrrr.hrrr_config_models import (
+    NoaaHrrrDataVar,
+    analysis_source_file_var_groups,
+)
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrVirtualRegionJob,
     NoaaHrrrVirtualSourceFileCoord,
@@ -40,12 +43,8 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         ref there and readers get NaN.
         """
         times = pd.to_datetime(processing_region_ds["time"].values)
-        var_groups = group_by(
-            data_var_group,
-            lambda v: (v.internal_attrs.hrrr_file_type, v.analysis_lead_time()),
-        )
         coords = []
-        for vars_in_file in var_groups:
+        for vars_in_file in analysis_source_file_var_groups(data_var_group):
             file_type = item({v.internal_attrs.hrrr_file_type for v in vars_in_file})
             lead_time = item({v.analysis_lead_time() for v in vars_in_file})
             for time in times:
@@ -98,7 +97,7 @@ class NoaaHrrrAnalysisVirtualRegionJob(
 
         A time's f01 files come from the previous init and publish an hour before its
         own f00 files, so ungated discovery would extend `time` to an hour carrying only
-        the variables that have no hour-0 value. Files past the limit stay pending and
+        the variables read at hour 1. Files past the limit stay pending and
         are offered again next tick, so an hour is first visible complete.
 
         A time the store already covers is never withheld: nothing extends there, and an
