@@ -42,7 +42,7 @@
     "long_name": "Icing probability",
     "short_name": "icip",
     "units": "1",
-    "comment": "NaN where the terrain is above this level.",
+    "comment": "Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; every other level is NaN at every step. NaN where the terrain is above this level.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

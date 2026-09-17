@@ -3905,7 +3905,11 @@ def _a_b_pressure_data_vars(
             short_name="icip",
             long_name="Icing probability",
             units="1",
-            comment=("NaN where the terrain is above this level."),
+            comment=(
+                "Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; "
+                "every other level is NaN at every step. NaN where the terrain is above "
+                "this level."
+            ),
         ),
         var(
             "icing_severity",
@@ -3916,7 +3920,11 @@ def _a_b_pressure_data_vars(
             units="1",
             flag_values=(0, 1, 2, 3, 4, 5),
             flag_meanings="none light moderate severe trace heavy",
-            comment=("NaN where the terrain is above this level."),
+            comment=(
+                "Published only at the 800, 700, 600, 500, 400 and 300 hPa levels; "
+                "every other level is NaN at every step. NaN where the terrain is above "
+                "this level."
+            ),
         ),
     ]
 
