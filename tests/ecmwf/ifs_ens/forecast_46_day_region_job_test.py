@@ -389,7 +389,7 @@ def test_deaccumulates_total_precipitation_to_a_daily_rate(tmp_path: Path) -> No
         ("wind_u_10m", "10_m_u_component_of_wind"),
         ("wind_v_10m", "10_m_v_component_of_wind"),
         (
-            "average_convective_available_potential_energy_atmosphere",
+            "average_convective_available_potential_energy_surface",
             "convective_available_potential_energy",
         ),
     ],
