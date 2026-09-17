@@ -40,8 +40,7 @@ GCS_LOCATION_PREFIX = "gs://ecmwf-open-data/"
 S3_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
 S3_REGION = "eu-central-1"
 # Inits before this date may reference s3://ecmwf-forecasts/ for files the GCS
-# mirror lacks; inits on or after it reference GCS only, since S3 rate-limits the
-# recent data readers touch most.
+# mirror lacks; inits on or after it reference GCS only.
 S3_FALLBACK_BEFORE: Final = pd.Timestamp("2025-03-01")
 
 
@@ -71,10 +70,6 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
         return self._source
 
     def fall_back_to_s3(self) -> None:
-        assert self.init_time < S3_FALLBACK_BEFORE, (
-            f"{self.init_time} is on or after {S3_FALLBACK_BEFORE}; only older inits "
-            "may reference S3"
-        )
         self._source = "s3"
 
     def _get_base_url(self) -> str:
@@ -82,6 +77,10 @@ class EcmwfAifsSingleForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
             case "gcs":
                 location_prefix = GCS_LOCATION_PREFIX
             case "s3":
+                assert self.init_time < S3_FALLBACK_BEFORE, (
+                    f"{self.init_time} is on or after {S3_FALLBACK_BEFORE}; only "
+                    "older inits may reference S3"
+                )
                 location_prefix = S3_LOCATION_PREFIX
             case _ as unreachable:
                 assert_never(unreachable)
@@ -156,7 +155,8 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
     ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
         """Files GCS can serve (data and index listed), plus, for inits before
         S3_FALLBACK_BEFORE, files S3 can serve that GCS cannot; a fallback coord
-        is switched to its S3 URL in place."""
+        is switched to its S3 URL in place. `pending` must be GCS-sourced: a coord
+        already switched to S3 is never offered again."""
         available = discover_available_by_obstore_listing(
             pending,
             store=gcs_store(GCS_LOCATION_PREFIX),

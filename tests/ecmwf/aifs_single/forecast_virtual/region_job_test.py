@@ -100,7 +100,11 @@ def _fake_index(
     """Serve `content` as every index download; returns the downloaded URLs."""
     downloaded: list[str] = []
 
-    def fake_download(url: str, dataset_id: str, **_kwargs: str) -> Path:
+    def fake_download(url: str, dataset_id: str, **kwargs: str) -> Path:
+        if url.startswith("s3://"):
+            assert kwargs == {"region": "eu-central-1"}
+        else:
+            assert not kwargs
         downloaded.append(url)
         path = tmp_path / (url.rsplit("/", 1)[-1])
         path.write_text(content)
@@ -131,6 +135,11 @@ def _fake_listing(
     ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
         assert require_index is True
         assert all(coord.get_url().startswith(location_prefix) for coord in pending)
+        if location_prefix.startswith("s3://"):
+            assert isinstance(store, obstore.store.S3Store)
+            assert store.config["region"] == "eu-central-1"
+        else:
+            assert isinstance(store, obstore.store.GCSStore)
         listed.append(location_prefix)
         return [
             (coord, 9000)
@@ -207,11 +216,17 @@ def test_source_file_coord_s3_source_uses_same_key_in_s3_bucket() -> None:
     )
 
 
-def test_fall_back_to_s3_refuses_inits_on_or_after_gate() -> None:
+def test_s3_url_refuses_inits_on_or_after_gate() -> None:
     coord = _coord([get_var("temperature_2m")], init_time=S3_FALLBACK_BEFORE)
+    coord.fall_back_to_s3()
     with pytest.raises(AssertionError, match="only older inits may reference S3"):
-        coord.fall_back_to_s3()
-    assert coord.source == "gcs"
+        coord.get_url()
+    # A retimed copy carries the source with it; the URL boundary still refuses.
+    old = _coord([get_var("temperature_2m")], init_time=_ERA1_INIT)
+    old.fall_back_to_s3()
+    retimed = old.model_copy(update={"init_time": S3_FALLBACK_BEFORE})
+    with pytest.raises(AssertionError, match="only older inits may reference S3"):
+        retimed.get_index_url()
 
 
 def test_out_loc_pins_init_and_lead_only(template_ds: xr.DataTree) -> None:
@@ -441,9 +456,76 @@ def test_discover_available_partial_init_falls_back_only_for_the_absent_file(
     result = job.discover_available([lead_0, lead_6])
 
     assert listed == ["gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"]
-    assert [coord for coord, _ in result] == [lead_6, lead_0]
+    assert {id(coord) for coord, _ in result} == {id(lead_6), id(lead_0)}
     assert lead_6.source == "gcs"
     assert lead_0.source == "s3"
+
+
+def test_discover_available_skips_s3_when_gcs_serves_every_file(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_vars = [get_var("temperature_2m")]
+    coord = _coord(data_vars, init_time=_ERA1_INIT)
+    listed = _fake_listing(
+        monkeypatch, on_gcs={(_ERA1_INIT, _LEAD_6H)}, on_s3={(_ERA1_INIT, _LEAD_6H)}
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    assert job.discover_available([coord]) == [(coord, 9000)]
+    assert listed == ["gs://ecmwf-open-data/"]
+    assert coord.source == "gcs"
+
+
+def test_update_loop_offers_only_unresolved_gcs_coords_on_later_ticks(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Over two polling ticks, a coord served from S3 on the first tick leaves the
+    loop, and only the still-pending GCS-sourced coord reaches the second listing."""
+    data_vars = [get_var("temperature_2m")]
+    init = _ERA1_INIT
+    on_s3 = _coord(data_vars, init_time=init, lead_time=pd.Timedelta(0))
+    late_on_gcs = _coord(data_vars, init_time=init, lead_time=_LEAD_6H)
+    _fake_index(monkeypatch, tmp_path, _index_line("2t", "sfc", 0, 1000))
+    listings: list[tuple[str, list[str]]] = []
+
+    def fake(
+        pending: list[EcmwfAifsSingleForecastVirtualSourceFileCoord],
+        *,
+        store: obstore.store.ObjectStore,
+        location_prefix: str,
+        require_index: bool,
+    ) -> list[tuple[EcmwfAifsSingleForecastVirtualSourceFileCoord, int]]:
+        listings.append((location_prefix, [c.get_url() for c in pending]))
+        gcs_calls = sum(prefix.startswith("gs://") for prefix, _ in listings)
+        if location_prefix.startswith("s3://"):
+            return [(c, 1000) for c in pending if c.lead_time == pd.Timedelta(0)]
+        if gcs_calls >= 2:
+            return [(c, 1000) for c in pending if c.lead_time == _LEAD_6H]
+        return []
+
+    monkeypatch.setattr(
+        region_job_module, "discover_available_by_obstore_listing", fake
+    )
+    job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
+    job = job.model_copy(update={"tick_interval": pd.Timedelta(0)})
+
+    batches = list(job.process_virtual_refs([on_s3, late_on_gcs]))
+
+    assert [[c for c, _ in batch] for batch in batches] == [[on_s3], [late_on_gcs]]
+    assert batches[0][0][1][0].location.startswith("s3://ecmwf-forecasts/")
+    assert batches[1][0][1][0].location.startswith("gs://ecmwf-open-data/")
+    assert [prefix for prefix, _ in listings] == [
+        "gs://ecmwf-open-data/",
+        "s3://ecmwf-forecasts/",
+        "gs://ecmwf-open-data/",
+    ]
+    # The S3 listing probed copies of both files GCS lacked; the still-pending
+    # coord kept its GCS URL for the second GCS listing.
+    assert listings[1][1] == [
+        on_s3.get_url(),
+        late_on_gcs.get_url().replace("gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"),
+    ]
+    assert listings[2][1] == [late_on_gcs.get_url()]
 
 
 # --- generate_source_file_coords ---
