@@ -561,6 +561,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         job = job.model_copy(
             update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
         )
+        if job.drops_before_template_start:
+            job.drop_before_template_start(self.store_factory)
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
         job.refresh_metadata(self.store_factory, self._tmp_store())
@@ -664,6 +666,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             f"validators() includes a check that requires a virtual dataset but "
             f"{self.region_job_class.__name__} is not a VirtualRegionJob"
         )
+        if job.drops_before_template_start:
+            # The checks probe the manifest by template position.
+            primary_repo, _ = self.store_factory.icechunk_primary_and_replica_repos()
+            job.assert_aligned_to_template(primary_repo.readonly_session("main").store)
         return job
 
     def dataset_urls(

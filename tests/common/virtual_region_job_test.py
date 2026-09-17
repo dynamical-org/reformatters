@@ -2363,3 +2363,204 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
     assert [j.poll_deadline for j in driven] == [deadline]
+
+
+# ----- Moving window: drop_before_template_start -----
+
+
+class MovingWindowTestRegionJob(VirtualTestRegionJob):
+    drops_before_template_start: ClassVar[bool] = True
+
+    def process_virtual_refs(
+        self,
+        remaining: Sequence[VirtualTestSourceFileCoord],
+    ) -> Iterator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]:
+        # Message offsets are keyed by absolute init, not by window position.
+        lead_index = self.template_ds.to_dataset().get_index("lead_time")
+        for coord in remaining:
+            offset, length = _message_offset_length(
+                _absolute_init_idx(coord.init_time),
+                int(lead_index.get_indexer(pd.Index([coord.lead_time]))[0]),
+            )
+            ref = VirtualRef(
+                data_var=self.data_vars[0],
+                out_loc=coord.out_loc(),
+                location=self.messages_url,
+                offset=offset,
+                length=length,
+            )
+            yield [(coord, [ref])]
+
+
+def _absolute_init_idx(init_time: pd.Timestamp) -> int:
+    return int((init_time - APPEND_DIM_START) / APPEND_DIM_FREQ)
+
+
+def _window_template(first_init_idx: int, end_init_idx: int) -> xr.DataTree:
+    full = _create_template_ds(end_init_idx).to_dataset()
+    return xr.DataTree.from_dict(
+        {"/": full.isel(init_time=slice(first_init_idx, end_init_idx))}
+    )
+
+
+def _moving_window_job(template_ds: xr.DataTree) -> MovingWindowTestRegionJob:
+    return MovingWindowTestRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[VirtualTestDataVar(name="temperature_2m")],
+        append_dim="init_time",
+        region=slice(0, template_ds.sizes["init_time"]),
+        reformat_job_name="test",
+        processing_mode="update",
+    )
+
+
+def _run_moving_window_update(
+    dataset: VirtualTestDataset, first_init_idx: int, end_init_idx: int
+) -> None:
+    job = _moving_window_job(_window_template(first_init_idx, end_init_idx))
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+
+
+def _assert_window_values(
+    dataset: VirtualTestDataset, first_init_idx: int, end_init_idx: int
+) -> None:
+    result = xr.open_zarr(dataset.store_factory.primary_store(), decode_timedelta=True)
+    expected_inits = pd.date_range(
+        APPEND_DIM_START + first_init_idx * APPEND_DIM_FREQ,
+        periods=end_init_idx - first_init_idx,
+        freq=APPEND_DIM_FREQ,
+    )
+    assert result.get_index("init_time").equals(expected_inits)
+    np.testing.assert_array_equal(
+        result["valid_time"].values,
+        (result["init_time"] + result["lead_time"]).values,
+    )
+    for position, init_idx in enumerate(range(first_init_idx, end_init_idx)):
+        for lead_idx in range(N_LEADS):
+            np.testing.assert_array_equal(
+                result["temperature_2m"]
+                .isel(init_time=position, lead_time=lead_idx)
+                .values,
+                _block_values(init_idx, lead_idx),
+            )
+
+
+def _make_moving_window_dataset(tmp_path: Path) -> VirtualTestDataset:
+    dataset = _make_dataset(tmp_path, n_inits=12)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    return dataset
+
+
+def test_moving_window_drops_then_appends(tmp_path: Path) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    _assert_window_values(dataset, 0, 4)
+
+    _run_moving_window_update(dataset, 3, 7)
+    _assert_window_values(dataset, 3, 7)
+
+
+def test_moving_window_drop_is_its_own_commit_and_repeats_as_noop(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    repo = _primary_repo(dataset.store_factory)
+    job = _moving_window_job(_window_template(1, 4))
+
+    before = _snapshot_count(repo)
+    job.drop_before_template_start(dataset.store_factory)
+    assert _snapshot_count(repo) - before == 1
+    _assert_window_values(dataset, 1, 4)
+
+    job.drop_before_template_start(dataset.store_factory)
+    assert _snapshot_count(repo) - before == 1
+
+
+def test_moving_window_drops_everything_then_regrows_clean(tmp_path: Path) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+
+    job = _moving_window_job(_window_template(8, 10))
+    job.drop_before_template_start(dataset.store_factory)
+    store = _primary_repo(dataset.store_factory).readonly_session("main").store
+    assert xr.open_zarr(store).sizes["init_time"] == 0
+    assert not any(_exists_many(store, _all_chunk_keys(n_inits=12)).values())
+
+    _run_moving_window_update(dataset, 8, 10)
+    _assert_window_values(dataset, 8, 10)
+
+
+def _all_chunk_keys(n_inits: int) -> list[str]:
+    return [
+        f"temperature_2m/c/{init_idx}/{lead_idx}/0/0"
+        for init_idx in range(n_inits)
+        for lead_idx in range(N_LEADS)
+    ]
+
+
+def test_moving_window_rejects_store_ahead_of_template(tmp_path: Path) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 3, 6)
+
+    job = _moving_window_job(_window_template(1, 6))
+    with pytest.raises(AssertionError, match="not an earlier window"):
+        job.drop_before_template_start(dataset.store_factory)
+    _assert_window_values(dataset, 3, 6)
+
+
+def test_moving_window_stale_writer_refuses_after_another_writer_drops(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    repo = _primary_repo(dataset.store_factory)
+
+    stale = _moving_window_job(_window_template(0, 5))
+    _moving_window_job(_window_template(2, 5)).drop_before_template_start(
+        dataset.store_factory
+    )
+    late_coord = VirtualTestSourceFileCoord(
+        init_time=APPEND_DIM_START + 4 * APPEND_DIM_FREQ, lead_time=LEAD_TIMES[0]
+    )
+    with pytest.raises(AssertionError, match="another writer moved the window"):
+        stale.process_virtual(repo, [], "main", [late_coord])
+    _assert_window_values(dataset, 2, 4)
+
+
+def test_moving_window_commit_does_not_rebase_over_a_drop(tmp_path: Path) -> None:
+    # The drop lands between the stale writer's session open and its commit.
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    repo = _primary_repo(dataset.store_factory)
+    stale = _moving_window_job(_window_template(0, 5))
+    dropper = _moving_window_job(_window_template(2, 5))
+    emit_refs = stale._emit_refs
+
+    def drop_then_emit(
+        stores: Sequence[icechunk.store.IcechunkStore], refs: Sequence[VirtualRef]
+    ) -> None:
+        dropper.drop_before_template_start(dataset.store_factory)
+        emit_refs(stores, refs)
+
+    object.__setattr__(stale, "_emit_refs", drop_then_emit)
+    late_coord = VirtualTestSourceFileCoord(
+        init_time=APPEND_DIM_START + 4 * APPEND_DIM_FREQ, lead_time=LEAD_TIMES[0]
+    )
+    with pytest.raises(icechunk.ConflictError):
+        stale.process_virtual(repo, [], "main", [late_coord])
+    _assert_window_values(dataset, 2, 4)
+
+
+def test_moving_window_validation_job_requires_aligned_store(tmp_path: Path) -> None:
+    dataset = _make_moving_window_dataset(tmp_path)
+    _run_moving_window_update(dataset, 0, 4)
+    store = _primary_repo(dataset.store_factory).readonly_session("main").store
+
+    assert (
+        _moving_window_job(_window_template(0, 6)).assert_aligned_to_template(store)
+        == 4
+    )
+    with pytest.raises(AssertionError, match="this fire's drop has not run"):
+        _moving_window_job(_window_template(1, 6)).assert_aligned_to_template(store)

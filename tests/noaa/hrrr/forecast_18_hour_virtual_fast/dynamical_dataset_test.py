@@ -1,39 +1,35 @@
-import re
-from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
-from unittest.mock import Mock
+from typing import Any, cast
 
-import icechunk
 import numpy as np
-import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
 
 from reformatters.common import template_utils, validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast import (
+    dynamical_dataset as dynamical_dataset_module,
+)
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.dynamical_dataset import (
-    CheckMirrorRefsRepointed,
+    CheckMirrorWindow,
     NoaaHrrrForecast18HourVirtualFastDataset,
+    _mirror_failure,
 )
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.region_job import (
-    PENDING_REPOINT_JOB_NAME,
     NoaaHrrrForecast18HourVirtualFastRegionJob,
 )
-from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.nomads_mirror import MIRROR_SECRET_NAME
-from tests.common.dynamical_dataset_test import assert_configured_validators
+from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.template_config import (
+    RETENTION,
+    NoaaHrrrForecast18HourVirtualFastTemplateConfig,
+)
+from reformatters.noaa.hrrr.nomads_mirror import (
+    MIRROR_LOCATION_PREFIX,
+    MIRROR_SECRET_NAME,
+)
 
-_Y, _X = 635, 1062
-_INIT = "2026-09-01T01:00"
-_FILTER_VARS = [
-    "temperature_2m",
-    "wind_u_10m",
-    "total_precipitation_surface",
-    "temperature",
-]
+TEMPLATE_CONFIG = NoaaHrrrForecast18HourVirtualFastTemplateConfig()
 
 
 def make_dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualFastDataset:
@@ -49,110 +45,16 @@ def dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualFastDataset:
     return make_dataset(tmp_path)
 
 
-@pytest.mark.slow
-def test_backfill_local_and_operational_update(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    dataset = make_dataset(tmp_path)
-    original_get_template = dataset.template_config.get_template
-    monkeypatch.setattr(
-        type(dataset.template_config),
-        "get_template",
-        lambda self, end_time: original_get_template(end_time).isel(lead_time=[0, 6]),
+def mirror_location(
+    init_time: pd.Timestamp,
+    *,
+    file_type: str = "sfc",
+    lead: int = 0,
+) -> str:
+    return (
+        f"{MIRROR_LOCATION_PREFIX}hrrr.{init_time:%Y%m%d}/conus/"
+        f"hrrr.t{init_time:%H}z.wrf{file_type}f{lead:02d}.grib2"
     )
-
-    dataset.backfill_local(
-        append_dim_end=pd.Timestamp("2026-09-01T02:00"),
-        filter_start=pd.Timestamp(_INIT),
-        filter_variable_names=_FILTER_VARS,
-    )
-
-    ds = validation.open_flattened_dataset(
-        dataset.store_factory.primary_store(), consolidated=False
-    )
-    cell = ds.isel(y=_Y, x=_X).sel(init_time=_INIT)
-    f6 = cell.sel(lead_time=pd.Timedelta("6h"))
-    np.testing.assert_allclose(f6["temperature_2m"].values, 28.350335693359398)
-    np.testing.assert_allclose(f6["wind_u_10m"].values, -0.7518806457519531)
-    np.testing.assert_allclose(f6["total_precipitation_surface"].values, 0.0)
-    np.testing.assert_allclose(
-        f6["pressure_level/temperature"].sel(pressure_level=500).values,
-        -4.524816894531227,
-    )
-    np.testing.assert_allclose(
-        f6["model_level/temperature"].sel(model_level=1).values,
-        28.178521728515648,
-    )
-
-    f0 = cell.sel(lead_time=pd.Timedelta("0h"))
-    assert np.isnan(f0["total_precipitation_surface"].values)
-    assert not np.isnan(f0["temperature_2m"].values)
-    assert not np.isnan(f0["pressure_level/temperature"].sel(pressure_level=500).values)
-
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2026-09-01T05:00")),
-    )
-    original_update_jobs = (
-        NoaaHrrrForecast18HourVirtualFastRegionJob.operational_update_jobs.__func__
-    )
-
-    def filtered_update_jobs(
-        cls: type[NoaaHrrrForecast18HourVirtualFastRegionJob],
-        *,
-        all_data_vars: Sequence[NoaaHrrrDataVar],
-        **kwargs: Any,  # noqa: ANN401 - passthrough to the wrapped classmethod
-    ) -> object:
-        jobs, template_ds = original_update_jobs(
-            cls,
-            all_data_vars=[v for v in all_data_vars if v.name in _FILTER_VARS],
-            **kwargs,
-        )
-        return jobs, template_ds
-
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualFastRegionJob,
-        "operational_update_jobs",
-        classmethod(filtered_update_jobs),
-    )
-
-    monkeypatch.setattr(
-        NoaaHrrrForecast18HourVirtualFastRegionJob,
-        "mirror_store",
-        lambda self: obstore.store.LocalStore(tmp_path / "empty-mirror", mkdir=True),
-    )
-    dataset.update("test-update")
-
-    updated = validation.open_flattened_dataset(
-        dataset.store_factory.primary_store(), consolidated=False
-    )
-    update_f6 = updated.isel(y=_Y, x=_X).sel(
-        init_time="2026-09-01T04:00", lead_time=pd.Timedelta("6h")
-    )
-    actual = [
-        update_f6["temperature_2m"].item(),
-        update_f6["wind_u_10m"].item(),
-        update_f6["total_precipitation_surface"].item(),
-        update_f6["pressure_level/temperature"].sel(pressure_level=500).item(),
-        update_f6["model_level/temperature"].sel(model_level=1).item(),
-    ]
-    np.testing.assert_allclose(
-        actual,
-        [
-            27.065789794921898,
-            0.4588966369628906,
-            0.0,
-            -4.87865295410154,
-            26.869805908203148,
-        ],
-    )
-
-    assert (
-        dataset.store_factory.list_coordination_files(PENDING_REPOINT_JOB_NAME, "")
-        == []
-    )
-    assert_configured_validators(dataset)
 
 
 def test_operational_kubernetes_resources(
@@ -162,158 +64,222 @@ def test_operational_kubernetes_resources(
         "test-image-tag"
     )
 
-    assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    assert update_cron_job.name == "noaa-hrrr-forecast-18-hour-virtual-fast-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "50 * * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "49 * * * *"
-    assert not validation_cron_job.suspend
-    assert update_cron_job.name == "noaa-hrrr-forecast-18-hour-virtual-fast-update"
-    assert (
-        validation_cron_job.name == "noaa-hrrr-forecast-18-hour-virtual-fast-validate"
+    assert validation_cron_job.name == (
+        "noaa-hrrr-forecast-18-hour-virtual-fast-validate"
     )
+    assert validation_cron_job.schedule == "49 * * * *"
+    assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
+    assert not validation_cron_job.suspend
     store_secrets = dataset.store_factory.k8s_secret_names()
     assert update_cron_job.secret_names == [*store_secrets, MIRROR_SECRET_NAME]
     assert validation_cron_job.secret_names == store_secrets
     assert MIRROR_SECRET_NAME not in validation_cron_job.secret_names
 
 
+def test_virtual_config_has_only_the_mirror_container_and_a_manifest_split(
+    dataset: NoaaHrrrForecast18HourVirtualFastDataset,
+) -> None:
+    config = dataset.icechunk_virtual_config
+
+    assert [container.url_prefix for container in config.containers] == [
+        MIRROR_LOCATION_PREFIX
+    ]
+    assert config.manifest_split is not None
+
+
 def test_validators(dataset: NoaaHrrrForecast18HourVirtualFastDataset) -> None:
     validators = tuple(dataset.validators())
-    assert len(validators) == 4
-    assert any(isinstance(v, CheckMirrorRefsRepointed) for v in validators)
-    (current_data,) = [
-        validator
-        for validator in validators
-        if isinstance(validator, validation.CheckCurrentData)
+
+    assert [type(validator) for validator in validators] == [
+        validation.CheckCurrentData,
+        validation.CheckVirtualManifestCompleteness,
+        validation.CheckVirtualDecodeHealth,
+        CheckMirrorWindow,
     ]
+    current_data = cast("validation.CheckCurrentData", validators[0])
+    completeness = cast("validation.CheckVirtualManifestCompleteness", validators[1])
     assert current_data.max_delay == timedelta(hours=1, minutes=49)
-    completeness = next(
-        validator
-        for validator in validators
-        if isinstance(validator, validation.CheckVirtualManifestCompleteness)
-    )
     assert completeness.min_present_fraction == (0.05, 1.0)
-    assert any(
-        isinstance(validator, validation.CheckVirtualDecodeHealth)
-        for validator in validators
-    )
 
 
-def _resolved_split_size(
-    split: icechunk.ManifestSplittingConfig, array_path: str
-) -> int:
-    for condition, dim_splits in split.split_sizes:
-        regex = getattr(condition, "regex", None)
-        if regex is None or re.search(regex, array_path):
-            [(_dim_condition, size)] = dim_splits
-            return size
-    raise AssertionError(f"no split rule matched {array_path}")
-
-
-def test_manifest_split_size_resolves_per_group(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset,
-) -> None:
-    split = dataset.icechunk_virtual_config.manifest_split
-    assert _resolved_split_size(split, "/pressure_level/temperature") == 225
-    assert _resolved_split_size(split, "/model_level/temperature") == 200
-    assert _resolved_split_size(split, "/temperature_2m") == 1500
-
-
-def test_virtual_containers_match_the_ref_prefixes_of_both_sources(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset,
-) -> None:
-    prefixes = [c.url_prefix for c in dataset.icechunk_virtual_config.containers]
-    assert prefixes == [
-        "s3://noaa-hrrr-bdp-pds/",
-        "https://noaa-hrrr-nomads-mirror.r2.dynamical.org/",
-    ]
-
-
-def test_validation_job_probes_the_manifest_without_the_mirror_override(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2026-09-02T01:00")),
-    )
-    template_ds = dataset.template_config.get_template(pd.Timestamp("2026-09-01T02:00"))
-    template_utils.write_metadata(
-        template_ds.isel(lead_time=[0]), dataset.store_factory
-    )
-    job = dataset._virtual_validation_region_job(dataset.validators(), "test")
-    assert isinstance(job, NoaaHrrrForecast18HourVirtualFastRegionJob)
-    assert not job.repoint_mirrored
-    assert job.pending_repoints() == []
-
-
-def _check_with_records(
+def test_virtual_validation_region_is_the_last_poll_window(
     dataset: NoaaHrrrForecast18HourVirtualFastDataset,
     monkeypatch: pytest.MonkeyPatch,
-    keys: Sequence[str],
-    now: pd.Timestamp,
-) -> validation.ValidationResult:
-    for key in keys:
-        dataset.store_factory.write_coordination_file(
-            PENDING_REPOINT_JOB_NAME, key.replace("/", "__"), b""
+) -> None:
+    now = pd.Timestamp("2026-09-10T12:00")
+
+    def fixed_now(cls: type[pd.Timestamp], tz: str | None = None) -> pd.Timestamp:
+        return now.tz_localize(tz) if tz else now
+
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(fixed_now))
+    fire_time = dataset.operational_kubernetes_resources("test-image")[
+        0
+    ].previous_fire_time(now)
+    template = dataset.template_config.get_template(fire_time).isel(lead_time=[0])
+    template_utils.write_metadata(template, dataset.store_factory)
+
+    job = dataset._virtual_validation_region_job(dataset.validators(), "test")
+
+    assert isinstance(job, NoaaHrrrForecast18HourVirtualFastRegionJob)
+    assert job.region.stop - job.region.start == 6
+    init_times = job.template_ds.to_dataset().get_index("init_time")
+    assert init_times[job.region].equals(init_times[-6:])
+
+
+class FakeSession:
+    def __init__(self, locations: list[str]) -> None:
+        self._locations = locations
+
+    def all_virtual_chunk_locations(self) -> list[str]:
+        return self._locations
+
+
+class FakeIcechunkStore:
+    def __init__(self, locations: list[str]) -> None:
+        self.session = FakeSession(locations)
+
+
+def mirror_validation_context(locations: list[str]) -> validation.ValidationContext:
+    init_times = pd.date_range("2026-09-10T10:00", periods=3, freq="1h")
+    lead_times = pd.timedelta_range("0h", periods=5, freq="1h")
+    paths = (
+        "composite_reflectivity",
+        "pressure_level/temperature",
+        "model_level/temperature",
+    )
+    shape = (len(init_times), len(lead_times), 1, 1)
+    ds = xr.Dataset(
+        {
+            path: (("init_time", "lead_time", "y", "x"), np.ones(shape))
+            for path in paths
+        },
+        coords={
+            "init_time": init_times,
+            "lead_time": lead_times,
+            "y": [0],
+            "x": [0],
+        },
+    )
+    configured = {var.path: var for var in TEMPLATE_CONFIG.data_vars}
+    return validation.ValidationContext(
+        store=cast(Any, FakeIcechunkStore(locations)),
+        ds=ds,
+        append_dim="init_time",
+        data_vars=tuple(configured[path] for path in paths),
+    )
+
+
+def test_mirror_window_checks_each_file_types_smallest_lead_at_oldest_ref_init(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oldest_ref_init = pd.Timestamp("2026-09-10T11:00")
+    locations = [
+        mirror_location(pd.Timestamp("2026-09-10T12:00"), lead=0),
+        mirror_location(oldest_ref_init, file_type="sfc", lead=3),
+        mirror_location(oldest_ref_init, file_type="sfc", lead=1),
+        mirror_location(oldest_ref_init, file_type="prs", lead=4),
+        mirror_location(oldest_ref_init, file_type="prs", lead=2),
+        mirror_location(oldest_ref_init, file_type="nat", lead=3),
+    ]
+    context = mirror_validation_context(locations)
+    loaded: list[tuple[str | None, pd.Timestamp, pd.Timedelta]] = []
+
+    def load(chunk: xr.DataArray, **kwargs: object) -> xr.DataArray:
+        loaded.append(
+            (
+                str(chunk.name) if chunk.name is not None else None,
+                pd.Timestamp(chunk["init_time"].item()),
+                pd.Timedelta(chunk["lead_time"].item()),
+            )
         )
+        return chunk
+
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda cls, tz=None: now.tz_localize(tz) if tz else now),
+        classmethod(lambda cls, *args: pd.Timestamp("2026-09-10T12:00")),
     )
-    template_ds = dataset.template_config.get_template(now)
-    template_utils.write_metadata(
-        template_ds.isel(lead_time=[0]), dataset.store_factory
-    )
-    job = dataset._virtual_validation_region_job(dataset.validators(), "test")
-    assert job is not None
-    context = validation.ValidationContext(
-        store=Mock(), ds=xr.Dataset(), append_dim="init_time", region_job=job
-    )
-    return CheckMirrorRefsRepointed().check(context)
+    monkeypatch.setattr(dynamical_dataset_module, "IcechunkStore", FakeIcechunkStore)
+    monkeypatch.setattr(xr.DataArray, "load", load)
 
+    result = CheckMirrorWindow().check(context)
 
-_KEY_19Z = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
-_KEY_20Z = "hrrr.20260907/conus/hrrr.t20z.wrfprsf01.grib2"
-
-
-def test_mirror_refs_check_passes_with_no_pending_records(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    result = _check_with_records(
-        dataset, monkeypatch, [], pd.Timestamp("2026-09-08T00:00")
-    )
     assert result.passed
-    assert result.checked_count == 0
+    assert result.checked_count == len(locations)
+    assert set(loaded) == {
+        ("composite_reflectivity", oldest_ref_init, pd.Timedelta("1h")),
+        ("pressure_level/temperature", oldest_ref_init, pd.Timedelta("2h")),
+        ("model_level/temperature", oldest_ref_init, pd.Timedelta("3h")),
+    }
 
 
-def test_mirror_refs_check_passes_with_a_young_pending_record(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    result = _check_with_records(
-        dataset, monkeypatch, [_KEY_19Z], pd.Timestamp("2026-09-08T06:00")
+def test_window_failure_rejects_empty_store() -> None:
+    assert CheckMirrorWindow()._window_failure(pd.DatetimeIndex([])) == (
+        "Dataset has no init_time positions"
     )
-    assert result.passed
-    assert result.checked_count == 1
-
-
-def test_mirror_refs_check_fails_with_a_record_older_than_36_hours(
-    dataset: NoaaHrrrForecast18HourVirtualFastDataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # 19Z is 36 h 30 m old, 20Z is 35 h 30 m old.
-    result = _check_with_records(
-        dataset,
-        monkeypatch,
-        [_KEY_19Z, _KEY_20Z],
-        pd.Timestamp("2026-09-09T07:30"),
+    assert _mirror_failure(mirror_validation_context([]), []) == (
+        "The store references no files"
     )
-    assert not result.passed
-    assert result.checked_count == 2
-    assert _KEY_19Z in result.message
-    assert _KEY_20Z not in result.message
+
+
+def test_window_failure_rejects_old_first_init(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = pd.Timestamp("2026-09-10T12:00")
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *args: now))
+    init_times = pd.date_range(
+        now - RETENTION - timedelta(hours=4), periods=72, freq="1h"
+    )
+
+    failure = CheckMirrorWindow()._window_failure(init_times)
+
+    assert failure is not None
+    assert "before" in failure
+
+
+def test_window_failure_rejects_too_many_positions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = pd.Timestamp("2026-09-10T12:00")
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *args: now))
+    init_times = pd.date_range(end=now, periods=74, freq="1h")
+
+    failure = CheckMirrorWindow()._window_failure(init_times)
+
+    assert failure is not None
+    assert "74 init_time positions exceed" in failure
+
+
+def test_mirror_failure_rejects_location_outside_mirror() -> None:
+    foreign = "s3://noaa-hrrr-bdp-pds/hrrr.20260910/conus/file.grib2"
+
+    locations = [mirror_location(pd.Timestamp("2026-09-10")), foreign]
+    failure = _mirror_failure(mirror_validation_context(locations), locations)
+
+    assert failure is not None
+    assert foreign in failure
+
+
+def test_mirror_failure_reports_read_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    location = mirror_location(pd.Timestamp("2026-09-10T11:00"), lead=2)
+    context = mirror_validation_context([location])
+
+    def fail_load(chunk: xr.DataArray, **kwargs: object) -> xr.DataArray:
+        raise RuntimeError("expired mirror object")
+
+    monkeypatch.setattr(xr.DataArray, "load", fail_load)
+    failure = _mirror_failure(context, [location])
+
+    assert failure is not None
+    assert "composite_reflectivity" in failure
+    assert "lead 0 days 02:00:00" in failure
+    assert "expired mirror object" in failure
