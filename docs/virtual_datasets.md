@@ -160,8 +160,8 @@ R2's S3 API has no anonymous access, so the mirror cron and the update pod both 
 
 1. Create the bucket `noaa-hrrr-nomads-mirror` and an API token scoped to it with object read and write; put the token in the secret above.
 2. Add an object lifecycle rule that deletes objects 3 days after upload, plus the rule that aborts incomplete multipart uploads after a day. Deletion runs on R2's schedule, up to a day after the expiry, so the three days are a floor, not a budget.
-3. Connect the custom domain `noaa-hrrr-nomads-mirror.r2.dynamical.org` and enable public access through it. Bypass the cache for this host, including negative responses: a data file may be replaced before its index appears, and a cached 404 or a cached prefix of the old object would be served to readers.
-4. Verify from outside the account: an anonymous ranged GET of a mirrored GRIB through the domain returns bytes, and a reader that authorizes the container with `HttpAccess` decodes a mirror-pointed chunk.
+3. Connect the custom domain `noaa-hrrr-nomads-mirror.r2.dynamical.org` and enable public access through it. Leave the zone's default caching in place. The mirror can overwrite a GRIB it copied while NOMADS was still writing it, and an edge copy of the shorter object would then be served for byte ranges the refs expect in the complete file. If that is observed, bypass the cache for this host, including negative responses.
+4. Verify from outside the account: an anonymous ranged GET of a mirrored GRIB through the domain returns bytes, and a reader that authorizes the container with `HttpAccess` decodes a mirror-pointed chunk. Record `cf-cache-status` on ranged GETs of a `.grib2` and an `.idx`.
 
 ## Storage and reading
 
