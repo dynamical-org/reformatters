@@ -16,6 +16,7 @@ from reformatters.noaa.hrrr.analysis.region_job import (
 from reformatters.noaa.hrrr.analysis.template_config import (
     NoaaHrrrAnalysisTemplateConfig,
 )
+from reformatters.noaa.hrrr.template_config import HRRR_V3_START
 
 
 @pytest.fixture
@@ -236,9 +237,10 @@ def test_region_job_generate_source_file_coords_hour_1(
 def test_region_job_generate_source_file_coords_unusable_hour_0(
     template_config: NoaaHrrrAnalysisTemplateConfig,
 ) -> None:
-    """An instant variable whose hour 0 is unusable reads hour 1 of the previous init."""
-    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T04:00"))
-    test_ds = template_ds.isel(time=slice(0, 4))
+    """From the time its hour 0 becomes unusable, an instant variable reads hour 1 of the previous init."""
+    template_ds = template_config.get_template(HRRR_V3_START + pd.Timedelta("2h"))
+    test_ds = template_ds.sel(time=slice(HRRR_V3_START - pd.Timedelta("2h"), None))
+    assert len(test_ds.time) == 4
     dew_point = [
         v for v in template_config.data_vars if v.name == "dew_point_temperature_2m"
     ]
@@ -249,7 +251,7 @@ def test_region_job_generate_source_file_coords_unusable_hour_0(
         template_ds=test_ds,
         data_vars=dew_point,
         append_dim=template_config.append_dim,
-        region=slice(2, 4),
+        region=slice(0, 4),
         reformat_job_name="test",
     )
     processing_region_ds, _ = region_job._get_region_datasets()
@@ -258,12 +260,14 @@ def test_region_job_generate_source_file_coords_unusable_hour_0(
         processing_region_ds, dew_point
     )
 
-    assert [c.init_time for c in source_coords] == list(
-        pd.date_range("2014-10-01T00:00", "2014-10-01T02:00", freq="1h")
-    )
-    assert {c.lead_time for c in source_coords} == {pd.Timedelta("1h")}
+    assert [(c.init_time, c.lead_time) for c in source_coords] == [
+        (pd.Timestamp("2018-07-12T10:00"), pd.Timedelta("0h")),
+        (pd.Timestamp("2018-07-12T11:00"), pd.Timedelta("0h")),
+        (pd.Timestamp("2018-07-12T11:00"), pd.Timedelta("1h")),
+        (pd.Timestamp("2018-07-12T12:00"), pd.Timedelta("1h")),
+    ]
     assert [c.out_loc()["time"] for c in source_coords] == list(
-        pd.date_range("2014-10-01T01:00", "2014-10-01T03:00", freq="1h")
+        pd.date_range("2018-07-12T10:00", "2018-07-12T13:00", freq="1h")
     )
 
 
@@ -272,11 +276,12 @@ def test_source_file_var_groups_split_on_analysis_lead_time(
 ) -> None:
     groups = NoaaHrrrAnalysisRegionJob.source_file_var_groups(template_config.data_vars)
     group_of = {v.name: i for i, group in enumerate(groups) for v in group}
-    for name in ("dew_point_temperature_2m", "relative_humidity_2m"):
-        assert group_of[name] != group_of["temperature_2m"]
-        assert group_of[name] == group_of["precipitation_surface"]
+    assert group_of["dew_point_temperature_2m"] == group_of["relative_humidity_2m"]
+    assert group_of["dew_point_temperature_2m"] != group_of["temperature_2m"]
+    assert group_of["dew_point_temperature_2m"] != group_of["precipitation_surface"]
     for group in groups:
-        assert len({v.analysis_lead_time() for v in group}) == 1
+        for time in (HRRR_V3_START - pd.Timedelta("1h"), HRRR_V3_START):
+            assert len({v.analysis_lead_time(time) for v in group}) == 1
 
 
 def test_operational_update_jobs(
@@ -391,7 +396,7 @@ def test_download_and_read_all_variables(
     )
 
     for source_group in NoaaHrrrAnalysisRegionJob.source_file_var_groups(all_vars):
-        lead_time = source_group[0].analysis_lead_time()
+        lead_time = source_group[0].analysis_lead_time(init_time)
 
         coord = NoaaHrrrAnalysisSourceFileCoord(
             init_time=init_time - lead_time,

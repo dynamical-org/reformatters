@@ -44,10 +44,8 @@ class NoaaHrrrAnalysisVirtualRegionJob(
         """
         times = pd.to_datetime(processing_region_ds["time"].values)
         coords = []
-        for vars_in_file in analysis_source_file_var_groups(data_var_group):
-            file_type = item({v.internal_attrs.hrrr_file_type for v in vars_in_file})
-            lead_time = item({v.analysis_lead_time() for v in vars_in_file})
-            for time in times:
+        for time in times:
+            for vars_in_file in analysis_source_file_var_groups(data_var_group, time):
                 usable_vars = [
                     var
                     for var in vars_in_file
@@ -56,12 +54,15 @@ class NoaaHrrrAnalysisVirtualRegionJob(
                 ]
                 if not usable_vars:
                     continue
+                lead_time = item({v.analysis_lead_time(time) for v in vars_in_file})
                 coords.append(
                     NoaaHrrrAnalysisVirtualSourceFileCoord(
                         init_time=time - lead_time,
                         lead_time=lead_time,
                         domain="conus",
-                        file_type=file_type,
+                        file_type=item(
+                            {v.internal_attrs.hrrr_file_type for v in vars_in_file}
+                        ),
                         data_vars=usable_vars,
                     )
                 )

@@ -76,9 +76,9 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     point_ds = backfill_ds.isel(x=1, y=-2)
 
     assert np.all(np.isfinite(point_ds["temperature_2m"].values))
-    # Dew point comes from f01 of the prior hour's cycle; f00 of the same hour's cycle
-    # holds 20.0 and 20.125 at this point.
-    assert_array_equal(point_ds["dew_point_temperature_2m"].values, [20.25, 20.0])
+    # Before HRRRv3 dew point comes from f00 of the same hour's cycle; f01 of the prior
+    # hour's cycle holds 20.25 and 20.0 at this point.
+    assert_array_equal(point_ds["dew_point_temperature_2m"].values, [20.0, 20.125])
     assert np.isnan(point_ds["precipitation_surface"].values[0])
     assert np.isfinite(point_ds["precipitation_surface"].values[1])
 

@@ -34,7 +34,10 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrFileType,
     NoaaHrrrInternalAttrs,
 )
-from reformatters.noaa.hrrr.template_config import NoaaHrrrCommonTemplateConfig
+from reformatters.noaa.hrrr.template_config import (
+    HRRR_V3_START,
+    NoaaHrrrCommonTemplateConfig,
+)
 
 # HRRR CONUS Lambert Conformal grid, from NoaaHrrrCommonTemplateConfig._spatial_info.
 # Asserted against _spatial_info in data_vars so the two cannot drift.
@@ -405,7 +408,7 @@ def _data_var(
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
     analysis_usable_from: Timestamp | None = None,
-    analysis_hour_0_unusable: bool = False,
+    analysis_hour_0_unusable_from: Timestamp | None = None,
 ) -> NoaaHrrrDataVar:
     step_type, window_reset_frequency = _WINDOW_ATTRS[window]
     # Default to the K->C filter for temperature/dew point; a var may override with an
@@ -444,7 +447,7 @@ def _data_var(
             window_reset_frequency=window_reset_frequency,
             hour_0_values_override=hour_0,
             analysis_usable_from=analysis_usable_from,
-            analysis_hour_0_unusable=analysis_hour_0_unusable,
+            analysis_hour_0_unusable_from=analysis_hour_0_unusable_from,
             # Virtual chunks are never rewritten, so no rounding and no rasterio band
             # description / index position (unused fields the base model requires).
             keep_mantissa_bits="no-rounding",
@@ -473,7 +476,7 @@ def _root_var(
     flag_values: tuple[int, ...] | None = None,
     flag_meanings: str | None = None,
     analysis_usable_from: Timestamp | None = None,
-    analysis_hour_0_unusable: bool = False,
+    analysis_hour_0_unusable_from: Timestamp | None = None,
 ) -> NoaaHrrrDataVar:
     return _data_var(
         name,
@@ -495,7 +498,7 @@ def _root_var(
         flag_values=flag_values,
         flag_meanings=flag_meanings,
         analysis_usable_from=analysis_usable_from,
-        analysis_hour_0_unusable=analysis_hour_0_unusable,
+        analysis_hour_0_unusable_from=analysis_hour_0_unusable_from,
     )
 
 
@@ -995,7 +998,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Specific humidity",
             units="1",
             standard_name="specific_humidity",
-            analysis_hour_0_unusable=True,
+            analysis_hour_0_unusable_from=HRRR_V3_START,
         ),
         root_var(
             "dew_point_temperature_2m",
@@ -1005,7 +1008,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="2 metre dewpoint temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
-            analysis_hour_0_unusable=True,
+            analysis_hour_0_unusable_from=HRRR_V3_START,
         ),
         root_var(
             "relative_humidity_2m",
@@ -1015,7 +1018,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="2 metre relative humidity",
             units="percent",
             standard_name="relative_humidity",
-            analysis_hour_0_unusable=True,
+            analysis_hour_0_unusable_from=HRRR_V3_START,
         ),
         root_var(
             "mass_density_8m",

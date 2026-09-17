@@ -27,6 +27,10 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrInternalAttrs,
 )
 
+# HRRRv3's first cycle. From v3 on, hour 0 carries scattered pixels of collapsed near-surface
+# moisture (dew point down to -81 C, relative humidity 1 %, specific humidity 0).
+HRRR_V3_START = pd.Timestamp("2018-07-12T12:00")
+
 
 class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
     # Snowfall accumulates from forecast start and never resets within a forecast. A forecast
@@ -520,7 +524,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=75,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
-                    analysis_hour_0_unusable=True,
+                    analysis_hour_0_unusable_from=HRRR_V3_START,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -602,7 +606,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=74,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
-                    analysis_hour_0_unusable=True,
+                    analysis_hour_0_unusable_from=HRRR_V3_START,
                 ),
             ),
             NoaaHrrrDataVar(

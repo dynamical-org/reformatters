@@ -162,9 +162,8 @@ def test_cloud_ice_index_spellings_emit_refs(
     ]
 
 
-def test_generate_source_file_coords_shortest_available_lead(
-    template_ds: xr.DataTree,
-) -> None:
+def test_generate_source_file_coords_shortest_usable_lead() -> None:
+    template_ds = TEMPLATE_CONFIG.get_template(pd.Timestamp("2024-06-01T02:00"))
     data_vars = [
         get_var("temperature_2m"),  # sfc, has hour-0 values
         get_var("total_precipitation_surface"),  # sfc, accum (no hour 0)
@@ -173,14 +172,15 @@ def test_generate_source_file_coords_shortest_available_lead(
         get_var("specific_humidity_2m"),  # sfc, hour 0 present but unusable
         get_var("pressure_level/temperature"),  # prs, has hour-0 values
     ]
-    job = make_job(template_ds, data_vars=data_vars, region=slice(0, 2))
-    region_ds = template_ds.to_dataset().isel(time=slice(0, 2))
+    region = slice(len(template_ds.time) - 2, len(template_ds.time))
+    job = make_job(template_ds, data_vars=data_vars, region=region)
+    region_ds = template_ds.to_dataset().isel(time=region)
 
     coords = job.generate_source_file_coords(region_ds, data_vars)
 
     by_key = {(c.file_type, c.lead_time, c.out_loc()["time"]): c for c in coords}
     assert len(coords) == 6  # (sfc f00, sfc f01, prs f00) x 2 times
-    time = pd.Timestamp("2014-10-01T00:00")
+    time = pd.Timestamp("2024-06-01T00:00")
 
     hour_0_coord = by_key[("sfc", pd.Timedelta("0h"), time)]
     assert hour_0_coord.init_time == time
@@ -224,7 +224,10 @@ def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> N
         v.path for v in data_vars if v.path not in gated
     )
     for coord in coords:
-        assert all(v.analysis_lead_time() == coord.lead_time for v in coord.data_vars)
+        assert all(
+            v.analysis_lead_time(coord.valid_time()) == coord.lead_time
+            for v in coord.data_vars
+        )
 
 
 def test_representative_var_is_available_in_every_era(
