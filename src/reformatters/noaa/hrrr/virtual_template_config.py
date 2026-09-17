@@ -2179,7 +2179,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             standard_name="specific_turbulent_kinetic_energy_of_air",
             # Identically zero until HRRRv2, then a boundary-layer scheme that blows up
             # aloft (domain maxima near 3000 J kg-1 at ~10 km) until HRRRv3.
-            analysis_usable_from=pd.Timestamp("2018-07-12T12:00"),
+            analysis_usable_from=HRRR_V3_START,
         ),
         model_var(
             "cloud_mixing_ratio",
