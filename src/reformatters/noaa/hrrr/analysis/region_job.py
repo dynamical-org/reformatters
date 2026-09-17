@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.iterating import group_by, item
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -14,6 +14,7 @@ from reformatters.common.types import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
+    analysis_source_file_var_groups,
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrRegionJob, NoaaHrrrSourceFileCoord
 
@@ -33,14 +34,7 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         cls,
         data_vars: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[Sequence[NoaaHrrrDataVar]]:
-        return group_by(
-            data_vars,
-            lambda v: (
-                v.internal_attrs.hrrr_file_type,
-                v.has_hour_0_values(),
-                v.internal_attrs.analysis_hour_0_unusable_from,
-            ),
-        )
+        return analysis_source_file_var_groups(data_vars)
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
@@ -52,21 +46,19 @@ class NoaaHrrrAnalysisRegionJob(NoaaHrrrRegionJob):
         data_var_group: Sequence[NoaaHrrrDataVar],
     ) -> Sequence[NoaaHrrrAnalysisSourceFileCoord]:
         times = pd.to_datetime(processing_region_ds["time"].values)
+        lead_time = item({var.analysis_lead_time() for var in data_var_group})
         file_type = item({var.internal_attrs.hrrr_file_type for var in data_var_group})
 
-        coords = []
-        for time in times:
-            lead_time = item({var.analysis_lead_time(time) for var in data_var_group})
-            coords.append(
-                NoaaHrrrAnalysisSourceFileCoord(
-                    init_time=time - lead_time,
-                    lead_time=lead_time,
-                    domain="conus",
-                    file_type=file_type,
-                    data_vars=data_var_group,
-                )
+        return [
+            NoaaHrrrAnalysisSourceFileCoord(
+                init_time=time - lead_time,
+                lead_time=lead_time,
+                domain="conus",
+                file_type=file_type,
+                data_vars=data_var_group,
             )
-        return coords
+            for time in times
+        ]
 
     def update_template_with_results(
         self, process_results: Mapping[str, Sequence[SourceFileResult]]
