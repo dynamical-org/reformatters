@@ -1071,6 +1071,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1126,6 +1127,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1181,6 +1183,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1236,6 +1239,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
+          "comment": "Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3796,6 +3800,7 @@
           "long_name": "Maximum downward vertical velocity",
           "short_name": "maxdvv",
           "units": "m s-1",
+          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4285,6 +4290,7 @@
           "short_name": "maxuvv",
           "standard_name": "upward_air_velocity",
           "units": "m s-1",
+          "comment": "The 100-1000 mb in the name are pressure differences from the surface, not isobaric levels.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10221,7 +10227,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
-          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
+          "comment": "Bunkers right-moving supercell motion along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10496,7 +10502,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
-          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
+          "comment": "Bunkers right-moving supercell motion along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

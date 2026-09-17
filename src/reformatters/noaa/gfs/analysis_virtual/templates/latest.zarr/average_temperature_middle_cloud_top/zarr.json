@@ -41,7 +41,6 @@
   "attributes": {
     "long_name": "Temperature",
     "short_name": "t",
-    "standard_name": "air_temperature_at_cloud_top",
     "units": "degree_Celsius",
     "comment": "Averaged over the preceding 1-6 hours, since the 00, 06, 12 or 18 UTC hour before this time. NaN where the source reports no middle cloud in the column, and at some cloud-field edges where average_medium_cloud_cover is near zero.",
     "step_type": "avg",

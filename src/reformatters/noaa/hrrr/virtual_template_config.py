@@ -67,6 +67,10 @@ _PERCENT_TO_FRACTION = ScaleOffset(offset=0.0, scale=100.0).to_dict()
 # are unaffected throughout, which is why this gates an analysis alone.
 _MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM = pd.Timestamp("2020-12-02T13:00")
 
+_CONVECTIVE_INHIBITION = (
+    "Negative where there is inhibition and at or near zero where there is none."
+)
+
 type WindowKind = Literal["instant", "max", "min", "avg", "acc_run", "acc_1h"]
 
 # Each windowed kind's (step_type, window_reset_frequency). acc_run is the
@@ -664,6 +668,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             units="m s-1",
             standard_name="upward_air_velocity",
             analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
+            comment=(
+                "The 100-1000 mb in the name are pressure differences from the surface, "
+                "not isobaric levels."
+            ),
         ),
         root_var(
             "maximum_downward_vertical_velocity_100_1000mb",
@@ -674,6 +682,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Maximum downward vertical velocity",
             units="m s-1",
             analysis_usable_from=_MAX_VERTICAL_VELOCITY_ANALYSIS_USABLE_FROM,
+            comment=(
+                "The 100-1000 mb in the name are pressure differences from the surface, "
+                "not isobaric levels."
+            ),
         ),
         root_var(
             "vertical_velocity_geometric_0p5_0p8_sigma",
@@ -1370,6 +1382,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "precipitable_water_atmosphere",
@@ -1620,7 +1633,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="ustm",
             long_name="U-component storm motion",
             units="m s-1",
-            comment="Velocity along the model grid's x dimension, not eastward velocity.",
+            comment=(
+                "Bunkers right-moving supercell motion along the model grid's x "
+                "dimension, not eastward velocity."
+            ),
         ),
         root_var(
             "v_component_storm_motion_0_6000m",
@@ -1629,7 +1645,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             short_name="vstm",
             long_name="V-component storm motion",
             units="m s-1",
-            comment="Velocity along the model grid's y dimension, not northward velocity.",
+            comment=(
+                "Bunkers right-moving supercell motion along the model grid's y "
+                "dimension, not northward velocity."
+            ),
         ),
         root_var(
             "vertical_u_component_shear_0_1000m",
@@ -1787,6 +1806,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "planetary_boundary_layer_height_surface",
@@ -1823,6 +1843,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "convective_available_potential_energy_255_0mb",
@@ -1845,6 +1866,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             long_name="Convective inhibition",
             units="J kg-1",
             standard_name="atmosphere_convective_inhibition",
+            comment=_CONVECTIVE_INHIBITION,
         ),
         root_var(
             "geopotential_height_equilibrium_level",

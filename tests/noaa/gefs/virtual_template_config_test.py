@@ -303,9 +303,11 @@ def test_every_lead_time_carries_the_window_its_comment_promises(
 def test_flag_variables_carry_only_their_codes(
     config: NoaaGefsForecastABVirtualTemplateConfig,
 ) -> None:
-    """flag_values and flag_meanings are the whole meaning of a categorical variable, so
-    it carries no comment: a window sentence would contradict them by describing a
-    fraction, and restating the codes in prose would let the two representations drift.
+    """A categorical variable never carries a window sentence, which would contradict
+    its codes by describing a fraction, and never restates those codes in prose, which
+    would let the two representations drift. Where the source restricts the levels a
+    flag variable is published on, it shares that sentence with its non-flag sibling
+    verbatim rather than wording it separately.
     """
     for path in (
         "categorical_snow_surface",
@@ -322,15 +324,20 @@ def test_flag_variables_carry_only_their_codes(
     severity = get_var(config, "pressure_level/icing_severity")
     assert severity.attrs.flag_values == (0, 1, 2, 3, 4, 5)
     assert severity.attrs.flag_meanings == "none light moderate severe trace heavy"
-    assert severity.attrs.comment is None
+    probability = get_var(config, "pressure_level/icing_probability")
+    assert severity.attrs.comment is not None
+    assert severity.attrs.comment == probability.attrs.comment
+    assert "hour period" not in severity.attrs.comment
 
 
 @AB_CONFIG_PARAMS
 def test_instant_variables_the_source_omits_at_lead_zero(
     config: NoaaGefsForecastABVirtualTemplateConfig,
 ) -> None:
-    """Three convective cloud fields are instantaneous yet absent from the lead 0 file,
-    so the default step_type rule would request a message that is not there."""
+    """Instant-labelled variables whose lead 0 message must not be requested: three
+    convective cloud fields the lead 0 file omits, and sunshine duration, published at
+    lead 0 as an analysis message whose value is a partial accumulation window rather
+    than the zero-length one that step type implies."""
     omitted = {
         v.name for v in config.data_vars
         if v.attrs.step_type == "instant" and not v.has_hour_0_values()
@@ -339,6 +346,7 @@ def test_instant_variables_the_source_omits_at_lead_zero(
         "pressure_convective_cloud_bottom",
         "pressure_convective_cloud_top",
         "convective_cloud_cover",
+        "sunshine_duration_surface",
     }
 
 

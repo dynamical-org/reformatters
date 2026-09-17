@@ -39,6 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
+    "comment": "The source searches only 500 to 100 hPa for this level, so stronger wind can lie outside that layer.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
