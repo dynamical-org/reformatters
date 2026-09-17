@@ -411,7 +411,11 @@ def _root_data_vars() -> list[EcmwfAifsSingleVirtualDataVar]:
             long_name="Snow cover",
             units="1",
             standard_name="surface_snow_area_fraction",
-            comment="Fraction (0-1) of the grid box covered by snow. Applies over land only; NaN over water.",
+            comment=(
+                "Fraction (0-1) of the grid box covered by snow. Applies over land only; "
+                "NaN over water, except at forecast hour 0, which has values over water: "
+                "0 over open ocean and up to 1 in polar seas."
+            ),
             date_available=AIFS_2026_UPGRADE_DATE,
         ),
         # tp/cp exist before AIFS_SINGLE_FORMAT_CHANGE_DATE too, but in metres;
