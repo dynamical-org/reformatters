@@ -520,6 +520,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=75,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
+                    analysis_hour_0_unusable=True,
                 ),
             ),
             NoaaHrrrDataVar(
@@ -601,6 +602,7 @@ class NoaaHrrrCommonTemplateConfig(TemplateConfig[NoaaHrrrDataVar]):
                     index_position=74,
                     keep_mantissa_bits=default_keep_mantissa_bits,
                     hrrr_file_type="sfc",
+                    analysis_hour_0_unusable=True,
                 ),
             ),
             NoaaHrrrDataVar(

@@ -233,6 +233,52 @@ def test_region_job_generate_source_file_coords_hour_1(
         assert coord.out_loc()["time"] == expected_time
 
 
+def test_region_job_generate_source_file_coords_unusable_hour_0(
+    template_config: NoaaHrrrAnalysisTemplateConfig,
+) -> None:
+    """An instant variable whose hour 0 is unusable reads hour 1 of the previous init."""
+    template_ds = template_config.get_template(pd.Timestamp("2014-10-01T04:00"))
+    test_ds = template_ds.isel(time=slice(0, 4))
+    dew_point = [
+        v for v in template_config.data_vars if v.name == "dew_point_temperature_2m"
+    ]
+    assert dew_point[0].has_hour_0_values()
+
+    region_job = NoaaHrrrAnalysisRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=test_ds,
+        data_vars=dew_point,
+        append_dim=template_config.append_dim,
+        region=slice(2, 4),
+        reformat_job_name="test",
+    )
+    processing_region_ds, _ = region_job._get_region_datasets()
+
+    source_coords = region_job.generate_source_file_coords(
+        processing_region_ds, dew_point
+    )
+
+    assert [c.init_time for c in source_coords] == list(
+        pd.date_range("2014-10-01T00:00", "2014-10-01T02:00", freq="1h")
+    )
+    assert {c.lead_time for c in source_coords} == {pd.Timedelta("1h")}
+    assert [c.out_loc()["time"] for c in source_coords] == list(
+        pd.date_range("2014-10-01T01:00", "2014-10-01T03:00", freq="1h")
+    )
+
+
+def test_source_file_var_groups_split_on_analysis_lead_time(
+    template_config: NoaaHrrrAnalysisTemplateConfig,
+) -> None:
+    groups = NoaaHrrrAnalysisRegionJob.source_file_var_groups(template_config.data_vars)
+    group_of = {v.name: i for i, group in enumerate(groups) for v in group}
+    for name in ("dew_point_temperature_2m", "relative_humidity_2m"):
+        assert group_of[name] != group_of["temperature_2m"]
+        assert group_of[name] == group_of["precipitation_surface"]
+    for group in groups:
+        assert len({v.analysis_lead_time() for v in group}) == 1
+
+
 def test_operational_update_jobs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -345,12 +391,10 @@ def test_download_and_read_all_variables(
     )
 
     for source_group in NoaaHrrrAnalysisRegionJob.source_file_var_groups(all_vars):
-        is_hour_0 = source_group[0].has_hour_0_values()
-        lead_time = pd.Timedelta("0h") if is_hour_0 else pd.Timedelta("1h")
-        coord_init_time = init_time if is_hour_0 else init_time - pd.Timedelta("1h")
+        lead_time = source_group[0].analysis_lead_time()
 
         coord = NoaaHrrrAnalysisSourceFileCoord(
-            init_time=coord_init_time,
+            init_time=init_time - lead_time,
             lead_time=lead_time,
             domain="conus",
             file_type=source_group[0].internal_attrs.hrrr_file_type,

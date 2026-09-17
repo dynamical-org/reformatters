@@ -168,6 +168,9 @@ def test_generate_source_file_coords_shortest_available_lead(
     data_vars = [
         get_var("temperature_2m"),  # sfc, has hour-0 values
         get_var("total_precipitation_surface"),  # sfc, accum (no hour 0)
+        get_var("dew_point_temperature_2m"),  # sfc, hour 0 present but unusable
+        get_var("relative_humidity_2m"),  # sfc, hour 0 present but unusable
+        get_var("specific_humidity_2m"),  # sfc, hour 0 present but unusable
         get_var("pressure_level/temperature"),  # prs, has hour-0 values
     ]
     job = make_job(template_ds, data_vars=data_vars, region=slice(0, 2))
@@ -185,7 +188,12 @@ def test_generate_source_file_coords_shortest_available_lead(
 
     hour_1_coord = by_key[("sfc", pd.Timedelta("1h"), time)]
     assert hour_1_coord.init_time == time - pd.Timedelta("1h")
-    assert {v.name for v in hour_1_coord.data_vars} == {"total_precipitation_surface"}
+    assert {v.name for v in hour_1_coord.data_vars} == {
+        "total_precipitation_surface",
+        "dew_point_temperature_2m",
+        "relative_humidity_2m",
+        "specific_humidity_2m",
+    }
 
     prs_coord = by_key[("prs", pd.Timedelta("0h"), time)]
     assert prs_coord.init_time == time
@@ -216,8 +224,7 @@ def test_full_catalog_sources_four_files_per_time(template_ds: xr.DataTree) -> N
         v.path for v in data_vars if v.path not in gated
     )
     for coord in coords:
-        from_f00 = coord.lead_time == pd.Timedelta("0h")
-        assert all(v.has_hour_0_values() == from_f00 for v in coord.data_vars)
+        assert all(v.analysis_lead_time() == coord.lead_time for v in coord.data_vars)
 
 
 def test_representative_var_is_available_in_every_era(

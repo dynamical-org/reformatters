@@ -25,6 +25,7 @@ _TIME = "2024-06-01T07:00"
 _FILTER_VARS = [
     "temperature_2m",
     "wind_u_10m",
+    "dew_point_temperature_2m",
     "total_precipitation_surface",
     "temperature",
 ]
@@ -60,9 +61,13 @@ def test_backfill_local_and_operational_update(
     )
     cell = ds.isel(y=_Y, x=_X).sel(time=_TIME)
     # Instant vars come from f00 of the same hour's cycle; the hourly precipitation
-    # accumulation comes from f01 of the prior hour's cycle.
+    # accumulation and dew point come from f01 of the prior hour's cycle (f00 dew point
+    # at this cell is 18.287287).
     np.testing.assert_allclose(cell["temperature_2m"].values, 19.862695312500023)
     np.testing.assert_allclose(cell["wind_u_10m"].values, -1.5750274658203125)
+    np.testing.assert_allclose(
+        cell["dew_point_temperature_2m"].values, 18.599787, rtol=1e-6
+    )
     np.testing.assert_allclose(cell["total_precipitation_surface"].values, 0.0)
     assert (ds["total_precipitation_surface"].sel(time=_TIME).values > 0).any()
     np.testing.assert_allclose(
@@ -114,6 +119,7 @@ def test_backfill_local_and_operational_update(
     actual = [
         update_cell["temperature_2m"].item(),
         update_cell["wind_u_10m"].item(),
+        update_cell["dew_point_temperature_2m"].item(),
         update_cell["total_precipitation_surface"].item(),
         update_cell["pressure_level/temperature"].sel(pressure_level=500).item(),
         update_cell["model_level/temperature"].sel(model_level=1).item(),
@@ -123,6 +129,7 @@ def test_backfill_local_and_operational_update(
         [
             20.107934570312523,
             -1.6848134994506836,
+            18.62781677246096,
             0.0,
             -11.095617675781227,
             19.839074707031273,
