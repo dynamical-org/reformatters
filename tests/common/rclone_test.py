@@ -106,6 +106,7 @@ def test_copy_urls_passes_a_csv_of_urls_and_dst_paths_to_copyurl(
     assert cmd[cmd.index("--urls") + 2] == ":s3:bucket/root/"
     assert "--transfers=8" in cmd
     assert "--checkers=4" in cmd
+    assert "--retries=1" in cmd
     assert csv_contents == [
         (
             "https://host/p/T_2M/r/2026-09-15T00%3A00/s/PT000H00M.grib2,2026-09-15T00/T_2M/PT000H00M.grib2\n"

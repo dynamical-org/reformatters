@@ -21,6 +21,7 @@ import re
 import time
 from collections.abc import Sequence
 from datetime import timedelta
+from functools import partial
 from pathlib import PurePosixPath
 from typing import Any, Final
 from urllib.parse import quote
@@ -131,32 +132,18 @@ def copy_icosahedral_files_from_dwd_https(
             continue
 
         raise_if_out_of_time(f"run {run_dir}")
-        already_on_dst = set(
-            retry(
-                lambda run_dir=run_dir: list_files(
-                    path=f"{dst_root_path}{run_dir}/",
-                    checkers=checkers,
-                    env_vars=env_vars,
-                ),
-                max_attempts=3,
-            )
-        )
-        to_copy = [
-            (f"{DWD_HOST}{SRC_ROOT_PATH}{quote(str(src_path))}", dst_path)
-            for src_path, dst_path in run
-            if dst_path.relative_to(run_dir) not in already_on_dst
-        ]
-        log.info(f"Run {run_dir}: {len(to_copy):,d} of {len(run):,d} files to copy.")
-        if to_copy:
-            raise_if_out_of_time(f"copying run {run_dir}")
-            copy_urls(
-                sources_and_dst_paths=to_copy,
+        retry(
+            partial(
+                _copy_run_files_missing_from_dst,
+                run,
                 dst_root_path=dst_root_path,
                 transfer_parallelism=transfer_parallelism,
                 checkers=checkers,
                 stats_logging_freq=stats_logging_freq,
                 env_vars=env_vars,
-            )
+            ),
+            max_attempts=3,
+        )
         copied_runs.append([dst_path for _src_path, dst_path in run])
 
     listed_run_dirs = {run[0].parts[0] for run in copied_runs}
@@ -167,6 +154,39 @@ def copy_icosahedral_files_from_dwd_https(
     if problems := missing_runs + incomplete_runs(copied_runs, level_types, params):
         raise RuntimeError(
             "Incomplete icosahedral runs on DWD's server: " + "; ".join(problems)
+        )
+
+
+def _copy_run_files_missing_from_dst(
+    run: Sequence[tuple[PurePosixPath, PurePosixPath]],
+    dst_root_path: str,
+    transfer_parallelism: int,
+    checkers: int,
+    stats_logging_freq: str,
+    env_vars: dict[str, Any] | None,
+) -> None:
+    run_dir = run[0][1].parts[0]
+    already_on_dst = set(
+        list_files(
+            path=f"{dst_root_path}{run_dir}/",
+            checkers=checkers,
+            env_vars=env_vars,
+        )
+    )
+    to_copy = [
+        (f"{DWD_HOST}{SRC_ROOT_PATH}{quote(str(src_path))}", dst_path)
+        for src_path, dst_path in run
+        if dst_path.relative_to(run_dir) not in already_on_dst
+    ]
+    log.info(f"Run {run_dir}: {len(to_copy):,d} of {len(run):,d} files to copy.")
+    if to_copy:
+        copy_urls(
+            sources_and_dst_paths=to_copy,
+            dst_root_path=dst_root_path,
+            transfer_parallelism=transfer_parallelism,
+            checkers=checkers,
+            stats_logging_freq=stats_logging_freq,
+            env_vars=env_vars,
         )
 
 

@@ -123,29 +123,28 @@ def copy_files_from_dwd_https(
         max_attempts=3,
     )
 
-    files_already_on_dst = retry(
-        lambda: list_files_on_dst_for_all_nwp_runs_available_from_dwd(
+    def copy_files_missing_from_dst() -> None:
+        files_already_on_dst = list_files_on_dst_for_all_nwp_runs_available_from_dwd(
             src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
             src_root_path_ending_with_init_hour=src_root_path,
             dst_root_path_without_init_dt=dst_root_path,
             checkers=checkers,
             env_vars=env_vars,
-        ),
-        max_attempts=3,
-    )
+        )
+        copy_urls(
+            sources_and_dst_paths=compute_which_files_still_need_to_be_transferred(
+                src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
+                files_already_on_dst=files_already_on_dst,
+                src_host_and_root_path=f"{src_host}{src_root_path}",
+            ),
+            dst_root_path=str(dst_root_path),
+            transfer_parallelism=transfer_parallelism,
+            checkers=checkers,
+            stats_logging_freq=stats_logging_freq,
+            env_vars=env_vars,
+        )
 
-    copy_urls(
-        sources_and_dst_paths=compute_which_files_still_need_to_be_transferred(
-            src_paths_starting_with_nwp_var=src_paths_starting_with_nwp_var,
-            files_already_on_dst=files_already_on_dst,
-            src_host_and_root_path=f"{src_host}{src_root_path}",
-        ),
-        dst_root_path=str(dst_root_path),
-        transfer_parallelism=transfer_parallelism,
-        checkers=checkers,
-        stats_logging_freq=stats_logging_freq,
-        env_vars=env_vars,
-    )
+    retry(copy_files_missing_from_dst, max_attempts=3)
 
 
 def compute_which_files_still_need_to_be_transferred(
