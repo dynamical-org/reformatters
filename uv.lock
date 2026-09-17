@@ -1389,7 +1389,7 @@ requires-dist = [
     { name = "google-crc32c", specifier = ">=1.8.0" },
     { name = "gribberish", specifier = "==1.7.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "icechunk", specifier = "~=2.1" },
+    { name = "icechunk", specifier = "~=2.2" },
     { name = "kubernetes", specifier = ">=36.0.3,<37" },
     { name = "numba", specifier = "~=0.67" },
     { name = "numcodecs", specifier = "~=0.16" },

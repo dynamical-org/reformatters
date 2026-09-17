@@ -23,7 +23,7 @@ dependencies = [
     "xarray~=2026.7",
     "zarr~=3.3",
     "kubernetes>=36.0.3,<37",
-    "icechunk~=2.1",
+    "icechunk~=2.2",
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
     "gribberish==1.7.0",
