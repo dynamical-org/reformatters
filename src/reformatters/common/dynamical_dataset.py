@@ -706,7 +706,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         lead_index: Annotated[
             int | None,
             typer.Option(
-                help="Delete only this lead_time index, at every append-dim position."
+                help="Delete only this lead_time index of the selected positions (default: all)."
             ),
         ] = None,
         before: Annotated[

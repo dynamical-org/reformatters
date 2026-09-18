@@ -1,10 +1,4 @@
-"""Delete chunks, or whole arrays, from a dataset's stores.
-
-No backfill operation removes anything: metadata is copied from the template into the
-store rather than synced with it, and writes only ever set chunks. So an array the
-template no longer declares, and chunks a variable should no longer carry, survive every
-backfill. A deleted chunk reads as the array's fill value.
-"""
+"""Delete chunks, or whole arrays, from a dataset's primary store and every replica."""
 
 import asyncio
 import itertools
@@ -15,6 +9,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 import zarr.core.metadata.v3
+import zarr.core.sync
 from zarr.abc.store import Store
 
 from reformatters.common import template_utils
@@ -24,8 +19,6 @@ from reformatters.common.types import AppendDim
 
 log = get_logger(__name__)
 
-# Deletes are independent, so issue them concurrently; a batch bounds memory and gives
-# the progress log something to report against.
 _DELETE_BATCH = 2_000
 
 
@@ -49,7 +42,7 @@ def remove_from_stores(
     )
 
     store = store_factory.primary_store()
-    log.info(f"Store: {store_factory.primary_url()}")
+    log.info(f"Store: {store}")
     root = zarr.open_group(store, mode="r")
     positions = pd.DatetimeIndex(xr.open_zarr(store, chunks=None)[append_dim].values)
 
@@ -82,25 +75,31 @@ def remove_from_stores(
         if whole_array
         else f"{total} chunk(s) from {len(plan)} array(s): {', '.join(plan)}"
     )
-
     if not apply:
         log.info(f"Dry run. Would delete {summary}. Pass --apply.")
         return
 
-    primary = store_factory.primary_store(writable=True)
-    replicas = store_factory.replica_stores(writable=True)
-    for writable in [primary, *replicas]:
-        log.info(f"Deleting from {writable}")
-        if whole_array:
-            _delete_arrays(writable, list(plan))
-        else:
-            _delete_chunks(writable, plan, total)
-    commit_if_icechunk(f"Delete {summary}", primary, replicas)
-    log.info(f"Committed: Delete {summary}")
-
-    for readonly in [store_factory.primary_store(), *store_factory.replica_stores()]:
-        _verify_removed(readonly, plan, whole_array=whole_array)
-    log.info("Verified removed from every store.")
+    for path, keys in plan.items():
+        message = (
+            f"Delete array {path}"
+            if whole_array
+            else f"Delete {len(keys)} chunk(s) from {path}"
+        )
+        primary = store_factory.primary_store(writable=True)
+        replicas = store_factory.replica_stores(writable=True)
+        for writable in [primary, *replicas]:
+            log.info(f"{message} in {writable}")
+            if whole_array:
+                _delete_array(writable, path)
+            else:
+                _delete_chunks(writable, keys)
+        commit_if_icechunk(message, primary, replicas)
+        for readonly in [
+            store_factory.primary_store(),
+            *store_factory.replica_stores(),
+        ]:
+            _verify_removed(readonly, path, keys, whole_array=whole_array)
+        log.info(f"{message}: committed and verified removed from every store.")
 
 
 def chunk_keys(
@@ -172,25 +171,23 @@ def _whole_shards(path: str, selected: set[int], shard: int, size: int) -> list[
     return shards
 
 
-def _delete_arrays(store: Store, paths: list[str]) -> None:
+def _delete_array(store: Store, path: str) -> None:
     root = zarr.open_group(store, mode="a")
     consolidated = root.metadata.consolidated_metadata is not None
-    for path in paths:
-        del root[path]
-        log.info(f"  deleted array {path}")
-    # Deleting a member leaves the consolidated metadata still listing it.
+    del root[path]
+    # zarr drops a deleted direct member from consolidated metadata but not a nested one.
     if consolidated:
         with template_utils.ignore_consolidated_metadata_spec_warning():
             zarr.consolidate_metadata(store)
 
 
-def _delete_chunks(store: Store, plan: dict[str, list[str]], total: int) -> None:
-    done = 0
-    for keys in plan.values():
-        for batch in itertools.batched(keys, _DELETE_BATCH, strict=False):
-            asyncio.run(_delete_all(store, batch))
-            done += len(batch)
-            log.info(f"  deleted {done}/{total}")
+def _delete_chunks(store: Store, keys: list[str]) -> None:
+    for done, batch in enumerate(
+        itertools.batched(keys, _DELETE_BATCH, strict=False), start=1
+    ):
+        # Through zarr's loop, not asyncio.run: an fsspec store binds to the first loop.
+        zarr.core.sync.sync(_delete_all(store, batch))
+        log.info(f"  deleted {min(done * _DELETE_BATCH, len(keys))}/{len(keys)}")
 
 
 async def _delete_all(store: Store, keys: Sequence[str]) -> None:
@@ -198,16 +195,16 @@ async def _delete_all(store: Store, keys: Sequence[str]) -> None:
 
 
 def _verify_removed(
-    store: Store, plan: dict[str, list[str]], *, whole_array: bool
+    store: Store, path: str, keys: list[str], *, whole_array: bool
 ) -> None:
-    root = zarr.open_group(store, mode="r")
-    for path, keys in plan.items():
-        if whole_array:
-            assert path not in root, f"{path} still present in {store}"
-            continue
-        for batch in itertools.batched(keys, _DELETE_BATCH, strict=False):
-            present = asyncio.run(_existing(store, batch))
-            assert not present, f"{path}: still present in {store}: {present[:5]}"
+    if whole_array:
+        assert path not in zarr.open_group(store, mode="r"), (
+            f"{path} still present in {store}"
+        )
+        return
+    for batch in itertools.batched(keys, _DELETE_BATCH, strict=False):
+        present = zarr.core.sync.sync(_existing(store, batch))
+        assert not present, f"{path}: still present in {store}: {present[:5]}"
 
 
 async def _existing(store: Store, keys: Sequence[str]) -> list[str]:

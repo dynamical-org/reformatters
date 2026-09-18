@@ -107,6 +107,21 @@ def test_lead_index_on_an_ensemble_array_spans_every_member() -> None:
     ]
 
 
+def test_a_trailing_level_axis_is_enumerated() -> None:
+    array = _array(
+        ("init_time", "lead_time", "latitude", "longitude", "pressure_level"),
+        (3, 2, 8, 9, 3),
+        (1, 1, 8, 9, 1),
+    )
+    assert chunk_keys(
+        "pressure_level/t", array, "init_time", INITS, lead_index=1, at=[INITS[2]]
+    ) == [
+        "pressure_level/t/c/2/1/0/0/0",
+        "pressure_level/t/c/2/1/0/0/1",
+        "pressure_level/t/c/2/1/0/0/2",
+    ]
+
+
 def test_sharded_array_keys_every_spatial_shard_of_a_fully_selected_shard() -> None:
     array = _array(
         ("time", "latitude", "longitude"), (4, 8, 9), (1, 4, 3), shards=(2, 8, 3)
@@ -210,7 +225,7 @@ def test_lead_index_removal_leaves_other_leads_and_commits_once(
     )
     assert _snapshot_count(repo) == snapshots + 1
     assert next(iter(repo.ancestry(branch="main"))).message == (
-        "Delete 4 chunk(s) from 1 array(s): temperature_2m"
+        "Delete 4 chunk(s) from temperature_2m"
     )
     values = _values(backfilled)
     assert values.isel(lead_time=0).isnull().all()
@@ -285,7 +300,11 @@ def with_replica(tmp_path: Path) -> StoreFactory:
         dataset_id="test-replica-removal",
         template_config_version="v1.0",
     )
-    template_utils.write_metadata(_create_template_ds(4), factory)
+    template = _create_template_ds(4)
+    template["pressure_level"] = template.to_dataset().rename_vars(
+        temperature_2m="temperature"
+    )
+    template_utils.write_metadata(template, factory)
     for store in [
         factory.primary_store(writable=True),
         *factory.replica_stores(writable=True),
@@ -315,17 +334,19 @@ def test_whole_array_removal_refreshes_replica_consolidated_metadata(
     with_replica: StoreFactory,
 ) -> None:
     factory = with_replica
-    remove_from_stores(
-        factory, "init_time", ["temperature_2m"], whole_array=True, apply=True
-    )
+    arrays = ["temperature_2m", "pressure_level/temperature"]
     for store in [factory.primary_store(), *factory.replica_stores()]:
         root = zarr.open_group(store, mode="r")
-        assert "temperature_2m" not in root
+        assert all(path in root for path in arrays)
+    remove_from_stores(factory, "init_time", arrays, whole_array=True, apply=True)
+    for store in [factory.primary_store(), *factory.replica_stores()]:
+        root = zarr.open_group(store, mode="r")
+        assert not any(path in root for path in arrays)
         assert "init_time" in root
     (replica,) = factory.replica_stores()
     consolidated = zarr.open_group(replica, mode="r").metadata.consolidated_metadata
     assert consolidated is not None
-    assert "temperature_2m" not in consolidated.metadata
+    assert not any(path in consolidated.flattened_metadata for path in arrays)
 
 
 def test_cli_parses_selectors_and_is_a_dry_run_by_default(
