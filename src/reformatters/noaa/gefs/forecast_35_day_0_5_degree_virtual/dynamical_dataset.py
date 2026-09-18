@@ -89,5 +89,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.57, 1.0)
             ),
-            validation.CheckVirtualDecodeHealth(),
+            # Four levels so the sample reaches 600 hPa, an icing level; three would
+            # miss every level icing is published at.
+            validation.CheckVirtualDecodeHealth(sampled_levels=4),
         )

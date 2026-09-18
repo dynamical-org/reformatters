@@ -28,6 +28,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
 from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
 )
+from reformatters.noaa.gefs.virtual_template_config import PRESSURE_LEVELS
 from tests.common.dynamical_dataset_test import (
     assert_configured_validators,
     stalled_cycles_before_alerting,
@@ -389,6 +390,12 @@ def test_validators(
     )
     assert decode_health.positions == 1
     assert decode_health.allow_all_nan_vars == ()
+    assert decode_health.sampled_levels == 4
+    sampled = decode_health._sample_levels(
+        xr.DataArray(np.array(PRESSURE_LEVELS), dims=["pressure_level"])
+    ).values
+    icing_levels = {800, 700, 600, 500, 400, 300}
+    assert icing_levels & set(sampled), sampled
 
 
 def _resolved_split_size(
