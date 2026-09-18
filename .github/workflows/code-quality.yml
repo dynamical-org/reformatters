@@ -9,6 +9,12 @@ on:
   push:
     branches: [main]
 
+# Concurrent runs on main can finish out of commit order, and each successful
+# finish deploys its commit, so the older commit would deploy last.
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   quality:
     name: Code Quality (${{ matrix.arch }})
