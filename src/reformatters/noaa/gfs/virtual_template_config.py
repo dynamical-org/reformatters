@@ -575,7 +575,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "NaN over water. Over permanent land ice the value is a placeholder "
                 "rather than soil moisture: near 1 on fully ice-covered cells and "
-                "above about 0.45 where ice partly covers the cell."
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -589,7 +589,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen "
                 "plus liquid water. NaN over water. Over permanent "
                 "land ice the value is a placeholder rather than soil moisture: near 1 "
-                "on fully ice-covered cells and above about 0.45 where ice partly "
+                "on fully ice-covered cells and above about 0.5 where ice partly "
                 "covers the cell."
             ),
         ),
@@ -614,7 +614,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "NaN over water. Over permanent land ice the value is a placeholder "
                 "rather than soil moisture: near 1 on fully ice-covered cells and "
-                "above about 0.45 where ice partly covers the cell."
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -628,7 +628,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen "
                 "plus liquid water. NaN over water. Over permanent "
                 "land ice the value is a placeholder rather than soil moisture: near 1 "
-                "on fully ice-covered cells and above about 0.45 where ice partly "
+                "on fully ice-covered cells and above about 0.5 where ice partly "
                 "covers the cell."
             ),
         ),
@@ -653,7 +653,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "NaN over water. Over permanent land ice the value is a placeholder "
                 "rather than soil moisture: near 1 on fully ice-covered cells and "
-                "above about 0.45 where ice partly covers the cell."
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -667,7 +667,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries "
                 "frozen plus liquid water. NaN over water. Over permanent land ice "
                 "the value is a placeholder rather than soil moisture: near 1 on "
-                "fully ice-covered cells and above about 0.45 where ice partly "
+                "fully ice-covered cells and above about 0.5 where ice partly "
                 "covers the cell."
             ),
         ),
@@ -692,7 +692,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             comment=(
                 "NaN over water. Over permanent land ice the value is a placeholder "
                 "rather than soil moisture: near 1 on fully ice-covered cells and "
-                "above about 0.45 where ice partly covers the cell."
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -706,7 +706,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
                 "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries "
                 "frozen plus liquid water. NaN over water. Over permanent land ice "
                 "the value is a placeholder rather than soil moisture: near 1 on "
-                "fully ice-covered cells and above about 0.45 where ice partly "
+                "fully ice-covered cells and above about 0.5 where ice partly "
                 "covers the cell."
             ),
         ),

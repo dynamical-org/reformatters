@@ -39,7 +39,7 @@
     "short_name": "vsw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
-    "comment": "NaN over water. Over permanent land ice the value is a placeholder rather than soil moisture: near 1 on fully ice-covered cells and above about 0.45 where ice partly covers the cell.",
+    "comment": "NaN over water. Over permanent land ice the value is a placeholder rather than soil moisture: near 1 on fully ice-covered cells and above about 0.5 where ice partly covers the cell.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
