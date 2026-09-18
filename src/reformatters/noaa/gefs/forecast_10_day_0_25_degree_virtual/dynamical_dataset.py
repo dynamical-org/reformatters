@@ -52,7 +52,7 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
             parallelism=1,
@@ -65,7 +65,7 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.3",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
