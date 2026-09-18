@@ -16,6 +16,7 @@ from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    chunk_removal,
     parallel_coordination,
     template_utils,
     validation,
@@ -693,6 +694,55 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 else:
                     typer.echo("(none)")
 
+    def remove_chunks(
+        self,
+        arrays: Annotated[
+            list[str],
+            typer.Argument(
+                help="Array paths, e.g. temperature_2m or pressure_level/temperature"
+            ),
+        ],
+        *,
+        lead_index: Annotated[
+            int | None,
+            typer.Option(
+                help="Delete only this lead_time index, at every append-dim position."
+            ),
+        ] = None,
+        before: Annotated[
+            datetime | None,
+            typer.Option(
+                help="Delete only append-dim positions before this timestamp (exclusive)."
+            ),
+        ] = None,
+        at: Annotated[
+            list[datetime] | None,
+            typer.Option(help="Delete only this append-dim position (repeatable)."),
+        ] = None,
+        whole_array: Annotated[
+            bool, typer.Option(help="Delete the arrays themselves.")
+        ] = False,
+        apply: Annotated[
+            bool, typer.Option(help="Actually delete (default is dry run).")
+        ] = False,
+    ) -> None:
+        """Delete chunks, or whole arrays, from the primary store and every replica.
+
+        A manual one-off, never part of a backfill or update: neither removes anything.
+        A deleted chunk reads as the array's fill value.
+        Dry run unless given --apply; reads back what it deleted after committing.
+        """
+        chunk_removal.remove_from_stores(
+            self.store_factory,
+            self.template_config.append_dim,
+            arrays,
+            lead_index=lead_index,
+            before=pd.Timestamp(before) if before is not None else None,
+            at=[pd.Timestamp(t) for t in at or []],
+            whole_array=whole_array,
+            apply=apply,
+        )
+
     def get_cli(
         self,
     ) -> typer.Typer:
@@ -704,6 +754,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         app.command()(self.backfill_local)
         app.command()(self.backfill)
         app.command()(self.dataset_urls)
+        app.command()(self.remove_chunks)
         # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app
