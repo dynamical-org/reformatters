@@ -573,9 +573,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
             comment=(
-                "NaN over water. Values are near 1 over permanent land ice, where they "
-                "are placeholders rather than soil moisture measurements. Mask values "
-                ">= 0.9."
+                "NaN over water. Over permanent land ice the value is a placeholder "
+                "rather than soil moisture: near 1 on fully ice-covered cells and "
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -587,9 +587,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen "
-                "plus liquid water. NaN over water. Values are near 1 over permanent "
-                "land ice, where they are placeholders rather than soil moisture "
-                "measurements. Mask values >= 0.9."
+                "plus liquid water. NaN over water. Over permanent "
+                "land ice the value is a placeholder rather than soil moisture: near 1 "
+                "on fully ice-covered cells and above about 0.5 where ice partly "
+                "covers the cell."
             ),
         ),
         root_var(
@@ -611,9 +612,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
             comment=(
-                "NaN over water. Values are near 1 over permanent land ice, where they "
-                "are placeholders rather than soil moisture measurements. Mask values "
-                ">= 0.9."
+                "NaN over water. Over permanent land ice the value is a placeholder "
+                "rather than soil moisture: near 1 on fully ice-covered cells and "
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -625,9 +626,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_10_40cm carries frozen "
-                "plus liquid water. NaN over water. Values are near 1 over permanent "
-                "land ice, where they are placeholders rather than soil moisture "
-                "measurements. Mask values >= 0.9."
+                "plus liquid water. NaN over water. Over permanent "
+                "land ice the value is a placeholder rather than soil moisture: near 1 "
+                "on fully ice-covered cells and above about 0.5 where ice partly "
+                "covers the cell."
             ),
         ),
         root_var(
@@ -649,9 +651,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
             comment=(
-                "NaN over water. Values are near 1 over permanent land ice, where they "
-                "are placeholders rather than soil moisture measurements. Mask values "
-                ">= 0.9."
+                "NaN over water. Over permanent land ice the value is a placeholder "
+                "rather than soil moisture: near 1 on fully ice-covered cells and "
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -663,9 +665,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_40_100cm carries "
-                "frozen plus liquid water. NaN over water. Values are near 1 over "
-                "permanent land ice, where they are placeholders rather than soil "
-                "moisture measurements. Mask values >= 0.9."
+                "frozen plus liquid water. NaN over water. Over permanent land ice "
+                "the value is a placeholder rather than soil moisture: near 1 on "
+                "fully ice-covered cells and above about 0.5 where ice partly "
+                "covers the cell."
             ),
         ),
         root_var(
@@ -687,9 +690,9 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
             comment=(
-                "NaN over water. Values are near 1 over permanent land ice, where they "
-                "are placeholders rather than soil moisture measurements. Mask values "
-                ">= 0.9."
+                "NaN over water. Over permanent land ice the value is a placeholder "
+                "rather than soil moisture: near 1 on fully ice-covered cells and "
+                "above about 0.5 where ice partly covers the cell."
             ),
         ),
         root_var(
@@ -701,9 +704,10 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             units="1",
             comment=(
                 "Unfrozen fraction only; volumetric_soil_moisture_100_200cm carries "
-                "frozen plus liquid water. NaN over water. Values are near 1 over "
-                "permanent land ice, where they are placeholders rather than soil "
-                "moisture measurements. Mask values >= 0.9."
+                "frozen plus liquid water. NaN over water. Over permanent land ice "
+                "the value is a placeholder rather than soil moisture: near 1 on "
+                "fully ice-covered cells and above about 0.5 where ice partly "
+                "covers the cell."
             ),
         ),
         root_var(
@@ -744,7 +748,11 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pevr",
             long_name="Potential evaporation rate",
             units="W m-2",
-            comment="NaN over open water.",
+            comment=(
+                "Potential evaporation demand computed by the land model, not the "
+                "actual evaporative flux, so it is not bounded by available net "
+                "radiation. NaN over open water."
+            ),
             hour_0=False,
         ),
         root_var(

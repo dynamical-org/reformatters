@@ -36,7 +36,7 @@
     "long_name": "Liquid volumetric soil moisture (non-frozen)",
     "short_name": "soill",
     "units": "1",
-    "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. Values are near 1 over permanent land ice, where they are placeholders rather than soil moisture measurements. Mask values >= 0.9.",
+    "comment": "Unfrozen fraction only; volumetric_soil_moisture_0_10cm carries frozen plus liquid water. NaN over water. Over permanent land ice the value is a placeholder rather than soil moisture: near 1 on fully ice-covered cells and above about 0.5 where ice partly covers the cell.",
     "step_type": "instant",
     "coordinates": "spatial_ref",
     "_FillValue": "AAAAAAAA+H8="
