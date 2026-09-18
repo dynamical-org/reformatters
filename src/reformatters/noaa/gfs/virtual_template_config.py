@@ -2202,7 +2202,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             standard_name="floating_ice_area_fraction",
             comment=(
                 "The fraction of the cell covered by floating ice, taking any value "
-                "between 0 and 1. Covers lake ice as well as sea ice."
+                "between 0 and 1."
             ),
         ),
         root_var(
