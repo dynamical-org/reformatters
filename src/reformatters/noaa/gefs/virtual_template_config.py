@@ -1142,7 +1142,7 @@ def _a_b_root_data_vars(
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
             filters=[_WATER_KG_M2_TO_M_LWE],
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "snow_thickness_surface",
@@ -1153,7 +1153,7 @@ def _a_b_root_data_vars(
             long_name="Snow depth",
             units="m",
             standard_name="surface_snow_thickness",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "ice_thickness_surface",
@@ -1163,7 +1163,6 @@ def _a_b_root_data_vars(
             short_name="icetk",
             long_name="Ice thickness",
             units="m",
-            comment="Thickness of ice on water, covering lake ice as well as sea ice.",
         ),
         var(
             "temperature_2m",
