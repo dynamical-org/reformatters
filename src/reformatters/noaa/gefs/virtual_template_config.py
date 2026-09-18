@@ -175,8 +175,9 @@ _CONVECTIVE_INHIBITION = (
 )
 
 _SOIL_MOISTURE_LAND_ICE = (
-    "Values are near 1 over permanent land ice, where they are placeholders rather "
-    "than soil moisture measurements. Mask values >= 0.9."
+    "Over permanent land ice the value is a placeholder rather than soil moisture: "
+    "near 1 on fully ice-covered cells and above about 0.5 where ice partly covers "
+    "the cell."
 )
 
 # MSLET entered the s file at this cycle.
@@ -1671,7 +1672,11 @@ def _a_b_root_data_vars(
             short_name="pevr",
             long_name="Potential evaporation rate",
             units="W m-2",
-            comment="NaN over open water.",
+            comment=(
+                "Potential evaporation demand computed by the land model, not the "
+                "actual evaporative flux, so it is not bounded by available net "
+                "radiation. NaN over open water."
+            ),
         ),
         var(
             "specific_humidity_2m",

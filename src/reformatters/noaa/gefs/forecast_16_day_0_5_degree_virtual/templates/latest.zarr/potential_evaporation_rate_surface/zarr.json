@@ -40,7 +40,7 @@
     "long_name": "Potential evaporation rate",
     "short_name": "pevr",
     "units": "W m-2",
-    "comment": "NaN over open water.",
+    "comment": "Potential evaporation demand computed by the land model, not the actual evaporative flux, so it is not bounded by available net radiation. NaN over open water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
