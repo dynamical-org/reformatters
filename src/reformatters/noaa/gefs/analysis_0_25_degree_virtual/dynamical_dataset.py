@@ -54,7 +54,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
             parallelism=1,
@@ -68,7 +68,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.3",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
