@@ -774,7 +774,7 @@
           "short_name": "snowc",
           "standard_name": "surface_snow_area_fraction",
           "units": "1",
-          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water, available over land and sea ice.",
+          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3501,7 +3501,7 @@
           "short_name": "gflux",
           "standard_name": "upward_heat_flux_at_ground_level_in_soil",
           "units": "W m-2",
-          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water, available over land and sea ice.",
+          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4511,8 +4511,8 @@
         "attributes": {
           "long_name": "Ice thickness",
           "short_name": "icetk",
+          "standard_name": "floating_ice_thickness",
           "units": "m",
-          "comment": "Thickness of ice on water, covering lake ice as well as sea ice.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6688,7 +6688,7 @@
           "long_name": "Potential evaporation rate",
           "short_name": "pevr",
           "units": "W m-2",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over open water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10651,7 +10651,7 @@
           "short_name": "sde",
           "standard_name": "surface_snow_thickness",
           "units": "m",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over open water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10716,7 +10716,7 @@
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
-          "comment": "NaN over open water, available over land and sea ice.",
+          "comment": "NaN over open water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

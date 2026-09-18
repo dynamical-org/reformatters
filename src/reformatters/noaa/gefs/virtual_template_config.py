@@ -792,6 +792,7 @@ def _s_file_data_vars(
             short_name="icetk",
             long_name="Ice thickness",
             units="m",
+            standard_name="floating_ice_thickness",
         ),
         var(
             "temperature_2m",
@@ -1142,7 +1143,7 @@ def _a_b_root_data_vars(
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
             filters=[_WATER_KG_M2_TO_M_LWE],
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "snow_thickness_surface",
@@ -1153,7 +1154,7 @@ def _a_b_root_data_vars(
             long_name="Snow depth",
             units="m",
             standard_name="surface_snow_thickness",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "ice_thickness_surface",
@@ -1163,7 +1164,7 @@ def _a_b_root_data_vars(
             short_name="icetk",
             long_name="Ice thickness",
             units="m",
-            comment="Thickness of ice on water, covering lake ice as well as sea ice.",
+            standard_name="floating_ice_thickness",
         ),
         var(
             "temperature_2m",
@@ -1660,7 +1661,7 @@ def _a_b_root_data_vars(
             units="1",
             standard_name="surface_snow_area_fraction",
             filters=[_PERCENT_TO_FRACTION],
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "potential_evaporation_rate_surface",
@@ -1670,7 +1671,7 @@ def _a_b_root_data_vars(
             short_name="pevr",
             long_name="Potential evaporation rate",
             units="W m-2",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "specific_humidity_2m",
@@ -1781,7 +1782,7 @@ def _a_b_root_data_vars(
             long_name="Ground heat flux",
             units="W m-2",
             standard_name="upward_heat_flux_at_ground_level_in_soil",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         var(
             "snow_phase_change_heat_flux_surface",

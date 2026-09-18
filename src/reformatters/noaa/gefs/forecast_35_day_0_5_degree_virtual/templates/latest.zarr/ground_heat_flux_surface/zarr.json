@@ -41,7 +41,7 @@
     "short_name": "gflux",
     "standard_name": "upward_heat_flux_at_ground_level_in_soil",
     "units": "W m-2",
-    "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water, available over land and sea ice.",
+    "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over open water.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
