@@ -562,7 +562,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "volumetric_soil_moisture_0_10cm",
@@ -600,7 +600,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "volumetric_soil_moisture_10_40cm",
@@ -638,7 +638,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "volumetric_soil_moisture_40_100cm",
@@ -676,7 +676,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Soil temperature",
             units="degree_Celsius",
             standard_name="soil_temperature",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "volumetric_soil_moisture_100_200cm",
@@ -724,7 +724,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Snow depth water equivalent",
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
             filters=[_WATER_KG_M2_TO_M_LWE],
         ),
         root_var(
@@ -735,7 +735,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Snow depth",
             units="m",
             standard_name="surface_snow_thickness",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "potential_evaporation_rate_surface",
@@ -744,7 +744,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="pevr",
             long_name="Potential evaporation rate",
             units="W m-2",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
             hour_0=False,
         ),
         root_var(
@@ -754,7 +754,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             short_name="icetk",
             long_name="Ice thickness",
             units="m",
-            comment="Thickness of ice on water, covering lake ice as well as sea ice.",
+            standard_name="floating_ice_thickness",
         ),
         root_var(
             "temperature_2m",
@@ -1076,7 +1076,7 @@ def _root_data_vars(chunks: tuple[int, ...]) -> list[NoaaDataVar]:
             long_name="Ground heat flux",
             units="W m-2",
             standard_name="upward_heat_flux_at_ground_level_in_soil",
-            comment="NaN over open water, available over land and sea ice.",
+            comment="NaN over open water.",
         ),
         root_var(
             "momentum_flux_u_component_surface",

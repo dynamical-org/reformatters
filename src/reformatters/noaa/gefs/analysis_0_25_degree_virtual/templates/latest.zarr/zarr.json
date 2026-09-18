@@ -705,6 +705,7 @@
         "attributes": {
           "long_name": "Ice thickness",
           "short_name": "icetk",
+          "standard_name": "floating_ice_thickness",
           "units": "m",
           "step_type": "instant",
           "coordinates": "spatial_ref",
