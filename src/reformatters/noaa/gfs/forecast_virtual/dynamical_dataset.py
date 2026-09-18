@@ -57,7 +57,7 @@ class NoaaGfsForecastVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         validation_cron_job = ValidationCronJob(
@@ -69,7 +69,7 @@ class NoaaGfsForecastVirtualDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.5",
-            memory="7G",
+            memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
