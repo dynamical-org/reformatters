@@ -85,5 +85,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=50)),
             validation.CheckVirtualManifestCompleteness(),
-            validation.CheckVirtualDecodeHealth(),
+            # Four levels so the sample reaches 600 hPa, an icing level; three would
+            # miss every level icing is published at.
+            validation.CheckVirtualDecodeHealth(sampled_levels=4),
         )
