@@ -9,7 +9,11 @@ registered dataset from the store's `dataset_id` attribute, so they take a store
 like every other validation command.
 """
 
+import json
+import os
+from collections.abc import Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import icechunk
@@ -99,3 +103,16 @@ def evenly_spaced_subset(items: list[Any], n: int) -> list[Any]:
         return items
     idxs = np.unique(np.linspace(0, len(items) - 1, n).round().astype(int))
     return [items[i] for i in idxs]
+
+
+def write_checkpoint(path: Path, payload: Mapping[str, Any]) -> None:
+    """Write `payload` as JSON to `path`, replacing any existing file atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.partial")
+    tmp.write_text(json.dumps(payload))
+    # Rename last so an interrupted write never leaves a half-file a later run trusts.
+    tmp.rename(path)
+
+
+def read_checkpoint(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text())

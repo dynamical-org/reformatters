@@ -88,19 +88,38 @@ time_option = typer.Option(
 start_date_option = typer.Option(
     None,
     "--start-date",
-    help="Scope analysis to times after this date",
+    help="Scope analysis to times from this date (inclusive)",
 )
 
 end_date_option = typer.Option(
     None,
     "--end-date",
-    help="Scope analysis to times before this date",
+    help="Scope analysis to times through this date (inclusive)",
 )
 
 output_dir_option = typer.Option(
     None,
     "--output-dir",
     help="Write outputs into this directory instead of creating a new run directory.",
+)
+
+checkpoint_dir_option = typer.Option(
+    None,
+    "--checkpoint-dir",
+    help="Virtual stores: record the whole-archive scans in this directory as they run "
+    "— the manifest scan slice by slice, the decode scan region job by region job — and "
+    "reuse anything already there. These scans run for hours on a large ensemble "
+    "archive; checkpointing lets an interrupted scan resume instead of starting over. "
+    "Files are keyed by dataset id, not store, so use one directory per store.",
+)
+
+probe_workers_option = typer.Option(
+    None,
+    "--probe-workers",
+    help="Virtual stores: how many region jobs the manifest scan probes at once. "
+    "Lower it on an archive with many source files per job: in-flight jobs spread "
+    "across that many append-dim manifest splits, and a set too large for the ref "
+    "cache refetches manifests instead of reusing them. Default: the tuned value.",
 )
 
 level_option = typer.Option(
@@ -244,6 +263,10 @@ class RunContext:
     # snapshot is cheap, an append-dim point column is expensive. Routes availability /
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
+    # Where the whole-archive manifest and decode scans record completed work, so an
+    # interrupted scan resumes. None scans in one pass and keeps nothing.
+    checkpoint_dir: Path | None = None
+    probe_workers: int | None = None
     level_override: float | None = None
     # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
     # the spatial snapshot), an analysis run uses time; each anchors both the spatial

@@ -8,19 +8,24 @@ exhaustive sweep: a reference that decodes to garbage outside the sample is not 
 (a literal every-chunk decode is hours; see docs/validation.md).
 
 Entry points: the `decode-scan` command (URL-driven, resolves the registered dataset from
-the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`.
+the store's `dataset_id` attribute) and `run-all`, via `run_decode_scan`. Both accept
+`--checkpoint-dir`, which records each sampled region job as it finishes so an
+interrupted scan resumes. See docs/validation.md.
 """
 
+import json
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
+import pandas as pd
 import typer
 import zarr
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
@@ -29,10 +34,13 @@ from scripts.validation.manifest_scan import _var_chunk_key, _var_keys, _VarKeys
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     evenly_spaced_subset,
+    read_checkpoint,
     resolve_scan_window,
+    write_checkpoint,
 )
 from scripts.validation.utils import (
     RunContext,
+    checkpoint_dir_option,
     end_date_option,
     output_dir_option,
     start_date_option,
@@ -69,8 +77,64 @@ def _decode_checker(
     )
 
 
+def _checkpoint_key(
+    dataset_id: str,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp,
+    variables: list[str],
+    max_samples: int,
+    checker: validation.CheckVirtualDecodeHealth,
+) -> str:
+    """Namespace under which a sampled job's result may be reused: the scan plan (window,
+    variable filter, region sample size), so a changed extent never reuses a job recorded
+    while its tail was still being filled, and the checker configuration that decides a
+    job's outcome (lead, level and position sampling, all-NaN allowances). The job's own
+    region and variables are in its file name."""
+    return digest(
+        [
+            json.dumps(
+                {
+                    "dataset_id": dataset_id,
+                    "start": str(start),
+                    "end": str(end),
+                    "variables": sorted(variables),
+                    "max_samples": max_samples,
+                    "checker": checker.model_dump(
+                        mode="json", exclude={"reference_exists", "max_workers"}
+                    ),
+                },
+                sort_keys=True,
+            )
+        ]
+    )
+
+
+def _job_checkpoint_path(
+    checkpoint_dir: Path, dataset_id: str, key: str, job: RegionJob[Any, Any]
+) -> Path:
+    """Where one sampled region job's outcome is recorded — one file per job, since a job
+    is the unit of work a resumed scan skips. The dataset id and key let one directory
+    hold both scans' files for several datasets."""
+    variables = digest(sorted(var.path for var in job.data_vars))
+    job_id = f"{job.region.start}-{job.region.stop}-{variables}"
+    return checkpoint_dir / f"{dataset_id}_decode_{key}_{job_id}.json"
+
+
+def _write_job_checkpoint(path: Path, result: validation.ValidationResult) -> None:
+    write_checkpoint(path, result.model_dump(mode="json"))
+
+
+def _read_job_checkpoint(path: Path) -> validation.ValidationResult:
+    return validation.ValidationResult.model_validate(read_checkpoint(path))
+
+
 def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> None:
-    """Decode a bounded sample of present references and record health on ctx."""
+    """Decode a bounded sample of present references and record health on ctx.
+
+    With `ctx.checkpoint_dir` each sampled region job's outcome is written there as it
+    finishes and reused on a later call, so an interrupted scan decodes only the jobs it
+    did not reach.
+    """
     assert ctx.is_virtual, "decode scan reads refs from a virtual store's manifest"
     dataset, store, start, end = resolve_scan_window(ctx)
     ds = validation.open_flattened_dataset(store, consolidated=False)
@@ -102,9 +166,17 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     )
 
     checker = _decode_checker(dataset, reference_exists)
+    key = _checkpoint_key(
+        dataset.dataset_id, start, end, ctx.variables, max_samples, checker
+    )
+
+    def checkpoint_path(job: RegionJob[Any, Any]) -> Path | None:
+        if ctx.checkpoint_dir is None:
+            return None
+        return _job_checkpoint_path(ctx.checkpoint_dir, dataset.dataset_id, key, job)
 
     def check(job: RegionJob[Any, Any]) -> validation.ValidationResult:
-        return checker.check(
+        result = checker.check(
             validation.ValidationContext(
                 store=store,
                 ds=ds,
@@ -113,13 +185,31 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
                 region_job=cast("VirtualRegionJob[Any, Any]", job),
             )
         )
+        path = checkpoint_path(job)
+        if path is not None:
+            _write_job_checkpoint(path, result)
+        return result
+
+    checkpointed = {
+        index: _read_job_checkpoint(path)
+        for index, job in enumerate(sampled)
+        if (path := checkpoint_path(job)) is not None and path.exists()
+    }
+    pending = [job for index, job in enumerate(sampled) if index not in checkpointed]
+    if checkpointed:
+        log.info(
+            f"Reusing {len(checkpointed)} checkpointed region jobs, "
+            f"decoding the remaining {len(pending)}"
+        )
 
     failures = []
     decoded_refs = 0
     # A job's decodes are network-latency-bound and parallelize only across its own
     # source files, so a few jobs run concurrently to fill the idle time.
     with ThreadPoolExecutor(max_workers=JOB_CONCURRENCY) as pool:
-        for i, result in enumerate(pool.map(check, sampled)):
+        decoded = iter(pool.map(check, pending))
+        for i in range(len(sampled)):
+            result = checkpointed[i] if i in checkpointed else next(decoded)
             log.info(f"  [{i + 1}/{len(sampled)}] {'ok' if result.passed else 'FAIL'}")
             decoded_refs += result.checked_count or 0
             if not result.passed:
@@ -160,6 +250,7 @@ def decode_scan(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     output_dir: Path | None = output_dir_option,
+    checkpoint_dir: Path | None = checkpoint_dir_option,
     max_samples: int = typer.Option(
         MAX_SAMPLED_REGIONS,
         "--max-samples",
@@ -168,7 +259,12 @@ def decode_scan(
 ) -> None:
     """Decode a bounded sample of present references across the archive and check health."""
     ctx = build_run_context(
-        dataset_url, variables, start_date, end_date, output_dir=output_dir
+        dataset_url,
+        variables,
+        start_date,
+        end_date,
+        output_dir=output_dir,
+        checkpoint_dir=checkpoint_dir,
     )
     run_decode_scan(ctx, max_samples=max_samples)
     (ctx.output_dir / "decode_scan_summary.md").write_text(

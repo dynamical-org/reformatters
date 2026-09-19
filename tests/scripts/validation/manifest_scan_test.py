@@ -1,23 +1,32 @@
 import subprocess
 import sys
+from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 import zarr
 from zarr.storage import MemoryStore
 
+from scripts.validation import manifest_scan
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
+    _checkpoint_path,
     _flush_var_probes,
     _fold_file_availability,
+    _merge_into,
     _probe_coord_for_var,
+    _read_checkpoint,
+    _scan_windows,
     _sort_coords_for_probe,
     _var_chunk_key,
     _var_keys,
     _var_probes,
+    _write_checkpoint,
     probe_jobs,
     result_availability_series,
 )
@@ -336,3 +345,146 @@ def test_result_availability_series_marks_unprobed_positions_nan() -> None:
     )
     np.testing.assert_array_equal(series.fraction[:2], [1.0, 0.0])
     assert np.isnan(series.fraction[2])
+
+
+def test_checkpoint_round_trips_availability_including_unprobed_positions(
+    tmp_path: Path,
+) -> None:
+    positions = pd.to_datetime(["2024-01-01", "2024-01-02"])
+    result = ManifestScanResult(
+        file_availability={positions[0]: (3, 4), positions[1]: (4, 4)},
+        # temperature is unprobed at the second position; absence must survive the trip.
+        var_availability={
+            "temperature": {positions[0]: True},
+            "pressure_level/wind_u": {positions[0]: False, positions[1]: True},
+        },
+    )
+    path = tmp_path / "checkpoint.json"
+    _write_checkpoint(path, result)
+
+    assert _read_checkpoint(path) == result
+
+
+def test_merge_into_combines_windows_replacing_a_position_probed_twice() -> None:
+    """A region job straddling a window boundary is probed in both windows; the later
+    window's counts and booleans for that position replace, not add to, the earlier."""
+    first = pd.Timestamp("2024-01-01")
+    second = pd.Timestamp("2024-02-01")
+    merged = ManifestScanResult(file_availability={}, var_availability={})
+    _merge_into(
+        merged,
+        ManifestScanResult(
+            file_availability={first: (1, 2), second: (1, 2)},
+            var_availability={"temperature": {first: True, second: True}},
+        ),
+    )
+    _merge_into(
+        merged,
+        ManifestScanResult(
+            file_availability={second: (2, 2)},
+            var_availability={
+                "temperature": {second: False},
+                "pressure_surface": {second: True},
+            },
+        ),
+    )
+
+    assert merged.file_availability == {first: (1, 2), second: (2, 2)}
+    assert merged.var_availability == {
+        "temperature": {first: True, second: False},
+        "pressure_surface": {second: True},
+    }
+
+
+def test_checkpoint_path_separates_variable_filters(tmp_path: Path) -> None:
+    dataset_id = "noaa-gefs-forecast-35-day-0-5-degree-virtual"
+    start, end = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-04-01")
+
+    unfiltered = _checkpoint_path(tmp_path, dataset_id, start, end, None)
+    filtered = _checkpoint_path(tmp_path, dataset_id, start, end, ["temperature_2m"])
+
+    assert unfiltered != filtered
+    assert unfiltered.name.startswith(f"{dataset_id}_20240101T0000_20240401T0000")
+
+
+def test_scan_windows_slices_the_range_and_covers_the_end() -> None:
+    windows = list(
+        _scan_windows(
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2024-03-01"),
+            window=pd.Timedelta(days=25),
+        )
+    )
+
+    assert windows == [
+        (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-26")),
+        (pd.Timestamp("2024-01-26"), pd.Timestamp("2024-02-20")),
+        (pd.Timestamp("2024-02-20"), pd.Timestamp("2024-03-01")),
+    ]
+
+
+def test_scan_windows_exact_multiple_has_no_empty_trailing_slice() -> None:
+    windows = list(
+        _scan_windows(
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2024-01-21"),
+            window=pd.Timedelta(days=10),
+        )
+    )
+
+    assert windows == [
+        (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-11")),
+        (pd.Timestamp("2024-01-11"), pd.Timestamp("2024-01-21")),
+    ]
+
+
+def test_scan_window_probe_workers_bounds_concurrent_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """probe_workers reaches probe_jobs; omitting it keeps probe_jobs' tuned default.
+
+    The default's in-flight set spans more append-dim manifest splits than the ref
+    cache holds on an archive with many source files per job, so a caller must be
+    able to lower it.
+    """
+    seen: list[dict[str, int]] = []
+
+    def fake_probe_jobs(
+        jobs: object, store: object, **kwargs: int
+    ) -> Iterator[tuple[object, list[object]]]:
+        seen.append(kwargs)
+        return iter(())
+
+    monkeypatch.setattr(manifest_scan, "probe_jobs", fake_probe_jobs)
+    monkeypatch.setattr(manifest_scan, "build_virtual_jobs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(manifest_scan, "expected_lead_limits", lambda store: {})
+    monkeypatch.setattr(manifest_scan.zarr, "open_group", lambda store, mode: None)
+
+    dataset = SimpleNamespace(dataset_id="d")
+    for probe_workers in (8, None):
+        with pytest.raises(AssertionError, match="No source files"):
+            manifest_scan._scan_window(
+                dataset,  # ty: ignore[invalid-argument-type]
+                None,  # ty: ignore[invalid-argument-type]
+                start=None,
+                end=None,
+                variables=None,
+                probe_workers=probe_workers,
+            )
+
+    assert seen == [{"max_workers": 8}, {}]
+
+
+def test_resolve_bounds_clamps_a_start_before_the_dataset() -> None:
+    """A slice wholly before the dataset's first position would build an empty template."""
+    dataset = SimpleNamespace(
+        template_config=SimpleNamespace(append_dim_start=pd.Timestamp("2020-10-01"))
+    )
+    start, end = manifest_scan._resolve_bounds(
+        dataset,  # ty: ignore[invalid-argument-type]
+        None,  # ty: ignore[invalid-argument-type]
+        start=pd.Timestamp("2020-01-01"),
+        end=pd.Timestamp("2021-01-01"),
+    )
+
+    assert (start, end) == (pd.Timestamp("2020-10-01"), pd.Timestamp("2021-01-01"))

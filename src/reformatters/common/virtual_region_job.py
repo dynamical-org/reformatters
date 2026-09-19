@@ -717,18 +717,26 @@ def _chunk_key_encoder(
 
 
 def _exists_many(
-    store: IcechunkStore, keys: Sequence[str], *, max_attempts: int = 8
+    store: IcechunkStore,
+    keys: Sequence[str],
+    *,
+    max_attempts: int = 8,
+    batch_size: int = 1_000,  # manifest cache locality + bound memory
 ) -> dict[str, bool]:
-    """Probe many chunk keys concurrently."""
+    """Probe many chunk keys concurrently, at most `batch_size` at a time."""
     if not keys:
         return {}
 
     async def _check(probe_keys: Sequence[str]) -> list[bool | BaseException]:
-        return list(
-            await asyncio.gather(
-                *(store.exists(key) for key in probe_keys), return_exceptions=True
+        outcomes: list[bool | BaseException] = []
+        for start in range(0, len(probe_keys), batch_size):
+            batch = probe_keys[start : start + batch_size]
+            outcomes.extend(
+                await asyncio.gather(
+                    *(store.exists(key) for key in batch), return_exceptions=True
+                )
             )
-        )
+        return outcomes
 
     result: dict[str, bool] = {}
     pending: Sequence[str] = keys
