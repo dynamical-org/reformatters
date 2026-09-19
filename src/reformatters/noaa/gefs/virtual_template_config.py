@@ -3059,6 +3059,10 @@ def _a_b_root_data_vars(
             long_name="Forecast albedo",
             units="percent",
             standard_name="surface_albedo",
+            comment=(
+                "Exactly 0 wherever the averaging window received no sunlight; exclude "
+                "those zeros from a time mean albedo."
+            ),
         ),
         var(
             "potential_vorticity_310k",
