@@ -180,11 +180,8 @@ def test_representative_probe_is_filled_only_by_its_own_product(
         assert dict(job.representative_probe_loc(coord, var)) == expected_loc
 
 
-def test_operational_update_jobs_single_polling_job(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = pd.Timestamp("2021-05-03T12:00")
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
+def test_operational_update_jobs_single_polling_job() -> None:
+    fire_time = pd.Timestamp("2021-05-03T03:29")
 
     jobs, template_ds = NoaaGfsAnalysisVirtualRegionJob.operational_update_jobs(
         primary_store=Mock(),
@@ -193,13 +190,18 @@ def test_operational_update_jobs_single_polling_job(
         append_dim="time",
         all_data_vars=TEMPLATE_CONFIG.data_vars,
         reformat_job_name="test",
+        job_fire_time=fire_time,
     )
 
     (job,) = jobs
     assert isinstance(job, NoaaGfsAnalysisVirtualRegionJob)
     assert job.processing_mode == "update"
     times = template_ds.to_dataset().get_index("time")
-    assert job.region == slice(len(times) - 12, len(times))
+    # The 00z cycle's hours 04 and 05 publish while this run polls, so candidates
+    # run up to 6 h after the fire; the lookback still starts 12 h before it.
+    assert times[-1] == pd.Timestamp("2021-05-03T09:00")
+    assert times[job.region.start] == pd.Timestamp("2021-05-02T16:00")
+    assert job.region.stop == len(times)
 
 
 def discover(
