@@ -1,13 +1,15 @@
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import ClassVar
 
 import pandas as pd
 import xarray as xr
+from zarr.abc.store import Store
 
-from reformatters.common.region_job import CoordinateValue
+from reformatters.common.region_job import CoordinateValue, RegionJob
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.noaa.gfs.analysis.region_job import NOAA_GFS_INIT_FREQUENCY
 from reformatters.noaa.gfs.virtual_region_job import (
     GFS_FILE_TYPES,
@@ -29,7 +31,38 @@ class NoaaGfsAnalysisVirtualSourceFileCoord(NoaaGfsVirtualSourceFileCoord):
 class NoaaGfsAnalysisVirtualRegionJob(
     NoaaGfsVirtualRegionJob[NoaaGfsAnalysisVirtualSourceFileCoord]
 ):
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("12h")
+    # A position is labelled by its valid time, and the cycle a fire targets publishes
+    # hours valid up to one cycle after the fire while the run polls, so candidates run
+    # from 12 h before the fire to 6 h after it. Positions of the next cycle stay held
+    # by discover_available until that cycle's own files land.
+    operational_update_window: ClassVar[Timedelta] = (
+        pd.Timedelta("12h") + NOAA_GFS_INIT_FREQUENCY
+    )
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[NoaaDataVar],
+        reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
+    ) -> tuple[
+        Sequence[RegionJob[NoaaDataVar, NoaaGfsAnalysisVirtualSourceFileCoord]],
+        xr.DataTree,
+    ]:
+        return super().operational_update_jobs(
+            primary_store=primary_store,
+            tmp_store=tmp_store,
+            get_template_fn=get_template_fn,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            job_fire_time=(job_fire_time or pd.Timestamp.now())
+            + NOAA_GFS_INIT_FREQUENCY,
+        )
 
     def generate_source_file_coords(
         self,
