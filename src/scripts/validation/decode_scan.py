@@ -101,7 +101,7 @@ def _checkpoint_key(
                     "variables": sorted(variables),
                     "max_samples": max_samples,
                     "checker": checker.model_dump(
-                        mode="json", exclude={"reference_exists"}
+                        mode="json", exclude={"reference_exists", "max_workers"}
                     ),
                 },
                 sort_keys=True,

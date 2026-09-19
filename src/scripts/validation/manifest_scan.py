@@ -2,7 +2,8 @@
 
 The offline analog of the operational `CheckVirtualManifestCompleteness`: instead of a
 recent window it probes the whole archive for ref existence (no decode), streaming job
-by job so peak memory is independent of the scan window length. Two measures:
+by job so only the per-position and per-variable results grow with the scan window
+length. Two measures:
 
 1. **Per source file** — every expected file's representative ref, the strict
    completeness gate. Lists any incomplete positions for a targeted backfill.
@@ -340,7 +341,7 @@ def scan_manifest(
     if window is not None:
         bounds = _resolve_bounds(dataset, store, start=start, end=end)
         windows = list(_scan_windows(*bounds, window=window))
-    results = []
+    merged = ManifestScanResult(file_availability={}, var_availability={})
     for index, (window_start, window_end) in enumerate(windows, start=1):
         if len(windows) > 1:
             log.info(f"Window {index}/{len(windows)} [{window_start} .. {window_end}]")
@@ -357,20 +358,20 @@ def scan_manifest(
         )
         if path is not None and path.exists():
             log.info(f"  reusing checkpoint {path.name}")
-            results.append(_read_checkpoint(path))
-            continue
-        result = _scan_window(
-            dataset,
-            store,
-            start=window_start,
-            end=window_end,
-            variables=variables,
-            probe_workers=probe_workers,
-        )
-        if path is not None:
-            _write_checkpoint(path, result)
-        results.append(result)
-    return _merge_results(results)
+            result = _read_checkpoint(path)
+        else:
+            result = _scan_window(
+                dataset,
+                store,
+                start=window_start,
+                end=window_end,
+                variables=variables,
+                probe_workers=probe_workers,
+            )
+            if path is not None:
+                _write_checkpoint(path, result)
+        _merge_into(merged, result)
+    return merged
 
 
 def _resolve_bounds(
@@ -463,18 +464,12 @@ def _read_checkpoint(path: Path) -> ManifestScanResult:
     )
 
 
-def _merge_results(results: Sequence[ManifestScanResult]) -> ManifestScanResult:
-    if len(results) == 1:
-        return results[0]
-    file_availability: dict[pd.Timestamp, tuple[int, int]] = {}
-    var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
-    for result in results:
-        file_availability.update(result.file_availability)
-        for var_path, by_position in result.var_availability.items():
-            var_availability.setdefault(var_path, {}).update(by_position)
-    return ManifestScanResult(
-        file_availability=file_availability, var_availability=var_availability
-    )
+def _merge_into(merged: ManifestScanResult, result: ManifestScanResult) -> None:
+    """Fold one window's result into `merged`. A position both windows probed (a region
+    job straddling their boundary) is replaced, not summed."""
+    merged.file_availability.update(result.file_availability)
+    for var_path, by_position in result.var_availability.items():
+        merged.var_availability.setdefault(var_path, {}).update(by_position)
 
 
 def _scan_window(

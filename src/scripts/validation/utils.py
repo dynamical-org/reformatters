@@ -109,7 +109,8 @@ checkpoint_dir_option = typer.Option(
     help="Virtual stores: record the whole-archive scans in this directory as they run "
     "— the manifest scan slice by slice, the decode scan region job by region job — and "
     "reuse anything already there. These scans run for hours on a large ensemble "
-    "archive; checkpointing lets an interrupted scan resume instead of starting over.",
+    "archive; checkpointing lets an interrupted scan resume instead of starting over. "
+    "Files are keyed by dataset id, not store, so use one directory per store.",
 )
 
 probe_workers_option = typer.Option(

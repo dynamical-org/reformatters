@@ -18,7 +18,7 @@ from scripts.validation.manifest_scan import (
     _checkpoint_path,
     _flush_var_probes,
     _fold_file_availability,
-    _merge_results,
+    _merge_into,
     _probe_coord_for_var,
     _read_checkpoint,
     _scan_windows,
@@ -365,23 +365,28 @@ def test_checkpoint_round_trips_availability_including_unprobed_positions(
     assert _read_checkpoint(path) == result
 
 
-def test_merge_results_combines_windows() -> None:
+def test_merge_into_combines_windows_replacing_a_position_probed_twice() -> None:
+    """A region job straddling a window boundary is probed in both windows; the later
+    window's counts and booleans for that position replace, not add to, the earlier."""
     first = pd.Timestamp("2024-01-01")
     second = pd.Timestamp("2024-02-01")
-    merged = _merge_results(
-        [
-            ManifestScanResult(
-                file_availability={first: (1, 2)},
-                var_availability={"temperature": {first: True}},
-            ),
-            ManifestScanResult(
-                file_availability={second: (2, 2)},
-                var_availability={
-                    "temperature": {second: False},
-                    "pressure_surface": {second: True},
-                },
-            ),
-        ]
+    merged = ManifestScanResult(file_availability={}, var_availability={})
+    _merge_into(
+        merged,
+        ManifestScanResult(
+            file_availability={first: (1, 2), second: (1, 2)},
+            var_availability={"temperature": {first: True, second: True}},
+        ),
+    )
+    _merge_into(
+        merged,
+        ManifestScanResult(
+            file_availability={second: (2, 2)},
+            var_availability={
+                "temperature": {second: False},
+                "pressure_surface": {second: True},
+            },
+        ),
     )
 
     assert merged.file_availability == {first: (1, 2), second: (2, 2)}

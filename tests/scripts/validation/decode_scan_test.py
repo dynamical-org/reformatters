@@ -1,3 +1,4 @@
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -206,7 +207,7 @@ def test_interrupted_checkpoint_write_is_not_reused(
     monkeypatch.undo()
 
     assert not path.exists()
-    assert (tmp_path / "job.json.partial").exists()
+    assert [p.name for p in tmp_path.iterdir()] == [f"job.json.{os.getpid()}.partial"]
 
 
 def test_resume_decodes_only_the_jobs_without_a_checkpoint(
@@ -275,6 +276,7 @@ def test_checkpoint_key_separates_everything_that_changes_the_sample() -> None:
     baseline = _key()
 
     assert _key(variables=["pressure_surface", "temperature_2m"]) == baseline
+    assert _key(checker=validation.CheckVirtualDecodeHealth(max_workers=64)) == baseline
     assert _key(max_samples=40) != baseline
     assert _key(variables=["temperature_2m"]) != baseline
     assert _key(start=pd.Timestamp("2024-01-15")) != baseline
