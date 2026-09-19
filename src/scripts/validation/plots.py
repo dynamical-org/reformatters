@@ -26,6 +26,7 @@ from scripts.validation.summary import write_summary_md
 from scripts.validation.upload import upload_command
 from scripts.validation.utils import (
     RunContext,
+    checkpoint_dir_option,
     create_run_output_dir,
     end_date_option,
     get_two_random_points,
@@ -105,6 +106,7 @@ def run_all(
     level: float | None = level_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
+    checkpoint_dir: Path | None = checkpoint_dir_option,
 ) -> None:
     """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
@@ -164,6 +166,7 @@ def run_all(
         variables=selected_vars,
         start_date=start_date,
         is_virtual=is_virtual,
+        checkpoint_dir=checkpoint_dir,
         level_override=level,
         init_time=init_time,
         lead_time=lead_time,
