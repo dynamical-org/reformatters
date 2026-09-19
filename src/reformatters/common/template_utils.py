@@ -383,12 +383,17 @@ def refresh_store_metadata(
     tmp_store: Path,
     *,
     consolidated: bool,
+    aligned_size: Callable[[IcechunkStore], int] | None = None,
 ) -> None:
     """Rewrite attrs, encodings, and template-derived coordinate values on every
     existing store from the current template, trimmed to the store's committed extent
     so arrays are never resized. Arrays the template adds are created (all-NaN until
     backfilled); store-written coordinate values are preserved. Icechunk stores commit
     only when something actually changed.
+
+    `aligned_size` is for a store whose append-dim origin moves: called on each
+    writable store before it is written, it asserts the store still matches the
+    template and returns its append-dim size, and the commit does not rebase.
     """
     existing = store_factory.open_primary_datatree()
     existing_sizes = {
@@ -422,6 +427,9 @@ def refresh_store_metadata(
         store_factory.primary_store(writable=True),
     ]
     for store in ordered_stores:
+        if aligned_size is not None:
+            assert isinstance(store, IcechunkStore)
+            assert aligned_size(store) == committed_size
         copy_zarr_metadata(
             trimmed,
             tmp_store,
@@ -432,7 +440,7 @@ def refresh_store_metadata(
         if isinstance(store, IcechunkStore) and store.session.has_uncommitted_changes:
             store.session.commit(
                 "Refresh metadata from template",
-                rebase_with=icechunk.ConflictDetector(),
+                rebase_with=None if aligned_size else icechunk.ConflictDetector(),
             )
             log.info(f"Refreshed metadata from template on {store}")
 

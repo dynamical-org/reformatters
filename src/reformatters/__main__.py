@@ -90,12 +90,16 @@ from reformatters.noaa.hrrr.analysis_virtual.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
 )
+from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.dynamical_dataset import (
+    NoaaHrrrForecast18HourVirtualFastDataset,
+)
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualDataset,
 )
+from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
@@ -282,6 +286,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrForecast18HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
+    NoaaHrrrForecast18HourVirtualFastDataset(
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
     NoaaMrmsConusAnalysisHourlyDataset(
         primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
@@ -400,7 +407,10 @@ app.command()(initialize_new_integration)
 
 # Source archives that feed a dataset but have no store of their own. They deploy
 # their own cronjobs and are not datasets, so they carry no update/validate/backfill.
-OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [EcmwfIfsEns46DayGribArchiver()]
+OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [
+    EcmwfIfsEns46DayGribArchiver(),
+    NoaaHrrrNomadsMirror(),
+]
 
 for dataset in DYNAMICAL_DATASETS:
     app.add_typer(dataset.get_cli(), name=dataset.dataset_id)

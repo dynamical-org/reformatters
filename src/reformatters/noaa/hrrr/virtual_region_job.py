@@ -85,6 +85,10 @@ class NoaaHrrrForecastVirtualRegionJob(
     """RegionJob shared by the HRRR virtual forecast datasets; a forecast-length
     subclass declares operational_update_window."""
 
+    source_file_coord_class: ClassVar[type[NoaaHrrrForecastVirtualSourceFileCoord]] = (
+        NoaaHrrrForecastVirtualSourceFileCoord
+    )
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -109,7 +113,7 @@ class NoaaHrrrForecastVirtualRegionJob(
                     if not vars_in_file:
                         continue
                     coords.append(
-                        NoaaHrrrForecastVirtualSourceFileCoord(
+                        self.source_file_coord_class(
                             init_time=init_time,
                             lead_time=lead_time,
                             domain="conus",

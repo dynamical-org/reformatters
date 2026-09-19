@@ -486,6 +486,8 @@ def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
+    *,
+    rebase: bool = True,
 ) -> None:
     """Conveience function to handle committing to icechunk stores.
 
@@ -503,25 +505,30 @@ def commit_if_icechunk(
 
     Each job however may need to rebase before it is able to commit. We use the rebase_with
     argument which will handle automatic retries until the commit succeeds.
+
+    `rebase=False` is for a single writer whose changes are only valid on the snapshot
+    it opened: a commit that finds the branch moved raises instead.
     """
 
     def _commit(icechunk_store: IcechunkStore) -> None:
         icechunk_store.session.commit(
             message=message,
-            rebase_with=icechunk.ConflictDetector(),
+            rebase_with=icechunk.ConflictDetector() if rebase else None,
         )
+
+    max_attempts = 10 if rebase else 1
 
     for store in replica_stores:
         if isinstance(store, IcechunkStore):
             retry(
                 functools.partial(_commit, store),
-                max_attempts=10,
+                max_attempts=max_attempts,
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_commit, primary_store),
-            max_attempts=10,
+            max_attempts=max_attempts,
         )
 
 

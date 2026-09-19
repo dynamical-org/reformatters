@@ -1218,3 +1218,56 @@ def test_representative_probe_loc_supplements_the_group_level() -> None:
     # A root variable has no vertical dim, so its probe is just the file's slab.
     root_var = next(var for var in job.data_vars if var.group is ROOT)
     assert dict(job.representative_probe_loc(coord, root_var)) == dict(coord.out_loc())
+
+
+class _MovingWindowMultiGroupRegionJob(MultiGroupRegionJob):
+    drops_before_template_start: ClassVar[bool] = True
+
+
+def test_drop_before_template_start_moves_every_group(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path, n_inits=4)
+    full_template = _create_template_ds(4)
+    template_utils.write_metadata(full_template, dataset.store_factory)
+    _process_virtual(
+        _make_region_job(full_template, region=slice(0, 4)),
+        _primary_repo(dataset.store_factory),
+    )
+
+    dropped = 2
+    window_template = xr.DataTree.from_dict(
+        {
+            node.path: node.to_dataset(inherit=False).isel(
+                init_time=slice(dropped, None)
+            )
+            for node in full_template.subtree
+        }
+    )
+    job = _MovingWindowMultiGroupRegionJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=window_template,
+        data_vars=_data_vars(),
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+        processing_mode="update",
+    )
+    job.drop_before_template_start(dataset.store_factory)
+
+    store: Any = dataset.store_factory.primary_store()
+    tree = xr.open_datatree(store, engine="zarr", decode_timedelta=True)
+    for group_ds in (tree.to_dataset(), tree["pressure_level"].to_dataset()):
+        assert group_ds.get_index("init_time").equals(
+            window_template.to_dataset().get_index("init_time")
+        )
+    for position in range(2):
+        np.testing.assert_array_equal(
+            tree["temperature_2m"].isel(init_time=position, lead_time=0).values,
+            _root_values(position + dropped, 0),
+        )
+        for level_idx in range(N_LEVELS):
+            np.testing.assert_array_equal(
+                tree["pressure_level/temperature"]
+                .isel(init_time=position, lead_time=0, pressure_level=level_idx)
+                .values,
+                _pressure_values(position + dropped, 0, level_idx),
+            )

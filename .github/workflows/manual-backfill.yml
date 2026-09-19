@@ -35,6 +35,7 @@ name: 'Manual: Backfill'
         - noaa-hrrr-analysis
         - noaa-hrrr-analysis-virtual
         - noaa-hrrr-forecast-18-hour-virtual
+        - noaa-hrrr-forecast-18-hour-virtual-fast
         - noaa-hrrr-forecast-48-hour
         - noaa-hrrr-forecast-48-hour-virtual
         - noaa-mrms-conus-analysis-hourly

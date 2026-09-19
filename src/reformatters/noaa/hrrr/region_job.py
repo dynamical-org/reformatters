@@ -55,12 +55,17 @@ class NoaaHrrrSourceFileCoord(InitLeadSourceFileCoord):
     file_type: NoaaHrrrFileType
     data_vars: Sequence[NoaaHrrrDataVar]
 
-    def get_url(self, source: DownloadSource = "s3") -> str:
-        """Return the URL for this HRRR file."""
+    def relative_path(self) -> str:
+        """The file's path under either host's HRRR root, e.g.
+        `hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2`."""
         lead_time_hours = whole_hours(self.lead_time)
         init_date_str = self.init_time.strftime("%Y%m%d")
         init_hour_str = self.init_time.strftime("%H")
-        path = f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+        return f"hrrr.{init_date_str}/{self.domain}/hrrr.t{init_hour_str}z.wrf{self.file_type}f{int(lead_time_hours):02d}.grib2"
+
+    def get_url(self, source: DownloadSource = "s3") -> str:
+        """Return the URL for this HRRR file."""
+        path = self.relative_path()
         match source:
             case "nomads":
                 base = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/"

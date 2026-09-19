@@ -93,6 +93,11 @@ class VirtualRegionJob(
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
 
+    # The store holds only the template's append-dim span: each update fire first drops
+    # the positions before the template's first label, see "Moving window" in
+    # docs/virtual_datasets.md.
+    drops_before_template_start: ClassVar[bool] = False
+
     # ----- Overridable methods -----
     # A dataset implements file_refs and generate_source_file_coords (from
     # RegionJob) and sets operational_update_window; the rest have working defaults.
@@ -409,6 +414,9 @@ class VirtualRegionJob(
         # lazily (a no-op on the pre-sized backfill branch).
         readonly_store = primary_repo.readonly_session(branch).store
         current_size = self._committed_append_dim_size(readonly_store)
+        # A rebase replays positional refs unchanged over another update's drop; backfill
+        # workers share a branch nothing drops from. See docs/virtual_datasets.md.
+        fenced = self.drops_before_template_start and self.processing_mode == "update"
 
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
@@ -418,6 +426,8 @@ class VirtualRegionJob(
             primary_session = primary_repo.writable_session(branch)
             replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
             stores = [primary_session.store, *(s.store for s in replica_sessions)]
+            if fenced:
+                current_size = self.assert_aligned_to_template(primary_session.store)
 
             needed_size = self._needed_append_dim_size(refs)
             if needed_size > current_size:
@@ -434,6 +444,7 @@ class VirtualRegionJob(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+                rebase=not fenced,
             )
             log.info(
                 f"Committed {len(refs)} refs "
@@ -579,7 +590,100 @@ class VirtualRegionJob(
             self.append_dim,
             tmp_store,
             consolidated=self.consolidated_metadata,
+            aligned_size=(
+                self.assert_aligned_to_template
+                if self.drops_before_template_start
+                else None
+            ),
         )
+
+    def drop_before_template_start(self, store_factory: storage.StoreFactory) -> None:
+        """Drop the store's append-dim positions before the template's first label, in
+        one commit, so store position i is template position i again. Chunk refs move
+        in the manifest; coordinate values move in place. A store already aligned, or
+        empty, is left alone; one the template cannot be a later window of raises.
+        """
+        assert self.drops_before_template_start
+        primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
+        assert not replica_repos, "dropping positions is single-repository"
+        session = primary_repo.writable_session("main")
+        template_labels = self.template_ds.to_dataset().get_index(self.append_dim)
+        stored_labels = self._stored_append_dim_labels(session.store)
+        drop_count = int(stored_labels.searchsorted(template_labels[0]))
+        surviving = stored_labels[drop_count:]
+        assert surviving.equals(template_labels[: len(surviving)]), (
+            f"store {self.append_dim} labels from {stored_labels[0]} are not an "
+            f"earlier window of the template's, which starts {template_labels[0]}"
+        )
+        if drop_count == 0:
+            return
+
+        members = zarr.open_group(session.store).members(max_depth=None)
+        for _, array in members:
+            if not isinstance(array, zarr.Array):
+                continue
+            assert isinstance(array.metadata, ArrayV3Metadata)
+            dimension_names = array.metadata.dimension_names or ()
+            if self.append_dim not in dimension_names:
+                continue
+            axis = dimension_names.index(self.append_dim)
+            new_shape = tuple(
+                len(surviving) if i == axis else size
+                for i, size in enumerate(array.shape)
+            )
+            if array.basename in self.template_ds[array.path].coords:
+                values = np.take(
+                    array[...], range(drop_count, array.shape[axis]), axis=axis
+                )
+                array.resize(new_shape)
+                array[...] = values
+            else:
+                assert array.chunks[axis] == 1, (
+                    f"{array.path} holds {array.chunks[axis]} {self.append_dim} "
+                    "positions per chunk; only whole chunks can be dropped"
+                )
+                session.shift_array(
+                    f"/{array.path}",
+                    [-drop_count if i == axis else 0 for i in range(array.ndim)],
+                )
+                array.resize(new_shape)
+        session.commit(
+            f"Drop {drop_count} {self.append_dim} positions before {template_labels[0]}"
+        )
+        log.info(
+            f"Dropped {drop_count} {self.append_dim} positions before {template_labels[0]}"
+        )
+
+    def assert_aligned_to_template(self, store: IcechunkStore) -> int:
+        """Assert `store`'s append-dim labels are the template's first ones, position
+        for position, and return how many there are."""
+        stored_labels = self._stored_append_dim_labels(store)
+        template_labels = self.template_ds.to_dataset().get_index(self.append_dim)
+        assert stored_labels.equals(template_labels[: len(stored_labels)]), (
+            f"store {self.append_dim} labels {stored_labels[:1].tolist()}.."
+            f"{stored_labels[-1:].tolist()} are not the template's first "
+            f"{len(stored_labels)}, which start {template_labels[0]}: another writer "
+            "moved the window, or this fire's drop has not run"
+        )
+        return len(stored_labels)
+
+    def _stored_append_dim_labels(self, store: IcechunkStore) -> pd.Index:
+        """The store's append-dim labels, asserting every group agrees."""
+        labels = [
+            xr.open_zarr(
+                store,
+                group=node_group_name(node),
+                consolidated=False,
+                chunks=None,
+                drop_variables=[str(name) for name in node.data_vars],
+            ).get_index(self.append_dim)
+            for node in self.template_ds.subtree
+        ]
+        assert all(group_labels.equals(labels[0]) for group_labels in labels), (
+            f"{self.append_dim} labels differ across groups; every group changes in "
+            "one atomic commit, so this store requires manual repair"
+        )
+        return labels[0]
 
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int

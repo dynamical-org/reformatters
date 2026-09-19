@@ -1,5 +1,6 @@
 import struct
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from reformatters.common.config_models import ROOT, DataVar
@@ -31,8 +32,8 @@ NOAA_DATA_VAR = TypeVar("NOAA_DATA_VAR", bound=DataVar[NoaaInternalAttrs])
 class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]):
     """One NOAA GRIB file: the forecast step it holds and the variables it packs.
 
-    `get_url()` must return the `s3://` location refs point at, matching the dataset's
-    virtual chunk container prefix.
+    `get_url()` must return the location refs point at, under one of the dataset's
+    virtual chunk container prefixes.
     """
 
     data_vars: Sequence[NOAA_DATA_VAR]
@@ -73,6 +74,19 @@ class NoaaVirtualRegionJob(
             require_index=True,
         )
 
+    def download_index(self, coord: NOAA_VIRTUAL_COORD) -> Path:
+        """Download the index beside `coord`'s data file; the caller deletes the file.
+        Override with `read_data_bytes` where a coord may resolve to another store."""
+        return s3_download_to_disk(
+            coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
+        )
+
+    def read_data_bytes(self, coord: NOAA_VIRTUAL_COORD, start: int, end: int) -> bytes:
+        """The `[start, end)` byte range of `coord`'s data file."""
+        return s3_read_bytes(
+            coord.get_url(), region=self.source_bucket_region, start=start, end=end
+        )
+
     def owns_index_message(
         self,
         coord: NOAA_VIRTUAL_COORD,  # noqa: ARG002 - overrides key the decision on it
@@ -88,9 +102,7 @@ class NoaaVirtualRegionJob(
         return True
 
     def file_refs(self, coord: NOAA_VIRTUAL_COORD, file_size: int) -> list[VirtualRef]:
-        index_path = s3_download_to_disk(
-            coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
-        )
+        index_path = self.download_index(coord)
         try:
             index_lines = parse_grib_index_lines(index_path)
         finally:
@@ -174,12 +186,7 @@ class NoaaVirtualRegionJob(
         """
         if offset + GRIB_SECTION_0_BYTES > file_size:
             return None
-        header = s3_read_bytes(
-            coord.get_url(),
-            region=self.source_bucket_region,
-            start=offset,
-            end=offset + GRIB_SECTION_0_BYTES,
-        )
+        header = self.read_data_bytes(coord, offset, offset + GRIB_SECTION_0_BYTES)
         if header[:4] != b"GRIB" or header[7] != 2:
             return None
         (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
