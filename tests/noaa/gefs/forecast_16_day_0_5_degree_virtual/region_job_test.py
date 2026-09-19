@@ -251,6 +251,67 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
         job.file_refs(coord, file_size=1200)
 
 
+def test_file_refs_accepts_a_record_the_source_is_known_to_have_dropped(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """gep11's b file at 2023-04-26T12 f240 was published without its 5WAVH record; the
+    other variables in the file are still referenced and only that cell stays empty."""
+
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: "1:0:d=2023042612:PRES:mean sea level:240 hour fcst:ENS=+11\n",
+        data_file_size=1200,
+    )
+
+    data_vars = [
+        get_var("pressure_mean_sea_level"),
+        get_var("five_wave_geopotential_height_500mb"),
+    ]
+    coord = NoaaGefsForecastVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2023-04-26T12:00"),
+        lead_time=pd.Timedelta("240h"),
+        ensemble_member=11,
+        source_file_type="b",
+        data_vars=data_vars,
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    refs = job.file_refs(coord, file_size=1200)
+    assert {ref.data_var.name for ref in refs} == {"pressure_mean_sea_level"}
+
+
+def test_file_refs_still_refuses_a_listed_file_missing_another_record(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        noaa_virtual_job_module,
+        tmp_path,
+        lambda _url: "1:0:d=2023042612:5WAVH:500 mb:240 hour fcst:ENS=+11\n",
+        data_file_size=1200,
+    )
+
+    data_vars = [
+        get_var("pressure_mean_sea_level"),
+        get_var("five_wave_geopotential_height_500mb"),
+    ]
+    coord = NoaaGefsForecastVirtualSourceFileCoord(
+        init_time=pd.Timestamp("2023-04-26T12:00"),
+        lead_time=pd.Timedelta("240h"),
+        ensemble_member=11,
+        source_file_type="b",
+        data_vars=data_vars,
+    )
+    job = make_job(template_ds, data_vars=data_vars)
+
+    with pytest.raises(
+        AssertionError, match=r"no message for \['pressure_mean_sea_level'\]"
+    ):
+        job.file_refs(coord, file_size=1200)
+
+
 def test_a_vertical_group_variable_fills_one_chunk_per_level(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

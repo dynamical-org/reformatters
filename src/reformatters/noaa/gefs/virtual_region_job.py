@@ -58,6 +58,25 @@ class NoaaGefsVirtualSourceFileCoord(
 
 GEFS_VIRTUAL_COORD = TypeVar("GEFS_VIRTUAL_COORD", bound=NoaaGefsVirtualSourceFileCoord)
 
+_5WAVH_500MB = frozenset({"five_wave_geopotential_height_500mb"})
+
+# Source files NOAA published without a record, and the variables that record filled.
+KNOWN_MISSING_MESSAGES: Mapping[
+    tuple[pd.Timestamp, pd.Timedelta, int, GEFSSourceFileType], frozenset[str]
+] = {
+    **{
+        (
+            pd.Timestamp("2023-04-26T12"),
+            pd.Timedelta(hours=240),
+            member,
+            "b",
+        ): _5WAVH_500MB
+        for member in (11, 12, 16, 18, 20, 22)
+    },
+    (pd.Timestamp("2023-04-26T12"), pd.Timedelta(hours=288), 0, "b"): _5WAVH_500MB,
+    (pd.Timestamp("2025-07-01T18"), pd.Timedelta(hours=24), 28, "b"): _5WAVH_500MB,
+}
+
 
 class NoaaGefsVirtualRegionJob(
     NoaaVirtualRegionJob[NoaaGefsVirtualDataVar, GEFS_VIRTUAL_COORD],
@@ -76,12 +95,24 @@ class NoaaGefsVirtualRegionJob(
         NaN column: the file counts as ingested through its representative variable, so
         nothing ever retries it."""
         filled = {ref.data_var.path for ref in refs}
+        known_missing = KNOWN_MISSING_MESSAGES.get(
+            (
+                coord.init_time,
+                coord.lead_time,
+                coord.ensemble_member,
+                coord.source_file_type,
+            ),
+            frozenset(),
+        )
         unmatched = sorted(
-            var.name for var in coord.data_vars if var.path not in filled
+            var.name
+            for var in coord.data_vars
+            if var.path not in filled and var.name not in known_missing
         )
         assert not unmatched, (
             f"{coord.get_url()} has no message for {unmatched}; "
-            "the source era is not modelled by this catalog"
+            "the source era is not modelled by this catalog, or the file belongs in "
+            "KNOWN_MISSING_MESSAGES"
         )
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
