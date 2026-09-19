@@ -57,7 +57,6 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
-    _PROBE_BATCH_SIZE,
     VirtualRef,
     VirtualRegionJob,
     _exists_many,
@@ -2385,11 +2384,11 @@ def test_exists_many_bounds_concurrent_probes() -> None:
             in_flight -= 1
             return True
 
-    keys = [f"key-{i}" for i in range(_PROBE_BATCH_SIZE * 2 + 5)]
+    keys = [f"key-{i}" for i in range(1_000 * 2 + 5)]
     result = _exists_many(cast("icechunk.IcechunkStore", SlowStore()), keys)
 
     assert result == dict.fromkeys(keys, True)
-    assert peak <= _PROBE_BATCH_SIZE
+    assert peak <= 1_000
 
 
 def test_exists_many_batch_size_bounds_concurrent_probes() -> None:

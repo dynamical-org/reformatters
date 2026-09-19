@@ -716,19 +716,12 @@ def _chunk_key_encoder(
     )
 
 
-# Bounds the probes in flight per call, so pending requests do not scale with the
-# number of keys passed (the result still does). A whole-archive scan probes every
-# expected source file of a region job at once -- tens of thousands for a large
-# ensemble archive, times the number of jobs scanned concurrently.
-_PROBE_BATCH_SIZE = 1_000
-
-
 def _exists_many(
     store: IcechunkStore,
     keys: Sequence[str],
     *,
     max_attempts: int = 8,
-    batch_size: int = _PROBE_BATCH_SIZE,
+    batch_size: int = 1_000,  # bound memory + manifest cache locality
 ) -> dict[str, bool]:
     """Probe many chunk keys concurrently, at most `batch_size` at a time."""
     if not keys:
