@@ -136,10 +136,7 @@ def _sample_virtual_points(
     stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
     da = da.isel({append_dim: slice(None, None, stride)})
 
-    indexers: dict[str, xr.DataArray | int] = {
-        dim: xr.DataArray([ctx.point1_sel[dim], ctx.point2_sel[dim]], dims="point")
-        for dim in ctx.point1_sel
-    }
+    indexers: dict[str, int] = {}
     for dim, label in select_var_level(ctx, var, stats).items():
         loc = da.get_index(dim).get_loc(label)
         assert isinstance(loc, int)
@@ -159,7 +156,16 @@ def _sample_virtual_points(
             indexers[dim] = 0
             if dim == "ensemble_member":
                 ctx.value_ts_member = int(da[dim].values[0])
-    return da.isel(indexers)
+    # Reduce with scalars first, then take each point on its own. A `point` indexer
+    # spanning both at once is vectorized indexing, which the zarr backend cannot push
+    # down: it reads the whole member x level cross-product per position, 6.9 GB for
+    # eight positions of a pressure-level variable against 0.4 GB this way.
+    reduced = da.isel(indexers)
+    points = [
+        reduced.isel({dim: sel[dim] for dim in sel})
+        for sel in (ctx.point1_sel, ctx.point2_sel)
+    ]
+    return xr.concat(points, dim="point").transpose(..., "point")
 
 
 def _point_arrays(
