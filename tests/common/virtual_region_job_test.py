@@ -57,6 +57,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import (
+    _PROBE_BATCH_SIZE,
     VirtualRef,
     VirtualRegionJob,
     _exists_many,
@@ -2363,3 +2364,53 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
 
     assert [j.poll_deadline for j in driven] == [deadline]
+
+
+def test_exists_many_bounds_concurrent_probes() -> None:
+    """Probes go out in bounded batches, so memory does not scale with the key count.
+
+    A whole-archive manifest scan passes a region job's every expected source file at
+    once -- tens of thousands for a large ensemble archive. Gathering them all held
+    every pending request at once and exhausted the host.
+    """
+    in_flight = 0
+    peak = 0
+
+    class SlowStore:
+        async def exists(self, _key: str) -> bool:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return True
+
+    keys = [f"key-{i}" for i in range(_PROBE_BATCH_SIZE * 2 + 5)]
+    result = _exists_many(cast("icechunk.IcechunkStore", SlowStore()), keys)
+
+    assert result == dict.fromkeys(keys, True)
+    assert peak <= _PROBE_BATCH_SIZE
+
+
+def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
+    """An explicit batch_size, not the module default, bounds the probes in flight."""
+    in_flight = 0
+    peak = 0
+
+    class SlowStore:
+        async def exists(self, _key: str) -> bool:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return True
+
+    batch_size = 7
+    keys = [f"key-{i}" for i in range(batch_size * 3 + 2)]
+    result = _exists_many(
+        cast("icechunk.IcechunkStore", SlowStore()), keys, batch_size=batch_size
+    )
+
+    assert result == dict.fromkeys(keys, True)
+    assert peak <= batch_size
