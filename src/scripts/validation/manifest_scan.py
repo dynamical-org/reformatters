@@ -17,7 +17,6 @@ the archive in slices and writes each as it completes so an interrupted scan res
 See docs/validation.md.
 """
 
-import json
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -41,6 +40,8 @@ from reformatters.common.retry import retry
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from scripts.validation.scan_common import (
     build_virtual_jobs,
+    read_checkpoint,
+    write_checkpoint,
 )
 from scripts.validation.utils import (
     AvailabilitySeries,
@@ -429,25 +430,20 @@ def _write_checkpoint(path: Path, result: ManifestScanResult) -> None:
         for position, present in by_position.items():
             marks[index[position]] = "1" if present else "0"
         var_availability[var_path] = "".join(marks)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.partial")
-    tmp.write_text(
-        json.dumps(
-            {
-                "positions": [position.isoformat() for position in positions],
-                "file_availability": [
-                    list(result.file_availability[position]) for position in positions
-                ],
-                "var_availability": var_availability,
-            }
-        )
+    write_checkpoint(
+        path,
+        {
+            "positions": [position.isoformat() for position in positions],
+            "file_availability": [
+                list(result.file_availability[position]) for position in positions
+            ],
+            "var_availability": var_availability,
+        },
     )
-    # Rename last so an interrupted write never leaves a half-file a later run trusts.
-    tmp.rename(path)
 
 
 def _read_checkpoint(path: Path) -> ManifestScanResult:
-    raw = json.loads(path.read_text())
+    raw = read_checkpoint(path)
     positions = [pd.Timestamp(value) for value in raw["positions"]]
     return ManifestScanResult(
         file_availability={

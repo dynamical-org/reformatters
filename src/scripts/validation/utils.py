@@ -106,10 +106,10 @@ output_dir_option = typer.Option(
 checkpoint_dir_option = typer.Option(
     None,
     "--checkpoint-dir",
-    help="Virtual stores: write the whole-archive manifest scan to this directory in "
-    "slices as it runs, and reuse any slice already there. A whole-archive scan of a "
-    "large ensemble archive runs for hours; checkpointing lets an interrupted scan "
-    "resume instead of starting over.",
+    help="Virtual stores: record the whole-archive scans in this directory as they run "
+    "— the manifest scan slice by slice, the decode scan region job by region job — and "
+    "reuse anything already there. These scans run for hours on a large ensemble "
+    "archive; checkpointing lets an interrupted scan resume instead of starting over.",
 )
 
 probe_workers_option = typer.Option(
@@ -262,8 +262,8 @@ class RunContext:
     # snapshot is cheap, an append-dim point column is expensive. Routes availability /
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
-    # Where the whole-archive manifest scan checkpoints its slices, so an interrupted
-    # scan resumes. None scans in one pass and keeps nothing.
+    # Where the whole-archive manifest and decode scans record completed work, so an
+    # interrupted scan resumes. None scans in one pass and keeps nothing.
     checkpoint_dir: Path | None = None
     probe_workers: int | None = None
     level_override: float | None = None
