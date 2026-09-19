@@ -39,6 +39,7 @@ from scripts.validation.utils import (
     output_dir_option,
     parse_point_options,
     point_option,
+    probe_workers_option,
     reference_url_option,
     resolve_reference_url,
     scope_time_period,
@@ -107,6 +108,7 @@ def run_all(
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
     checkpoint_dir: Path | None = checkpoint_dir_option,
+    probe_workers: int | None = probe_workers_option,
 ) -> None:
     """Produce availability / value / spatial / temporal plots, one per variable, in one directory + validation_summary.md."""
     started_at = pd.Timestamp.now(tz="UTC")
@@ -167,6 +169,7 @@ def run_all(
         start_date=start_date,
         is_virtual=is_virtual,
         checkpoint_dir=checkpoint_dir,
+        probe_workers=probe_workers,
         level_override=level,
         init_time=init_time,
         lead_time=lead_time,

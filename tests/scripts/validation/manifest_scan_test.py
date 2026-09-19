@@ -1,15 +1,18 @@
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 import zarr
 from zarr.storage import MemoryStore
 
+from scripts.validation import manifest_scan
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
     _checkpoint_path,
@@ -428,3 +431,40 @@ def test_scan_windows_exact_multiple_has_no_empty_trailing_slice() -> None:
         (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-11")),
         (pd.Timestamp("2024-01-11"), pd.Timestamp("2024-01-21")),
     ]
+
+
+def test_scan_window_probe_workers_bounds_concurrent_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """probe_workers reaches probe_jobs; omitting it keeps probe_jobs' tuned default.
+
+    The default's in-flight set spans more append-dim manifest splits than the ref
+    cache holds on an archive with many source files per job, so a caller must be
+    able to lower it.
+    """
+    seen: list[dict[str, int]] = []
+
+    def fake_probe_jobs(
+        jobs: object, store: object, **kwargs: int
+    ) -> Iterator[tuple[object, list[object]]]:
+        seen.append(kwargs)
+        return iter(())
+
+    monkeypatch.setattr(manifest_scan, "probe_jobs", fake_probe_jobs)
+    monkeypatch.setattr(manifest_scan, "build_virtual_jobs", lambda *args, **kwargs: [])
+    monkeypatch.setattr(manifest_scan, "expected_lead_limits", lambda store: {})
+    monkeypatch.setattr(manifest_scan.zarr, "open_group", lambda store, mode: None)
+
+    dataset = SimpleNamespace(dataset_id="d")
+    for probe_workers in (8, None):
+        with pytest.raises(AssertionError, match="No source files"):
+            manifest_scan._scan_window(
+                dataset,  # ty: ignore[invalid-argument-type]
+                None,  # ty: ignore[invalid-argument-type]
+                start=None,
+                end=None,
+                variables=None,
+                probe_workers=probe_workers,
+            )
+
+    assert seen == [{"max_workers": 8}, {}]

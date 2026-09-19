@@ -321,6 +321,7 @@ def scan_manifest(
     variables: list[str] | None = None,
     checkpoint_dir: Path | None = None,
     window: pd.Timedelta | None = None,
+    probe_workers: int | None = None,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
@@ -358,7 +359,12 @@ def scan_manifest(
             results.append(_read_checkpoint(path))
             continue
         result = _scan_window(
-            dataset, store, start=window_start, end=window_end, variables=variables
+            dataset,
+            store,
+            start=window_start,
+            end=window_end,
+            variables=variables,
+            probe_workers=probe_workers,
         )
         if path is not None:
             _write_checkpoint(path, result)
@@ -482,6 +488,7 @@ def _scan_window(
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     variables: list[str] | None,
+    probe_workers: int | None = None,
 ) -> ManifestScanResult:
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
@@ -499,7 +506,10 @@ def _scan_window(
     var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
     pending_probes: list[tuple[str, pd.Timestamp, str]] = []
     progress_every = max(1, len(jobs) // 20)
-    for i, (job, coord_presence) in enumerate(probe_jobs(jobs, store), start=1):
+    probe_kwargs = {} if probe_workers is None else {"max_workers": probe_workers}
+    for i, (job, coord_presence) in enumerate(
+        probe_jobs(jobs, store, **probe_kwargs), start=1
+    ):
         _fold_file_availability(coord_presence, lead_limits, file_counts)
         for var in job.data_vars:
             var_availability.setdefault(var.path, {})

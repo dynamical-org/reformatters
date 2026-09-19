@@ -112,6 +112,15 @@ checkpoint_dir_option = typer.Option(
     "resume instead of starting over.",
 )
 
+probe_workers_option = typer.Option(
+    None,
+    "--probe-workers",
+    help="Virtual stores: how many region jobs the manifest scan probes at once. "
+    "Lower it on an archive with many source files per job: in-flight jobs spread "
+    "across that many append-dim manifest splits, and a set too large for the ref "
+    "cache refetches manifests instead of reusing them. Default: the tuned value.",
+)
+
 level_option = typer.Option(
     None,
     "--level",
@@ -256,6 +265,7 @@ class RunContext:
     # Where the whole-archive manifest scan checkpoints its slices, so an interrupted
     # scan resumes. None scans in one pass and keeps nothing.
     checkpoint_dir: Path | None = None
+    probe_workers: int | None = None
     level_override: float | None = None
     # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
     # the spatial snapshot), an analysis run uses time; each anchors both the spatial
