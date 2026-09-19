@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,13 +12,18 @@ from zarr.storage import MemoryStore
 
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
+    _checkpoint_path,
     _flush_var_probes,
     _fold_file_availability,
+    _merge_results,
     _probe_coord_for_var,
+    _read_checkpoint,
+    _scan_windows,
     _sort_coords_for_probe,
     _var_chunk_key,
     _var_keys,
     _var_probes,
+    _write_checkpoint,
     probe_jobs,
     result_availability_series,
 )
@@ -336,3 +342,89 @@ def test_result_availability_series_marks_unprobed_positions_nan() -> None:
     )
     np.testing.assert_array_equal(series.fraction[:2], [1.0, 0.0])
     assert np.isnan(series.fraction[2])
+
+
+def test_checkpoint_round_trips_availability_including_unprobed_positions(
+    tmp_path: Path,
+) -> None:
+    positions = pd.to_datetime(["2024-01-01", "2024-01-02"])
+    result = ManifestScanResult(
+        file_availability={positions[0]: (3, 4), positions[1]: (4, 4)},
+        # temperature is unprobed at the second position; absence must survive the trip.
+        var_availability={
+            "temperature": {positions[0]: True},
+            "pressure_level/wind_u": {positions[0]: False, positions[1]: True},
+        },
+    )
+    path = tmp_path / "checkpoint.json"
+    _write_checkpoint(path, result)
+
+    assert _read_checkpoint(path) == result
+
+
+def test_merge_results_combines_windows() -> None:
+    first = pd.Timestamp("2024-01-01")
+    second = pd.Timestamp("2024-02-01")
+    merged = _merge_results(
+        [
+            ManifestScanResult(
+                file_availability={first: (1, 2)},
+                var_availability={"temperature": {first: True}},
+            ),
+            ManifestScanResult(
+                file_availability={second: (2, 2)},
+                var_availability={
+                    "temperature": {second: False},
+                    "pressure_surface": {second: True},
+                },
+            ),
+        ]
+    )
+
+    assert merged.file_availability == {first: (1, 2), second: (2, 2)}
+    assert merged.var_availability == {
+        "temperature": {first: True, second: False},
+        "pressure_surface": {second: True},
+    }
+
+
+def test_checkpoint_path_separates_variable_filters(tmp_path: Path) -> None:
+    dataset_id = "noaa-gefs-forecast-35-day-0-5-degree-virtual"
+    start, end = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-04-01")
+
+    unfiltered = _checkpoint_path(tmp_path, dataset_id, start, end, None)
+    filtered = _checkpoint_path(tmp_path, dataset_id, start, end, ["temperature_2m"])
+
+    assert unfiltered != filtered
+    assert unfiltered.name.startswith(f"{dataset_id}_20240101T0000_20240401T0000")
+
+
+def test_scan_windows_slices_the_range_and_covers_the_end() -> None:
+    windows = list(
+        _scan_windows(
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2024-03-01"),
+            window=pd.Timedelta(days=25),
+        )
+    )
+
+    assert windows == [
+        (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-26")),
+        (pd.Timestamp("2024-01-26"), pd.Timestamp("2024-02-20")),
+        (pd.Timestamp("2024-02-20"), pd.Timestamp("2024-03-01")),
+    ]
+
+
+def test_scan_windows_exact_multiple_has_no_empty_trailing_slice() -> None:
+    windows = list(
+        _scan_windows(
+            pd.Timestamp("2024-01-01"),
+            pd.Timestamp("2024-01-21"),
+            window=pd.Timedelta(days=10),
+        )
+    )
+
+    assert windows == [
+        (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-11")),
+        (pd.Timestamp("2024-01-11"), pd.Timestamp("2024-01-21")),
+    ]

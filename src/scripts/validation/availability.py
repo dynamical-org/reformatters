@@ -33,6 +33,7 @@ from scripts.validation.scan_common import find_registered_dataset, resolve_scan
 from scripts.validation.utils import (
     AvailabilitySeries,
     RunContext,
+    checkpoint_dir_option,
     end_date_option,
     get_two_random_points,
     is_virtual_store,
@@ -475,7 +476,12 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     """
     dataset, store, start, end = resolve_scan_window(ctx)
     result = scan_manifest(
-        dataset, store, start=start, end=end, variables=ctx.variables
+        dataset,
+        store,
+        start=start,
+        end=end,
+        variables=ctx.variables,
+        checkpoint_dir=ctx.checkpoint_dir,
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}
@@ -506,6 +512,7 @@ def build_run_context(
     end_date: str | None = None,
     level: float | None = None,
     output_dir: Path | None = None,
+    checkpoint_dir: Path | None = None,
 ) -> RunContext:
     """The RunContext a standalone command runs against (run-all builds its own)."""
     ds = load_zarr_dataset(dataset_url)
@@ -535,6 +542,7 @@ def build_run_context(
         variables=selected_vars,
         start_date=start_date,
         is_virtual=is_virtual_store(dataset_url),
+        checkpoint_dir=checkpoint_dir,
         level_override=level,
     )
 
@@ -546,6 +554,7 @@ def availability(
     end_date: str | None = end_date_option,
     level: float | None = level_option,
     output_dir: Path | None = output_dir_option,
+    checkpoint_dir: Path | None = checkpoint_dir_option,
     min_fraction: float = typer.Option(
         1.0,
         "--min-fraction",
@@ -555,7 +564,7 @@ def availability(
 ) -> None:
     """Per-variable availability over the append dim (manifest-probed for virtual stores)."""
     ctx = build_run_context(
-        dataset_url, variables, start_date, end_date, level, output_dir
+        dataset_url, variables, start_date, end_date, level, output_dir, checkpoint_dir
     )
     if ctx.is_virtual:
         file_availability = run_manifest_availability(ctx)

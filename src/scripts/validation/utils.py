@@ -103,6 +103,15 @@ output_dir_option = typer.Option(
     help="Write outputs into this directory instead of creating a new run directory.",
 )
 
+checkpoint_dir_option = typer.Option(
+    None,
+    "--checkpoint-dir",
+    help="Virtual stores: write the whole-archive manifest scan to this directory in "
+    "slices as it runs, and reuse any slice already there. A whole-archive scan of a "
+    "large ensemble archive runs for hours; checkpointing lets an interrupted scan "
+    "resume instead of starting over.",
+)
+
 level_option = typer.Option(
     None,
     "--level",
@@ -244,6 +253,9 @@ class RunContext:
     # snapshot is cheap, an append-dim point column is expensive. Routes availability /
     # value_timeseries to manifest- and sample-based paths instead of full reads.
     is_virtual: bool = False
+    # Where the whole-archive manifest scan checkpoints its slices, so an interrupted
+    # scan resumes. None scans in one pass and keeps nothing.
+    checkpoint_dir: Path | None = None
     level_override: float | None = None
     # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
     # the spatial snapshot), an analysis run uses time; each anchors both the spatial

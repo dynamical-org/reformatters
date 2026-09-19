@@ -12,9 +12,12 @@ by job so peak memory is independent of the scan window length. Two measures:
 
 Entry points: the `availability` command (URL-driven, resolves the registered dataset
 from the store's `dataset_id` attribute) and `run-all`, via
-`availability.run_manifest_availability`. See docs/validation.md.
+`availability.run_manifest_availability`. Both accept `--checkpoint-dir`, which scans
+the archive in slices and writes each as it completes so an interrupted scan resumes.
+See docs/validation.md.
 """
 
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -31,6 +34,7 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.retry import retry
@@ -50,6 +54,9 @@ _EXISTS_BATCH_SIZE = 20_000
 # than let one blip kill the whole scan. Backoff grows with attempt in retry(), so
 # these attempts span several minutes — 12 was observed too short for a ~90s blip.
 _SCAN_MAX_RETRIES = 20
+# Checkpoint slice length. Small enough that an interrupted scan loses minutes rather
+# than hours, large enough that rebuilding a slice's region jobs stays negligible.
+_CHECKPOINT_WINDOW = pd.Timedelta(days=90)
 
 
 @dataclass
@@ -312,12 +319,170 @@ def scan_manifest(
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     variables: list[str] | None = None,
+    checkpoint_dir: Path | None = None,
+    window: pd.Timedelta | None = None,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
     `dataset` supplies the region-job machinery (expected source files, chunk keys);
     `store` is the archive actually probed, so a staging store is scanned as itself.
+
+    With `checkpoint_dir` the archive is scanned in `window`-long slices, each written
+    there as it completes and reused on a later call. A whole-archive scan of a large
+    ensemble archive runs for hours, long enough that an interruption is likely; without
+    checkpoints the whole scan is lost and starts over.
     """
+    if checkpoint_dir is not None and window is None:
+        window = _CHECKPOINT_WINDOW
+    windows: list[tuple[pd.Timestamp | None, pd.Timestamp | None]] = [(start, end)]
+    if window is not None:
+        bounds = _resolve_bounds(dataset, store, start=start, end=end)
+        windows = list(_scan_windows(*bounds, window=window))
+    results = []
+    for index, (window_start, window_end) in enumerate(windows, start=1):
+        if len(windows) > 1:
+            log.info(f"Window {index}/{len(windows)} [{window_start} .. {window_end}]")
+        path = (
+            _checkpoint_path(
+                checkpoint_dir,
+                dataset.dataset_id,
+                window_start,
+                window_end,
+                variables,
+            )
+            if checkpoint_dir is not None
+            else None
+        )
+        if path is not None and path.exists():
+            log.info(f"  reusing checkpoint {path.name}")
+            results.append(_read_checkpoint(path))
+            continue
+        result = _scan_window(
+            dataset, store, start=window_start, end=window_end, variables=variables
+        )
+        if path is not None:
+            _write_checkpoint(path, result)
+        results.append(result)
+    return _merge_results(results)
+
+
+def _resolve_bounds(
+    dataset: DynamicalDataset[Any, Any],
+    store: IcechunkStore,
+    *,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """`start`/`end` with either open end taken from the store's committed positions."""
+    if start is not None and end is not None:
+        return start, end
+    append_dim = dataset.template_config.append_dim
+    positions = xr.open_zarr(store, consolidated=False)[append_dim].to_index()
+    return (
+        start if start is not None else pd.Timestamp(positions.min()),
+        end
+        if end is not None
+        else pd.Timestamp(positions.max())
+        + dataset.template_config.append_dim_frequency,
+    )
+
+
+def _scan_windows(
+    start: pd.Timestamp, end: pd.Timestamp, *, window: pd.Timedelta
+) -> Iterator[tuple[pd.Timestamp, pd.Timestamp]]:
+    """`window`-long [start, end) slices, the last one short where it does not divide."""
+    while start < end:
+        stop = min(start + window, end)
+        yield start, stop
+        start = stop
+
+
+def _checkpoint_path(
+    checkpoint_dir: Path,
+    dataset_id: str,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    variables: list[str] | None,
+) -> Path:
+    # The variable filter changes which vars a checkpoint holds, so it keys the file.
+    scope = "all" if variables is None else digest(sorted(variables), length=8)
+    return (
+        checkpoint_dir
+        / f"{dataset_id}_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
+    )
+
+
+def _write_checkpoint(path: Path, result: ManifestScanResult) -> None:
+    positions = sorted(result.file_availability)
+    index = {position: i for i, position in enumerate(positions)}
+    # Presence per variable as one char per position, aligned to `positions`:
+    # "1" present, "0" absent, "-" not probed (no present source file there).
+    var_availability = {}
+    for var_path, by_position in result.var_availability.items():
+        marks = ["-"] * len(positions)
+        for position, present in by_position.items():
+            marks[index[position]] = "1" if present else "0"
+        var_availability[var_path] = "".join(marks)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.partial")
+    tmp.write_text(
+        json.dumps(
+            {
+                "positions": [position.isoformat() for position in positions],
+                "file_availability": [
+                    list(result.file_availability[position]) for position in positions
+                ],
+                "var_availability": var_availability,
+            }
+        )
+    )
+    # Rename last so an interrupted write never leaves a half-file a later run trusts.
+    tmp.rename(path)
+
+
+def _read_checkpoint(path: Path) -> ManifestScanResult:
+    raw = json.loads(path.read_text())
+    positions = [pd.Timestamp(value) for value in raw["positions"]]
+    return ManifestScanResult(
+        file_availability={
+            position: (present, expected)
+            for position, (present, expected) in zip(
+                positions, raw["file_availability"], strict=True
+            )
+        },
+        var_availability={
+            var_path: {
+                position: mark == "1"
+                for position, mark in zip(positions, marks, strict=True)
+                if mark != "-"
+            }
+            for var_path, marks in raw["var_availability"].items()
+        },
+    )
+
+
+def _merge_results(results: Sequence[ManifestScanResult]) -> ManifestScanResult:
+    if len(results) == 1:
+        return results[0]
+    file_availability: dict[pd.Timestamp, tuple[int, int]] = {}
+    var_availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    for result in results:
+        file_availability.update(result.file_availability)
+        for var_path, by_position in result.var_availability.items():
+            var_availability.setdefault(var_path, {}).update(by_position)
+    return ManifestScanResult(
+        file_availability=file_availability, var_availability=var_availability
+    )
+
+
+def _scan_window(
+    dataset: DynamicalDataset[Any, Any],
+    store: IcechunkStore,
+    *,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    variables: list[str] | None,
+) -> ManifestScanResult:
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
         "list[VirtualRegionJob[Any, Any]]",
