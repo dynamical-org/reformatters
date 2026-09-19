@@ -392,10 +392,19 @@ def test_checkpoint_path_separates_variable_filters(tmp_path: Path) -> None:
     dataset_id = "noaa-gefs-forecast-35-day-0-5-degree-virtual"
     start, end = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-04-01")
 
-    unfiltered = _checkpoint_path(tmp_path, dataset_id, start, end, None)
+    everything = _checkpoint_path(
+        tmp_path, dataset_id, start, end, ["temperature_2m", "pressure_surface"]
+    )
     filtered = _checkpoint_path(tmp_path, dataset_id, start, end, ["temperature_2m"])
+    # Order must not matter: run-all and the standalone command list the same variables
+    # in different orders and must land on the same checkpoint.
+    reordered = _checkpoint_path(
+        tmp_path, dataset_id, start, end, ["pressure_surface", "temperature_2m"]
+    )
 
-    assert unfiltered != filtered
+    assert everything != filtered
+    assert everything == reordered
+    unfiltered = everything
     assert unfiltered.name.startswith(f"{dataset_id}_20240101T0000_20240401T0000")
 
 

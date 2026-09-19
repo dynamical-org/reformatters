@@ -348,7 +348,11 @@ def scan_manifest(
                 dataset.dataset_id,
                 window_start,
                 window_end,
-                variables,
+                # run-all names every variable explicitly where the standalone command
+                # passes None; both mean the whole dataset and must share a checkpoint.
+                variables
+                if variables is not None
+                else [var.path for var in dataset.template_config.data_vars],
             )
             if checkpoint_dir is not None
             else None
@@ -402,10 +406,10 @@ def _checkpoint_path(
     dataset_id: str,
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
-    variables: list[str] | None,
+    variables: list[str],
 ) -> Path:
     # The variable filter changes which vars a checkpoint holds, so it keys the file.
-    scope = "all" if variables is None else digest(sorted(variables), length=8)
+    scope = digest(sorted(variables), length=8)
     return (
         checkpoint_dir
         / f"{dataset_id}_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
