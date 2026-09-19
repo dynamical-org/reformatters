@@ -86,11 +86,10 @@ def _checkpoint_key(
     checker: validation.CheckVirtualDecodeHealth,
 ) -> str:
     """Digest of everything that decides which references a sampled job decodes and
-    whether they pass: the scan window and variable filter (which jobs exist at all),
-    the region sample size, and the resolved checker configuration (its lead, level and
-    position sampling plus any all-NaN allowance). A result recorded under one key is
-    never reused under another, so a changed sampling parameter rescans instead of
-    silently reporting counts gathered under the old one.
+    whether they pass: the scan window and variable filter (which jobs exist), the region
+    sample size, and the resolved checker configuration (lead, level and position
+    sampling, all-NaN allowances). A result is only ever reused under the same key, so a
+    changed sampling parameter rescans rather than reporting the old sampling's counts.
     """
     return digest(
         [
@@ -114,9 +113,9 @@ def _checkpoint_key(
 def _job_checkpoint_path(
     checkpoint_dir: Path, dataset_id: str, key: str, job: RegionJob[Any, Any]
 ) -> Path:
-    """Where one sampled region job's outcome is recorded. A job is the unit of work a
-    resumed scan skips, so each gets its own file; the dataset id and key keep several
-    datasets' and both scans' files in one directory."""
+    """Where one sampled region job's outcome is recorded — one file per job, since a job
+    is the unit of work a resumed scan skips. The dataset id and key let one directory
+    hold both scans' files for several datasets."""
     variables = digest(sorted(var.path for var in job.data_vars))
     job_id = f"{job.region.start}-{job.region.stop}-{variables}"
     return checkpoint_dir / f"{dataset_id}_decode_{key}_{job_id}.json"
@@ -135,8 +134,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
 
     With `ctx.checkpoint_dir` each sampled region job's outcome is written there as it
     finishes and reused on a later call, so an interrupted scan decodes only the jobs it
-    did not reach. The decode scan is the long pole of a virtual run-all and one job
-    takes tens of minutes on a large ensemble archive.
+    did not reach.
     """
     assert ctx.is_virtual, "decode scan reads refs from a virtual store's manifest"
     dataset, store, start, end = resolve_scan_window(ctx)
