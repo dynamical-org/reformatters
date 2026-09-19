@@ -721,7 +721,7 @@ def _exists_many(
     keys: Sequence[str],
     *,
     max_attempts: int = 8,
-    batch_size: int = 1_000,  # bound memory + manifest cache locality
+    batch_size: int = 1_000,  # manifest cache locality + bound memory
 ) -> dict[str, bool]:
     """Probe many chunk keys concurrently, at most `batch_size` at a time."""
     if not keys:
