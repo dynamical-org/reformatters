@@ -85,12 +85,11 @@ def _checkpoint_key(
     max_samples: int,
     checker: validation.CheckVirtualDecodeHealth,
 ) -> str:
-    """Digest of everything that decides which references a sampled job decodes and
-    whether they pass: the scan window and variable filter (which jobs exist), the region
-    sample size, and the resolved checker configuration (lead, level and position
-    sampling, all-NaN allowances). A result is only ever reused under the same key, so a
-    changed sampling parameter rescans rather than reporting the old sampling's counts.
-    """
+    """Namespace under which a sampled job's result may be reused: the scan plan (window,
+    variable filter, region sample size), so a changed extent never reuses a job recorded
+    while its tail was still being filled, and the checker configuration that decides a
+    job's outcome (lead, level and position sampling, all-NaN allowances). The job's own
+    region and variables are in its file name."""
     return digest(
         [
             json.dumps(

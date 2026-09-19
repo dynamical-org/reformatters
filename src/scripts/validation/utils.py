@@ -88,13 +88,13 @@ time_option = typer.Option(
 start_date_option = typer.Option(
     None,
     "--start-date",
-    help="Scope analysis to times after this date",
+    help="Scope analysis to times from this date (inclusive)",
 )
 
 end_date_option = typer.Option(
     None,
     "--end-date",
-    help="Scope analysis to times before this date",
+    help="Scope analysis to times through this date (inclusive)",
 )
 
 output_dir_option = typer.Option(

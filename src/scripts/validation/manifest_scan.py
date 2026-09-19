@@ -339,8 +339,9 @@ def scan_manifest(
         window = _CHECKPOINT_WINDOW
     windows: list[tuple[pd.Timestamp | None, pd.Timestamp | None]] = [(start, end)]
     if window is not None:
-        bounds = _resolve_bounds(dataset, store, start=start, end=end)
-        windows = list(_scan_windows(*bounds, window=window))
+        start, end = _resolve_bounds(dataset, store, start=start, end=end)
+        assert start < end, f"Nothing to scan: [{start} .. {end}]"
+        windows = list(_scan_windows(start, end, window=window))
     merged = ManifestScanResult(file_availability={}, var_availability={})
     for index, (window_start, window_end) in enumerate(windows, start=1):
         if len(windows) > 1:
@@ -381,18 +382,19 @@ def _resolve_bounds(
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
 ) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """`start`/`end` with either open end taken from the store's committed positions."""
-    if start is not None and end is not None:
-        return start, end
-    append_dim = dataset.template_config.append_dim
-    positions = xr.open_zarr(store, consolidated=False)[append_dim].to_index()
-    return (
-        start if start is not None else pd.Timestamp(positions.min()),
-        end
-        if end is not None
-        else pd.Timestamp(positions.max())
-        + dataset.template_config.append_dim_frequency,
-    )
+    """`start`/`end` with either open end taken from the store's committed positions,
+    and `start` no earlier than the dataset's first position (a slice before it has no
+    region jobs)."""
+    template_config = dataset.template_config
+    if start is None or end is None:
+        positions = xr.open_zarr(store, consolidated=False)[
+            template_config.append_dim
+        ].to_index()
+        if start is None:
+            start = pd.Timestamp(positions.min())
+        if end is None:
+            end = pd.Timestamp(positions.max()) + template_config.append_dim_frequency
+    return max(start, template_config.append_dim_start), end
 
 
 def _scan_windows(

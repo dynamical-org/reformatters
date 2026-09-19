@@ -473,3 +473,18 @@ def test_scan_window_probe_workers_bounds_concurrent_jobs(
             )
 
     assert seen == [{"max_workers": 8}, {}]
+
+
+def test_resolve_bounds_clamps_a_start_before_the_dataset() -> None:
+    """A slice wholly before the dataset's first position would build an empty template."""
+    dataset = SimpleNamespace(
+        template_config=SimpleNamespace(append_dim_start=pd.Timestamp("2020-10-01"))
+    )
+    start, end = manifest_scan._resolve_bounds(
+        dataset,  # ty: ignore[invalid-argument-type]
+        None,  # ty: ignore[invalid-argument-type]
+        start=pd.Timestamp("2020-01-01"),
+        end=pd.Timestamp("2021-01-01"),
+    )
+
+    assert (start, end) == (pd.Timestamp("2020-10-01"), pd.Timestamp("2021-01-01"))
