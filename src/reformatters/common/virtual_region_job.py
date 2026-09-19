@@ -724,16 +724,20 @@ _PROBE_BATCH_SIZE = 1_000
 
 
 def _exists_many(
-    store: IcechunkStore, keys: Sequence[str], *, max_attempts: int = 8
+    store: IcechunkStore,
+    keys: Sequence[str],
+    *,
+    max_attempts: int = 8,
+    batch_size: int = _PROBE_BATCH_SIZE,
 ) -> dict[str, bool]:
-    """Probe many chunk keys concurrently, at most _PROBE_BATCH_SIZE at a time."""
+    """Probe many chunk keys concurrently, at most `batch_size` at a time."""
     if not keys:
         return {}
 
     async def _check(probe_keys: Sequence[str]) -> list[bool | BaseException]:
         outcomes: list[bool | BaseException] = []
-        for start in range(0, len(probe_keys), _PROBE_BATCH_SIZE):
-            batch = probe_keys[start : start + _PROBE_BATCH_SIZE]
+        for start in range(0, len(probe_keys), batch_size):
+            batch = probe_keys[start : start + batch_size]
             outcomes.extend(
                 await asyncio.gather(
                     *(store.exists(key) for key in batch), return_exceptions=True

@@ -2390,3 +2390,27 @@ def test_exists_many_bounds_concurrent_probes() -> None:
 
     assert result == dict.fromkeys(keys, True)
     assert peak <= _PROBE_BATCH_SIZE
+
+
+def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
+    """An explicit batch_size, not the module default, bounds the probes in flight."""
+    in_flight = 0
+    peak = 0
+
+    class SlowStore:
+        async def exists(self, _key: str) -> bool:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return True
+
+    batch_size = 7
+    keys = [f"key-{i}" for i in range(batch_size * 3 + 2)]
+    result = _exists_many(
+        cast("icechunk.IcechunkStore", SlowStore()), keys, batch_size=batch_size
+    )
+
+    assert result == dict.fromkeys(keys, True)
+    assert peak <= batch_size
