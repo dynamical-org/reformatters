@@ -36,6 +36,8 @@ MIRROR_SECRET_NAME: Final = "noaa-hrrr-nomads-mirror-storage-options-key"  # noq
 
 MIRRORED_FILE_TYPES: Final[tuple[NoaaHrrrFileType, ...]] = ("sfc", "prs", "nat")
 MIRRORED_LEAD_HOURS: Final = range(19)
+# NOMADS keeps about two days of inits.
+CATCH_UP_INIT_TIMES: Final = 24
 
 # GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
 # total length as a big endian u64.
@@ -126,11 +128,12 @@ def mirror_init_time(
     file_types: Sequence[NoaaHrrrFileType] = MIRRORED_FILE_TYPES,
     lead_hours: Sequence[int] = MIRRORED_LEAD_HOURS,
     poll_interval: timedelta = timedelta(seconds=1),
+    max_polls: int | None = None,
     list_directory: Callable[[str], set[str]] = list_nomads_directory,
     fetch: Callable[[str], Path] = download_from_nomads,
 ) -> MirrorResult:
     """Copy one init's files into the mirror as NOMADS publishes them, until every file
-    is copied or `deadline` passes.
+    is copied, `deadline` passes, or `max_polls` polls have run.
 
     Each poll is one NOMADS directory listing, so the poll rate alone is the listing
     rate; every listing and copy goes through the shared NOMADS limiter. A data file
@@ -155,10 +158,18 @@ def mirror_init_time(
     directory_url = files[0].url.rsplit("/", 1)[0] + "/"
     offsets_by_key: dict[str, list[int]] = {}
     result = MirrorResult([], [])
-    while pending and pd.Timestamp.now("UTC") < deadline:
+    polls = 0
+    while (
+        pending
+        and pd.Timestamp.now("UTC") < deadline
+        and (max_polls is None or polls < max_polls)
+    ):
+        polls += 1
         poll_start = time.monotonic()
         listed = list_directory(directory_url)
         for file in [f for f in pending if f.name in listed]:
+            if pd.Timestamp.now("UTC") > deadline:
+                break
             data_key = mirror_key(file.coord)
             if file.is_index and data_key not in in_mirror:
                 continue
@@ -176,8 +187,41 @@ def mirror_init_time(
     result.pending.extend(file.key for file in pending)
     if pending:
         log.warning(
-            f"Deadline reached with {len(pending)} files not mirrored: {result.pending}"
+            f"{len(pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored: {result.pending}"
         )
+    return result
+
+
+def mirror_earlier_init_times(
+    init_time: pd.Timestamp,
+    mirror: obstore.store.ObjectStore,
+    *,
+    deadline: pd.Timestamp,
+    init_times_back: int = CATCH_UP_INIT_TIMES,
+    file_types: Sequence[NoaaHrrrFileType] = MIRRORED_FILE_TYPES,
+    lead_hours: Sequence[int] = MIRRORED_LEAD_HOURS,
+    list_directory: Callable[[str], set[str]] = list_nomads_directory,
+    fetch: Callable[[str], Path] = download_from_nomads,
+) -> MirrorResult:
+    """Copy what the mirror lacks of the `init_times_back` inits before `init_time`,
+    newest first, one poll each, until `deadline`. An init the mirror holds whole costs
+    one mirror listing and no NOMADS request."""
+    result = MirrorResult([], [])
+    for hours_back in range(1, init_times_back + 1):
+        if pd.Timestamp.now("UTC") >= deadline:
+            break
+        earlier = mirror_init_time(
+            init_time - pd.Timedelta(hours=hours_back),
+            mirror,
+            deadline=deadline,
+            file_types=file_types,
+            lead_hours=lead_hours,
+            max_polls=1,
+            list_directory=list_directory,
+            fetch=fetch,
+        )
+        result.copied.extend(earlier.copied)
+        result.pending.extend(earlier.pending)
     return result
 
 
@@ -363,11 +407,19 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 f"Mirroring {init_time:%Y-%m-%dT%H}Z from {poll_start:%H:%M}Z ({wait:.0f}s)"
             )
             time.sleep(wait)
+            mirror = mirror_store()
             result = mirror_init_time(
-                init_time.tz_localize(None), mirror_store(), deadline=deadline
+                init_time.tz_localize(None), mirror, deadline=deadline
             )
             log.info(
                 f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored"
+            )
+            caught_up = mirror_earlier_init_times(
+                init_time.tz_localize(None), mirror, deadline=deadline
+            )
+            log.info(
+                f"Caught up {len(caught_up.copied)} files of earlier inits, "
+                f"{len(caught_up.pending)} not mirrored"
             )
 
     def get_cli(self) -> typer.Typer:

@@ -71,6 +71,25 @@ class FakeNomads:
 _counter = count()
 
 
+def _clock_ticks_per_listing(
+    nomads: FakeNomads, monkeypatch: pytest.MonkeyPatch
+) -> pd.Timestamp:
+    """A fake clock that advances one second per NOMADS listing; returns its start."""
+    start = pd.Timestamp("2026-09-07T19:49Z")
+    listings_before = nomads.listings
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(
+            lambda cls, *a, **k: (
+                start + pd.Timedelta(seconds=nomads.listings - listings_before)
+            )
+        ),
+    )
+    monkeypatch.setattr(nomads_mirror.time, "sleep", lambda _s: None)
+    return start
+
+
 def run(
     nomads: FakeNomads,
     mirror: obstore.store.ObjectStore,
@@ -81,14 +100,7 @@ def run(
     lead_hours: tuple[int, ...] = (0, 1),
 ) -> nomads_mirror.MirrorResult:
     """Poll `polls` times; the fake clock reaches the deadline after that."""
-    start = pd.Timestamp("2026-09-07T19:49Z")
-    clock = count()
-    monkeypatch.setattr(
-        pd.Timestamp,
-        "now",
-        classmethod(lambda cls, *a, **k: start + pd.Timedelta(seconds=next(clock))),
-    )
-    monkeypatch.setattr(nomads_mirror.time, "sleep", lambda _s: None)
+    start = _clock_ticks_per_listing(nomads, monkeypatch)
     return mirror_init_time(
         INIT,
         mirror,
@@ -370,3 +382,94 @@ def test_after_a_restart_the_mirrored_file_is_scanned_before_its_index_is_truste
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
     assert result.copied == [mirror_key(coord(0)) + ".idx"]
+
+
+def test_earlier_init_times_are_caught_up_newest_first_in_one_poll_each(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    grib, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
+    # 18Z is whole in the mirror, 17Z lacks its index, 16Z was never published.
+    for name in ("hrrr.t18z.wrfsfcf00.grib2", "hrrr.t17z.wrfsfcf00.grib2"):
+        obstore.put(mirror, f"hrrr.20260907/conus/{name}", grib)
+        nomads.publish(name, grib)
+    obstore.put(mirror, "hrrr.20260907/conus/hrrr.t18z.wrfsfcf00.grib2.idx", index)
+    nomads.publish("hrrr.t17z.wrfsfcf00.grib2.idx", index)
+    start = _clock_ticks_per_listing(nomads, monkeypatch)
+
+    result = nomads_mirror.mirror_earlier_init_times(
+        INIT,
+        mirror,
+        deadline=start + pd.Timedelta(seconds=10),
+        init_times_back=3,
+        file_types=("sfc",),
+        lead_hours=(0,),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+
+    assert result.copied == ["hrrr.20260907/conus/hrrr.t17z.wrfsfcf00.grib2.idx"]
+    assert result.pending == [
+        "hrrr.20260907/conus/hrrr.t16z.wrfsfcf00.grib2",
+        "hrrr.20260907/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+    ]
+    # No NOMADS request for the whole init, one listing for each of the others.
+    assert nomads.listings == 2
+    assert nomads.fetched == ["hrrr.t17z.wrfsfcf00.grib2.idx"]
+
+
+def test_catch_up_stops_at_the_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    start = _clock_ticks_per_listing(nomads, monkeypatch)
+
+    result = nomads_mirror.mirror_earlier_init_times(
+        INIT,
+        mirror,
+        deadline=start + pd.Timedelta(seconds=1),
+        init_times_back=3,
+        file_types=("sfc",),
+        lead_hours=(0,),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+
+    assert nomads.listings == 1
+    assert result.pending == [
+        "hrrr.20260907/conus/hrrr.t18z.wrfsfcf00.grib2",
+        "hrrr.20260907/conus/hrrr.t18z.wrfsfcf00.grib2.idx",
+    ]
+
+
+def test_no_copy_starts_after_the_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf01.grib2", FIXTURE_GRIB.read_bytes())
+    start = pd.Timestamp("2026-09-07T19:49Z")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(
+            lambda cls, *a, **k: start + pd.Timedelta(minutes=len(nomads.fetched))
+        ),
+    )
+
+    result = mirror_init_time(
+        INIT,
+        mirror,
+        deadline=start + pd.Timedelta(seconds=30),
+        file_types=("sfc",),
+        lead_hours=(0, 1),
+        poll_interval=timedelta(0),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+
+    assert result.copied == [mirror_key(coord(0))]
+    assert nomads.fetched == ["hrrr.t19z.wrfsfcf00.grib2"]
