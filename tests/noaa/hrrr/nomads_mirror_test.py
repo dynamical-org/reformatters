@@ -420,7 +420,7 @@ def test_earlier_init_times_are_caught_up_newest_first_in_one_poll_each(
 
 
 def test_catch_up_stops_at_the_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     nomads = FakeNomads(tmp_path)
     mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
@@ -438,6 +438,7 @@ def test_catch_up_stops_at_the_deadline(
     )
 
     assert nomads.listings == 1
+    assert "Deadline reached with 2 earlier inits not checked" in caplog.text
     assert result.pending == [
         "hrrr.20260907/conus/hrrr.t18z.wrfsfcf00.grib2",
         "hrrr.20260907/conus/hrrr.t18z.wrfsfcf00.grib2.idx",

@@ -38,6 +38,9 @@ MIRRORED_FILE_TYPES: Final[tuple[NoaaHrrrFileType, ...]] = ("sfc", "prs", "nat")
 MIRRORED_LEAD_HOURS: Final = range(19)
 # NOMADS keeps about two days of inits.
 CATCH_UP_INIT_TIMES: Final = 24
+# Catch-up stops starting copies this long before the fire's deadline, so one in
+# flight can finish.
+CATCH_UP_DEADLINE_MARGIN: Final = timedelta(minutes=5)
 
 # GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
 # total length as a big endian u64.
@@ -186,9 +189,8 @@ def mirror_init_time(
         )
     result.pending.extend(file.key for file in pending)
     if pending:
-        log.warning(
-            f"{len(pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored: {result.pending}"
-        )
+        log.warning(f"{len(pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored")
+        log.debug(f"Not mirrored: {result.pending}")
     return result
 
 
@@ -209,6 +211,10 @@ def mirror_earlier_init_times(
     result = MirrorResult([], [])
     for hours_back in range(1, init_times_back + 1):
         if pd.Timestamp.now("UTC") >= deadline:
+            log.warning(
+                f"Deadline reached with {init_times_back - hours_back + 1} "
+                "earlier inits not checked"
+            )
             break
         earlier = mirror_init_time(
             init_time - pd.Timedelta(hours=hours_back),
@@ -415,7 +421,9 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored"
             )
             caught_up = mirror_earlier_init_times(
-                init_time.tz_localize(None), mirror, deadline=deadline
+                init_time.tz_localize(None),
+                mirror,
+                deadline=deadline - CATCH_UP_DEADLINE_MARGIN,
             )
             log.info(
                 f"Caught up {len(caught_up.copied)} files of earlier inits, "
