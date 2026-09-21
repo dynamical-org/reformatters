@@ -320,17 +320,24 @@ def test_manifest_split_sizes_stay_inside_the_reader_budget(
     split = dataset.icechunk_virtual_config.manifest_split
     root_split = _resolved_split_size(split, "/temperature_2m")
     group_split = _resolved_split_size(split, "/pressure_level/temperature")
-    assert (root_split, group_split) == (128, 16)
+    height_split = _resolved_split_size(split, "/height_above_mean_sea_level/wind_u")
+    assert (root_split, group_split, height_split) == (16, 4, 8)
 
     leads = len(dataset.template_config.dimension_coordinates()["lead_time"])
     levels = len(dataset.template_config.dimension_coordinates()["pressure_level"])
-    # Measured GFS manifest cost, bytes per chunk reference.
+    heights = len(
+        dataset.template_config.dimension_coordinates()["height_above_mean_sea_level"]
+    )
+    # Bytes per chunk reference measured on this store's own manifests.
     mebibyte = 2**20
-    assert root_split * leads * 13.8 / mebibyte < 3.0
-    assert 0.0 < group_split * leads * levels * 11.0 / mebibyte < 8.0
-    # Both stay above the ~1000 refs a manifest needs to compress well.
+    assert root_split * leads * 17.6 / mebibyte < 3.0
+    assert 0.0 < group_split * leads * levels * 16.7 / mebibyte < 8.0
+    assert height_split * leads * heights * 17.0 / mebibyte < 8.0
+    # All stay above the 1000 refs at which icechunk trains its location dictionary;
+    # below it manifests are many tiny objects.
     assert root_split * leads > 1000
     assert group_split * leads * levels > 1000
+    assert height_split * leads * heights > 1000
 
 
 def test_virtual_container_matches_ref_prefix(
