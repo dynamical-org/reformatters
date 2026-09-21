@@ -316,8 +316,8 @@ def test_operational_kubernetes_resources(
     # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
     assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
 
-    assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
+    assert update_cron_job.suspend
+    assert validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(
@@ -441,12 +441,11 @@ def test_manifest_splits_hold_a_similar_number_of_refs_per_array(
     refs_per_init = 181 * 31
 
     root_split = _resolved_split_size(split, "/temperature_2m")
-    assert root_split == 8
+    assert root_split == 4
     root_refs = root_split * refs_per_init
-    assert root_refs == 44_888
+    assert root_refs == 22_444
 
-    # The smallest manifest in the store, and still far above the 1000 refs icechunk
-    # needs before it compresses ref locations.
+    # Above the 1000 refs at which icechunk trains its location dictionary.
     assert root_refs > 1000
 
     for group, levels, expected_split in (
