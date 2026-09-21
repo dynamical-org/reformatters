@@ -35,13 +35,12 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Eight days of daily inits at the root, fewer for the vertical groups.
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": 2,
                     r"^/model_level/": 4,
                     r"^/height_above_mean_sea_level/": 4,
-                    None: 8,
+                    None: 4,
                 },
                 dim="init_time",
             ),
@@ -67,6 +66,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=1,
             parallelism=1,
+            suspend=True,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{cron_job_name_prefix}-validate",
@@ -78,6 +78,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
             cpu="1.5",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]
