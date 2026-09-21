@@ -25,6 +25,7 @@ from reformatters.common.download import (
     s3_download_to_disk,
     s3_read_bytes,
     s3_store,
+    signed_s3_store,
 )
 
 
@@ -169,6 +170,46 @@ def test_gcs_download_to_disk_calls_download(tmp_path: Path) -> None:
 def test_gcs_download_to_disk_rejects_non_gcs_url() -> None:
     with pytest.raises(AssertionError):
         gcs_download_to_disk("s3://test-bucket/file.index", "my-dataset")
+
+
+def test_signed_s3_store_reads_icechunk_style_options() -> None:
+    store = signed_s3_store(
+        "bucket",
+        {
+            "endpoint_url": "https://account.r2.cloudflarestorage.com",
+            "access_key_id": "key-id",
+            "secret_access_key": "secret",
+            "region": "auto",
+            "force_path_style": True,
+        },
+    )
+    assert isinstance(store, obstore.store.S3Store)
+    assert store.config == {
+        "bucket": "bucket",
+        "endpoint": "https://account.r2.cloudflarestorage.com",
+        "access_key_id": "key-id",
+        "secret_access_key": "secret",
+        "region": "auto",
+        "virtual_hosted_style_request": "false",
+    }
+
+
+def test_signed_s3_store_defaults_to_auto_region_and_virtual_hosted_style() -> None:
+    store = signed_s3_store(
+        "bucket",
+        {
+            "endpoint_url": "https://account.r2.cloudflarestorage.com",
+            "access_key_id": "key-id",
+            "secret_access_key": "secret",
+        },
+    )
+    assert store.config["region"] == "auto"
+    assert store.config["virtual_hosted_style_request"] == "true"
+
+
+def test_signed_s3_store_requires_an_endpoint() -> None:
+    with pytest.raises(KeyError, match="endpoint_url"):
+        signed_s3_store("bucket", {"access_key_id": "k", "secret_access_key": "s"})
 
 
 def test_download_to_disk_skips_if_exists_and_disk_cache(tmp_path: Path) -> None:

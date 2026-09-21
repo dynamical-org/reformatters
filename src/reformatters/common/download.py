@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -132,6 +132,24 @@ def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
     )
     assert isinstance(store, obstore.store.GCSStore)
     return store
+
+
+def signed_s3_store(
+    bucket: str, storage_options: dict[str, Any]
+) -> obstore.store.S3Store:
+    """A signed store for an S3-compatible endpoint (R2) from `icechunk.s3_storage`
+    options as our kubernetes storage secrets hold them: `endpoint_url`,
+    `access_key_id`, `secret_access_key`, and optionally `region` (R2's is "auto")
+    and `force_path_style`. Other keys are not carried over.
+    """
+    return obstore.store.S3Store(
+        bucket,
+        endpoint=storage_options["endpoint_url"],
+        access_key_id=storage_options["access_key_id"],
+        secret_access_key=storage_options["secret_access_key"],
+        region=storage_options.get("region", "auto"),
+        virtual_hosted_style_request=not storage_options.get("force_path_style", False),
+    )
 
 
 def http_download_to_disk(
@@ -383,6 +401,18 @@ def httpx_download_to_disk(
         raise
 
     return local_path
+
+
+def httpx_get_text(
+    url: str,
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+) -> str:
+    """Fetch a small text resource, e.g. an HTML directory listing, with the same
+    retries and rate limiting as httpx_download_to_disk."""
+    return _httpx_get_with_retry(
+        url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+    ).text
 
 
 def http_status_code(e: Exception) -> int | None:
