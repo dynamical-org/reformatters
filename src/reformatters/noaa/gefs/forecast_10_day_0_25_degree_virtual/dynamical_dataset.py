@@ -35,8 +35,8 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
-            # Four days of 6 hourly inits.
-            manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
+            # Two days of 6 hourly inits.
+            manifest_split=manifest_append_dim_split(split_size=8, dim="init_time"),
         )
     )
 

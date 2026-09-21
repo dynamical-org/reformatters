@@ -342,20 +342,21 @@ def _resolved_split_size(
     raise AssertionError(f"no split rule matched {array_path}")
 
 
-def test_manifest_split_holds_four_days_of_inits(
+def test_manifest_split_holds_two_days_of_inits(
     dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
 ) -> None:
-    """Every array holds one ref per (lead time, ensemble member) of every init in the
-    split, so the split size fixes both the manifest's ref count and its bytes."""
+    """Every array holds at most one ref per (lead time, ensemble member) of every init
+    in the split, so the split size caps both the manifest's ref count and its bytes."""
     split = dataset.icechunk_virtual_config.manifest_split
     split_size = _resolved_split_size(split, "/temperature_2m")
-    assert split_size == 16
+    assert split_size == 8
 
     refs_per_manifest = split_size * 81 * 31
-    assert refs_per_manifest == 40176
-    # Above the 1000 refs icechunk needs before it compresses ref locations, and well
-    # inside the 3 MiB a reader downloads to resolve any one chunk. 17.8 bytes/ref is
-    # measured on this dataset's own manifests, not carried over from another.
+    assert refs_per_manifest == 20088
+    # Above the 1000 refs at which icechunk trains its location dictionary (below it
+    # manifests are tiny objects), and well inside the 3 MiB a reader downloads to
+    # resolve any one chunk. 17.8 bytes/ref is measured on this dataset's own
+    # manifests, not carried over from another.
     assert refs_per_manifest > 1000
     assert refs_per_manifest * 17.8 < 3 * 1024 * 1024
 
