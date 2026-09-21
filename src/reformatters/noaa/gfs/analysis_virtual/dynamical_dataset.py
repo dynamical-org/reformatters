@@ -37,9 +37,9 @@ class NoaaGfsAnalysisVirtualDataset(
             containers=gfs_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 3_000,
-                    r"^/height_above_mean_sea_level/": 20_000,
-                    None: 30_000,
+                    r"^/pressure_level/": 1_000,
+                    r"^/height_above_mean_sea_level/": 5_000,
+                    None: 4_000,
                 },
                 dim="time",
             ),
@@ -58,6 +58,7 @@ class NoaaGfsAnalysisVirtualDataset(
             cpu="4",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
         validation_cron_job = ValidationCronJob(
             name=f"{self.dataset_id}-validate",
@@ -70,6 +71,7 @@ class NoaaGfsAnalysisVirtualDataset(
             cpu="1.5",
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
+            suspend=True,
         )
 
         return [operational_update_cron_job, validation_cron_job]

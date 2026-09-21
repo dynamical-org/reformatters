@@ -200,8 +200,8 @@ def test_operational_kubernetes_resources(
     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert validation_cron_job.schedule == "14 4,10,16,22 * * *"
     assert len(update_cron_job.secret_names) > 0
-    assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
+    assert update_cron_job.suspend
+    assert validation_cron_job.suspend
 
 
 def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
@@ -250,12 +250,11 @@ def test_manifest_split_size_resolves_per_group(
     symptom but an oversized manifest.
     """
     split = dataset.icechunk_virtual_config.manifest_split
-    assert _resolved_split_size(split, "/pressure_level/temperature") == 3_000
+    assert _resolved_split_size(split, "/pressure_level/temperature") == 1_000
     assert (
-        _resolved_split_size(split, "/height_above_mean_sea_level/temperature")
-        == 20_000
+        _resolved_split_size(split, "/height_above_mean_sea_level/temperature") == 5_000
     )
-    assert _resolved_split_size(split, "/temperature_2m") == 30_000
+    assert _resolved_split_size(split, "/temperature_2m") == 4_000
 
 
 def test_virtual_container_matches_ref_prefix(
