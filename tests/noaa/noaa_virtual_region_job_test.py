@@ -650,3 +650,48 @@ def test_float_levels_render_and_resolve_for_a_non_hrrr_data_var(
         (0, 6, 0, 0, 0),
         (0, 6, 0, 0, 38),
     ]
+
+
+def test_file_refs_reads_index_and_header_through_the_job_hooks(
+    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A subclass that resolves a file against another store supplies the index
+    download and the GRIB header read; the shared code never touches S3 itself."""
+    reads: list[str] = []
+
+    class OtherStoreJob(NoaaHrrrForecast48HourVirtualRegionJob):
+        def download_index(
+            self,
+            coord: NoaaHrrrForecastVirtualSourceFileCoord,  # noqa: ARG002
+        ) -> Path:
+            reads.append("index")
+            path = tmp_path / "index.idx"
+            path.write_text(_SFC_INDEX)
+            return path
+
+        def read_data_bytes(
+            self,
+            coord: NoaaHrrrForecastVirtualSourceFileCoord,  # noqa: ARG002
+            start: int,
+            end: int,  # noqa: ARG002
+        ) -> bytes:
+            reads.append(f"header@{start}")
+            return grib_section_0(9000 - start)
+
+    def must_not_call(*args: object, **kwargs: object) -> object:
+        raise AssertionError("shared S3 helper called")
+
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", must_not_call)
+    monkeypatch.setattr(shared_region_job_module, "s3_read_bytes", must_not_call)
+    data_vars = [get_var("temperature_2m")]
+    job = OtherStoreJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=data_vars,
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test",
+    )
+    refs = job.file_refs(coord("sfc", data_vars), file_size=9000)
+    assert len(refs) == 1
+    assert reads == ["index", "header@3000"]

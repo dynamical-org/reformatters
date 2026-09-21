@@ -114,18 +114,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     if not issubclass(dataset.region_job_class, VirtualRegionJob):
         validators.append(validation.CheckExpectedShards())
 
-    region_job = None
-    if any(v.requires_virtual_dataset for v in validators):
-        jobs, _ = dataset.region_job_class.operational_update_jobs(
-            primary_store=store,
-            tmp_store=dataset._tmp_store(),
-            get_template_fn=dataset._get_template,
-            append_dim=dataset.template_config.append_dim,
-            all_data_vars=dataset.template_config.data_vars,
-            reformat_job_name="test",
-        )
-        region_job = jobs[0]
-        assert isinstance(region_job, VirtualRegionJob)
+    region_job = dataset._virtual_validation_region_job(validators, "test")
 
     context = validation.ValidationContext(
         store=store,

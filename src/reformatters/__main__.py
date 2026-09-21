@@ -90,6 +90,9 @@ from reformatters.noaa.hrrr.analysis_virtual.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
 )
+from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.dynamical_dataset import (
+    NoaaHrrrForecast18HourVirtualFastDataset,
+)
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
@@ -281,6 +284,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast18HourVirtualDataset(
+        primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaHrrrForecast18HourVirtualFastDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
