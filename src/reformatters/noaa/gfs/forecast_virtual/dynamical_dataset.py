@@ -37,9 +37,9 @@ class NoaaGfsForecastVirtualDataset(
             containers=gfs_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
                 split_size={
-                    r"^/pressure_level/": 16,
-                    r"^/height_above_mean_sea_level/": 16,
-                    None: 128,
+                    r"^/pressure_level/": 4,
+                    r"^/height_above_mean_sea_level/": 8,
+                    None: 16,
                 },
                 dim="init_time",
             ),
