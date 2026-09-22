@@ -1209,7 +1209,9 @@ class CheckVirtualDecodeHealth(Validator):
                 continue
             da = ds[var.path]
             selection = {dim: value for dim, value in loc.items() if dim in da.dims}
-            da = self._sample_levels(da.sel(selection))
+            da = self._sample_levels(
+                da.sel(selection), var.path, cast("Mapping[str, Any]", loc)
+            )
             try:
                 # Retried so a transient object store failure is not reported as
                 # a decode failure; a genuine decode error still fails fast.
@@ -1292,15 +1294,30 @@ class CheckVirtualDecodeHealth(Validator):
         }
         return [c for c in coords if c.out_loc().get("lead_time") in keep]
 
-    def _sample_levels(self, da: xr.DataArray) -> xr.DataArray:
+    def _sample_levels(
+        self,
+        da: xr.DataArray,
+        var_path: str | None = None,
+        out_loc: Mapping[str, Any] | None = None,
+    ) -> xr.DataArray:
         """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
         levels, so a group var is decode-checked at a bounded set of levels rather than
-        all of them. Single-level vars (only spatial dims left) are returned unchanged."""
+        all of them. With `reference_exists`, sample only referenced levels.
+        Single-level vars (only spatial dims left) are returned unchanged."""
         spatial = ("y", "x", "latitude", "longitude")
         isel: dict[Any, Any] = {}
         for dim in da.dims:
             if dim in spatial:
                 continue
+            if self.reference_exists is not None:
+                assert var_path is not None
+                assert out_loc is not None
+                labels = [
+                    label
+                    for label in da.get_index(dim)
+                    if self.reference_exists(var_path, {**out_loc, str(dim): label})
+                ]
+                da = da.sel({dim: labels})
             size = da.sizes[dim]
             if size > self.sampled_levels:
                 isel[dim] = np.unique(

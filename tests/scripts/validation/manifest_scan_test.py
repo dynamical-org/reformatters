@@ -1,9 +1,9 @@
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,8 @@ import xarray as xr
 import zarr
 from zarr.storage import MemoryStore
 
+from reformatters.common import validation
+from reformatters.common.virtual_region_job import _exists_many
 from scripts.validation import manifest_scan
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
@@ -23,7 +25,7 @@ from scripts.validation.manifest_scan import (
     _read_checkpoint,
     _scan_windows,
     _sort_coords_for_probe,
-    _var_chunk_key,
+    _var_chunk_keys,
     _var_keys,
     _var_probes,
     _write_checkpoint,
@@ -275,7 +277,7 @@ def _template() -> xr.Dataset:
     return ds
 
 
-def test_var_chunk_key_uses_middle_chunk_for_unlabeled_dims() -> None:
+def test_var_chunk_keys_cover_unlabeled_levels() -> None:
     template = _template()
     store = MemoryStore()
     root = zarr.open_group(store, mode="w")
@@ -290,9 +292,14 @@ def test_var_chunk_key_uses_middle_chunk_for_unlabeled_dims() -> None:
         "init_time": pd.Timestamp("2024-01-02"),
         "lead_time": pd.Timedelta(hours=6),
     }
-    key = _var_chunk_key(keys, out_loc)
-    # pressure_level is not in out_loc -> middle of its 3 chunks.
-    assert key == "temperature/c/1/1/1"
+    assert _var_chunk_keys(keys, out_loc) == [
+        "temperature/c/1/1/0",
+        "temperature/c/1/1/1",
+        "temperature/c/1/1/2",
+    ]
+    assert _var_chunk_keys(keys, {**out_loc, "pressure_level": 100.0}) == [
+        "temperature/c/1/1/2"
+    ]
 
 
 def test_var_availability_probes_written_chunks() -> None:
@@ -329,6 +336,77 @@ def test_var_availability_probes_written_chunks() -> None:
     assert probes == []  # flushed
     # Position 2 has no present source file -> not probed (absent from the mapping).
     assert availability == {"temperature_2m": {p0: True, p1: False}}
+
+
+@pytest.mark.parametrize("sampled_levels", [3, 4, 10])
+def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
+    sampled_levels: int,
+) -> None:
+    # The middle level (350 hPa) and both endpoints have no icing reference.
+    levels = [1000, 800, 700, 600, 500, 400, 350, 300, 200, 100, 50, 10, 1]
+    present_levels = [800, 700, 600, 500, 400, 300]
+    path = "pressure_level/icing_probability"
+    var = _var("icing_probability", path=path)
+    positions = pd.date_range("2024-01-01", periods=2)
+    values = np.full((2, len(levels), 2, 2), np.nan, dtype="f4")
+    for index, level in enumerate(levels):
+        if level in present_levels:
+            values[0, index] = level
+    da = xr.DataArray(
+        values,
+        dims=("init_time", "pressure_level", "latitude", "longitude"),
+        coords={"init_time": positions, "pressure_level": levels},
+    )
+    da.encoding["chunks"] = (1, 1, 2, 2)
+    template = xr.DataTree.from_dict(
+        {"pressure_level": xr.Dataset({"icing_probability": da})}
+    )
+    store = MemoryStore()
+    root = zarr.open_group(store, mode="w")
+    array = root.create_array(
+        path, shape=values.shape, chunks=(1, 1, 2, 2), dtype="f4", fill_value=np.nan
+    )
+    array[:] = values
+    coords = [_Coord(position, str(position)) for position in positions]
+    job = _Job(coords, [], [var], cast("Any", template))
+    keys = _var_keys(template, root, cast("Any", var))
+    probes = _var_probes(
+        cast("Any", job), [(cast("Any", c), True) for c in coords], root, {}
+    )
+    availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    _flush_var_probes(cast("Any", store), probes, availability)
+    assert availability == {path: {positions[0]: True, positions[1]: False}}
+
+    def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
+        assert var_path == path
+        return any(
+            _exists_many(cast("Any", store), _var_chunk_keys(keys, out_loc)).values()
+        )
+
+    checker = validation.CheckVirtualDecodeHealth(
+        sampled_levels=sampled_levels, reference_exists=reference_exists
+    )
+    selected = checker._sample_levels(da.isel(init_time=0), path, coords[0].out_loc())
+    assert len(selected.pressure_level) == min(sampled_levels, len(present_levels))
+    assert set(selected.pressure_level.values) <= set(present_levels)
+    results, skipped = checker._decode_coord(
+        cast("Any", coords[0]),
+        cast("Any", job),
+        cast("Any", store),
+        root,
+        xr.Dataset({path: da}),
+    )
+    assert results == [(path, 0.0, None)]
+    assert skipped == set()
+    results, skipped = checker._decode_coord(
+        cast("Any", coords[1]),
+        cast("Any", job),
+        cast("Any", store),
+        root,
+        xr.Dataset({path: da}),
+    )
+    assert results == []
+    assert skipped == {path}
 
 
 def test_result_availability_series_marks_unprobed_positions_nan() -> None:
@@ -404,7 +482,9 @@ def test_checkpoint_path_separates_variable_filters(tmp_path: Path) -> None:
     filtered = _checkpoint_path(tmp_path, dataset_id, start, end, ["temperature_2m"])
 
     assert unfiltered != filtered
-    assert unfiltered.name.startswith(f"{dataset_id}_20240101T0000_20240401T0000")
+    assert unfiltered.name.startswith(
+        f"{dataset_id}_levels-v2_20240101T0000_20240401T0000"
+    )
 
 
 def test_scan_windows_slices_the_range_and_covers_the_end() -> None:

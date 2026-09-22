@@ -68,7 +68,7 @@ def test_decode_summary_lines_failures(tmp_path: Path) -> None:
 
 def test_decode_checker_preserves_configured_all_nan_allowlist() -> None:
     configured = validation.CheckVirtualDecodeHealth(
-        allow_all_nan_vars=("legitimate_all_nan",)
+        allow_all_nan_vars=("legitimate_all_nan",), sampled_levels=4
     )
     dataset = cast(
         "DynamicalDataset[Any, Any]",
@@ -89,7 +89,7 @@ def test_decode_checker_preserves_configured_all_nan_allowlist() -> None:
     ) == (
         1,
         decode_scan.SAMPLED_LEADS,
-        decode_scan.SAMPLED_LEVELS,
+        4,
     )
 
 
@@ -118,6 +118,9 @@ class _Job:
 
 class _Checker:
     """Stub CheckVirtualDecodeHealth recording which jobs it actually decoded."""
+
+    sampled_leads = 5
+    sampled_levels = 3
 
     def __init__(self, results: dict[int, validation.ValidationResult]) -> None:
         self._results = results
@@ -275,6 +278,8 @@ def _key(**overrides: object) -> str:
 def test_checkpoint_key_separates_everything_that_changes_the_sample() -> None:
     baseline = _key()
 
+    # Fingerprint from the middle-level-only scan, with the same default configuration.
+    assert baseline != "36cfbd2c"
     assert _key(variables=["pressure_surface", "temperature_2m"]) == baseline
     assert _key(checker=validation.CheckVirtualDecodeHealth(max_workers=64)) == baseline
     assert _key(max_samples=40) != baseline

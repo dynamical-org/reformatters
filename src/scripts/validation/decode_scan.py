@@ -30,7 +30,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from scripts.validation.availability import build_run_context
-from scripts.validation.manifest_scan import _var_chunk_key, _var_keys, _VarKeys
+from scripts.validation.manifest_scan import _var_chunk_keys, _var_keys, _VarKeys
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     evenly_spaced_subset,
@@ -51,7 +51,6 @@ log = get_logger(__name__)
 
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
-SAMPLED_LEVELS = 3
 JOB_CONCURRENCY = 4
 
 
@@ -71,7 +70,6 @@ def _decode_checker(
         update={
             "positions": 1,
             "sampled_leads": SAMPLED_LEADS,
-            "sampled_levels": SAMPLED_LEVELS,
             "reference_exists": reference_exists,
         }
     )
@@ -94,6 +92,7 @@ def _checkpoint_key(
         [
             json.dumps(
                 {
+                    "version": 2,
                     "dataset_id": dataset_id,
                     "start": str(start),
                     "end": str(end),
@@ -149,8 +148,8 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     }
 
     def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
-        key = _var_chunk_key(keys_by_var[var_path], out_loc)
-        return _exists_many(store, [key])[key]
+        keys = _var_chunk_keys(keys_by_var[var_path], out_loc)
+        return any(_exists_many(store, keys).values())
 
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=ctx.variables)
     # Sample evenly over append-dim regions, keeping every var-group job at each sampled
@@ -159,13 +158,13 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     regions = sorted({job.region.start for job in jobs})
     sampled_regions = set(evenly_spaced_subset(regions, max_samples))
     sampled = [job for job in jobs if job.region.start in sampled_regions]
+    checker = _decode_checker(dataset, reference_exists)
     log.info(
         f"Decode-checking {len(sampled)} of {len(jobs)} region jobs across "
         f"{len(sampled_regions)} of {len(regions)} regions "
-        f"(sampled_leads={SAMPLED_LEADS}, sampled_levels={SAMPLED_LEVELS})"
+        f"(sampled_leads={checker.sampled_leads}, sampled_levels={checker.sampled_levels})"
     )
 
-    checker = _decode_checker(dataset, reference_exists)
     key = _checkpoint_key(
         dataset.dataset_id, start, end, ctx.variables, max_samples, checker
     )
@@ -217,7 +216,8 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
 
     ctx.decode_sample_desc = (
         f"{len(sampled_regions)} of {len(regions)} append-dim regions, "
-        f"{SAMPLED_LEADS} leads and {SAMPLED_LEVELS} levels per group variable"
+        f"{checker.sampled_leads} leads and up to {checker.sampled_levels} "
+        "present levels per group variable"
     )
     ctx.decode_checked_count = decoded_refs
     ctx.decode_failures = failures

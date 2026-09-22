@@ -21,7 +21,7 @@ See docs/validation.md.
 from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from itertools import islice
+from itertools import islice, product
 from pathlib import Path
 from typing import Any, cast
 
@@ -221,8 +221,7 @@ class _VarKeys:
     dims: tuple[str, ...]
     chunks: tuple[int, ...]
     indexes: Mapping[str, pd.Index]
-    # Middle chunk of each dim, used for dims out_loc doesn't label (levels).
-    middle_chunk: tuple[int, ...]
+    chunk_counts: tuple[int, ...]
 
 
 def _var_keys(
@@ -234,8 +233,8 @@ def _var_keys(
     template_var = template_ds[var.path]
     dims = tuple(str(d) for d in template_var.dims)
     chunks = tuple(template_var.encoding["chunks"])
-    middle_chunk = tuple(
-        (-(-int(template_var.sizes[dim]) // chunk_size)) // 2
+    chunk_counts = tuple(
+        -(-int(template_var.sizes[dim]) // chunk_size)
         for dim, chunk_size in zip(dims, chunks, strict=True)
     )
     return _VarKeys(
@@ -244,32 +243,28 @@ def _var_keys(
         dims=dims,
         chunks=chunks,
         indexes={str(d): index for d, index in template_var.indexes.items()},
-        middle_chunk=middle_chunk,
+        chunk_counts=chunk_counts,
     )
 
 
-def _var_chunk_key(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> str:
-    """The variable's chunk key at `out_loc`, taking the middle chunk of any unlabeled dim.
-
-    Unlike the write path's chunk resolution (which requires unlabeled dims to be
-    single-chunk), a vertical group var's level dim spans many chunks; probing its
-    middle chunk mirrors the plots' middle-level sampling.
-    """
-    index = []
-    for dim, chunk_size, middle in zip(
-        keys.dims, keys.chunks, keys.middle_chunk, strict=True
+def _var_chunk_keys(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> list[str]:
+    """Chunk keys at `out_loc`, covering unlabeled levels and one spatial chunk."""
+    indices = []
+    for dim, chunk_size, count in zip(
+        keys.dims, keys.chunks, keys.chunk_counts, strict=True
     ):
         if dim in out_loc:
             position = keys.indexes[dim].get_loc(out_loc[dim])
             assert isinstance(position, int)
-            assert position % chunk_size == 0, (
-                f"{keys.path} {dim} label {out_loc[dim]} is not on a chunk boundary"
-            )
-            index.append(position // chunk_size)
+            indices.append((position // chunk_size,))
+        elif dim in {"latitude", "longitude", "x", "y"}:
+            indices.append((count // 2,))
         else:
-            index.append(middle)
-    encoded = keys.metadata.chunk_key_encoding.encode_chunk_key(tuple(index))
-    return f"{keys.path}/{encoded}"
+            indices.append(range(count))
+    return [
+        f"{keys.path}/{keys.metadata.chunk_key_encoding.encode_chunk_key(index)}"
+        for index in product(*indices)
+    ]
 
 
 def _var_probes(
@@ -278,8 +273,7 @@ def _var_probes(
     group: zarr.Group,
     keys_by_var: dict[str, _VarKeys],
 ) -> list[tuple[str, pd.Timestamp, str]]:
-    """One (var path, position, chunk key) probe per variable per position with a
-    present source file: each variable's ref at one present source file per position."""
+    """Probe each variable's levels at one present source file per position."""
     by_position: dict[pd.Timestamp, list[SourceFileCoord]] = {}
     for coord, is_present in coord_presence:
         if is_present:
@@ -298,7 +292,10 @@ def _var_probes(
             coord = _probe_coord_for_var(sorted_coords, var)
             if coord is None:
                 continue
-            probes.append((var.path, position, _var_chunk_key(keys, coord.out_loc())))
+            probes.extend(
+                (var.path, position, key)
+                for key in _var_chunk_keys(keys, coord.out_loc())
+            )
     return probes
 
 
@@ -310,7 +307,8 @@ def _flush_var_probes(
     keys = [key for _, _, key in probes]
     present = _exists_many(store, keys, max_attempts=_SCAN_MAX_RETRIES)
     for var_path, position, key in probes:
-        out.setdefault(var_path, {})[position] = present[key]
+        positions = out.setdefault(var_path, {})
+        positions[position] = positions.get(position, False) or present[key]
     probes.clear()
 
 
@@ -418,7 +416,7 @@ def _checkpoint_path(
     scope = "all" if variables is None else digest(sorted(variables), length=8)
     return (
         checkpoint_dir
-        / f"{dataset_id}_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
+        / f"{dataset_id}_levels-v2_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
     )
 
 
