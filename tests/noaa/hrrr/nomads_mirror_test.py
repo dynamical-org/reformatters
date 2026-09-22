@@ -457,3 +457,19 @@ def test_no_copy_starts_after_the_deadline(
 
     assert result.copied == [mirror_key(coord(0))]
     assert nomads.fetched == ["hrrr.t19z.wrfsfcf00.grib2"]
+
+
+def test_a_partially_written_index_is_retried_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    index = FIXTURE_INDEX.read_bytes()
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index[: index.index(b":") + 3])
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == [mirror_key(coord(0)) + ".idx"]

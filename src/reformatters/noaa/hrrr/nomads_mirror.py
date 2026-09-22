@@ -129,8 +129,8 @@ def mirror_init_time(
         for is_index in (False, True)
     ]
     day_prefix = mirror_key(files[0].coord).rsplit("/", 1)[0] + "/"
-    in_mirror: dict[str, int] = {
-        meta["path"]: meta["size"]
+    in_mirror: set[str] = {
+        meta["path"]
         for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
         for meta in batch
     }
@@ -212,7 +212,7 @@ def _copy_data(
     file: _MirrorFile,
     mirror: obstore.store.ObjectStore,
     fetch: Callable[[str], Path],
-    in_mirror: dict[str, int],
+    in_mirror: set[str],
     offsets_by_key: dict[str, list[int]],
 ) -> bool:
     path = fetch(file.url)
@@ -223,7 +223,7 @@ def _copy_data(
             return False
         with path.open("rb") as data:
             obstore.put(mirror, file.key, data)
-        in_mirror[file.key] = path.stat().st_size
+        in_mirror.add(file.key)
         offsets_by_key[file.key] = offsets
         return True
     finally:
@@ -234,7 +234,7 @@ def _copy_index(
     file: _MirrorFile,
     mirror: obstore.store.ObjectStore,
     fetch: Callable[[str], Path],
-    in_mirror: dict[str, int],
+    in_mirror: set[str],
     offsets_by_key: dict[str, list[int]],
 ) -> bool:
     """Copy an index once it lists exactly the messages the mirrored data file holds.
@@ -244,9 +244,12 @@ def _copy_index(
     data_key = mirror_key(file.coord)
     path = fetch(file.url)
     try:
-        index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
+        try:
+            index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
+        except ValueError, IndexError:
+            index_offsets = []
         if not index_offsets:
-            log.warning(f"{file.name} is empty on NOMADS; will retry")
+            log.warning(f"{file.name} is empty or partly written on NOMADS; will retry")
             return False
         if data_key not in offsets_by_key:
             # Copied by an earlier pod: scan the mirror's copy before trusting the index.
@@ -266,7 +269,7 @@ def _copy_index(
                 return False
         with path.open("rb") as data:
             obstore.put(mirror, file.key, data)
-        in_mirror[file.key] = path.stat().st_size
+        in_mirror.add(file.key)
         return True
     finally:
         path.unlink()
