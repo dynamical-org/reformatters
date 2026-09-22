@@ -595,3 +595,58 @@ def test_a_failed_copy_admits_no_further_copies(
             fetch=fetch_failing,
         )
     assert len(fetched) == 1
+
+
+def test_waits_on_copies_without_spinning_once_all_are_in_flight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    _clock_ticks_per_listing(nomads, monkeypatch)
+    timeouts: list[float | None] = []
+    real_wait = nomads_mirror.wait
+
+    def recording_wait(
+        futures: object, timeout: float | None, return_when: str
+    ) -> object:
+        timeouts.append(timeout)
+        return real_wait(futures, timeout=timeout, return_when=return_when)  # ty: ignore[invalid-argument-type]
+
+    monkeypatch.setattr(nomads_mirror, "wait", recording_wait)
+    result = mirror_init_time(
+        INIT,
+        mirror,
+        deadline=pd.Timestamp("2026-09-07T19:49Z") + pd.Timedelta(seconds=10),
+        file_types=("sfc",),
+        lead_hours=(0,),
+        poll_interval=timedelta(0),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+    assert result.copied == [coord(0).relative_path()]
+    assert timeouts == [None]
+
+
+def test_one_listing_drains_more_pairs_than_the_pool_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    for lead in range(3):
+        nomads.publish(f"hrrr.t19z.wrfsfcf{lead:02d}.grib2", FIXTURE_GRIB.read_bytes())
+    start = _clock_ticks_per_listing(nomads, monkeypatch)
+    result = mirror_init_time(
+        INIT,
+        mirror,
+        deadline=start + pd.Timedelta(seconds=10),
+        file_types=("sfc",),
+        lead_hours=(0, 1, 2),
+        poll_interval=timedelta(0),
+        max_polls=1,
+        max_concurrent_copies=1,
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+    assert sorted(result.copied) == [coord(lead).relative_path() for lead in range(3)]
+    assert nomads.listings == 1

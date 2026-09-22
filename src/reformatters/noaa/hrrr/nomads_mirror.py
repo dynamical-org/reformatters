@@ -161,9 +161,10 @@ def mirror_init_time(
                     break
                 time.sleep(until_poll)
                 continue
+            # With every pending pair in flight, only a finished copy changes anything.
             done, _ = wait(
                 copies.in_flight,
-                timeout=until_poll if can_poll else None,
+                timeout=until_poll if can_poll and copies.waiting() else None,
                 return_when=FIRST_COMPLETED,
             )
             for future in done:
