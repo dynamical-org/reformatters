@@ -1,6 +1,7 @@
 import subprocess
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -13,8 +14,8 @@ import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.common import validation
-from reformatters.common.virtual_region_job import _exists_many
 from scripts.validation import manifest_scan
+from scripts.validation.decode_scan import _reference_exists
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
     _checkpoint_path,
@@ -278,27 +279,30 @@ def _template() -> xr.Dataset:
 
 
 def test_var_chunk_keys_cover_unlabeled_levels() -> None:
-    template = _template()
+    ds = _template().expand_dims(ensemble_member=[0, 1, 2, 3])
+    ds["temperature"].encoding["chunks"] = (1, 1, 1, 1)
+    template = xr.DataTree.from_dict({"pressure_level": ds})
+    path = "pressure_level/temperature"
     store = MemoryStore()
     root = zarr.open_group(store, mode="w")
-    root.create_array("temperature", shape=(3, 3, 3), chunks=(1, 1, 1), dtype="f4")
+    root.create_array(path, shape=(4, 3, 3, 3), chunks=(1, 1, 1, 1), dtype="f4")
 
     keys = _var_keys(
-        template,  # ty: ignore[invalid-argument-type]
+        template,
         root,
-        _var("temperature"),  # ty: ignore[invalid-argument-type]
+        _var("temperature", path=path),  # ty: ignore[invalid-argument-type]
     )
     out_loc = {
         "init_time": pd.Timestamp("2024-01-02"),
         "lead_time": pd.Timedelta(hours=6),
     }
     assert _var_chunk_keys(keys, out_loc) == [
-        "temperature/c/1/1/0",
-        "temperature/c/1/1/1",
-        "temperature/c/1/1/2",
+        f"{path}/c/2/1/1/0",
+        f"{path}/c/2/1/1/1",
+        f"{path}/c/2/1/1/2",
     ]
     assert _var_chunk_keys(keys, {**out_loc, "pressure_level": 100.0}) == [
-        "temperature/c/1/1/2"
+        f"{path}/c/2/1/1/2"
     ]
 
 
@@ -377,14 +381,9 @@ def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
     _flush_var_probes(cast("Any", store), probes, availability)
     assert availability == {path: {positions[0]: True, positions[1]: False}}
 
-    def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
-        assert var_path == path
-        return any(
-            _exists_many(cast("Any", store), _var_chunk_keys(keys, out_loc)).values()
-        )
-
     checker = validation.CheckVirtualDecodeHealth(
-        sampled_levels=sampled_levels, reference_exists=reference_exists
+        sampled_levels=sampled_levels,
+        reference_exists=partial(_reference_exists, cast("Any", store), {path: keys}),
     )
     selected = checker._sample_levels(da.isel(init_time=0), path, coords[0].out_loc())
     assert len(selected.pressure_level) == min(sampled_levels, len(present_levels))

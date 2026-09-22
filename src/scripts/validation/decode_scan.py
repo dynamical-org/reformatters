@@ -16,12 +16,14 @@ interrupted scan resumes. See docs/validation.md.
 import json
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
 import typer
 import zarr
+from icechunk.store import IcechunkStore
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -52,6 +54,16 @@ log = get_logger(__name__)
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
 JOB_CONCURRENCY = 4
+
+
+def _reference_exists(
+    store: IcechunkStore,
+    keys_by_var: Mapping[str, _VarKeys],
+    var_path: str,
+    out_loc: Mapping[str, Any],
+) -> bool:
+    keys = _var_chunk_keys(keys_by_var[var_path], out_loc)
+    return any(_exists_many(store, keys).values())
 
 
 def _decode_checker(
@@ -147,9 +159,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         path: _var_keys(template_ds, group, var) for path, var in var_by_path.items()
     }
 
-    def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
-        keys = _var_chunk_keys(keys_by_var[var_path], out_loc)
-        return any(_exists_many(store, keys).values())
+    reference_exists = partial(_reference_exists, store, keys_by_var)
 
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=ctx.variables)
     # Sample evenly over append-dim regions, keeping every var-group job at each sampled

@@ -1309,8 +1309,11 @@ class CheckVirtualDecodeHealth(Validator):
         for dim in da.dims:
             if dim in spatial:
                 continue
-            if self.reference_exists is not None:
-                assert var_path is not None
+            if (
+                self.reference_exists is not None
+                and var_path is not None
+                and dim == var_path.rpartition("/")[0]
+            ):
                 assert out_loc is not None
                 labels = [
                     label

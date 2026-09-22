@@ -222,6 +222,7 @@ class _VarKeys:
     chunks: tuple[int, ...]
     indexes: Mapping[str, pd.Index]
     chunk_counts: tuple[int, ...]
+    level_dim: str
 
 
 def _var_keys(
@@ -244,6 +245,7 @@ def _var_keys(
         chunks=chunks,
         indexes={str(d): index for d, index in template_var.indexes.items()},
         chunk_counts=chunk_counts,
+        level_dim=var.path.rpartition("/")[0],
     )
 
 
@@ -257,10 +259,10 @@ def _var_chunk_keys(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> list[str]:
             position = keys.indexes[dim].get_loc(out_loc[dim])
             assert isinstance(position, int)
             indices.append((position // chunk_size,))
-        elif dim in {"latitude", "longitude", "x", "y"}:
-            indices.append((count // 2,))
-        else:
+        elif dim == keys.level_dim:
             indices.append(range(count))
+        else:
+            indices.append((count // 2,))
     return [
         f"{keys.path}/{keys.metadata.chunk_key_encoding.encode_chunk_key(index)}"
         for index in product(*indices)
