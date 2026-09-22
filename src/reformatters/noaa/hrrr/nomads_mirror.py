@@ -3,13 +3,12 @@
 """
 
 import re
-import struct
 import tempfile
 import time
 from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Final, NamedTuple, cast
+from typing import Annotated, Final, NamedTuple
 
 import obstore
 import obstore.store
@@ -18,6 +17,7 @@ import typer
 
 from reformatters.common import download, kubernetes
 from reformatters.common.download import httpx_download_to_disk, httpx_get_text
+from reformatters.common.grib import grib_message_offsets
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
@@ -42,33 +42,10 @@ CATCH_UP_INIT_TIMES: Final = 24
 # flight can finish.
 CATCH_UP_DEADLINE_MARGIN: Final = timedelta(minutes=5)
 
-# GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
-# total length as a big endian u64.
-_GRIB_SECTION_0_BYTES = 16
-_GRIB_END_MARKER = b"7777"
-
 
 def mirror_key(coord: NoaaHrrrSourceFileCoord) -> str:
     """The mirror object key for coord's data file: identical to its NODD key."""
     return coord.relative_path()
-
-
-_MIRROR_KEY_PATTERN = re.compile(
-    r"hrrr\.(?P<date>\d{8})/conus/hrrr\.t(?P<hour>\d{2})z\.wrf(?P<file_type>sfc|prs|nat)f(?P<lead>\d{2})\.grib2"
-)
-
-
-def parse_mirror_key(
-    key: str,
-) -> tuple[pd.Timestamp, pd.Timedelta, NoaaHrrrFileType] | None:
-    """The (init_time, lead_time, file_type) a data file key names, or None for any
-    other key (an index, another product)."""
-    match = _MIRROR_KEY_PATTERN.fullmatch(key)
-    if match is None:
-        return None
-    init_time = pd.Timestamp(f"{match['date']}T{match['hour']}:00")
-    file_type = cast("NoaaHrrrFileType", match["file_type"])
-    return init_time, pd.Timedelta(hours=int(match["lead"])), file_type
 
 
 def mirror_store() -> obstore.store.S3Store:
@@ -88,18 +65,18 @@ class _MirrorFile(NamedTuple):
     is_index: bool
 
     @property
-    def name(self) -> str:
-        return self.coord.relative_path().rsplit("/", 1)[-1] + (
-            ".idx" if self.is_index else ""
-        )
-
-    @property
     def key(self) -> str:
         return mirror_key(self.coord) + (".idx" if self.is_index else "")
 
     @property
+    def name(self) -> str:
+        return self.key.rsplit("/", 1)[-1]
+
+    @property
     def url(self) -> str:
-        return self.coord.get_url(source="nomads") + (".idx" if self.is_index else "")
+        if self.is_index:
+            return self.coord.get_idx_url(source="nomads")
+        return self.coord.get_url(source="nomads")
 
 
 def download_from_nomads(url: str) -> Path:
@@ -152,8 +129,8 @@ def mirror_init_time(
         for is_index in (False, True)
     ]
     day_prefix = mirror_key(files[0].coord).rsplit("/", 1)[0] + "/"
-    in_mirror: dict[str, int] = {
-        meta["path"]: meta["size"]
+    in_mirror: set[str] = {
+        meta["path"]
         for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
         for meta in batch
     }
@@ -235,7 +212,7 @@ def _copy_data(
     file: _MirrorFile,
     mirror: obstore.store.ObjectStore,
     fetch: Callable[[str], Path],
-    in_mirror: dict[str, int],
+    in_mirror: set[str],
     offsets_by_key: dict[str, list[int]],
 ) -> bool:
     path = fetch(file.url)
@@ -246,7 +223,7 @@ def _copy_data(
             return False
         with path.open("rb") as data:
             obstore.put(mirror, file.key, data)
-        in_mirror[file.key] = path.stat().st_size
+        in_mirror.add(file.key)
         offsets_by_key[file.key] = offsets
         return True
     finally:
@@ -257,7 +234,7 @@ def _copy_index(
     file: _MirrorFile,
     mirror: obstore.store.ObjectStore,
     fetch: Callable[[str], Path],
-    in_mirror: dict[str, int],
+    in_mirror: set[str],
     offsets_by_key: dict[str, list[int]],
 ) -> bool:
     """Copy an index once it lists exactly the messages the mirrored data file holds.
@@ -267,14 +244,17 @@ def _copy_index(
     data_key = mirror_key(file.coord)
     path = fetch(file.url)
     try:
-        index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
+        try:
+            index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
+        except ValueError, IndexError:
+            index_offsets = []
         if not index_offsets:
-            log.warning(f"{file.name} is empty on NOMADS; will retry")
+            log.warning(f"{file.name} is empty or partly written on NOMADS; will retry")
             return False
         if data_key not in offsets_by_key:
             # Copied by an earlier pod: scan the mirror's copy before trusting the index.
             offsets_by_key[data_key] = _mirrored_message_offsets(mirror, data_key) or []
-        if not _index_matches(index_offsets, offsets_by_key[data_key]):
+        if index_offsets != offsets_by_key[data_key]:
             log.warning(
                 f"{file.name} lists messages the mirrored data file lacks; "
                 "re-copying the data file"
@@ -282,21 +262,17 @@ def _copy_index(
             data_file = _MirrorFile(file.coord, is_index=False)
             if not _copy_data(data_file, mirror, fetch, in_mirror, offsets_by_key):
                 return False
-            if not _index_matches(index_offsets, offsets_by_key[data_key]):
+            if index_offsets != offsets_by_key[data_key]:
                 log.warning(
                     f"{file.name} still disagrees with its data file; will retry"
                 )
                 return False
         with path.open("rb") as data:
             obstore.put(mirror, file.key, data)
-        in_mirror[file.key] = path.stat().st_size
+        in_mirror.add(file.key)
         return True
     finally:
         path.unlink()
-
-
-def _index_matches(index_offsets: list[int], data_offsets: list[int]) -> bool:
-    return index_offsets == data_offsets
 
 
 def _mirrored_message_offsets(
@@ -307,40 +283,6 @@ def _mirrored_message_offsets(
             copy.write(chunk)
         copy.flush()
         return grib_message_offsets(Path(copy.name))
-
-
-def is_whole_grib2(path: Path) -> bool:
-    """Whether the file is a non-empty sequence of complete GRIB2 messages that tile it
-    exactly. A file cut inside a message fails; one cut between messages does not,
-    which is what the index check at copy time is for."""
-    return grib_message_offsets(path) is not None
-
-
-def grib_message_offsets(path: Path) -> list[int] | None:
-    """The start byte of every GRIB2 message in the file, or None if the file is not a
-    non-empty sequence of complete edition-2 messages tiling it exactly."""
-    size = path.stat().st_size
-    offset = 0
-    offsets: list[int] = []
-    with path.open("rb") as f:
-        while offset < size:
-            f.seek(offset)
-            header = f.read(_GRIB_SECTION_0_BYTES)
-            if (
-                len(header) < _GRIB_SECTION_0_BYTES
-                or header[:4] != b"GRIB"
-                or header[7] != 2
-            ):
-                return None
-            (length,) = struct.unpack(">Q", header[8:_GRIB_SECTION_0_BYTES])
-            if length < _GRIB_SECTION_0_BYTES or offset + length > size:
-                return None
-            f.seek(offset + length - len(_GRIB_END_MARKER))
-            if f.read(len(_GRIB_END_MARKER)) != _GRIB_END_MARKER:
-                return None
-            offsets.append(offset)
-            offset += length
-    return offsets if offsets and offset == size else None
 
 
 def _coord(

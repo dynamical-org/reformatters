@@ -2,7 +2,7 @@
 
 _Report issues to feedback@dynamical.org._
 
-For each dataset an update (`-update`) CronJob runs first, followed by a validation (`-validate`) CronJob. Names may shorten the dataset ID to fit Kubernetes' length limit; use the generated choices in "Create job from cronjob" below. A few source archives and mirrors that feed a dataset run their own cron (e.g. `ecmwf-ifs-ens-46-day-gribs-archive-grib-files`, `noaa-hrrr-nomads-mirror-gribs`); they have no validate step.
+For each dataset an update (`-update`) CronJob runs first, followed by a validation (`-validate`) CronJob. Names may shorten the dataset ID to fit Kubernetes' length limit; use the generated choices in "Create job from cronjob" below.
 
 ## Sentry monitoring
 _Requires sentry organization invitation._

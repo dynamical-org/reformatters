@@ -1,10 +1,10 @@
-import struct
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Generic, TypeVar
 
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
+from reformatters.common.grib import GRIB_SECTION_0_BYTES, grib2_message_length
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
 from reformatters.common.time_utils import whole_hours
@@ -20,11 +20,6 @@ from reformatters.noaa.noaa_grib_index import (
 )
 
 log = get_logger(__name__)
-
-# GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
-# total length as a big endian u64.
-GRIB_SECTION_0_BYTES = 16
-
 
 NOAA_DATA_VAR = TypeVar("NOAA_DATA_VAR", bound=DataVar[NoaaInternalAttrs])
 
@@ -187,10 +182,7 @@ class NoaaVirtualRegionJob(
         if offset + GRIB_SECTION_0_BYTES > file_size:
             return None
         header = self.read_data_bytes(coord, offset, offset + GRIB_SECTION_0_BYTES)
-        if header[:4] != b"GRIB" or header[7] != 2:
-            return None
-        (length,) = struct.unpack(">Q", header[8:GRIB_SECTION_0_BYTES])
-        return length
+        return grib2_message_length(header)
 
     def _message_lookup(
         self, data_vars: Sequence[NOAA_DATA_VAR], lead_hours: int

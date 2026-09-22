@@ -36,11 +36,8 @@ def coord(lead: int, file_type: NoaaHrrrFileType = "sfc") -> NoaaHrrrSourceFileC
     )
 
 
-def test_mirror_key_is_the_nodd_key_and_parses_back() -> None:
-    key = "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
-    assert mirror_key(coord(1)) == key
-    assert nomads_mirror.parse_mirror_key(key) == (INIT, pd.Timedelta("1h"), "sfc")
-    assert nomads_mirror.parse_mirror_key(key + ".idx") is None
+def test_mirror_key_is_the_nodd_key() -> None:
+    assert mirror_key(coord(1)) == "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
 
 
 class FakeNomads:
@@ -202,20 +199,6 @@ def test_every_file_type_is_mirrored(
     assert sorted(result.copied) == sorted(
         mirror_key(coord(0, t)) + suffix for t in file_types for suffix in ("", ".idx")
     )
-
-
-def test_is_whole_grib2_rejects_a_cut_inside_a_message(tmp_path: Path) -> None:
-    whole = FIXTURE_GRIB.read_bytes()
-    assert nomads_mirror.is_whole_grib2(FIXTURE_GRIB)
-    cut = tmp_path / "cut.grib2"
-    cut.write_bytes(whole[: len(whole) - 100])
-    assert not nomads_mirror.is_whole_grib2(cut)
-    not_grib = tmp_path / "x.grib2"
-    not_grib.write_bytes(b"<html>rate limited</html>")
-    assert not nomads_mirror.is_whole_grib2(not_grib)
-    empty = tmp_path / "empty.grib2"
-    empty.write_bytes(b"")
-    assert not nomads_mirror.is_whole_grib2(empty)
 
 
 def test_a_data_file_cut_between_messages_is_replaced_when_its_index_disagrees(
@@ -474,3 +457,19 @@ def test_no_copy_starts_after_the_deadline(
 
     assert result.copied == [mirror_key(coord(0))]
     assert nomads.fetched == ["hrrr.t19z.wrfsfcf00.grib2"]
+
+
+def test_a_partially_written_index_is_retried_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    index = FIXTURE_INDEX.read_bytes()
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index[: index.index(b":") + 3])
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert result.copied == [mirror_key(coord(0)) + ".idx"]
