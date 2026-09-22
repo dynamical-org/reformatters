@@ -32,7 +32,7 @@ import zarr
 from icechunk.store import IcechunkStore
 from zarr.core.metadata import ArrayV3Metadata
 
-from reformatters.common.config_models import DataVar
+from reformatters.common.config_models import DataVar, split_var_path
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
@@ -222,7 +222,7 @@ class _VarKeys:
     chunks: tuple[int, ...]
     indexes: Mapping[str, pd.Index]
     chunk_counts: tuple[int, ...]
-    level_dim: str
+    level_dim: str | None
 
 
 def _var_keys(
@@ -233,6 +233,8 @@ def _var_keys(
     assert isinstance(array.metadata, ArrayV3Metadata)
     template_var = template_ds[var.path]
     dims = tuple(str(d) for d in template_var.dims)
+    level_dim, _ = split_var_path(var.path)
+    assert level_dim is None or level_dim in dims
     chunks = tuple(template_var.encoding["chunks"])
     chunk_counts = tuple(
         -(-int(template_var.sizes[dim]) // chunk_size)
@@ -245,7 +247,7 @@ def _var_keys(
         chunks=chunks,
         indexes={str(d): index for d, index in template_var.indexes.items()},
         chunk_counts=chunk_counts,
-        level_dim=var.path.rpartition("/")[0],
+        level_dim=level_dim,
     )
 
 

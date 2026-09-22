@@ -30,6 +30,7 @@ from zarr.abc.store import Store
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import iterating
+from reformatters.common.config_models import split_var_path
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
@@ -1312,7 +1313,7 @@ class CheckVirtualDecodeHealth(Validator):
             if (
                 self.reference_exists is not None
                 and var_path is not None
-                and dim == var_path.rpartition("/")[0]
+                and dim == split_var_path(var_path)[0]
             ):
                 assert out_loc is not None
                 labels = [
