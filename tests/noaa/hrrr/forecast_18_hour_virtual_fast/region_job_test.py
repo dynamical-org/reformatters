@@ -31,7 +31,7 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.template_config import
     NoaaHrrrForecast18HourVirtualFastTemplateConfig,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
-from reformatters.noaa.hrrr.nomads_mirror import MIRROR_LOCATION_PREFIX, mirror_key
+from reformatters.noaa.hrrr.nomads_mirror import MIRROR_LOCATION_PREFIX
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
@@ -94,7 +94,7 @@ def mirror_file(
     tmp_path: Path,
     source_coord: NoaaHrrrForecast18HourVirtualFastSourceFileCoord,
 ) -> None:
-    path = tmp_path / "mirror" / mirror_key(source_coord)
+    path = tmp_path / "mirror" / source_coord.relative_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(FIXTURE_GRIB.read_bytes())
     path.with_name(path.name + ".idx").write_bytes(FIXTURE_INDEX.read_bytes())
@@ -198,7 +198,7 @@ def test_partial_source_file_is_skipped(
         "get_local_path",
         lambda dataset_id, key: tmp_path / "download.idx",
     )
-    size = (tmp_path / "mirror" / mirror_key(source_coord)).stat().st_size
+    size = (tmp_path / "mirror" / source_coord.relative_path()).stat().st_size
 
     with pytest.raises(ValueError, match="temperature_2m"):
         job.file_refs(source_coord, size)
@@ -301,7 +301,7 @@ def test_operational_update_decodes_fixture_after_window_moves(
     )
     assert np.isfinite(first_values).any()
     primary_repo, _ = dataset.store_factory.icechunk_primary_and_replica_repos()
-    assert mirror_prefix + mirror_key(source_coord) in (
+    assert mirror_prefix + source_coord.relative_path() in (
         primary_repo.readonly_session("main").all_virtual_chunk_locations()
     )
 

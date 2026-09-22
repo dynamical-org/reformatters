@@ -17,7 +17,6 @@ from reformatters.common.virtual_source_listing import (
 )
 from reformatters.noaa.hrrr.nomads_mirror import (
     MIRROR_LOCATION_PREFIX,
-    mirror_key,
     mirror_store,
 )
 from reformatters.noaa.hrrr.region_job import DownloadSource
@@ -44,7 +43,7 @@ class NoaaHrrrForecast18HourVirtualFastSourceFileCoord(
     """An HRRR file in the NOMADS mirror, under the key NODD gives it."""
 
     def get_url(self, source: DownloadSource = "s3") -> str:  # noqa: ARG002
-        return MIRROR_LOCATION_PREFIX + mirror_key(self)
+        return MIRROR_LOCATION_PREFIX + self.relative_path()
 
 
 class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJob):
@@ -108,7 +107,7 @@ class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJo
         )
 
     def download_index(self, coord: NoaaHrrrForecastVirtualSourceFileCoord) -> Path:
-        key = mirror_key(coord) + ".idx"
+        key = coord.relative_path() + ".idx"
         local_path = get_local_path(self.dataset_id, key)
         download_to_disk(self.mirror_store(), key, local_path)
         return local_path
@@ -118,7 +117,7 @@ class NoaaHrrrForecast18HourVirtualFastRegionJob(NoaaHrrrForecastVirtualRegionJo
     ) -> bytes:
         return bytes(
             obstore.get_range(
-                self.mirror_store(), mirror_key(coord), start=start, end=end
+                self.mirror_store(), coord.relative_path(), start=start, end=end
             )
         )
 
