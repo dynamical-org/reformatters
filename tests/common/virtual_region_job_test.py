@@ -1850,11 +1850,8 @@ def test_check_virtual_decode_health_rejects_unknown_all_nan_var(
 def test_check_virtual_decode_health_skips_vars_without_reference(
     tmp_path: Path,
 ) -> None:
-    # Same all-NaN unreadable ref as detects_unreadable_ref, but the offline opt-in
-    # reference_presence oracle reports the var has no reference at the sampled position:
-    # it is skipped (an availability matter) so decode-health PASSES and reports the
-    # no-reference var. With the oracle reporting the ref present (like the operational
-    # default reference_presence=None) the same all-NaN var still FAILS.
+    # An all-absent presence map fails without decoding; a present NaN ref fails
+    # after decoding its fill values.
     dataset = _make_dataset(tmp_path)
     messages = tmp_path / "messages.bin"
     data = bytearray(messages.read_bytes())
@@ -1872,8 +1869,9 @@ def test_check_virtual_decode_health_skips_vars_without_reference(
     skipped = validation.CheckVirtualDecodeHealth(
         reference_presence=lambda var_path, out_loc: {None: False}
     ).check(context)
-    assert skipped.passed, skipped.message
-    assert "no reference" in skipped.message
+    assert not skipped.passed
+    assert skipped.checked_count == 0
+    assert "No sampled variable had a reference" in skipped.message
 
     present = validation.CheckVirtualDecodeHealth(
         reference_presence=lambda var_path, out_loc: {None: True}

@@ -1143,7 +1143,11 @@ class CheckVirtualDecodeHealth(Validator):
                 if self.reference_presence is not None:
                     no_reference_vars |= skipped
 
-        problems = []
+        problems = (
+            ["No sampled variable had a reference at the selected positions"]
+            if self.reference_presence is not None and decoded_refs == 0
+            else []
+        )
         for var_path in sorted(min_nan_fraction):
             if var_path in first_error:
                 problems.append(f"{var_path}: {first_error[var_path]}")
@@ -1210,12 +1214,12 @@ class CheckVirtualDecodeHealth(Validator):
                 if self.reference_presence is not None
                 else None
             )
-            if presence is not None and not any(presence.values()):
-                skipped.add(var.path)
-                continue
             da = ds[var.path]
             selection = {dim: value for dim, value in loc.items() if dim in da.dims}
             da = self._sample_levels(da.sel(selection), var.path, presence)
+            if presence is not None and not any(presence.values()):
+                skipped.add(var.path)
+                continue
             try:
                 # Retried so a transient object store failure is not reported as
                 # a decode failure; a genuine decode error still fails fast.
@@ -1307,17 +1311,42 @@ class CheckVirtualDecodeHealth(Validator):
         """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
         levels, so a group var is decode-checked at a bounded set of levels rather than
         all of them. With `reference_presence`, sample only referenced levels.
+        Presence labels must match the selected group dimension (None at root).
         Single-level vars (only spatial dims left) are returned unchanged."""
         spatial = ("y", "x", "latitude", "longitude")
+        level_dim = split_var_path(var_path)[0] if var_path is not None else None
+        if reference_presence is not None:
+            if var_path is None:
+                raise ValueError("Reference presence requires a variable path")
+            if level_dim is None:
+                expected_labels = [None]
+            elif level_dim in da.dims:
+                expected_labels = list(da.get_index(level_dim))
+            elif level_dim in da.coords and da[level_dim].ndim == 0:
+                expected_labels = [da[level_dim].item()]
+            else:
+                raise ValueError(
+                    f"{var_path}: reference presence requires group dimension "
+                    f"{level_dim!r}; array dimensions are {da.dims}"
+                )
+            expected = set(expected_labels)
+            missing = [
+                label for label in expected_labels if label not in reference_presence
+            ]
+            unexpected = [
+                label for label in reference_presence if label not in expected
+            ]
+            if missing or unexpected:
+                raise ValueError(
+                    f"{var_path}: reference presence labels for {level_dim or 'root'} "
+                    f"do not match selection; missing={missing!r}, "
+                    f"unexpected={unexpected!r}"
+                )
         isel: dict[Any, Any] = {}
         for dim in da.dims:
             if dim in spatial:
                 continue
-            if (
-                reference_presence is not None
-                and var_path is not None
-                and dim == split_var_path(var_path)[0]
-            ):
+            if reference_presence is not None and dim == level_dim:
                 labels = [
                     label for label in da.get_index(dim) if reference_presence[label]
                 ]
