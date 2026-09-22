@@ -1067,13 +1067,15 @@ class CheckVirtualDecodeHealth(Validator):
     max_positions: int | None = None
     max_workers: int = 32
     allow_all_nan_vars: Sequence[str] = ()
-    # Offline opt-in. Given (var_path, out_loc), returns whether a chunk reference actually
-    # exists. When provided, a variable with no reference at a sampled position is skipped
+    # Offline opt-in. Given (var_path, out_loc), returns presence by vertical label
+    # (None for root variables). A variable with no reference at a position is skipped
     # (not decoded, not a failure) -- reference existence is the availability check's
     # concern. When None (operational default) every declared variable is decoded and a
     # missing reference reads as fill NaN and fails, which is how the operational check
     # catches removed/renamed/unpulled vars.
-    reference_exists: Callable[[str, Mapping[str, Any]], bool] | None = None
+    reference_presence: (
+        Callable[[str, Mapping[str, Any]], Mapping[Any, bool]] | None
+    ) = None
 
     requires_virtual_dataset: ClassVar[bool] = True
 
@@ -1138,7 +1140,7 @@ class CheckVirtualDecodeHealth(Validator):
                     )
                     if error is not None and var_path not in first_error:
                         first_error[var_path] = error
-                if self.reference_exists is not None:
+                if self.reference_presence is not None:
                     no_reference_vars |= skipped
 
         problems = []
@@ -1164,7 +1166,7 @@ class CheckVirtualDecodeHealth(Validator):
             f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
             "— all readable"
         )
-        if self.reference_exists is not None and no_reference_vars:
+        if self.reference_presence is not None and no_reference_vars:
             message += (
                 f" ({len(no_reference_vars)} variable(s) had no reference at sampled "
                 "positions — reference existence is reported by the "
@@ -1203,16 +1205,17 @@ class CheckVirtualDecodeHealth(Validator):
         results = []
         skipped: set[str] = set()
         for var in file_vars:
-            if self.reference_exists is not None and not self.reference_exists(
-                var.path, cast("Mapping[str, Any]", loc)
-            ):
+            presence = (
+                self.reference_presence(var.path, cast("Mapping[str, Any]", loc))
+                if self.reference_presence is not None
+                else None
+            )
+            if presence is not None and not any(presence.values()):
                 skipped.add(var.path)
                 continue
             da = ds[var.path]
             selection = {dim: value for dim, value in loc.items() if dim in da.dims}
-            da = self._sample_levels(
-                da.sel(selection), var.path, cast("Mapping[str, Any]", loc)
-            )
+            da = self._sample_levels(da.sel(selection), var.path, presence)
             try:
                 # Retried so a transient object store failure is not reported as
                 # a decode failure; a genuine decode error still fails fast.
@@ -1299,11 +1302,11 @@ class CheckVirtualDecodeHealth(Validator):
         self,
         da: xr.DataArray,
         var_path: str | None = None,
-        out_loc: Mapping[str, Any] | None = None,
+        reference_presence: Mapping[Any, bool] | None = None,
     ) -> xr.DataArray:
         """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
         levels, so a group var is decode-checked at a bounded set of levels rather than
-        all of them. With `reference_exists`, sample only referenced levels.
+        all of them. With `reference_presence`, sample only referenced levels.
         Single-level vars (only spatial dims left) are returned unchanged."""
         spatial = ("y", "x", "latitude", "longitude")
         isel: dict[Any, Any] = {}
@@ -1311,15 +1314,12 @@ class CheckVirtualDecodeHealth(Validator):
             if dim in spatial:
                 continue
             if (
-                self.reference_exists is not None
+                reference_presence is not None
                 and var_path is not None
                 and dim == split_var_path(var_path)[0]
             ):
-                assert out_loc is not None
                 labels = [
-                    label
-                    for label in da.get_index(dim)
-                    if self.reference_exists(var_path, {**out_loc, str(dim): label})
+                    label for label in da.get_index(dim) if reference_presence[label]
                 ]
                 da = da.sel({dim: labels})
             size = da.sizes[dim]

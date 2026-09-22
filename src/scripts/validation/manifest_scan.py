@@ -308,11 +308,35 @@ def _flush_var_probes(
     probes: list[tuple[str, pd.Timestamp, str]],
     out: dict[str, dict[pd.Timestamp, bool]],
 ) -> None:
-    keys = [key for _, _, key in probes]
-    present = _exists_many(store, keys, max_attempts=_SCAN_MAX_RETRIES)
+    if not probes:
+        return
+    by_var_position: dict[tuple[str, pd.Timestamp], list[str]] = {}
     for var_path, position, key in probes:
+        by_var_position.setdefault((var_path, position), []).append(key)
+
+    middle_keys = {pair: keys[len(keys) // 2] for pair, keys in by_var_position.items()}
+    middle_present = _exists_many(
+        store, list(middle_keys.values()), max_attempts=_SCAN_MAX_RETRIES
+    )
+    remaining_keys = [
+        key
+        for pair, keys in by_var_position.items()
+        if not middle_present[middle_keys[pair]]
+        for key in keys
+        if key != middle_keys[pair]
+    ]
+    remaining_present = (
+        _exists_many(store, remaining_keys, max_attempts=_SCAN_MAX_RETRIES)
+        if remaining_keys
+        else {}
+    )
+    for (var_path, position), keys in by_var_position.items():
         positions = out.setdefault(var_path, {})
-        positions[position] = positions.get(position, False) or present[key]
+        positions[position] = (
+            positions.get(position, False)
+            or middle_present[middle_keys[var_path, position]]
+            or any(remaining_present.get(key, False) for key in keys)
+        )
     probes.clear()
 
 

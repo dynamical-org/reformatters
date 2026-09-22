@@ -3,14 +3,18 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
+from zarr.storage import MemoryStore
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from scripts.validation import decode_scan
+from scripts.validation import decode_scan, manifest_scan
 from scripts.validation.utils import RunContext
 
 
@@ -75,13 +79,15 @@ def test_decode_checker_preserves_configured_all_nan_allowlist() -> None:
         SimpleNamespace(validators=lambda: (configured,)),
     )
 
-    def reference_exists(var_path: str, out_loc: Mapping[str, object]) -> bool:
-        return bool(var_path or out_loc)
+    def reference_presence(
+        var_path: str, out_loc: Mapping[str, object]
+    ) -> Mapping[Any, bool]:
+        return {None: bool(var_path or out_loc)}
 
-    checker = decode_scan._decode_checker(dataset, reference_exists)
+    checker = decode_scan._decode_checker(dataset, reference_presence)
 
     assert checker.allow_all_nan_vars == ("legitimate_all_nan",)
-    assert checker.reference_exists is reference_exists
+    assert checker.reference_presence is reference_presence
     assert (
         checker.positions,
         checker.sampled_leads,
@@ -91,6 +97,53 @@ def test_decode_checker_preserves_configured_all_nan_allowlist() -> None:
         decode_scan.SAMPLED_LEADS,
         4,
     )
+
+
+def test_reference_presence_maps_chunk_presence_to_level_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    levels = [1000, 800, 600, 400, 200]
+    values = np.full((5, 2), np.nan, dtype="f4")
+    values[2:4] = 1
+    da = xr.DataArray(
+        values,
+        dims=("pressure_level", "latitude"),
+        coords={"pressure_level": levels},
+    )
+    da.encoding["chunks"] = (2, 2)
+    template = xr.DataTree.from_dict(
+        {"pressure_level": xr.Dataset({"temperature": da})}
+    )
+    store = MemoryStore()
+    group = zarr.open_group(store, mode="w")
+    path = "pressure_level/temperature"
+    group.create_array(
+        path, shape=values.shape, chunks=(2, 2), dtype="f4", fill_value=np.nan
+    )[:] = values
+    keys = manifest_scan._var_keys(
+        template, group, cast("Any", SimpleNamespace(path=path))
+    )
+    exists = Mock(wraps=decode_scan._exists_many)
+    monkeypatch.setattr(decode_scan, "_exists_many", exists)
+
+    presence = decode_scan._reference_presence(
+        cast("Any", store), {path: keys}, path, {}
+    )
+
+    assert presence == {1000: False, 800: False, 600: True, 400: True, 200: False}
+    assert exists.call_count == 1
+    assert len(exists.call_args.args[1]) == 3
+    selected = validation.CheckVirtualDecodeHealth(sampled_levels=4)._sample_levels(
+        da, path, presence
+    )
+    assert selected.pressure_level.values.tolist() == [600, 400]
+    assert exists.call_count == 1
+    assert decode_scan._reference_presence(
+        cast("Any", store), {path: keys}, path, {"pressure_level": 800}
+    ) == {800: False}
+    assert decode_scan._reference_presence(
+        cast("Any", store), {path: keys}, path, {"pressure_level": 600}
+    ) == {600: True}
 
 
 _DATASET_ID = "noaa-test-forecast-virtual"

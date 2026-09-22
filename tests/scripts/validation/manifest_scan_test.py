@@ -5,6 +5,7 @@ from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,7 @@ from zarr.storage import MemoryStore
 
 from reformatters.common import validation
 from scripts.validation import manifest_scan
-from scripts.validation.decode_scan import _reference_exists
+from scripts.validation.decode_scan import _reference_presence
 from scripts.validation.manifest_scan import (
     ManifestScanResult,
     _checkpoint_path,
@@ -342,13 +343,123 @@ def test_var_availability_probes_written_chunks() -> None:
     assert availability == {"temperature_2m": {p0: True, p1: False}}
 
 
-@pytest.mark.parametrize("sampled_levels", [3, 4, 10])
-def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
-    sampled_levels: int,
+@pytest.mark.parametrize(
+    ("present_levels", "expected_calls", "expected_available"),
+    [
+        ({1}, [[2], [0, 1, 3, 4]], True),
+        (set(), [[2], [0, 1, 3, 4]], False),
+        ({2}, [[2]], True),
+        (set(range(5)), [[2]], True),
+    ],
+)
+def test_flush_var_probes_checks_middle_before_other_levels(
+    monkeypatch: pytest.MonkeyPatch,
+    present_levels: set[int],
+    expected_calls: list[list[int]],
+    expected_available: bool,
 ) -> None:
-    # The middle level (350 hPa) and both endpoints have no icing reference.
+    path = "pressure_level/temperature"
+    position = pd.Timestamp("2024-01-01")
+    keys = [f"{path}/c/0/{level}" for level in range(5)]
+    calls: list[list[str]] = []
+
+    def fake_exists(
+        store: object, probe_keys: list[str], *, max_attempts: int
+    ) -> dict[str, bool]:
+        assert max_attempts == manifest_scan._SCAN_MAX_RETRIES
+        calls.append(list(probe_keys))
+        return {
+            key: key in {keys[level] for level in present_levels} for key in probe_keys
+        }
+
+    monkeypatch.setattr(manifest_scan, "_exists_many", fake_exists)
+    probes = [(path, position, key) for key in keys]
+    availability: dict[str, dict[pd.Timestamp, bool]] = {}
+
+    _flush_var_probes(cast("Any", object()), probes, availability)
+
+    assert calls == [[keys[level] for level in levels] for levels in expected_calls]
+    assert availability == {path: {position: expected_available}}
+    assert probes == []
+
+
+def test_flush_var_probes_preserves_positions_and_previous_flushes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = "pressure_level/temperature"
+    root_path = "temperature_2m"
+    p0, p1 = pd.date_range("2024-01-01", periods=2)
+    vertical = {
+        position: [f"{path}/c/{index}/{level}" for level in range(3)]
+        for index, position in enumerate((p0, p1))
+    }
+    root = {p0: f"{root_path}/c/0", p1: f"{root_path}/c/1"}
+    calls: list[list[str]] = []
+    present_keys = {vertical[p0][0], vertical[p1][1], root[p0]}
+
+    def fake_exists(
+        store: object, probe_keys: list[str], *, max_attempts: int
+    ) -> dict[str, bool]:
+        assert max_attempts == manifest_scan._SCAN_MAX_RETRIES
+        calls.append(list(probe_keys))
+        return {key: key in present_keys for key in probe_keys}
+
+    monkeypatch.setattr(manifest_scan, "_exists_many", fake_exists)
+    availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    probes = [
+        *((path, p0, key) for key in vertical[p0]),
+        *((path, p1, key) for key in vertical[p1]),
+        (root_path, p0, root[p0]),
+        (root_path, p1, root[p1]),
+    ]
+
+    _flush_var_probes(cast("Any", object()), probes, availability)
+
+    assert calls == [
+        [vertical[p0][1], vertical[p1][1], root[p0], root[p1]],
+        [vertical[p0][0], vertical[p0][2]],
+    ]
+    assert availability == {
+        path: {p0: True, p1: True},
+        root_path: {p0: True, p1: False},
+    }
+
+    calls.clear()
+    present_keys = {root[p1]}
+    probes = [
+        *((path, p0, key) for key in vertical[p0]),
+        *((path, p1, key) for key in vertical[p1]),
+        (root_path, p0, root[p0]),
+        (root_path, p1, root[p1]),
+    ]
+    _flush_var_probes(cast("Any", object()), probes, availability)
+
+    assert calls == [
+        [vertical[p0][1], vertical[p1][1], root[p0], root[p1]],
+        [vertical[p0][0], vertical[p0][2], vertical[p1][0], vertical[p1][2]],
+    ]
+    assert availability == {
+        path: {p0: True, p1: True},
+        root_path: {p0: True, p1: True},
+    }
+    result = ManifestScanResult(
+        file_availability={p0: (1, 1), p1: (1, 1)},
+        var_availability=availability,
+    )
+    checkpoint = tmp_path / "manifest.json"
+    _write_checkpoint(checkpoint, result)
+    assert _read_checkpoint(checkpoint) == result
+
+
+@pytest.mark.parametrize("sampled_levels", [3, 4, 10])
+@pytest.mark.parametrize("dense", [False, True])
+def test_vertical_references_are_present_and_decode_only_present_levels(
+    sampled_levels: int,
+    dense: bool,
+) -> None:
+    # Sparse icing has no reference at the middle level (350 hPa) or either endpoint.
     levels = [1000, 800, 700, 600, 500, 400, 350, 300, 200, 100, 50, 10, 1]
-    present_levels = [800, 700, 600, 500, 400, 300]
+    present_levels = levels if dense else [800, 700, 600, 500, 400, 300]
     path = "pressure_level/icing_probability"
     var = _var("icing_probability", path=path)
     positions = pd.date_range("2024-01-01", periods=2)
@@ -381,13 +492,19 @@ def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
     _flush_var_probes(cast("Any", store), probes, availability)
     assert availability == {path: {positions[0]: True, positions[1]: False}}
 
+    reference_presence = Mock(
+        wraps=partial(_reference_presence, cast("Any", store), {path: keys})
+    )
     checker = validation.CheckVirtualDecodeHealth(
         sampled_levels=sampled_levels,
-        reference_exists=partial(_reference_exists, cast("Any", store), {path: keys}),
+        reference_presence=reference_presence,
     )
-    selected = checker._sample_levels(da.isel(init_time=0), path, coords[0].out_loc())
+    selected = checker._sample_levels(
+        da.isel(init_time=0), path, reference_presence(path, coords[0].out_loc())
+    )
     assert len(selected.pressure_level) == min(sampled_levels, len(present_levels))
     assert set(selected.pressure_level.values) <= set(present_levels)
+    reference_presence.reset_mock()
     results, skipped = checker._decode_coord(
         cast("Any", coords[0]),
         cast("Any", job),
@@ -397,6 +514,8 @@ def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
     )
     assert results == [(path, 0.0, None)]
     assert skipped == set()
+    reference_presence.assert_called_once_with(path, coords[0].out_loc())
+    reference_presence.reset_mock()
     results, skipped = checker._decode_coord(
         cast("Any", coords[1]),
         cast("Any", job),
@@ -406,6 +525,7 @@ def test_sparse_vertical_references_are_present_and_decode_only_present_levels(
     )
     assert results == []
     assert skipped == {path}
+    reference_presence.assert_called_once_with(path, coords[1].out_loc())
 
 
 def test_result_availability_series_marks_unprobed_positions_nan() -> None:
