@@ -457,7 +457,7 @@ def test_download_file_fallback(
         call_count += 1
         raise FileNotFoundError(f"Primary index not found: {url}")
 
-    # Fallback source (httpx_download_to_disk for NOMADS) succeeds
+    # Fallback source (nomads_download_to_disk) succeeds
     def mock_fallback_download(url: str, dataset_id: str, **kwargs: object) -> Mock:
         nonlocal call_count
         call_count += 1
@@ -472,7 +472,7 @@ def test_download_file_fallback(
         Mock(side_effect=mock_primary_download),
     )
     monkeypatch.setattr(
-        "reformatters.noaa.gefs.utils.httpx_download_to_disk",
+        "reformatters.noaa.gefs.utils.nomads_download_to_disk",
         Mock(side_effect=mock_fallback_download),
     )
 
