@@ -11,7 +11,6 @@ from obstore.exceptions import GenericError, PermissionDeniedError
 from reformatters.common import download as download_module
 from reformatters.common.download import (
     DOWNLOAD_DIR,
-    _httpx_get_with_retry,
     _parse_multipart_byteranges,
     download_to_disk,
     gcs_download_to_disk,
@@ -21,11 +20,11 @@ from reformatters.common.download import (
     http_status_code,
     http_store,
     httpx_download_to_disk,
+    httpx_get,
     is_not_found,
     s3_download_to_disk,
     s3_read_bytes,
     s3_store,
-    signed_s3_store,
 )
 
 
@@ -172,44 +171,23 @@ def test_gcs_download_to_disk_rejects_non_gcs_url() -> None:
         gcs_download_to_disk("s3://test-bucket/file.index", "my-dataset")
 
 
-def test_signed_s3_store_reads_icechunk_style_options() -> None:
-    store = signed_s3_store(
-        "bucket",
-        {
-            "endpoint_url": "https://account.r2.cloudflarestorage.com",
-            "access_key_id": "key-id",
-            "secret_access_key": "secret",
-            "region": "auto",
-            "force_path_style": True,
-        },
+def test_s3_store_with_credentials_is_signed_for_an_s3_compatible_endpoint() -> None:
+    store = s3_store(
+        "s3://bucket",
+        region="auto",
+        skip_signature=False,
+        endpoint="https://account.r2.cloudflarestorage.com",
+        access_key_id="key-id",
+        secret_access_key="secret",  # noqa: S106
+        virtual_hosted_style_request=False,
     )
     assert isinstance(store, obstore.store.S3Store)
-    assert store.config == {
-        "bucket": "bucket",
-        "endpoint": "https://account.r2.cloudflarestorage.com",
-        "access_key_id": "key-id",
-        "secret_access_key": "secret",
-        "region": "auto",
-        "virtual_hosted_style_request": "false",
-    }
-
-
-def test_signed_s3_store_defaults_to_auto_region_and_virtual_hosted_style() -> None:
-    store = signed_s3_store(
-        "bucket",
-        {
-            "endpoint_url": "https://account.r2.cloudflarestorage.com",
-            "access_key_id": "key-id",
-            "secret_access_key": "secret",
-        },
-    )
+    assert store.config["endpoint"] == "https://account.r2.cloudflarestorage.com"
+    assert store.config["access_key_id"] == "key-id"
+    assert store.config["secret_access_key"] == "secret"  # noqa: S105
     assert store.config["region"] == "auto"
-    assert store.config["virtual_hosted_style_request"] == "true"
-
-
-def test_signed_s3_store_requires_an_endpoint() -> None:
-    with pytest.raises(KeyError, match="endpoint_url"):
-        signed_s3_store("bucket", {"access_key_id": "k", "secret_access_key": "s"})
+    assert store.config["virtual_hosted_style_request"] == "false"
+    assert store.config["skip_signature"] == "false"
 
 
 def test_download_to_disk_skips_if_exists_and_disk_cache(tmp_path: Path) -> None:
@@ -473,7 +451,7 @@ def test_httpx_download_to_disk_no_byte_ranges(tmp_path: Path) -> None:
     response = _make_httpx_response(status_code=200, content=file_content)
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", return_value=response),
+        patch.object(download_module, "httpx_get", return_value=response),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -505,7 +483,7 @@ def test_httpx_download_to_disk_with_byte_ranges_multipart(tmp_path: Path) -> No
     )
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", return_value=response),
+        patch.object(download_module, "httpx_get", return_value=response),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -526,7 +504,7 @@ def test_httpx_download_to_disk_with_byte_ranges_single_range(tmp_path: Path) ->
     )
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", return_value=response),
+        patch.object(download_module, "httpx_get", return_value=response),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -554,7 +532,7 @@ def test_httpx_download_to_disk_builds_correct_range_header(tmp_path: Path) -> N
         )
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "httpx_get", fake_get_with_retry),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         httpx_download_to_disk(
@@ -572,7 +550,7 @@ def test_httpx_download_to_disk_cleans_up_on_error(tmp_path: Path) -> None:
     with (
         patch.object(
             download_module,
-            "_httpx_get_with_retry",
+            "httpx_get",
             side_effect=httpx.ConnectError("failed"),
         ),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
@@ -607,7 +585,7 @@ def test_httpx_download_to_disk_disk_cache_skips_when_file_exists(
         return _make_httpx_response(status_code=200, content=b"fresh content")
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "httpx_get", fake_get_with_retry),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -634,7 +612,7 @@ def test_httpx_download_to_disk_disk_cache_downloads_when_missing(
         return response
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", fake_get_with_retry),
+        patch.object(download_module, "httpx_get", fake_get_with_retry),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -655,7 +633,7 @@ def test_httpx_download_to_disk_with_suffix(tmp_path: Path) -> None:
     )
 
     with (
-        patch.object(download_module, "_httpx_get_with_retry", return_value=response),
+        patch.object(download_module, "httpx_get", return_value=response),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -668,10 +646,10 @@ def test_httpx_download_to_disk_with_suffix(tmp_path: Path) -> None:
     assert result.name == "file.grib2-abc123"
 
 
-# --- _httpx_get_with_retry tests ---
+# --- httpx_get tests ---
 
 
-def test_httpx_get_with_retry_retries_on_5xx() -> None:
+def testhttpx_get_retries_on_5xx() -> None:
     call_count = 0
 
     def mock_get(url: str, **kwargs: object) -> httpx.Response:
@@ -688,13 +666,13 @@ def test_httpx_get_with_retry_retries_on_5xx() -> None:
         patch.object(download_module, "_httpx_client", return_value=mock_client),
         patch.object(download_module.time, "sleep"),
     ):
-        response = _httpx_get_with_retry("https://example.com/test")
+        response = httpx_get("https://example.com/test")
 
     assert call_count == 3
     assert response.status_code == 200
 
 
-def test_httpx_get_with_retry_retries_on_transport_error() -> None:
+def testhttpx_get_retries_on_transport_error() -> None:
     call_count = 0
 
     def mock_get(url: str, **kwargs: object) -> httpx.Response:
@@ -711,13 +689,13 @@ def test_httpx_get_with_retry_retries_on_transport_error() -> None:
         patch.object(download_module, "_httpx_client", return_value=mock_client),
         patch.object(download_module.time, "sleep"),
     ):
-        response = _httpx_get_with_retry("https://example.com/test")
+        response = httpx_get("https://example.com/test")
 
     assert call_count == 2
     assert response.status_code == 200
 
 
-def test_httpx_get_with_retry_raises_on_4xx() -> None:
+def testhttpx_get_raises_on_4xx() -> None:
     mock_client = Mock()
     mock_client.get = Mock(
         return_value=_make_httpx_response(status_code=404, content=b"not found")
@@ -727,4 +705,4 @@ def test_httpx_get_with_retry_raises_on_4xx() -> None:
         patch.object(download_module, "_httpx_client", return_value=mock_client),
         pytest.raises(httpx.HTTPStatusError),
     ):
-        _httpx_get_with_retry("https://example.com/test")
+        httpx_get("https://example.com/test")
