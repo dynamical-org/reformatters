@@ -1,3 +1,4 @@
+import threading
 from datetime import timedelta
 from itertools import count
 from pathlib import Path
@@ -15,7 +16,6 @@ from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrFileType
 from reformatters.noaa.hrrr.nomads_mirror import (
     NoaaHrrrNomadsMirror,
     mirror_init_time,
-    mirror_key,
     mirror_window,
 )
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
@@ -36,8 +36,8 @@ def coord(lead: int, file_type: NoaaHrrrFileType = "sfc") -> NoaaHrrrSourceFileC
     )
 
 
-def test_mirror_key_is_the_nodd_key() -> None:
-    assert mirror_key(coord(1)) == "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
+def test_mirror_keys_are_the_nodd_keys() -> None:
+    assert coord(1).relative_path() == "hrrr.20260907/conus/hrrr.t19z.wrfsfcf01.grib2"
 
 
 class FakeNomads:
@@ -131,8 +131,11 @@ def test_copies_each_file_as_nomads_publishes_it_data_before_index(
     nomads.publish("hrrr.t19z.wrfsfcf01.grib2.idx", index)
     result = run(nomads, mirror, polls=2, monkeypatch=monkeypatch)
 
-    f00, f01 = mirror_key(coord(0)), mirror_key(coord(1))
-    assert result.copied == [f00, f00 + ".idx", f01, f01 + ".idx"]
+    f00, f01 = coord(0).relative_path(), coord(1).relative_path()
+    assert sorted(result.copied) == [f00, f00 + ".idx", f01, f01 + ".idx"]
+    # Within a pair the data file is copied before its index.
+    assert result.copied.index(f00) < result.copied.index(f00 + ".idx")
+    assert result.copied.index(f01) < result.copied.index(f01 + ".idx")
     assert result.pending == []
     assert mirror_contents(mirror) == set(result.copied)
     # One listing per poll; each object fetched once.
@@ -147,16 +150,16 @@ def test_files_already_in_the_mirror_are_not_fetched_again(
 ) -> None:
     nomads = FakeNomads(tmp_path)
     mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
-    obstore.put(mirror, mirror_key(coord(0)), FIXTURE_GRIB.read_bytes())
-    obstore.put(mirror, mirror_key(coord(0)) + ".idx", FIXTURE_INDEX.read_bytes())
+    obstore.put(mirror, coord(0).relative_path(), FIXTURE_GRIB.read_bytes())
+    obstore.put(mirror, coord(0).relative_path() + ".idx", FIXTURE_INDEX.read_bytes())
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", FIXTURE_INDEX.read_bytes())
     nomads.publish("hrrr.t19z.wrfsfcf01.grib2", FIXTURE_GRIB.read_bytes())
 
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch)
 
-    assert result.copied == [mirror_key(coord(1))]
-    assert result.pending == [mirror_key(coord(1)) + ".idx"]
+    assert result.copied == [coord(1).relative_path()]
+    assert result.pending == [coord(1).relative_path() + ".idx"]
     assert nomads.fetched == ["hrrr.t19z.wrfsfcf01.grib2"]
 
 
@@ -174,7 +177,7 @@ def test_a_partially_written_data_file_is_retried_not_copied(
 
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.copied == [mirror_key(coord(0))]
+    assert result.copied == [coord(0).relative_path()]
 
 
 def test_every_file_type_is_mirrored(
@@ -197,7 +200,9 @@ def test_every_file_type_is_mirrored(
         lead_hours=(0,),
     )
     assert sorted(result.copied) == sorted(
-        mirror_key(coord(0, t)) + suffix for t in file_types for suffix in ("", ".idx")
+        coord(0, t).relative_path() + suffix
+        for t in file_types
+        for suffix in ("", ".idx")
     )
 
 
@@ -211,19 +216,19 @@ def test_a_data_file_cut_between_messages_is_replaced_when_its_index_disagrees(
     # NOMADS lists the file while it holds only its first message: whole GRIB2, but short.
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole[:second_message_start])
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.copied == [mirror_key(coord(0))]
+    assert result.copied == [coord(0).relative_path()]
 
     # The index arrives naming both messages: the short copy is replaced first.
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole)
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.copied == [mirror_key(coord(0)) + ".idx"]
+    assert result.copied == [coord(0).relative_path() + ".idx"]
     assert nomads.fetched == [
         "hrrr.t19z.wrfsfcf00.grib2",
         "hrrr.t19z.wrfsfcf00.grib2.idx",
         "hrrr.t19z.wrfsfcf00.grib2",
     ]
-    assert obstore.get(mirror, mirror_key(coord(0))).bytes().to_bytes() == whole
+    assert obstore.get(mirror, coord(0).relative_path()).bytes().to_bytes() == whole
 
 
 def test_an_index_disagreeing_with_a_file_mirrored_by_an_earlier_pod_waits(
@@ -233,14 +238,14 @@ def test_an_index_disagreeing_with_a_file_mirrored_by_an_earlier_pod_waits(
     mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
     whole, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
     second_message_start = int(index.decode().splitlines()[1].split(":")[1])
-    obstore.put(mirror, mirror_key(coord(0)), whole[:second_message_start])
+    obstore.put(mirror, coord(0).relative_path(), whole[:second_message_start])
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", whole[:second_message_start])
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
     # The index's last message starts past the mirrored file; NOMADS still serves
     # the short file, so nothing is exposed and the index stays pending.
     assert result.copied == []
-    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+    assert result.pending == [coord(0).relative_path() + ".idx"]
 
 
 def test_downloads_and_listings_go_through_the_nomads_limiter(
@@ -255,16 +260,18 @@ def test_downloads_and_listings_go_through_the_nomads_limiter(
         rate_limiter=nomads_mirror.nomads_rate_limiter,
         retry_status_codes=nomads_mirror.NOMADS_RETRY_STATUS_CODES,
     )
-    get_text = Mock(
-        return_value='<a href="hrrr.t19z.wrfsfcf00.grib2">x</a> <a href="hrrr.t19z.wrfsfcf00.grib2.idx">y</a> <a href="hrrr.t19z.wrfsubhf00.grib2">z</a>'
+    get = Mock(
+        return_value=Mock(
+            text='<a href="hrrr.t19z.wrfsfcf00.grib2">x</a> <a href="hrrr.t19z.wrfsfcf00.grib2.idx">y</a> <a href="hrrr.t19z.wrfsubhf00.grib2">z</a>'
+        )
     )
-    monkeypatch.setattr(nomads_mirror, "httpx_get_text", get_text)
+    monkeypatch.setattr(nomads_mirror, "httpx_get", get)
     assert nomads_mirror.list_nomads_directory("dir/") == {
         "hrrr.t19z.wrfsfcf00.grib2",
         "hrrr.t19z.wrfsfcf00.grib2.idx",
         "hrrr.t19z.wrfsubhf00.grib2",
     }
-    get_text.assert_called_once_with(
+    get.assert_called_once_with(
         "dir/",
         rate_limiter=nomads_mirror.nomads_rate_limiter,
         retry_status_codes=nomads_mirror.NOMADS_RETRY_STATUS_CODES,
@@ -293,14 +300,19 @@ def test_mirror_store_is_signed_from_the_mounted_secret(
     store = nomads_mirror.mirror_store()
     assert loaded == [nomads_mirror.MIRROR_SECRET_NAME]
     assert isinstance(store, obstore.store.S3Store)
-    assert store.config == {
-        "bucket": "noaa-hrrr-nomads-mirror",
-        "endpoint": "https://account.r2.cloudflarestorage.com",
-        "access_key_id": "key-id",
-        "secret_access_key": "secret",
-        "region": "auto",
-        "virtual_hosted_style_request": "false",
-    }
+    assert (
+        store.config
+        | {
+            "bucket": "noaa-hrrr-nomads-mirror",
+            "endpoint": "https://account.r2.cloudflarestorage.com",
+            "access_key_id": "key-id",
+            "secret_access_key": "secret",
+            "region": "auto",
+            "virtual_hosted_style_request": "false",
+            "skip_signature": "false",
+        }
+        == store.config
+    )
 
 
 def test_operational_kubernetes_resources_is_one_hourly_mirror_cron() -> None:
@@ -346,7 +358,7 @@ def test_after_a_restart_the_mirrored_file_is_scanned_before_its_index_is_truste
     whole, index = FIXTURE_GRIB.read_bytes(), FIXTURE_INDEX.read_bytes()
     # An earlier pod mirrored one version of the file; NOMADS now serves another
     # whose index names an in-bounds but different second offset.
-    obstore.put(mirror, mirror_key(coord(0)), whole)
+    obstore.put(mirror, coord(0).relative_path(), whole)
     lines = index.decode().splitlines()
     shifted = lines[1].split(":")
     shifted[1] = str(int(shifted[1]) - 1)
@@ -355,7 +367,7 @@ def test_after_a_restart_the_mirrored_file_is_scanned_before_its_index_is_truste
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", shifted_index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
     assert result.copied == []
-    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+    assert result.pending == [coord(0).relative_path() + ".idx"]
     # The data file was fetched again in case NOMADS had replaced it.
     assert nomads.fetched == [
         "hrrr.t19z.wrfsfcf00.grib2.idx",
@@ -364,7 +376,7 @@ def test_after_a_restart_the_mirrored_file_is_scanned_before_its_index_is_truste
 
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.copied == [mirror_key(coord(0)) + ".idx"]
+    assert result.copied == [coord(0).relative_path() + ".idx"]
 
 
 def test_earlier_init_times_are_caught_up_newest_first_in_one_poll_each(
@@ -451,11 +463,12 @@ def test_no_copy_starts_after_the_deadline(
         file_types=("sfc",),
         lead_hours=(0, 1),
         poll_interval=timedelta(0),
+        max_concurrent_copies=1,
         list_directory=nomads.list_directory,
         fetch=nomads.fetch,
     )
 
-    assert result.copied == [mirror_key(coord(0))]
+    assert result.copied == [coord(0).relative_path()]
     assert nomads.fetched == ["hrrr.t19z.wrfsfcf00.grib2"]
 
 
@@ -468,8 +481,55 @@ def test_a_partially_written_index_is_retried_not_fatal(
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index[: index.index(b":") + 3])
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.pending == [mirror_key(coord(0)) + ".idx"]
+    assert result.pending == [coord(0).relative_path() + ".idx"]
 
     nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", index)
     result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
-    assert result.copied == [mirror_key(coord(0)) + ".idx"]
+    assert result.copied == [coord(0).relative_path() + ".idx"]
+
+
+def test_data_files_copy_in_parallel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf01.grib2", FIXTURE_GRIB.read_bytes())
+    both_downloading = threading.Barrier(2, timeout=5)
+    fetch = nomads.fetch
+
+    def fetch_once_both_started(url: str) -> Path:
+        both_downloading.wait()
+        return fetch(url)
+
+    monkeypatch.setattr(nomads, "fetch", fetch_once_both_started)
+    result = run(nomads, mirror, polls=1, monkeypatch=monkeypatch)
+    assert sorted(result.copied) == [coord(0).relative_path(), coord(1).relative_path()]
+
+
+def test_polling_continues_while_a_copy_is_in_flight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    f01_fetched = threading.Event()
+    list_directory, fetch = nomads.list_directory, nomads.fetch
+
+    def list_publishing_f01_later(url: str) -> set[str]:
+        if nomads.listings == 1:
+            nomads.publish("hrrr.t19z.wrfsfcf01.grib2", FIXTURE_GRIB.read_bytes())
+        return list_directory(url)
+
+    def fetch_f00_slowly(url: str) -> Path:
+        if url.endswith("f01.grib2"):
+            f01_fetched.set()
+        else:
+            # f01 is only listed by a poll made while this download is in flight.
+            assert f01_fetched.wait(timeout=5)
+        return fetch(url)
+
+    monkeypatch.setattr(nomads, "list_directory", list_publishing_f01_later)
+    monkeypatch.setattr(nomads, "fetch", fetch_f00_slowly)
+    result = run(nomads, mirror, polls=10, monkeypatch=monkeypatch)
+    assert sorted(result.copied) == [coord(0).relative_path(), coord(1).relative_path()]

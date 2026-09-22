@@ -6,21 +6,23 @@ import re
 import tempfile
 import time
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Final, NamedTuple
+from typing import Annotated, Final
 
 import obstore
 import obstore.store
 import pandas as pd
 import typer
 
-from reformatters.common import download, kubernetes
-from reformatters.common.download import httpx_download_to_disk, httpx_get_text
+from reformatters.common import kubernetes
+from reformatters.common.download import httpx_download_to_disk, httpx_get, s3_store
 from reformatters.common.grib import grib_message_offsets
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrFileType
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
@@ -41,42 +43,53 @@ CATCH_UP_INIT_TIMES: Final = 24
 # Catch-up stops starting copies this long before the fire's deadline, so one in
 # flight can finish.
 CATCH_UP_DEADLINE_MARGIN: Final = timedelta(minutes=5)
-
-
-def mirror_key(coord: NoaaHrrrSourceFileCoord) -> str:
-    """The mirror object key for coord's data file: identical to its NODD key."""
-    return coord.relative_path()
+# Listings share the NOMADS rate limiter with downloads, so poll no faster than this.
+POLL_INTERVAL: Final = timedelta(seconds=20)
+# Bounded by the pod's ephemeral storage: each copy holds one data file on disk.
+MAX_CONCURRENT_COPIES: Final = 4
 
 
 def mirror_store() -> obstore.store.S3Store:
-    """The mirror bucket over R2's S3 API, signed with the mounted secret."""
-    return download.signed_s3_store(
-        MIRROR_BUCKET, kubernetes.load_secret(MIRROR_SECRET_NAME)
+    """The mirror bucket over R2's S3 API, signed with the mounted secret, which holds
+    `icechunk.s3_storage` options."""
+    options = kubernetes.load_secret(MIRROR_SECRET_NAME)
+    return s3_store(
+        f"s3://{MIRROR_BUCKET}",
+        region=options.get("region", "auto"),
+        skip_signature=False,
+        endpoint=options["endpoint_url"],
+        access_key_id=options["access_key_id"],
+        secret_access_key=options["secret_access_key"],
+        virtual_hosted_style_request=not options.get("force_path_style", False),
     )
 
 
-class MirrorResult(NamedTuple):
+class MirrorResult(FrozenBaseModel):
     copied: list[str]
     pending: list[str]
 
 
-class _MirrorFile(NamedTuple):
+class _PairCopy(FrozenBaseModel):
+    """What one task copies of a data file and its index."""
+
     coord: NoaaHrrrSourceFileCoord
-    is_index: bool
+    copy_data: bool
+    copy_index: bool
+    # Message offsets of the data file already in the mirror, when known.
+    data_offsets: list[int] | None
 
     @property
-    def key(self) -> str:
-        return mirror_key(self.coord) + (".idx" if self.is_index else "")
+    def data_key(self) -> str:
+        return self.coord.relative_path()
 
     @property
-    def name(self) -> str:
-        return self.key.rsplit("/", 1)[-1]
+    def index_key(self) -> str:
+        return self.data_key + ".idx"
 
-    @property
-    def url(self) -> str:
-        if self.is_index:
-            return self.coord.get_idx_url(source="nomads")
-        return self.coord.get_url(source="nomads")
+
+class _PairResult(FrozenBaseModel):
+    copied: list[str]
+    data_offsets: list[int] | None
 
 
 def download_from_nomads(url: str) -> Path:
@@ -90,11 +103,11 @@ def download_from_nomads(url: str) -> Path:
 
 def list_nomads_directory(url: str) -> set[str]:
     """The file names NOMADS lists in one init's directory (one request)."""
-    html = httpx_get_text(
+    html = httpx_get(
         url,
         rate_limiter=nomads_rate_limiter,
         retry_status_codes=NOMADS_RETRY_STATUS_CODES,
-    )
+    ).text
     return set(
         re.findall(r'href="(hrrr\.t\d{2}z\.wrf\w+f\d{2}\.grib2(?:\.idx)?)"', html)
     )
@@ -107,66 +120,88 @@ def mirror_init_time(
     deadline: pd.Timestamp,
     file_types: Sequence[NoaaHrrrFileType] = MIRRORED_FILE_TYPES,
     lead_hours: Sequence[int] = MIRRORED_LEAD_HOURS,
-    poll_interval: timedelta = timedelta(seconds=1),
+    poll_interval: timedelta = POLL_INTERVAL,
     max_polls: int | None = None,
+    max_concurrent_copies: int = MAX_CONCURRENT_COPIES,
     list_directory: Callable[[str], set[str]] = list_nomads_directory,
     fetch: Callable[[str], Path] = download_from_nomads,
 ) -> MirrorResult:
     """Copy one init's files into the mirror as NOMADS publishes them, until every file
-    is copied, `deadline` passes, or `max_polls` polls have run.
+    is copied, `deadline` passes, or `max_polls` polls have run; copies started before
+    then finish before this returns.
 
-    Each poll is one NOMADS directory listing, so the poll rate alone is the listing
-    rate; every listing and copy goes through the shared NOMADS limiter. A data file
-    is copied once it parses as whole GRIB2 messages, and its index only once it
-    lists exactly the messages the mirrored data file holds, so an index in the
-    mirror describes the data file beside it; anything else is retried next poll.
+    Up to `max_concurrent_copies` data file and index pairs copy in parallel while
+    polling continues; every listing and download shares the NOMADS rate limiter. A
+    data file is copied once it parses as whole GRIB2 messages, and its index only
+    once it lists exactly the messages the mirrored data file holds, so an index in
+    the mirror describes the data file beside it; anything else is retried next poll.
     """
-    files = [
-        _MirrorFile(coord, is_index)
+    coords = [
+        _coord(init_time, lead, file_type)
         for file_type in file_types
         for lead in lead_hours
-        for coord in [_coord(init_time, lead, file_type)]
-        for is_index in (False, True)
     ]
-    day_prefix = mirror_key(files[0].coord).rsplit("/", 1)[0] + "/"
+    keys = [
+        key for c in coords for key in (c.relative_path(), c.relative_path() + ".idx")
+    ]
+    day_prefix = keys[0].rsplit("/", 1)[0] + "/"
     in_mirror: set[str] = {
         meta["path"]
         for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
         for meta in batch
     }
-    pending = [file for file in files if file.key not in in_mirror]
-    directory_url = files[0].url.rsplit("/", 1)[0] + "/"
+    pending = set(keys) - in_mirror
+    directory_url = coords[0].get_url(source="nomads").rsplit("/", 1)[0] + "/"
     offsets_by_key: dict[str, list[int]] = {}
-    result = MirrorResult([], [])
+    copied: list[str] = []
+    in_flight: dict[Future[_PairResult], _PairCopy] = {}
+
+    def harvest(future: Future[_PairResult]) -> None:
+        pair = in_flight.pop(future)
+        result = future.result()
+        if result.data_offsets is not None:
+            offsets_by_key[pair.data_key] = result.data_offsets
+        for key in result.copied:
+            pending.discard(key)
+            in_mirror.add(key)
+            copied.append(key)
+            log.info(f"Mirrored {key}")
+
     polls = 0
-    while (
-        pending
-        and pd.Timestamp.now("UTC") < deadline
-        and (max_polls is None or polls < max_polls)
-    ):
-        polls += 1
-        poll_start = time.monotonic()
-        listed = list_directory(directory_url)
-        for file in [f for f in pending if f.name in listed]:
-            if pd.Timestamp.now("UTC") > deadline:
-                break
-            data_key = mirror_key(file.coord)
-            if file.is_index and data_key not in in_mirror:
+    next_poll = time.monotonic()
+    with ThreadPoolExecutor(max_workers=max_concurrent_copies) as pool:
+        while (
+            pending
+            and pd.Timestamp.now("UTC") < deadline
+            and (max_polls is None or polls < max_polls)
+        ):
+            time.sleep(max(0.0, next_poll - time.monotonic()))
+            next_poll = time.monotonic() + poll_interval.total_seconds()
+            for future in [f for f in in_flight if f.done()]:
+                harvest(future)
+            copying = {pair.data_key for pair in in_flight.values()}
+            waiting = [
+                c
+                for c in coords
+                if c.relative_path() not in copying
+                and {c.relative_path(), c.relative_path() + ".idx"} & pending
+            ]
+            if not waiting:
                 continue
-            if file.is_index:
-                copied = _copy_index(file, mirror, fetch, in_mirror, offsets_by_key)
-            else:
-                copied = _copy_data(file, mirror, fetch, in_mirror, offsets_by_key)
-            if copied:
-                pending.remove(file)
-                result.copied.append(file.key)
-                log.info(f"Mirrored {file.key}")
-        time.sleep(
-            max(0.0, poll_interval.total_seconds() - (time.monotonic() - poll_start))
+            polls += 1
+            listed = list_directory(directory_url)
+            for coord in waiting:
+                pair = _pair_copy(coord, listed, pending, in_mirror, offsets_by_key)
+                if pair is not None:
+                    future = pool.submit(_copy_pair, pair, mirror, fetch, deadline)
+                    in_flight[future] = pair
+        for future in as_completed(list(in_flight)):
+            harvest(future)
+    result = MirrorResult(copied=copied, pending=[k for k in keys if k in pending])
+    if result.pending:
+        log.warning(
+            f"{len(result.pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored"
         )
-    result.pending.extend(file.key for file in pending)
-    if pending:
-        log.warning(f"{len(pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored")
         log.debug(f"Not mirrored: {result.pending}")
     return result
 
@@ -179,13 +214,15 @@ def mirror_earlier_init_times(
     init_times_back: int = CATCH_UP_INIT_TIMES,
     file_types: Sequence[NoaaHrrrFileType] = MIRRORED_FILE_TYPES,
     lead_hours: Sequence[int] = MIRRORED_LEAD_HOURS,
+    max_concurrent_copies: int = MAX_CONCURRENT_COPIES,
     list_directory: Callable[[str], set[str]] = list_nomads_directory,
     fetch: Callable[[str], Path] = download_from_nomads,
 ) -> MirrorResult:
     """Copy what the mirror lacks of the `init_times_back` inits before `init_time`,
     newest first, one poll each, until `deadline`. An init the mirror holds whole costs
     one mirror listing and no NOMADS request."""
-    result = MirrorResult([], [])
+    copied: list[str] = []
+    pending: list[str] = []
     for hours_back in range(1, init_times_back + 1):
         if pd.Timestamp.now("UTC") >= deadline:
             log.warning(
@@ -200,79 +237,118 @@ def mirror_earlier_init_times(
             file_types=file_types,
             lead_hours=lead_hours,
             max_polls=1,
+            max_concurrent_copies=max_concurrent_copies,
             list_directory=list_directory,
             fetch=fetch,
         )
-        result.copied.extend(earlier.copied)
-        result.pending.extend(earlier.pending)
-    return result
+        copied.extend(earlier.copied)
+        pending.extend(earlier.pending)
+    return MirrorResult(copied=copied, pending=pending)
+
+
+def _pair_copy(
+    coord: NoaaHrrrSourceFileCoord,
+    listed: set[str],
+    pending: set[str],
+    in_mirror: set[str],
+    offsets_by_key: dict[str, list[int]],
+) -> _PairCopy | None:
+    """The copy to start for coord's files given what NOMADS lists, or None. An index
+    is only copied beside a data file that is, or is being, mirrored."""
+    data_key = coord.relative_path()
+    data_name = data_key.rsplit("/", 1)[-1]
+    copy_data = data_key in pending and data_name in listed
+    copy_index = (
+        data_key + ".idx" in pending
+        and data_name + ".idx" in listed
+        and (copy_data or data_key in in_mirror)
+    )
+    if not (copy_data or copy_index):
+        return None
+    return _PairCopy(
+        coord=coord,
+        copy_data=copy_data,
+        copy_index=copy_index,
+        data_offsets=offsets_by_key.get(data_key),
+    )
+
+
+def _copy_pair(
+    pair: _PairCopy,
+    mirror: obstore.store.ObjectStore,
+    fetch: Callable[[str], Path],
+    deadline: pd.Timestamp,
+) -> _PairResult:
+    """Copy the pair's data file, then its index once it agrees with the mirrored data
+    file. A data file copied while NOMADS was still appending messages passes the
+    whole-GRIB2 check, so on disagreement the data file is fetched again and replaced
+    before the index is exposed."""
+    if pd.Timestamp.now("UTC") > deadline:
+        return _PairResult(copied=[], data_offsets=None)
+    index_path = (
+        fetch(pair.coord.get_idx_url(source="nomads")) if pair.copy_index else None
+    )
+    try:
+        copied: list[str] = []
+        data_offsets = pair.data_offsets
+        if pair.copy_data:
+            data_offsets = _copy_data(pair, mirror, fetch)
+            if data_offsets is None:
+                return _PairResult(copied=copied, data_offsets=None)
+            copied.append(pair.data_key)
+        if index_path is None:
+            return _PairResult(copied=copied, data_offsets=data_offsets)
+        index_offsets = _index_offsets(index_path)
+        if not index_offsets:
+            log.warning(
+                f"{pair.index_key} is empty or partly written on NOMADS; will retry"
+            )
+            return _PairResult(copied=copied, data_offsets=data_offsets)
+        if data_offsets is None:
+            # Copied by an earlier pod: scan the mirror's copy before trusting the index.
+            data_offsets = _mirrored_message_offsets(mirror, pair.data_key) or []
+        if index_offsets != data_offsets:
+            log.warning(
+                f"{pair.index_key} lists messages the mirrored data file lacks; "
+                "re-copying the data file"
+            )
+            data_offsets = _copy_data(pair, mirror, fetch)
+            if index_offsets != data_offsets:
+                log.warning(
+                    f"{pair.index_key} still disagrees with its data file; will retry"
+                )
+                return _PairResult(copied=copied, data_offsets=data_offsets)
+        with index_path.open("rb") as index:
+            obstore.put(mirror, pair.index_key, index)
+        copied.append(pair.index_key)
+        return _PairResult(copied=copied, data_offsets=data_offsets)
+    finally:
+        if index_path is not None:
+            index_path.unlink()
 
 
 def _copy_data(
-    file: _MirrorFile,
-    mirror: obstore.store.ObjectStore,
-    fetch: Callable[[str], Path],
-    in_mirror: set[str],
-    offsets_by_key: dict[str, list[int]],
-) -> bool:
-    path = fetch(file.url)
+    pair: _PairCopy, mirror: obstore.store.ObjectStore, fetch: Callable[[str], Path]
+) -> list[int] | None:
+    """Copy the data file if it is whole GRIB2 and return its message offsets."""
+    path = fetch(pair.coord.get_url(source="nomads"))
     try:
         offsets = grib_message_offsets(path)
         if offsets is None:
-            log.warning(f"{file.name} is not whole GRIB2 on NOMADS yet; will retry")
-            return False
+            log.warning(f"{pair.data_key} is not whole GRIB2 on NOMADS yet; will retry")
+            return None
         with path.open("rb") as data:
-            obstore.put(mirror, file.key, data)
-        in_mirror.add(file.key)
-        offsets_by_key[file.key] = offsets
-        return True
+            obstore.put(mirror, pair.data_key, data)
+        return offsets
     finally:
         path.unlink()
 
 
-def _copy_index(
-    file: _MirrorFile,
-    mirror: obstore.store.ObjectStore,
-    fetch: Callable[[str], Path],
-    in_mirror: set[str],
-    offsets_by_key: dict[str, list[int]],
-) -> bool:
-    """Copy an index once it lists exactly the messages the mirrored data file holds.
-    A data file copied while NOMADS was still appending messages passes the
-    whole-GRIB2 check, so on disagreement the data file is fetched again and replaced
-    before the index is exposed."""
-    data_key = mirror_key(file.coord)
-    path = fetch(file.url)
+def _index_offsets(path: Path) -> list[int]:
     try:
-        try:
-            index_offsets = [start for start, *_ in parse_grib_index_lines(path)]
-        except ValueError, IndexError:
-            index_offsets = []
-        if not index_offsets:
-            log.warning(f"{file.name} is empty or partly written on NOMADS; will retry")
-            return False
-        if data_key not in offsets_by_key:
-            # Copied by an earlier pod: scan the mirror's copy before trusting the index.
-            offsets_by_key[data_key] = _mirrored_message_offsets(mirror, data_key) or []
-        if index_offsets != offsets_by_key[data_key]:
-            log.warning(
-                f"{file.name} lists messages the mirrored data file lacks; "
-                "re-copying the data file"
-            )
-            data_file = _MirrorFile(file.coord, is_index=False)
-            if not _copy_data(data_file, mirror, fetch, in_mirror, offsets_by_key):
-                return False
-            if index_offsets != offsets_by_key[data_key]:
-                log.warning(
-                    f"{file.name} still disagrees with its data file; will retry"
-                )
-                return False
-        with path.open("rb") as data:
-            obstore.put(mirror, file.key, data)
-        in_mirror.add(file.key)
-        return True
-    finally:
-        path.unlink()
+        return [start for start, *_ in parse_grib_index_lines(path)]
+    except ValueError, IndexError:
+        return []
 
 
 def _mirrored_message_offsets(
@@ -333,7 +409,7 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 dataset_id=self.dataset_id,
                 cpu="1",
                 memory="2G",
-                ephemeral_storage="4G",
+                ephemeral_storage="8G",
                 secret_names=[MIRROR_SECRET_NAME],
             )
         ]
