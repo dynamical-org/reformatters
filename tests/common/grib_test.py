@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from reformatters.common.grib import grib_decimal_scale_factors
+from reformatters.common.grib import grib_decimal_scale_factors, grib_message_offsets
 
 
 def _sign_and_magnitude_bytes(value: int) -> bytes:
@@ -92,3 +92,27 @@ def test_grib_decimal_scale_factors_real_negative_decimal_scale(
     path = tmp_path / "neg_d.grib2"
     path.write_bytes(_grib2_message([(0, -3)]))
     assert grib_decimal_scale_factors(path) == [-3]
+
+
+HRRR_FIXTURE = (
+    Path(__file__).parents[1] / "noaa/fixtures/hrrr.t19z.wrfsfcf00.first2.grib2"
+)
+
+
+def test_grib_message_offsets_of_whole_messages() -> None:
+    offsets = grib_message_offsets(HRRR_FIXTURE)
+    assert offsets is not None
+    assert len(offsets) == 2
+    assert offsets[0] == 0
+
+
+def test_grib_message_offsets_reject_partial_or_non_grib_files(tmp_path: Path) -> None:
+    whole = HRRR_FIXTURE.read_bytes()
+    cut = tmp_path / "cut.grib2"
+    cut.write_bytes(whole[: len(whole) - 100])
+    not_grib = tmp_path / "x.grib2"
+    not_grib.write_bytes(b"<html>rate limited</html>")
+    empty = tmp_path / "empty.grib2"
+    empty.write_bytes(b"")
+    for path in (cut, not_grib, empty):
+        assert grib_message_offsets(path) is None

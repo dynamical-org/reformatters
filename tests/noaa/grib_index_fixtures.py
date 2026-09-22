@@ -9,7 +9,7 @@ from types import ModuleType
 import pytest
 
 from reformatters.common.download import http_download_to_disk
-from reformatters.noaa.noaa_virtual_region_job import GRIB_SECTION_0_BYTES
+from reformatters.common.grib import GRIB_SECTION_0_BYTES
 
 _S3_HTTPS_PREFIX = "https://{bucket}.s3.amazonaws.com/"
 _copy_counter = itertools.count()
