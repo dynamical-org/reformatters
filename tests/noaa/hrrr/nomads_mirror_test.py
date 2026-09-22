@@ -533,3 +533,65 @@ def test_polling_continues_while_a_copy_is_in_flight(
     monkeypatch.setattr(nomads, "fetch", fetch_f00_slowly)
     result = run(nomads, mirror, polls=10, monkeypatch=monkeypatch)
     assert sorted(result.copied) == [coord(0).relative_path(), coord(1).relative_path()]
+
+
+def test_no_transfer_starts_after_the_deadline_within_a_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", FIXTURE_INDEX.read_bytes())
+    start = pd.Timestamp("2026-09-07T19:49Z")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(
+            lambda cls, *a, **k: start + pd.Timedelta(minutes=len(nomads.fetched))
+        ),
+    )
+
+    result = mirror_init_time(
+        INIT,
+        mirror,
+        deadline=start + pd.Timedelta(seconds=30),
+        file_types=("sfc",),
+        lead_hours=(0,),
+        poll_interval=timedelta(0),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+
+    # The index fetch passed the deadline, so the data file was never fetched.
+    assert nomads.fetched == ["hrrr.t19z.wrfsfcf00.grib2.idx"]
+    assert result.copied == []
+    assert mirror_contents(mirror) == set()
+
+
+def test_a_failed_copy_admits_no_further_copies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf01.grib2", FIXTURE_GRIB.read_bytes())
+    fetched: list[str] = []
+
+    def fetch_failing(url: str) -> Path:
+        fetched.append(url)
+        raise RuntimeError("R2 rejected the write")
+
+    _clock_ticks_per_listing(nomads, monkeypatch)
+    with pytest.raises(RuntimeError, match="R2 rejected"):
+        mirror_init_time(
+            INIT,
+            mirror,
+            deadline=pd.Timestamp("2026-09-07T19:49Z") + pd.Timedelta(seconds=10),
+            file_types=("sfc",),
+            lead_hours=(0, 1),
+            poll_interval=timedelta(0),
+            max_concurrent_copies=1,
+            list_directory=nomads.list_directory,
+            fetch=fetch_failing,
+        )
+    assert len(fetched) == 1

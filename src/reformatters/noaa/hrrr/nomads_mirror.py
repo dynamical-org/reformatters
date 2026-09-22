@@ -6,7 +6,13 @@ import re
 import tempfile
 import time
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
 from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Final
@@ -136,74 +142,126 @@ def mirror_init_time(
     once it lists exactly the messages the mirrored data file holds, so an index in
     the mirror describes the data file beside it; anything else is retried next poll.
     """
-    coords = [
-        _coord(init_time, lead, file_type)
-        for file_type in file_types
-        for lead in lead_hours
-    ]
-    keys = [
-        key for c in coords for key in (c.relative_path(), c.relative_path() + ".idx")
-    ]
-    day_prefix = keys[0].rsplit("/", 1)[0] + "/"
-    in_mirror: set[str] = {
-        meta["path"]
-        for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
-        for meta in batch
-    }
-    pending = set(keys) - in_mirror
-    directory_url = coords[0].get_url(source="nomads").rsplit("/", 1)[0] + "/"
-    offsets_by_key: dict[str, list[int]] = {}
-    copied: list[str] = []
-    in_flight: dict[Future[_PairResult], _PairCopy] = {}
-
-    def harvest(future: Future[_PairResult]) -> None:
-        pair = in_flight.pop(future)
-        result = future.result()
-        if result.data_offsets is not None:
-            offsets_by_key[pair.data_key] = result.data_offsets
-        for key in result.copied:
-            pending.discard(key)
-            in_mirror.add(key)
-            copied.append(key)
-            log.info(f"Mirrored {key}")
-
+    copies = _InitCopies(init_time, mirror, file_types, lead_hours)
+    directory_url = copies.coords[0].get_url(source="nomads").rsplit("/", 1)[0] + "/"
     polls = 0
     next_poll = time.monotonic()
     with ThreadPoolExecutor(max_workers=max_concurrent_copies) as pool:
-        while (
-            pending
-            and pd.Timestamp.now("UTC") < deadline
-            and (max_polls is None or polls < max_polls)
-        ):
-            time.sleep(max(0.0, next_poll - time.monotonic()))
-            next_poll = time.monotonic() + poll_interval.total_seconds()
-            for future in [f for f in in_flight if f.done()]:
-                harvest(future)
-            copying = {pair.data_key for pair in in_flight.values()}
-            waiting = [
-                c
-                for c in coords
-                if c.relative_path() not in copying
-                and {c.relative_path(), c.relative_path() + ".idx"} & pending
-            ]
-            if not waiting:
+        while copies.pending and pd.Timestamp.now("UTC") < deadline:
+            can_poll = max_polls is None or polls < max_polls
+            if copies.waiting() and can_poll and time.monotonic() >= next_poll:
+                polls += 1
+                copies.listed(list_directory(directory_url))
+                next_poll = time.monotonic() + poll_interval.total_seconds()
+            copies.admit(pool, max_concurrent_copies, mirror, fetch, deadline)
+            can_poll = max_polls is None or polls < max_polls
+            until_poll = max(0.0, next_poll - time.monotonic())
+            if not copies.in_flight:
+                if not can_poll:
+                    break
+                time.sleep(until_poll)
                 continue
-            polls += 1
-            listed = list_directory(directory_url)
-            for coord in waiting:
-                pair = _pair_copy(coord, listed, pending, in_mirror, offsets_by_key)
-                if pair is not None:
-                    future = pool.submit(_copy_pair, pair, mirror, fetch, deadline)
-                    in_flight[future] = pair
-        for future in as_completed(list(in_flight)):
-            harvest(future)
-    result = MirrorResult(copied=copied, pending=[k for k in keys if k in pending])
+            done, _ = wait(
+                copies.in_flight,
+                timeout=until_poll if can_poll else None,
+                return_when=FIRST_COMPLETED,
+            )
+            for future in done:
+                copies.harvest(future)
+        for future in as_completed(list(copies.in_flight)):
+            copies.harvest(future)
+    result = MirrorResult(
+        copied=copies.copied, pending=[k for k in copies.keys if k in copies.pending]
+    )
     if result.pending:
         log.warning(
             f"{len(result.pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored"
         )
         log.debug(f"Not mirrored: {result.pending}")
     return result
+
+
+class _InitCopies:
+    """One init's copy state, owned by the polling thread; workers only return results."""
+
+    def __init__(
+        self,
+        init_time: pd.Timestamp,
+        mirror: obstore.store.ObjectStore,
+        file_types: Sequence[NoaaHrrrFileType],
+        lead_hours: Sequence[int],
+    ) -> None:
+        self.coords = [
+            _coord(init_time, lead, file_type)
+            for file_type in file_types
+            for lead in lead_hours
+        ]
+        self.keys = [
+            key
+            for c in self.coords
+            for key in (c.relative_path(), c.relative_path() + ".idx")
+        ]
+        day_prefix = self.keys[0].rsplit("/", 1)[0] + "/"
+        self.in_mirror: set[str] = {
+            meta["path"]
+            for batch in obstore.list(mirror, prefix=day_prefix, chunk_size=10_000)
+            for meta in batch
+        }
+        self.pending = set(self.keys) - self.in_mirror
+        self.copied: list[str] = []
+        self.in_flight: dict[Future[_PairResult], _PairCopy] = {}
+        self._offsets_by_key: dict[str, list[int]] = {}
+        self._listed: set[str] = set()
+        # A pair is tried at most once per listing, so a file NOMADS is still writing
+        # is not fetched again until the next poll.
+        self._tried_since_listing: set[str] = set()
+
+    def waiting(self) -> list[NoaaHrrrSourceFileCoord]:
+        """The coords with a file still to copy and no copy in flight."""
+        copying = {pair.data_key for pair in self.in_flight.values()}
+        return [
+            c
+            for c in self.coords
+            if c.relative_path() not in copying
+            and {c.relative_path(), c.relative_path() + ".idx"} & self.pending
+        ]
+
+    def listed(self, names: set[str]) -> None:
+        self._listed = names
+        self._tried_since_listing.clear()
+
+    def admit(
+        self,
+        pool: ThreadPoolExecutor,
+        capacity: int,
+        mirror: obstore.store.ObjectStore,
+        fetch: Callable[[str], Path],
+        deadline: pd.Timestamp,
+    ) -> None:
+        """Start copies up to `capacity` in flight, so nothing queues past the deadline."""
+        for coord in self.waiting():
+            if len(self.in_flight) >= capacity:
+                return
+            if coord.relative_path() in self._tried_since_listing:
+                continue
+            pair = _pair_copy(
+                coord, self._listed, self.pending, self.in_mirror, self._offsets_by_key
+            )
+            if pair is not None:
+                self._tried_since_listing.add(pair.data_key)
+                future = pool.submit(_copy_pair, pair, mirror, fetch, deadline)
+                self.in_flight[future] = pair
+
+    def harvest(self, future: Future[_PairResult]) -> None:
+        pair = self.in_flight.pop(future)
+        result = future.result()
+        if result.data_offsets is not None:
+            self._offsets_by_key[pair.data_key] = result.data_offsets
+        for key in result.copied:
+            self.pending.discard(key)
+            self.in_mirror.add(key)
+            self.copied.append(key)
+            log.info(f"Mirrored {key}")
 
 
 def mirror_earlier_init_times(
@@ -283,7 +341,7 @@ def _copy_pair(
     file. A data file copied while NOMADS was still appending messages passes the
     whole-GRIB2 check, so on disagreement the data file is fetched again and replaced
     before the index is exposed."""
-    if pd.Timestamp.now("UTC") > deadline:
+    if _past(deadline):
         return _PairResult(copied=[], data_offsets=None)
     index_path = (
         fetch(pair.coord.get_idx_url(source="nomads")) if pair.copy_index else None
@@ -292,7 +350,7 @@ def _copy_pair(
         copied: list[str] = []
         data_offsets = pair.data_offsets
         if pair.copy_data:
-            data_offsets = _copy_data(pair, mirror, fetch)
+            data_offsets = _copy_data(pair, mirror, fetch, deadline)
             if data_offsets is None:
                 return _PairResult(copied=copied, data_offsets=None)
             copied.append(pair.data_key)
@@ -312,7 +370,7 @@ def _copy_pair(
                 f"{pair.index_key} lists messages the mirrored data file lacks; "
                 "re-copying the data file"
             )
-            data_offsets = _copy_data(pair, mirror, fetch)
+            data_offsets = _copy_data(pair, mirror, fetch, deadline)
             if index_offsets != data_offsets:
                 log.warning(
                     f"{pair.index_key} still disagrees with its data file; will retry"
@@ -328,9 +386,15 @@ def _copy_pair(
 
 
 def _copy_data(
-    pair: _PairCopy, mirror: obstore.store.ObjectStore, fetch: Callable[[str], Path]
+    pair: _PairCopy,
+    mirror: obstore.store.ObjectStore,
+    fetch: Callable[[str], Path],
+    deadline: pd.Timestamp,
 ) -> list[int] | None:
-    """Copy the data file if it is whole GRIB2 and return its message offsets."""
+    """Copy the data file if it is whole GRIB2 and `deadline` has not passed, and return
+    its message offsets."""
+    if _past(deadline):
+        return None
     path = fetch(pair.coord.get_url(source="nomads"))
     try:
         offsets = grib_message_offsets(path)
@@ -342,6 +406,10 @@ def _copy_data(
         return offsets
     finally:
         path.unlink()
+
+
+def _past(deadline: pd.Timestamp) -> bool:
+    return pd.Timestamp.now("UTC") > deadline
 
 
 def _index_offsets(path: Path) -> list[int]:
