@@ -246,3 +246,84 @@ def test_deploy_staging_stages_only_update_and_validate(
     assert [item["metadata"]["name"] for item in items] == (
         staging.staging_cronjob_names(dataset_id, version)
     )
+
+
+@pytest.mark.parametrize(
+    ("dataset_id", "expected_names"),
+    [
+        (
+            "ecmwf-ifs-ens-46-day-gribs",
+            ["ecmwf-ifs-ens-46-day-gribs-archive-grib-files"],
+        ),
+        (
+            "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
+            [
+                "ecmwf-ifs-ens-46-day-daily-update",
+                "ecmwf-ifs-ens-46-day-daily-validate",
+            ],
+        ),
+        (
+            "noaa-hrrr-forecast-18-hour-virtual-fast",
+            [
+                "noaa-hrrr-nomads-mirror-gribs",
+                "noaa-hrrr-forecast-18-hour-virtual-fast-update",
+                "noaa-hrrr-forecast-18-hour-virtual-fast-validate",
+            ],
+        ),
+    ],
+)
+def test_deploy_dataset_id_filter_selects_the_owner_of_each_cron(
+    monkeypatch: pytest.MonkeyPatch, dataset_id: str, expected_names: list[str]
+) -> None:
+    from reformatters.__main__ import app  # noqa: PLC0415
+
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = CliRunner().invoke(
+        app,
+        ["deploy", "--docker-image", "test-image-tag", "--dataset-id", dataset_id],
+    )
+
+    assert result.exit_code == 0, result.exception
+    items = json.loads(mock_run.call_args.kwargs["input"])["items"]
+    assert [item["metadata"]["name"] for item in items] == expected_names
+    for item in items:
+        container = item["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+            "containers"
+        ][0]
+        assert container["command"][2] == dataset_id
+
+
+def test_archive_is_registered_but_is_not_a_dataset() -> None:
+    from reformatters.__main__ import OPERATIONAL_RESOURCES  # noqa: PLC0415
+
+    resource_ids = [resource.dataset_id for resource in OPERATIONAL_RESOURCES]
+    assert "ecmwf-ifs-ens-46-day-gribs" in resource_ids
+    assert "ecmwf-ifs-ens-46-day-gribs" not in [
+        dataset.dataset_id for dataset in DYNAMICAL_DATASETS
+    ]
+    assert len(resource_ids) == len(set(resource_ids))
+
+
+def test_deploy_filter_for_the_removed_mirror_id_applies_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reformatters.__main__ import app  # noqa: PLC0415
+
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "deploy",
+            "--docker-image",
+            "test-image-tag",
+            "--dataset-id",
+            "noaa-hrrr-nomads",
+        ],
+    )
+
+    assert isinstance(result.exception, AssertionError)
+    mock_run.assert_not_called()
