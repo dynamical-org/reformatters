@@ -63,3 +63,45 @@ def _sign_and_magnitude_int(raw: bytes) -> int:
     value = int.from_bytes(raw)
     sign_bit = 1 << (len(raw) * 8 - 1)
     return -(value & ~sign_bit) if value & sign_bit else value
+
+
+# GRIB2 section 0: b"GRIB", 2 reserved bytes, discipline, edition, then the message's
+# total length as a big endian u64.
+GRIB_SECTION_0_BYTES = 16
+
+
+def grib2_message_length(section_0: bytes) -> int | None:
+    """The total length an edition 2 section 0 declares, or None if the bytes are not
+    one."""
+    if (
+        len(section_0) < GRIB_SECTION_0_BYTES
+        or section_0[:4] != b"GRIB"
+        or section_0[7] != 2
+    ):
+        return None
+    return int.from_bytes(section_0[8:GRIB_SECTION_0_BYTES])
+
+
+def grib_message_offsets(path: Path) -> list[int] | None:
+    """The start byte of every GRIB2 message in the file, or None if the file is not a
+    non-empty sequence of complete edition 2 messages tiling it exactly. A file cut
+    between messages still passes."""
+    size = path.stat().st_size
+    offset = 0
+    offsets: list[int] = []
+    with path.open("rb") as f:
+        while offset < size:
+            f.seek(offset)
+            length = grib2_message_length(f.read(GRIB_SECTION_0_BYTES))
+            if (
+                length is None
+                or length < GRIB_SECTION_0_BYTES
+                or offset + length > size
+            ):
+                return None
+            f.seek(offset + length - 4)
+            if f.read(4) != b"7777":
+                return None
+            offsets.append(offset)
+            offset += length
+    return offsets or None

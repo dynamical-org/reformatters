@@ -21,7 +21,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.retry import exponential_backoff_time
 
 if TYPE_CHECKING:
-    from obstore._store import ClientConfig, RetryConfig
+    from obstore._store import ClientConfig, RetryConfig, S3Config
     from obstore.store import ObjectStore
 
 log = get_logger(__name__)
@@ -108,10 +108,28 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
 
 @functools.cache
 def s3_store(
-    bucket_url: str, region: str, skip_signature: bool = True
+    bucket_url: str,
+    region: str,
+    skip_signature: bool = True,
+    endpoint: str | None = None,
+    access_key_id: str | None = None,
+    secret_access_key: str | None = None,
+    virtual_hosted_style_request: bool | None = None,
 ) -> obstore.store.S3Store:
+    """An S3 store, anonymous by default. Pass credentials and `endpoint` for a signed
+    store on an S3-compatible service such as R2."""
+    config: S3Config = {}
+    if endpoint is not None:
+        config["endpoint"] = endpoint
+    if access_key_id is not None:
+        config["access_key_id"] = access_key_id
+    if secret_access_key is not None:
+        config["secret_access_key"] = secret_access_key
+    if virtual_hosted_style_request is not None:
+        config["virtual_hosted_style_request"] = virtual_hosted_style_request
     store = obstore.store.from_url(
         bucket_url,
+        config=config,
         region=region,
         skip_signature=skip_signature,
         client_options=_CLIENT_OPTIONS,
@@ -253,7 +271,7 @@ _MAX_RETRIES = 16
 _RETRY_TIMEOUT_SECONDS = 300.0
 
 
-def _httpx_get_with_retry(
+def httpx_get(
     url: str,
     headers: dict[str, str] | None = None,
     rate_limiter: RateLimiter | None = None,
@@ -351,7 +369,7 @@ def httpx_download_to_disk(
             # Build multi-range header. Ends from grib index are exclusive; HTTP Range is inclusive.
             range_specs = [f"{s}-{e - 1}" for s, e in zip(starts, ends, strict=True)]
             range_header = f"bytes={', '.join(range_specs)}"
-            response = _httpx_get_with_retry(
+            response = httpx_get(
                 url,
                 headers={"Range": range_header},
                 rate_limiter=rate_limiter,
@@ -368,7 +386,7 @@ def httpx_download_to_disk(
             with open(temp_path, "wb") as f:
                 f.write(body)
         else:
-            response = _httpx_get_with_retry(
+            response = httpx_get(
                 url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
             )
             with open(temp_path, "wb") as f:
