@@ -1,4 +1,3 @@
-import functools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal, assert_never
@@ -12,7 +11,7 @@ from zarr.abc.store import Store
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest, group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
@@ -34,10 +33,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrFileType,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import (
-    NOMADS_RETRY_STATUS_CODES,
-    nomads_rate_limiter,
-)
+from reformatters.noaa.noaa_utils import nomads_download_to_disk
 
 log = get_logger(__name__)
 
@@ -135,13 +131,7 @@ class NoaaHrrrRegionJob(
         self, coord: NoaaHrrrSourceFileCoord, source: DownloadSource
     ) -> Path:
         download = (
-            functools.partial(
-                httpx_download_to_disk,
-                rate_limiter=nomads_rate_limiter,
-                retry_status_codes=NOMADS_RETRY_STATUS_CODES,
-            )
-            if source == "nomads"
-            else http_download_to_disk
+            nomads_download_to_disk if source == "nomads" else http_download_to_disk
         )
         idx_local_path = download(
             coord.get_idx_url(source=source), self.dataset_id, disk_cache=True

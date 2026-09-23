@@ -326,10 +326,10 @@ def test_download_file_raises_for_old_init_time(
         region_job.download_file(coord)
 
 
-def test_download_file_nomads_fallback_uses_httpx(
+def test_download_file_nomads_fallback_uses_nomads_download(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """NOMADS fallback uses httpx_download_to_disk (not http_download_to_disk)."""
+    """NOMADS fallback uses nomads_download_to_disk (not http_download_to_disk)."""
     template_config = NoaaGfsForecastTemplateConfig()
     now = pd.Timestamp.now()
     region_job = _make_gfs_region_job(template_config, now)
@@ -345,7 +345,7 @@ def test_download_file_nomads_fallback_uses_httpx(
     )
     mock_httpx = Mock(return_value=Mock())
     monkeypatch.setattr(
-        "reformatters.noaa.gfs.region_job.httpx_download_to_disk", mock_httpx
+        "reformatters.noaa.gfs.region_job.nomads_download_to_disk", mock_httpx
     )
     monkeypatch.setattr(
         "reformatters.noaa.gfs.region_job.grib_message_byte_ranges_from_index",

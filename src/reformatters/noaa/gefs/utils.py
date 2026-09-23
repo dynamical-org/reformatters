@@ -1,10 +1,9 @@
-import functools
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pandas as pd
 
-from reformatters.common.download import http_download_to_disk, httpx_download_to_disk
+from reformatters.common.download import http_download_to_disk
 from reformatters.common.iterating import digest
 from reformatters.common.pydantic import replace
 from reformatters.noaa.gefs.gefs_config_models import (
@@ -13,10 +12,7 @@ from reformatters.noaa.gefs.gefs_config_models import (
     get_grib_element,
 )
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
-from reformatters.noaa.noaa_utils import (
-    NOMADS_RETRY_STATUS_CODES,
-    nomads_rate_limiter,
-)
+from reformatters.noaa.noaa_utils import nomads_download_to_disk
 
 type _DownloadFn = Callable[..., Path]
 
@@ -82,11 +78,7 @@ def gefs_download_file(
                 coord,
                 coord.get_index_url(fallback=True),
                 coord.get_fallback_url(),
-                download=functools.partial(
-                    httpx_download_to_disk,
-                    rate_limiter=nomads_rate_limiter,
-                    retry_status_codes=NOMADS_RETRY_STATUS_CODES,
-                ),
+                download=nomads_download_to_disk,
             )
         else:
             raise
