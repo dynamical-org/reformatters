@@ -5,7 +5,7 @@
 import re
 import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
     Future,
@@ -15,7 +15,7 @@ from concurrent.futures import (
 )
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Annotated, Any, Final, get_args
 
 import httpx
 import obstore
@@ -56,12 +56,15 @@ POLL_INTERVAL: Final = timedelta(seconds=20)
 MAX_CONCURRENT_COPIES: Final = 4
 
 
-def mirror_store() -> obstore.store.S3Store:
-    """The mirror bucket over R2's S3 API, signed with the mounted secret, which holds
-    `icechunk.s3_storage` options."""
-    options = kubernetes.load_secret(MIRROR_SECRET_NAME)
+def mirror_store(
+    options: Mapping[str, Any] | None = None, bucket: str = MIRROR_BUCKET
+) -> obstore.store.S3Store:
+    """`bucket` over R2's S3 API, signed with `icechunk.s3_storage` options, by default
+    the mounted secret's."""
+    if options is None:
+        options = kubernetes.load_secret(MIRROR_SECRET_NAME)
     return s3_store(
-        f"s3://{MIRROR_BUCKET}",
+        f"s3://{bucket}",
         region=options.get("region", "auto"),
         skip_signature=False,
         endpoint=options["endpoint_url"],
@@ -499,6 +502,34 @@ def mirror_fire(
             f"{len(result.pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored "
             f"by the deadline: {result.pending}"
         )
+
+
+def mirror_pilot(
+    init_time: pd.Timestamp,
+    mirror_options: Mapping[str, Any],
+    bucket: str,
+    file_types: Sequence[str],
+    lead_hours: Sequence[int],
+    deadline: pd.Timestamp,
+    *,
+    list_directory: Callable[[str], set[str]] = list_nomads_directory,
+    fetch: Callable[[str], Path] = download_from_nomads,
+) -> MirrorResult:
+    """Copy the chosen files of one published init into a bucket other than the
+    mirror's: one NOMADS listing, no catch-up."""
+    assert bucket != MIRROR_BUCKET, "A pilot must not write the production mirror"
+    allowed = get_args(NoaaHrrrFileType.__value__)
+    assert set(file_types) <= set(allowed), f"file types must be among {allowed}"
+    return mirror_init_time(
+        init_time,
+        mirror_store(mirror_options, bucket=bucket),
+        deadline=deadline,
+        file_types=[t for t in allowed if t in file_types],
+        lead_hours=lead_hours,
+        max_polls=1,
+        list_directory=list_directory,
+        fetch=fetch,
+    )
 
 
 class NoaaHrrrNomadsMirror(OperationalResources):

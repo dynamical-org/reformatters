@@ -783,3 +783,75 @@ def test_a_listed_file_nomads_never_serves_fails_the_fire(
     )
     with pytest.raises(RuntimeError, match="not mirrored by the deadline"):
         nomads_mirror.mirror_fire(INIT, INIT, mirror)
+
+
+def test_mirror_store_takes_explicit_options_and_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def load_secret(name: str) -> dict[str, object]:
+        raise AssertionError("explicit options must not read the mounted secret")
+
+    monkeypatch.setattr(nomads_mirror.kubernetes, "load_secret", load_secret)
+    store = nomads_mirror.mirror_store(
+        {
+            "endpoint_url": "https://account.r2.cloudflarestorage.com",
+            "access_key_id": "key-id",
+            "secret_access_key": "secret",
+        },
+        bucket="pilot-bucket",
+    )
+    assert store.config["bucket"] == "pilot-bucket"
+    assert store.config["endpoint"] == "https://account.r2.cloudflarestorage.com"
+
+
+def test_a_pilot_refuses_the_production_mirror() -> None:
+    with pytest.raises(AssertionError, match="production mirror"):
+        nomads_mirror.mirror_pilot(
+            INIT, {}, nomads_mirror.MIRROR_BUCKET, ["sfc"], [0], INIT
+        )
+
+
+def test_a_pilot_rejects_unknown_file_types() -> None:
+    with pytest.raises(AssertionError, match="file types"):
+        nomads_mirror.mirror_pilot(INIT, {}, "pilot", ["wrfsfc"], [0], INIT)
+
+
+def test_a_pilot_copies_only_the_chosen_files_into_its_bucket_in_one_poll(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    for name in (
+        "hrrr.t19z.wrfsfcf00.grib2",
+        "hrrr.t19z.wrfsfcf01.grib2",
+        "hrrr.t19z.wrfprsf00.grib2",
+    ):
+        nomads.publish(name, FIXTURE_GRIB.read_bytes())
+        nomads.publish(name + ".idx", FIXTURE_INDEX.read_bytes())
+    pilot_bucket = obstore.store.LocalStore(tmp_path / "pilot", mkdir=True)
+    buckets: list[str] = []
+
+    def mirror_store(
+        options: dict[str, object], bucket: str
+    ) -> obstore.store.LocalStore:
+        buckets.append(bucket)
+        return pilot_bucket
+
+    monkeypatch.setattr(nomads_mirror, "mirror_store", mirror_store)
+    start = _clock_ticks_per_listing(nomads, monkeypatch)
+
+    result = nomads_mirror.mirror_pilot(
+        INIT,
+        {},
+        "pilot",
+        ["sfc"],
+        [0],
+        start + pd.Timedelta(minutes=10),
+        list_directory=nomads.list_directory,
+        fetch=nomads.fetch,
+    )
+
+    f00 = coord(0).relative_path()
+    assert buckets == ["pilot"]
+    assert sorted(result.copied) == [f00, f00 + ".idx"]
+    assert mirror_contents(pilot_bucket) == {f00, f00 + ".idx"}
+    assert nomads.listings == 1
