@@ -708,3 +708,78 @@ def test_a_nomads_error_other_than_not_served_still_fails_the_fire(
     monkeypatch.setattr(nomads, "fetch", forbidden)
     with pytest.raises(httpx.HTTPStatusError, match="403"):
         run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))
+
+
+def _mirror_fire_with(
+    monkeypatch: pytest.MonkeyPatch, init_pending: list[str], earlier_pending: list[str]
+) -> list[str]:
+    calls: list[str] = []
+
+    def mirror_init_time(
+        _init_time: pd.Timestamp, _mirror: object, *, deadline: pd.Timestamp
+    ) -> nomads_mirror.MirrorResult:
+        calls.append("init")
+        return nomads_mirror.MirrorResult(copied=[], pending=init_pending)
+
+    def mirror_earlier_init_times(
+        _init_time: pd.Timestamp, _mirror: object, *, deadline: pd.Timestamp
+    ) -> nomads_mirror.MirrorResult:
+        calls.append("catch-up")
+        return nomads_mirror.MirrorResult(copied=[], pending=earlier_pending)
+
+    monkeypatch.setattr(nomads_mirror, "mirror_init_time", mirror_init_time)
+    monkeypatch.setattr(
+        nomads_mirror, "mirror_earlier_init_times", mirror_earlier_init_times
+    )
+    return calls
+
+
+def test_a_fire_whose_init_is_incomplete_at_the_deadline_fails_after_catching_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _mirror_fire_with(
+        monkeypatch, init_pending=["f00.grib2"], earlier_pending=[]
+    )
+    with pytest.raises(RuntimeError, match="1 files of 2026-09-23T17Z not mirrored"):
+        nomads_mirror.mirror_fire(
+            pd.Timestamp("2026-09-23T17:00Z"), pd.Timestamp("2026-09-23T18:44Z"), Mock()
+        )
+    assert calls == ["init", "catch-up"]
+
+
+def test_earlier_inits_left_incomplete_do_not_fail_the_fire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _mirror_fire_with(monkeypatch, init_pending=[], earlier_pending=["x"])
+    nomads_mirror.mirror_fire(
+        pd.Timestamp("2026-09-23T17:00Z"), pd.Timestamp("2026-09-23T18:44Z"), Mock()
+    )
+    assert calls == ["init", "catch-up"]
+
+
+def test_a_listed_file_nomads_never_serves_fails_the_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+
+    def unreachable(_url: str) -> Path:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(nomads, "fetch", unreachable)
+    result = run(nomads, mirror, polls=3, monkeypatch=monkeypatch, lead_hours=(0,))
+    assert coord(0).relative_path() in result.pending
+
+    monkeypatch.setattr(
+        nomads_mirror,
+        "mirror_init_time",
+        lambda *_a, **_k: result,
+    )
+    monkeypatch.setattr(
+        nomads_mirror,
+        "mirror_earlier_init_times",
+        lambda *_a, **_k: nomads_mirror.MirrorResult(copied=[], pending=[]),
+    )
+    with pytest.raises(RuntimeError, match="not mirrored by the deadline"):
+        nomads_mirror.mirror_fire(INIT, INIT, mirror)

@@ -477,6 +477,30 @@ def mirror_window(
     )
 
 
+def mirror_fire(
+    init_time: pd.Timestamp, deadline: pd.Timestamp, mirror: obstore.store.ObjectStore
+) -> None:
+    """One scheduled fire: mirror `init_time` as NOMADS publishes it, then catch up.
+    Raises once catch-up is done if any of `init_time`'s files is still not mirrored,
+    which by the deadline means NOMADS was late or failing."""
+    result = mirror_init_time(init_time.tz_localize(None), mirror, deadline=deadline)
+    log.info(f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored")
+    caught_up = mirror_earlier_init_times(
+        init_time.tz_localize(None),
+        mirror,
+        deadline=deadline - CATCH_UP_DEADLINE_MARGIN,
+    )
+    log.info(
+        f"Caught up {len(caught_up.copied)} files of earlier inits, "
+        f"{len(caught_up.pending)} not mirrored"
+    )
+    if result.pending:
+        raise RuntimeError(
+            f"{len(result.pending)} files of {init_time:%Y-%m-%dT%H}Z not mirrored "
+            f"by the deadline: {result.pending}"
+        )
+
+
 class NoaaHrrrNomadsMirror(OperationalResources):
     """Copies each hourly HRRR init's files from NOMADS into the mirror bucket."""
 
@@ -521,22 +545,7 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 f"Mirroring {init_time:%Y-%m-%dT%H}Z from {poll_start:%H:%M}Z ({wait:.0f}s)"
             )
             time.sleep(wait)
-            mirror = mirror_store()
-            result = mirror_init_time(
-                init_time.tz_localize(None), mirror, deadline=deadline
-            )
-            log.info(
-                f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored"
-            )
-            caught_up = mirror_earlier_init_times(
-                init_time.tz_localize(None),
-                mirror,
-                deadline=deadline - CATCH_UP_DEADLINE_MARGIN,
-            )
-            log.info(
-                f"Caught up {len(caught_up.copied)} files of earlier inits, "
-                f"{len(caught_up.pending)} not mirrored"
-            )
+            mirror_fire(init_time, deadline, mirror_store())
 
     def get_cli(self) -> typer.Typer:
         app = typer.Typer()
