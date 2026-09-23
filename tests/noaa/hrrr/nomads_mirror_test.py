@@ -323,7 +323,7 @@ def test_operational_kubernetes_resources_is_one_hourly_mirror_cron() -> None:
     assert cron_job.pod_active_deadline == timedelta(minutes=59)
     assert cron_job.command == ["mirror-gribs"]
     assert cron_job.secret_names == [nomads_mirror.MIRROR_SECRET_NAME]
-    assert not cron_job.suspend
+    assert cron_job.suspend
 
 
 def test_cron_command_matches_a_registered_cli_command() -> None:

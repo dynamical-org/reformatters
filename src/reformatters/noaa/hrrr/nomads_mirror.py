@@ -480,6 +480,7 @@ class NoaaHrrrNomadsMirror(OperationalResources):
                 memory="2G",
                 ephemeral_storage="8G",
                 secret_names=[MIRROR_SECRET_NAME],
+                suspend=True,
             )
         ]
 
