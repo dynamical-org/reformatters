@@ -30,6 +30,7 @@ from zarr.abc.store import Store
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import iterating
+from reformatters.common.config_models import split_var_path
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
@@ -1066,13 +1067,15 @@ class CheckVirtualDecodeHealth(Validator):
     max_positions: int | None = None
     max_workers: int = 32
     allow_all_nan_vars: Sequence[str] = ()
-    # Offline opt-in. Given (var_path, out_loc), returns whether a chunk reference actually
-    # exists. When provided, a variable with no reference at a sampled position is skipped
+    # Offline opt-in. Given (var_path, out_loc), returns presence by vertical label
+    # (None for root variables). A variable with no reference at a position is skipped
     # (not decoded, not a failure) -- reference existence is the availability check's
     # concern. When None (operational default) every declared variable is decoded and a
     # missing reference reads as fill NaN and fails, which is how the operational check
     # catches removed/renamed/unpulled vars.
-    reference_exists: Callable[[str, Mapping[str, Any]], bool] | None = None
+    reference_presence: (
+        Callable[[str, Mapping[str, Any]], Mapping[Any, bool]] | None
+    ) = None
 
     requires_virtual_dataset: ClassVar[bool] = True
 
@@ -1137,10 +1140,14 @@ class CheckVirtualDecodeHealth(Validator):
                     )
                     if error is not None and var_path not in first_error:
                         first_error[var_path] = error
-                if self.reference_exists is not None:
+                if self.reference_presence is not None:
                     no_reference_vars |= skipped
 
-        problems = []
+        problems = (
+            ["No sampled variable had a reference at the selected positions"]
+            if self.reference_presence is not None and decoded_refs == 0
+            else []
+        )
         for var_path in sorted(min_nan_fraction):
             if var_path in first_error:
                 problems.append(f"{var_path}: {first_error[var_path]}")
@@ -1163,7 +1170,7 @@ class CheckVirtualDecodeHealth(Validator):
             f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
             "— all readable"
         )
-        if self.reference_exists is not None and no_reference_vars:
+        if self.reference_presence is not None and no_reference_vars:
             message += (
                 f" ({len(no_reference_vars)} variable(s) had no reference at sampled "
                 "positions — reference existence is reported by the "
@@ -1202,14 +1209,17 @@ class CheckVirtualDecodeHealth(Validator):
         results = []
         skipped: set[str] = set()
         for var in file_vars:
-            if self.reference_exists is not None and not self.reference_exists(
-                var.path, cast("Mapping[str, Any]", loc)
-            ):
-                skipped.add(var.path)
-                continue
+            presence = (
+                self.reference_presence(var.path, cast("Mapping[str, Any]", loc))
+                if self.reference_presence is not None
+                else None
+            )
             da = ds[var.path]
             selection = {dim: value for dim, value in loc.items() if dim in da.dims}
-            da = self._sample_levels(da.sel(selection))
+            da = self._sample_levels(da.sel(selection), var.path, presence)
+            if presence is not None and not any(presence.values()):
+                skipped.add(var.path)
+                continue
             try:
                 # Retried so a transient object store failure is not reported as
                 # a decode failure; a genuine decode error still fails fast.
@@ -1292,15 +1302,55 @@ class CheckVirtualDecodeHealth(Validator):
         }
         return [c for c in coords if c.out_loc().get("lead_time") in keep]
 
-    def _sample_levels(self, da: xr.DataArray) -> xr.DataArray:
+    def _sample_levels(
+        self,
+        da: xr.DataArray,
+        var_path: str | None = None,
+        reference_presence: Mapping[Any, bool] | None = None,
+    ) -> xr.DataArray:
         """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
         levels, so a group var is decode-checked at a bounded set of levels rather than
-        all of them. Single-level vars (only spatial dims left) are returned unchanged."""
+        all of them. With `reference_presence`, sample only referenced levels.
+        Presence labels must match the selected group dimension (None at root).
+        Single-level vars (only spatial dims left) are returned unchanged."""
         spatial = ("y", "x", "latitude", "longitude")
+        level_dim = split_var_path(var_path)[0] if var_path is not None else None
+        if reference_presence is not None:
+            if var_path is None:
+                raise ValueError("Reference presence requires a variable path")
+            if level_dim is None:
+                expected_labels = [None]
+            elif level_dim in da.dims:
+                expected_labels = list(da.get_index(level_dim))
+            elif level_dim in da.coords and da[level_dim].ndim == 0:
+                expected_labels = [da[level_dim].item()]
+            else:
+                raise ValueError(
+                    f"{var_path}: reference presence requires group dimension "
+                    f"{level_dim!r}; array dimensions are {da.dims}"
+                )
+            expected = set(expected_labels)
+            missing = [
+                label for label in expected_labels if label not in reference_presence
+            ]
+            unexpected = [
+                label for label in reference_presence if label not in expected
+            ]
+            if missing or unexpected:
+                raise ValueError(
+                    f"{var_path}: reference presence labels for {level_dim or 'root'} "
+                    f"do not match selection; missing={missing!r}, "
+                    f"unexpected={unexpected!r}"
+                )
         isel: dict[Any, Any] = {}
         for dim in da.dims:
             if dim in spatial:
                 continue
+            if reference_presence is not None and dim == level_dim:
+                labels = [
+                    label for label in da.get_index(dim) if reference_presence[label]
+                ]
+                da = da.sel({dim: labels})
             size = da.sizes[dim]
             if size > self.sampled_levels:
                 isel[dim] = np.unique(

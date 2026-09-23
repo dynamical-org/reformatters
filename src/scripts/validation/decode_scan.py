@@ -16,12 +16,14 @@ interrupted scan resumes. See docs/validation.md.
 import json
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
 import typer
 import zarr
+from icechunk.store import IcechunkStore
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -30,7 +32,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from scripts.validation.availability import build_run_context
-from scripts.validation.manifest_scan import _var_chunk_key, _var_keys, _VarKeys
+from scripts.validation.manifest_scan import _var_chunk_keys, _var_keys, _VarKeys
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     evenly_spaced_subset,
@@ -51,13 +53,33 @@ log = get_logger(__name__)
 
 MAX_SAMPLED_REGIONS = 20
 SAMPLED_LEADS = 5
-SAMPLED_LEVELS = 3
 JOB_CONCURRENCY = 4
+
+
+def _reference_presence(
+    store: IcechunkStore,
+    keys_by_var: Mapping[str, _VarKeys],
+    var_path: str,
+    out_loc: Mapping[str, Any],
+) -> Mapping[Any, bool]:
+    var_keys = keys_by_var[var_path]
+    keys = _var_chunk_keys(var_keys, out_loc)
+    present = _exists_many(store, keys)
+    dim = var_keys.level_dim
+    if dim is None:
+        return {None: present[keys[0]]}
+    if dim in out_loc:
+        return {out_loc[dim]: present[keys[0]]}
+    chunk_size = var_keys.chunks[var_keys.dims.index(dim)]
+    return {
+        label: present[keys[index // chunk_size]]
+        for index, label in enumerate(var_keys.indexes[dim])
+    }
 
 
 def _decode_checker(
     dataset: DynamicalDataset[Any, Any],
-    reference_exists: Callable[[str, Mapping[str, Any]], bool],
+    reference_presence: Callable[[str, Mapping[str, Any]], Mapping[Any, bool]],
 ) -> validation.CheckVirtualDecodeHealth:
     configured = next(
         (
@@ -71,8 +93,7 @@ def _decode_checker(
         update={
             "positions": 1,
             "sampled_leads": SAMPLED_LEADS,
-            "sampled_levels": SAMPLED_LEVELS,
-            "reference_exists": reference_exists,
+            "reference_presence": reference_presence,
         }
     )
 
@@ -94,13 +115,14 @@ def _checkpoint_key(
         [
             json.dumps(
                 {
+                    "version": 2,
                     "dataset_id": dataset_id,
                     "start": str(start),
                     "end": str(end),
                     "variables": sorted(variables),
                     "max_samples": max_samples,
                     "checker": checker.model_dump(
-                        mode="json", exclude={"reference_exists", "max_workers"}
+                        mode="json", exclude={"reference_presence", "max_workers"}
                     ),
                 },
                 sort_keys=True,
@@ -148,9 +170,7 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
         path: _var_keys(template_ds, group, var) for path, var in var_by_path.items()
     }
 
-    def reference_exists(var_path: str, out_loc: Mapping[str, Any]) -> bool:
-        key = _var_chunk_key(keys_by_var[var_path], out_loc)
-        return _exists_many(store, [key])[key]
+    reference_presence = partial(_reference_presence, store, keys_by_var)
 
     jobs = build_virtual_jobs(dataset, end=end, start=start, variables=ctx.variables)
     # Sample evenly over append-dim regions, keeping every var-group job at each sampled
@@ -159,13 +179,13 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
     regions = sorted({job.region.start for job in jobs})
     sampled_regions = set(evenly_spaced_subset(regions, max_samples))
     sampled = [job for job in jobs if job.region.start in sampled_regions]
+    checker = _decode_checker(dataset, reference_presence)
     log.info(
         f"Decode-checking {len(sampled)} of {len(jobs)} region jobs across "
         f"{len(sampled_regions)} of {len(regions)} regions "
-        f"(sampled_leads={SAMPLED_LEADS}, sampled_levels={SAMPLED_LEVELS})"
+        f"(sampled_leads={checker.sampled_leads}, sampled_levels={checker.sampled_levels})"
     )
 
-    checker = _decode_checker(dataset, reference_exists)
     key = _checkpoint_key(
         dataset.dataset_id, start, end, ctx.variables, max_samples, checker
     )
@@ -217,7 +237,8 @@ def run_decode_scan(ctx: RunContext, max_samples: int = MAX_SAMPLED_REGIONS) -> 
 
     ctx.decode_sample_desc = (
         f"{len(sampled_regions)} of {len(regions)} append-dim regions, "
-        f"{SAMPLED_LEADS} leads and {SAMPLED_LEVELS} levels per group variable"
+        f"{checker.sampled_leads} leads and up to {checker.sampled_levels} "
+        "present levels per group variable"
     )
     ctx.decode_checked_count = decoded_refs
     ctx.decode_failures = failures
