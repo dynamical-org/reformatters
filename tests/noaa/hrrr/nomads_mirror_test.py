@@ -4,6 +4,7 @@ from itertools import count
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import obstore
 import obstore.store
 import pandas as pd
@@ -650,3 +651,60 @@ def test_one_listing_drains_more_pairs_than_the_pool_runs(
     )
     assert sorted(result.copied) == [coord(lead).relative_path() for lead in range(3)]
     assert nomads.listings == 1
+
+
+def _unserved(status_code: int | None) -> Exception:
+    """What a NOMADS fetch raises for a listed file it does not serve: a status error,
+    or (None) a body cut short on every retry."""
+    request = httpx.Request("GET", "https://nomads.ncep.noaa.gov/x")
+    if status_code is None:
+        return httpx.RemoteProtocolError("peer closed connection", request=request)
+    return httpx.HTTPStatusError(
+        f"{status_code}", request=request, response=httpx.Response(status_code)
+    )
+
+
+@pytest.mark.parametrize("status_code", [404, None])
+@pytest.mark.parametrize(
+    "unserved_name", ["hrrr.t19z.wrfsfcf00.grib2", "hrrr.t19z.wrfsfcf00.grib2.idx"]
+)
+def test_a_listed_file_nomads_does_not_serve_is_retried_next_poll(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int | None,
+    unserved_name: str,
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2.idx", FIXTURE_INDEX.read_bytes())
+    serve = nomads.fetch
+    failures = iter([_unserved(status_code)])
+
+    def fetch_once_unserved(url: str) -> Path:
+        if url.endswith("/" + unserved_name) and (failure := next(failures, None)):
+            raise failure
+        return serve(url)
+
+    monkeypatch.setattr(nomads, "fetch", fetch_once_unserved)
+    result = run(nomads, mirror, polls=2, monkeypatch=monkeypatch, lead_hours=(0,))
+
+    f00 = coord(0).relative_path()
+    assert sorted(result.copied) == [f00, f00 + ".idx"]
+    assert result.pending == []
+    assert nomads.listings == 2
+
+
+def test_a_nomads_error_other_than_not_served_still_fails_the_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    nomads = FakeNomads(tmp_path)
+    mirror = obstore.store.LocalStore(tmp_path / "mirror", mkdir=True)
+    nomads.publish("hrrr.t19z.wrfsfcf00.grib2", FIXTURE_GRIB.read_bytes())
+
+    def forbidden(_url: str) -> Path:
+        raise _unserved(403)
+
+    monkeypatch.setattr(nomads, "fetch", forbidden)
+    with pytest.raises(httpx.HTTPStatusError, match="403"):
+        run(nomads, mirror, polls=1, monkeypatch=monkeypatch, lead_hours=(0,))

@@ -5,7 +5,7 @@ import functools
 import threading
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -277,6 +277,24 @@ def httpx_get(
     rate_limiter: RateLimiter | None = None,
     retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
 ) -> httpx.Response:
+    def read(response: httpx.Response) -> httpx.Response:
+        response.read()
+        return response
+
+    return _httpx_stream_with_retries(
+        url, read, headers, rate_limiter, retry_status_codes
+    )
+
+
+def _httpx_stream_with_retries[T](
+    url: str,
+    consume: Callable[[httpx.Response], T],
+    headers: dict[str, str] | None,
+    rate_limiter: RateLimiter | None,
+    retry_status_codes: set[int],
+) -> T:
+    """GET `url` and pass the streaming response to `consume`, retrying the whole
+    request when it fails in transport, including a body cut off mid-stream."""
     client = _httpx_client()
     start_time = time.monotonic()
 
@@ -292,15 +310,14 @@ def httpx_get(
             rate_limiter.wait()
 
         try:
-            response = client.get(url, headers=headers)
+            with client.stream("GET", url, headers=headers) as response:
+                if response.status_code not in retry_status_codes:
+                    response.raise_for_status()
+                    return consume(response)
         except httpx.TransportError as e:
             last_exception = e
             log.warning(f"httpx transport error on attempt {attempt + 1}: {e}")
             continue
-
-        if response.status_code not in retry_status_codes:
-            response.raise_for_status()
-            return response
 
         last_exception = httpx.HTTPStatusError(
             f"Server returned {response.status_code}",
@@ -386,11 +403,14 @@ def httpx_download_to_disk(
             with open(temp_path, "wb") as f:
                 f.write(body)
         else:
-            response = httpx_get(
-                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+
+            def write(response: httpx.Response) -> None:
+                with open(temp_path, "wb") as f:
+                    f.writelines(response.iter_bytes())
+
+            _httpx_stream_with_retries(
+                url, write, None, rate_limiter, retry_status_codes
             )
-            with open(temp_path, "wb") as f:
-                f.write(response.content)
 
         temp_path.rename(local_path)
 

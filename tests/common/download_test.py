@@ -1,6 +1,7 @@
-from collections.abc import Sequence
+import tracemalloc
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import obstore.store
@@ -446,12 +447,33 @@ def _make_httpx_response(
     return response
 
 
+def _mock_httpx_client(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+class _Body(httpx.SyncByteStream):
+    """`chunks` chunks of `chunk_size` bytes, then a dropped connection if `cut`."""
+
+    def __init__(self, chunks: int, chunk_size: int, *, cut: bool = False) -> None:
+        self.chunks = chunks
+        self.chunk_size = chunk_size
+        self.cut = cut
+
+    def __iter__(self) -> Iterator[bytes]:
+        for _ in range(self.chunks):
+            yield b"x" * self.chunk_size
+        if self.cut:
+            raise httpx.RemoteProtocolError("peer closed connection")
+
+
 def test_httpx_download_to_disk_no_byte_ranges(tmp_path: Path) -> None:
     file_content = b"full file content here"
-    response = _make_httpx_response(status_code=200, content=file_content)
+    client = _mock_httpx_client(lambda _r: httpx.Response(200, content=file_content))
 
     with (
-        patch.object(download_module, "httpx_get", return_value=response),
+        patch.object(download_module, "_httpx_client", return_value=client),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -603,16 +625,17 @@ def test_httpx_download_to_disk_disk_cache_skips_when_file_exists(
 def test_httpx_download_to_disk_disk_cache_downloads_when_missing(
     tmp_path: Path,
 ) -> None:
-    response = _make_httpx_response(status_code=200, content=b"fresh content")
     call_count = 0
 
-    def fake_get_with_retry(*args: object, **kwargs: object) -> httpx.Response:
+    def handler(_r: httpx.Request) -> httpx.Response:
         nonlocal call_count
         call_count += 1
-        return response
+        return httpx.Response(200, content=b"fresh content")
 
     with (
-        patch.object(download_module, "httpx_get", fake_get_with_retry),
+        patch.object(
+            download_module, "_httpx_client", return_value=_mock_httpx_client(handler)
+        ),
         patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
     ):
         result = httpx_download_to_disk(
@@ -652,41 +675,40 @@ def test_httpx_download_to_disk_with_suffix(tmp_path: Path) -> None:
 def testhttpx_get_retries_on_5xx() -> None:
     call_count = 0
 
-    def mock_get(url: str, **kwargs: object) -> httpx.Response:
+    def handler(_r: httpx.Request) -> httpx.Response:
         nonlocal call_count
         call_count += 1
         if call_count < 3:
-            return _make_httpx_response(status_code=503, content=b"unavailable")
-        return _make_httpx_response(status_code=200, content=b"ok")
-
-    mock_client = Mock()
-    mock_client.get = mock_get
+            return httpx.Response(503, content=b"unavailable")
+        return httpx.Response(200, content=b"ok")
 
     with (
-        patch.object(download_module, "_httpx_client", return_value=mock_client),
+        patch.object(
+            download_module, "_httpx_client", return_value=_mock_httpx_client(handler)
+        ),
         patch.object(download_module.time, "sleep"),
     ):
         response = httpx_get("https://example.com/test")
 
     assert call_count == 3
     assert response.status_code == 200
+    assert response.content == b"ok"
 
 
 def testhttpx_get_retries_on_transport_error() -> None:
     call_count = 0
 
-    def mock_get(url: str, **kwargs: object) -> httpx.Response:
+    def handler(_r: httpx.Request) -> httpx.Response:
         nonlocal call_count
         call_count += 1
         if call_count < 2:
             raise httpx.ConnectError("connection refused")
-        return _make_httpx_response(status_code=200, content=b"ok")
-
-    mock_client = Mock()
-    mock_client.get = mock_get
+        return httpx.Response(200, content=b"ok")
 
     with (
-        patch.object(download_module, "_httpx_client", return_value=mock_client),
+        patch.object(
+            download_module, "_httpx_client", return_value=_mock_httpx_client(handler)
+        ),
         patch.object(download_module.time, "sleep"),
     ):
         response = httpx_get("https://example.com/test")
@@ -696,13 +718,78 @@ def testhttpx_get_retries_on_transport_error() -> None:
 
 
 def testhttpx_get_raises_on_4xx() -> None:
-    mock_client = Mock()
-    mock_client.get = Mock(
-        return_value=_make_httpx_response(status_code=404, content=b"not found")
-    )
+    client = _mock_httpx_client(lambda _r: httpx.Response(404, content=b"not found"))
 
     with (
-        patch.object(download_module, "_httpx_client", return_value=mock_client),
+        patch.object(download_module, "_httpx_client", return_value=client),
         pytest.raises(httpx.HTTPStatusError),
     ):
         httpx_get("https://example.com/test")
+
+
+def test_httpx_download_to_disk_retries_a_body_cut_off_mid_stream(
+    tmp_path: Path,
+) -> None:
+    bodies = iter([_Body(3, 10, cut=True), _Body(5, 10)])
+    client = _mock_httpx_client(lambda _r: httpx.Response(200, stream=next(bodies)))
+
+    with (
+        patch.object(download_module, "_httpx_client", return_value=client),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+        patch.object(download_module.time, "sleep"),
+    ):
+        result = httpx_download_to_disk(
+            "https://example.com/data/file.grib2", "my-dataset"
+        )
+
+    assert result.read_bytes() == b"x" * 50
+    assert [f for f in tmp_path.rglob("*") if f.is_file()] == [result]
+
+
+def test_httpx_download_to_disk_streams_without_holding_the_body(
+    tmp_path: Path,
+) -> None:
+    chunk_size = 64 * 1024
+    body_size = 256 * 1024 * 1024
+    client = _mock_httpx_client(
+        lambda _r: httpx.Response(
+            200, stream=_Body(body_size // chunk_size, chunk_size)
+        )
+    )
+
+    tracemalloc.start()
+    try:
+        with (
+            patch.object(download_module, "_httpx_client", return_value=client),
+            patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+        ):
+            result = httpx_download_to_disk(
+                "https://example.com/data/file.grib2", "my-dataset"
+            )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert result.stat().st_size == body_size
+    assert peak < 16 * 1024 * 1024
+
+
+def test_httpx_download_to_disk_raises_a_404_at_once(tmp_path: Path) -> None:
+    requests_made = 0
+
+    def not_found(_r: httpx.Request) -> httpx.Response:
+        nonlocal requests_made
+        requests_made += 1
+        return httpx.Response(404)
+
+    with (
+        patch.object(
+            download_module, "_httpx_client", return_value=_mock_httpx_client(not_found)
+        ),
+        patch.object(download_module, "DOWNLOAD_DIR", tmp_path),
+        pytest.raises(httpx.HTTPStatusError, match="404"),
+    ):
+        httpx_download_to_disk("https://example.com/data/file.grib2", "my-dataset")
+
+    assert requests_made == 1
+    assert [f for f in tmp_path.rglob("*") if f.is_file()] == []

@@ -17,6 +17,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Final
 
+import httpx
 import obstore
 import obstore.store
 import pandas as pd
@@ -345,7 +346,9 @@ def _copy_pair(
     if _past(deadline):
         return _PairResult(copied=[], data_offsets=None)
     index_path = (
-        fetch(pair.coord.get_idx_url(source="nomads")) if pair.copy_index else None
+        _fetch_if_served(fetch, pair.coord.get_idx_url(source="nomads"))
+        if pair.copy_index
+        else None
     )
     try:
         copied: list[str] = []
@@ -396,7 +399,9 @@ def _copy_data(
     its message offsets."""
     if _past(deadline):
         return None
-    path = fetch(pair.coord.get_url(source="nomads"))
+    path = _fetch_if_served(fetch, pair.coord.get_url(source="nomads"))
+    if path is None:
+        return None
     try:
         offsets = grib_message_offsets(path)
         if offsets is None:
@@ -407,6 +412,22 @@ def _copy_data(
         return offsets
     finally:
         path.unlink()
+
+
+def _fetch_if_served(fetch: Callable[[str], Path], url: str) -> Path | None:
+    """The fetched file, or None when NOMADS lists it but does not serve it: a 404, or
+    a transfer that fails on every retry, while the file is written or replaced."""
+    try:
+        return fetch(url)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 404:
+            raise
+    except httpx.TransportError:
+        pass
+    log.warning(
+        f"{url.rsplit('/', 1)[-1]} is listed but not served by NOMADS; will retry"
+    )
+    return None
 
 
 def _past(deadline: pd.Timestamp) -> bool:
