@@ -89,16 +89,15 @@ def pilot_copy(
     bucket: str,
     file_types: list[str],
     lead_hours: list[int],
-    minutes: int,
+    deadline: str,
 ) -> dict[str, list[str]]:
-    assert timedelta(minutes=minutes) < PILOT_TIMEOUT - timedelta(minutes=5)
     result = mirror_pilot(
         pd.Timestamp(init_time),
         json.loads(os.environ[STORAGE_OPTIONS_ENV]),
         bucket,
         file_types,
         lead_hours,
-        deadline=pd.Timestamp.now("UTC") + timedelta(minutes=minutes),
+        deadline=pd.Timestamp(deadline),
     )
     log_peak_memory()
     return {"copied": result.copied, "pending": result.pending}
@@ -112,11 +111,14 @@ def pilot(
     leads: str = "0",
     minutes: int = 10,
 ) -> None:
+    # Fixed here, so a run restarted after preemption keeps the original deadline.
+    deadline = pd.Timestamp.now("UTC") + timedelta(minutes=minutes)
+    assert timedelta(minutes=minutes) < PILOT_TIMEOUT - timedelta(minutes=5)
     result = pilot_copy.remote(
         init_time,
         bucket,
         file_types.split(","),
         [int(lead) for lead in leads.split(",")],
-        minutes,
+        deadline.isoformat(),
     )
     print(json.dumps(result, indent=2))  # noqa: T201
