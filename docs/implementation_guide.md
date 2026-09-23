@@ -58,12 +58,12 @@ If a dataset for the same provider/model already exists, reuse its shared config
 
 ### 2. Register your dataset
 
-Add an instance of your `DynamicalDataset` subclass to the `DYNAMICAL_DATASETS` constant in `src/reformatters/__main__.py`:
+Add an instance of your `DynamicalDataset` subclass to the `OPERATIONAL_RESOURCES` constant in `src/reformatters/__main__.py`:
 
 ```python
 from reformatters.provider.model.variant import ProviderModelVariantDataset
 
-DYNAMICAL_DATASETS = [
+OPERATIONAL_RESOURCES = [
     ...,
     ProviderModelVariantDataset(
         primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),

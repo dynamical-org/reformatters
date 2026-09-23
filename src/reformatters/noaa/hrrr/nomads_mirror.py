@@ -15,19 +15,17 @@ from concurrent.futures import (
 )
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Final
+from typing import Final
 
 import obstore
 import obstore.store
 import pandas as pd
-import typer
 
 from reformatters.common import kubernetes
 from reformatters.common.download import httpx_download_to_disk, httpx_get, s3_store
 from reformatters.common.grib import grib_message_offsets
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
-from reformatters.common.operational import OperationalResources
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrFileType
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
@@ -456,68 +454,24 @@ def mirror_window(
     )
 
 
-class NoaaHrrrNomadsMirror(OperationalResources):
-    """Copies each hourly HRRR init's files from NOMADS into the mirror bucket."""
-
-    @property
-    def dataset_id(self) -> str:
-        return "noaa-hrrr-nomads"
-
-    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Hourly with a deadline inside the hour (concurrencyPolicy Replace); sfc f00
-        # lands ~init+51m and f18 by ~init+87m, so the fire starts polling at init+49m.
-        return [
-            CronJob(
-                command=["mirror-gribs"],
-                workers_total=1,
-                parallelism=1,
-                name=f"{self.dataset_id}-mirror-gribs",
-                schedule="45 * * * *",
-                pod_active_deadline=timedelta(minutes=59),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="2G",
-                ephemeral_storage="8G",
-                secret_names=[MIRROR_SECRET_NAME],
-            )
-        ]
-
-    def mirror_gribs(
-        self,
-        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
-        poll_start_minutes: int = 49,
-    ) -> None:
-        with self._monitor(
-            CronJob, reformat_job_name, cron_job_name=f"{self.dataset_id}-mirror-gribs"
-        ):
-            now = pd.Timestamp.now("UTC")
-            init_time, poll_start, deadline = mirror_window(
-                now, self._operational_cron_job(CronJob), poll_start_minutes
-            )
-            wait = max(0.0, (poll_start - now).total_seconds())
-            log.info(
-                f"Mirroring {init_time:%Y-%m-%dT%H}Z from {poll_start:%H:%M}Z ({wait:.0f}s)"
-            )
-            time.sleep(wait)
-            mirror = mirror_store()
-            result = mirror_init_time(
-                init_time.tz_localize(None), mirror, deadline=deadline
-            )
-            log.info(
-                f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored"
-            )
-            caught_up = mirror_earlier_init_times(
-                init_time.tz_localize(None),
-                mirror,
-                deadline=deadline - CATCH_UP_DEADLINE_MARGIN,
-            )
-            log.info(
-                f"Caught up {len(caught_up.copied)} files of earlier inits, "
-                f"{len(caught_up.pending)} not mirrored"
-            )
-
-    def get_cli(self) -> typer.Typer:
-        app = typer.Typer()
-        app.command()(self.mirror_gribs)
-        return app
+def mirror_gribs(cron_job: CronJob, poll_start_minutes: int) -> None:
+    """Mirror the init of `cron_job`'s current fire, then catch up earlier inits."""
+    now = pd.Timestamp.now("UTC")
+    init_time, poll_start, deadline = mirror_window(now, cron_job, poll_start_minutes)
+    wait = max(0.0, (poll_start - now).total_seconds())
+    log.info(
+        f"Mirroring {init_time:%Y-%m-%dT%H}Z from {poll_start:%H:%M}Z ({wait:.0f}s)"
+    )
+    time.sleep(wait)
+    mirror = mirror_store()
+    result = mirror_init_time(init_time.tz_localize(None), mirror, deadline=deadline)
+    log.info(f"Mirrored {len(result.copied)} files, {len(result.pending)} not mirrored")
+    caught_up = mirror_earlier_init_times(
+        init_time.tz_localize(None),
+        mirror,
+        deadline=deadline - CATCH_UP_DEADLINE_MARGIN,
+    )
+    log.info(
+        f"Caught up {len(caught_up.copied)} files of earlier inits, "
+        f"{len(caught_up.pending)} not mirrored"
+    )

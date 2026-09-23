@@ -14,7 +14,7 @@ A naming convention links git branches, kubernetes cronjobs, and dataset version
 | Kubernetes cronjobs | `stage-{dataset_id}-v{version}-{update\|validate}` | `stage-noaa-gfs-forecast-v0-3-0-update` |
 | Store path | `{base_path}/{dataset_id}/v{version}.{ext}` | `s3://…/noaa-gfs-forecast/v0.3.0.zarr` |
 
-Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the full CI suite, builds a Docker image, and deploys cronjobs (e.g. update and validate) for only the specific dataset in the branch name.
+Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the full CI suite, builds a Docker image, and deploys the update and validate cronjobs for only the specific dataset in the branch name. Jobs that feed the dataset, such as a GRIB archive or mirror, are not staged; the staged update reads what production's copy writes.
 
 ## Setup a staged version
 

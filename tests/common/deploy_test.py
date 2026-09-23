@@ -12,7 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
-from reformatters.common import deploy, monitoring
+from reformatters.common import deploy, monitoring, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 
@@ -198,3 +198,51 @@ class TestDeployCommandsRegistered:
         assert "deploy " in result.output or "deploy\n" in result.output
         assert "deploy-staging" in result.output
         assert "cleanup-staging" in result.output
+
+
+def test_deploy_applies_datasets_and_archives_from_the_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reformatters.__main__ import app  # noqa: PLC0415
+
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = CliRunner().invoke(app, ["deploy", "--docker-image", "test-image-tag"])
+
+    assert result.exit_code == 0, result.exception
+    items = json.loads(mock_run.call_args.kwargs["input"])["items"]
+    names = [item["metadata"]["name"] for item in items]
+    assert len(names) == len(set(names))
+    assert names.count("ecmwf-ifs-ens-46-day-gribs-archive-grib-files") == 1
+    assert names.count("noaa-hrrr-nomads-mirror-gribs") == 1
+
+
+def test_deploy_staging_stages_only_update_and_validate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reformatters.__main__ import app  # noqa: PLC0415
+
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(staging, "get_main_version", lambda dataset: "0.0.0")
+    dataset_id = "noaa-hrrr-forecast-18-hour-virtual-fast"
+    version = next(
+        d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id
+    ).template_config.version
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "deploy-staging",
+            dataset_id,
+            version,
+            "test-image-tag",
+        ],
+    )
+
+    assert result.exit_code == 0, result.exception
+    items = json.loads(mock_run.call_args.kwargs["input"])["items"]
+    assert [item["metadata"]["name"] for item in items] == (
+        staging.staging_cronjob_names(dataset_id, version)
+    )

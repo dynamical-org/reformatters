@@ -6,9 +6,14 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from typer.testing import CliRunner
 
 from reformatters.common import template_utils, validation
+from reformatters.common.kubernetes import CronJob
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast import (
+    dynamical_dataset as fast_dynamical_dataset,
+)
 from reformatters.noaa.hrrr.forecast_18_hour_virtual_fast.dynamical_dataset import (
     CheckMirrorWindow,
     NoaaHrrrForecast18HourVirtualFastDataset,
@@ -43,9 +48,17 @@ def dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualFastDataset:
 def test_operational_kubernetes_resources(
     dataset: NoaaHrrrForecast18HourVirtualFastDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
+    mirror_cron_job, update_cron_job, validation_cron_job = (
+        dataset.operational_kubernetes_resources("test-image-tag")
     )
+
+    assert mirror_cron_job.name == "noaa-hrrr-nomads-mirror-gribs"
+    assert mirror_cron_job.command == ["mirror-gribs"]
+    assert mirror_cron_job.dataset_id == dataset.dataset_id
+    assert mirror_cron_job.schedule == "45 * * * *"
+    assert mirror_cron_job.pod_active_deadline == timedelta(minutes=59)
+    assert mirror_cron_job.secret_names == [MIRROR_SECRET_NAME]
+    assert not mirror_cron_job.suspend
 
     assert update_cron_job.name == "noaa-hrrr-forecast-18-hour-virtual-fast-update"
     assert update_cron_job.workers_total == 1
@@ -64,6 +77,29 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.secret_names == [*store_secrets, MIRROR_SECRET_NAME]
     assert validation_cron_job.secret_names == store_secrets
     assert MIRROR_SECRET_NAME not in validation_cron_job.secret_names
+
+
+def test_mirror_gribs_command_runs_the_mirror_cron(
+    dataset: NoaaHrrrForecast18HourVirtualFastDataset,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[CronJob, int]] = []
+    monkeypatch.setattr(
+        fast_dynamical_dataset,
+        "mirror_gribs",
+        lambda cron_job, poll_start_minutes: calls.append(
+            (cron_job, poll_start_minutes)
+        ),
+    )
+
+    result = CliRunner().invoke(
+        dataset.get_cli(), ["mirror-gribs", "job-name", "--poll-start-minutes", "50"]
+    )
+
+    assert result.exit_code == 0, result.output
+    ((cron_job, poll_start_minutes),) = calls
+    assert cron_job.name == "noaa-hrrr-nomads-mirror-gribs"
+    assert poll_start_minutes == 50
 
 
 def test_virtual_config_has_only_the_mirror_container_and_a_manifest_split(

@@ -8,13 +8,11 @@ import obstore
 import obstore.store
 import pandas as pd
 import pytest
-from typer.testing import CliRunner
 
 from reformatters.common.kubernetes import CronJob
 from reformatters.noaa.hrrr import nomads_mirror
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrFileType
 from reformatters.noaa.hrrr.nomads_mirror import (
-    NoaaHrrrNomadsMirror,
     mirror_init_time,
     mirror_window,
 )
@@ -23,7 +21,6 @@ from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 FIXTURE_GRIB = Path(__file__).parents[1] / "fixtures/hrrr.t19z.wrfsfcf00.first2.grib2"
 FIXTURE_INDEX = FIXTURE_GRIB.with_name(FIXTURE_GRIB.name + ".idx")
 INIT = pd.Timestamp("2026-09-07T19:00")
-runner = CliRunner()
 
 
 def coord(lead: int, file_type: NoaaHrrrFileType = "sfc") -> NoaaHrrrSourceFileCoord:
@@ -315,31 +312,19 @@ def test_mirror_store_is_signed_from_the_mounted_secret(
     )
 
 
-def test_operational_kubernetes_resources_is_one_hourly_mirror_cron() -> None:
-    (cron_job,) = NoaaHrrrNomadsMirror().operational_kubernetes_resources("image")
-    assert cron_job.name == "noaa-hrrr-nomads-mirror-gribs"
-    assert len(cron_job.name) <= 52
-    assert cron_job.schedule == "45 * * * *"
-    assert cron_job.pod_active_deadline == timedelta(minutes=59)
-    assert cron_job.command == ["mirror-gribs"]
-    assert cron_job.secret_names == [nomads_mirror.MIRROR_SECRET_NAME]
-    assert not cron_job.suspend
-
-
-def test_cron_command_matches_a_registered_cli_command() -> None:
-    mirror = NoaaHrrrNomadsMirror()
-    command_names = {
-        (command.name or command.callback.__name__).replace("_", "-")  # ty: ignore[unresolved-attribute]
-        for command in mirror.get_cli().registered_commands
-    }
-    for cron_job in mirror.operational_kubernetes_resources("image"):
-        assert cron_job.command[0] in command_names
-    assert runner.invoke(mirror.get_cli(), ["--help"]).exit_code == 0
-
-
 def test_mirror_window_is_anchored_to_the_scheduled_fire() -> None:
-    (cron_job,) = NoaaHrrrNomadsMirror().operational_kubernetes_resources("image")
-    assert isinstance(cron_job, CronJob)
+    cron_job = CronJob(
+        command=["mirror-gribs"],
+        workers_total=1,
+        parallelism=1,
+        name="noaa-hrrr-nomads-mirror-gribs",
+        schedule="45 * * * *",
+        pod_active_deadline=timedelta(minutes=59),
+        image="image",
+        dataset_id="noaa-hrrr-forecast-18-hour-virtual-fast",
+        cpu="1",
+        memory="2G",
+    )
     # A pod (re)started at 20:10 belongs to the 19:45 fire: init 19:00, poll from
     # 19:49, stop a minute before the 59-minute deadline.
     init_time, poll_start, deadline = mirror_window(

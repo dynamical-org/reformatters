@@ -1,8 +1,9 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
 import pandas as pd
+import typer
 from pydantic import Field
 
 from reformatters.common import validation
@@ -21,6 +22,7 @@ from reformatters.noaa.hrrr.hrrr_config_models import (
 )
 from reformatters.noaa.hrrr.nomads_mirror import (
     MIRROR_SECRET_NAME,
+    mirror_gribs,
 )
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
@@ -84,6 +86,9 @@ class CheckMirrorWindow(validation.Validator):
         )
 
 
+MIRROR_CRON_JOB_NAME = "noaa-hrrr-nomads-mirror-gribs"
+
+
 class NoaaHrrrForecast18HourVirtualFastDataset(
     DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrForecastVirtualSourceFileCoord]
 ):
@@ -111,6 +116,22 @@ class NoaaHrrrForecast18HourVirtualFastDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        # Hourly with a deadline inside the hour (concurrencyPolicy Replace); sfc f00
+        # lands ~init+51m and f18 by ~init+87m, so the fire starts polling at init+49m.
+        mirror_cron_job = CronJob(
+            command=["mirror-gribs"],
+            workers_total=1,
+            parallelism=1,
+            name=MIRROR_CRON_JOB_NAME,
+            schedule="45 * * * *",
+            pod_active_deadline=timedelta(minutes=59),
+            image=image_tag,
+            dataset_id=self.dataset_id,
+            cpu="1",
+            memory="2G",
+            ephemeral_storage="8G",
+            secret_names=[MIRROR_SECRET_NAME],
+        )
         # Race the current init: f00 arrives near :51 and f18 normally by init + 86m.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
@@ -137,7 +158,26 @@ class NoaaHrrrForecast18HourVirtualFastDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [mirror_cron_job, operational_update_cron_job, validation_cron_job]
+
+    def mirror_gribs(
+        self,
+        reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
+        poll_start_minutes: int = 49,
+    ) -> None:
+        """Copy the current init's GRIBs and indexes from NOMADS into the mirror."""
+        with self._monitor(
+            CronJob, reformat_job_name, cron_job_name=MIRROR_CRON_JOB_NAME
+        ):
+            mirror_gribs(
+                self._operational_cron_job(CronJob, MIRROR_CRON_JOB_NAME),
+                poll_start_minutes,
+            )
+
+    def get_cli(self) -> typer.Typer:
+        app = super().get_cli()
+        app.command()(self.mirror_gribs)
+        return app
 
     def _virtual_validation_region_job(
         self,

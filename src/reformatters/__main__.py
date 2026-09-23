@@ -99,7 +99,6 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast48HourVirtualDataset,
 )
-from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
@@ -232,8 +231,9 @@ class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
-# Registry of all DynamicalDatasets.
-DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
+# Registry of everything that deploys cron jobs: datasets, and the source archives
+# that feed datasets but have no store of their own.
+OPERATIONAL_RESOURCES: Sequence[OperationalResources] = [
     # NOAA
     NoaaGfsForecastDataset(
         primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),
@@ -304,6 +304,7 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
+    EcmwfIfsEns46DayGribArchiver(),
     EcmwfAifsSingleForecastDataset(
         primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
@@ -353,6 +354,12 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NasaSmapLevel336KmV9Dataset(
         primary_storage_config=UpstreamGriddedZarrsDatasetStorageConfig()
     ),
+]
+
+DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
+    resource
+    for resource in OPERATIONAL_RESOURCES
+    if isinstance(resource, DynamicalDataset)
 ]
 
 register_run_monitor(monitoring.monitor_cron)
@@ -405,20 +412,10 @@ def startup(ctx: typer.Context) -> None:
 app.command()(initialize_new_integration)
 
 
-# Source archives that feed a dataset but have no store of their own. They deploy
-# their own cronjobs and are not datasets, so they carry no update/validate/backfill.
-OPERATIONAL_ARCHIVERS: Sequence[OperationalResources] = [
-    EcmwfIfsEns46DayGribArchiver(),
-    NoaaHrrrNomadsMirror(),
-]
+for resource in OPERATIONAL_RESOURCES:
+    app.add_typer(resource.get_cli(), name=resource.dataset_id)
 
-for dataset in DYNAMICAL_DATASETS:
-    app.add_typer(dataset.get_cli(), name=dataset.dataset_id)
-
-for archiver in OPERATIONAL_ARCHIVERS:
-    app.add_typer(archiver.get_cli(), name=archiver.dataset_id)
-
-deploy_module.register_commands(app, DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS)
+deploy_module.register_commands(app, OPERATIONAL_RESOURCES)
 
 
 if not __debug__:

@@ -4,7 +4,7 @@
 import re
 from pathlib import Path
 
-from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
+from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_RESOURCES
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
 
@@ -14,13 +14,13 @@ log = get_logger(__name__)
 def get_all_cronjob_names() -> list[str]:
     cronjob_names: list[str] = []
 
-    for deployable in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]:
+    for resource in OPERATIONAL_RESOURCES:
         try:
-            resources = deployable.operational_kubernetes_resources(
+            cron_jobs = resource.operational_kubernetes_resources(
                 "placeholder-image-tag"
             )
             cronjob_names.extend(
-                resource.name for resource in resources if isinstance(resource, CronJob)
+                cron_job.name for cron_job in cron_jobs if isinstance(cron_job, CronJob)
             )
         except NotImplementedError:
             continue

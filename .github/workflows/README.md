@@ -40,7 +40,7 @@ The cronjob dropdown in `manual-create-job-from-cronjob.yml` and dataset dropdow
 `manual-backfill.yml` are automatically updated:
 
 1. **Generator Script:** `src/scripts/generate_manual_workflows.py`
-   - Scans `DYNAMICAL_DATASETS` in `src/reformatters/__main__.py`
+   - Scans `OPERATIONAL_RESOURCES` in `src/reformatters/__main__.py`
    - Computes the available cronjobs and backfillable datasets
    - Updates only the dropdown choices in the checked-in workflows
    - Leaves the rest of each workflow unchanged

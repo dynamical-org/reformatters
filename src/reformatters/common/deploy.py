@@ -1,7 +1,6 @@
 import json
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any
 
 import typer
 
@@ -17,7 +16,8 @@ def deploy_operational_resources(
     resources: Iterable[OperationalResources],
     docker_image: str | None = None,
     dataset_id_filter: str | None = None,
-    cronjob_transform: Callable[[kubernetes.CronJob], kubernetes.CronJob] | None = None,
+    cronjob_transform: Callable[[kubernetes.CronJob], kubernetes.CronJob | None]
+    | None = None,
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
@@ -39,7 +39,11 @@ def deploy_operational_resources(
             continue
 
         if cronjob_transform is not None:
-            dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
+            dataset_cronjobs = [
+                transformed
+                for cj in dataset_cronjobs
+                if (transformed := cronjob_transform(cj)) is not None
+            ]
 
         reformat_jobs.extend(dataset_cronjobs)
 
@@ -68,17 +72,19 @@ def deploy_operational_resources(
 
 
 def register_commands(
-    app: typer.Typer,
-    datasets: Sequence[DynamicalDataset[Any, Any]],
-    archivers: Sequence[OperationalResources] = (),
+    app: typer.Typer, resources: Sequence[OperationalResources]
 ) -> None:
+    datasets = [
+        resource for resource in resources if isinstance(resource, DynamicalDataset)
+    ]
+
     @app.command()
     def deploy(
         docker_image: str | None = None,
         dataset_id: str | None = None,
     ) -> None:
         deploy_operational_resources(
-            [*datasets, *archivers], docker_image, dataset_id_filter=dataset_id
+            resources, docker_image, dataset_id_filter=dataset_id
         )
 
     @app.command()
@@ -92,7 +98,12 @@ def register_commands(
         staging.validate_version_matches_template(dataset, version)
         staging.validate_version_differs_from_main(dataset, version)
 
-        def transform(cronjob: kubernetes.CronJob) -> kubernetes.CronJob:
+        def transform(cronjob: kubernetes.CronJob) -> kubernetes.CronJob | None:
+            # A job that feeds the dataset, like a source archive, stays production's.
+            if not isinstance(
+                cronjob, kubernetes.ReformatCronJob | kubernetes.ValidationCronJob
+            ):
+                return None
             return staging.rename_cronjob_for_staging(cronjob, dataset_id, version)
 
         deploy_operational_resources(
