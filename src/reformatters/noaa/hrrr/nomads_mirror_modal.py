@@ -1,7 +1,8 @@
 """The NOMADS mirror's hourly fire as a Modal app, an alternative to the
 `noaa-hrrr-nomads-mirror-gribs` CronJob. Only one of the two may write the mirror.
 
-Deploy: `uv run modal deploy -m reformatters.noaa.hrrr.nomads_mirror_modal`.
+Deploy: `uv run modal deploy src/reformatters/noaa/hrrr/nomads_mirror_modal.py::app`.
+`pilot_app` holds a bounded one-off copy into another bucket, with its own secret.
 """
 
 import json
@@ -32,6 +33,7 @@ REGION: Final = "us-east"
 STORAGE_OPTIONS_ENV: Final = "NOAA_HRRR_NOMADS_MIRROR_STORAGE_OPTIONS"
 
 app = modal.App("noaa-hrrr-nomads-mirror")
+pilot_app = modal.App("noaa-hrrr-nomads-mirror-pilot")
 image = (
     modal.Image.debian_slim(python_version="3.14")
     .uv_sync(extra_options="--no-dev")
@@ -75,7 +77,7 @@ def mirror_gribs() -> None:
         log_peak_memory()
 
 
-@app.function(
+@pilot_app.function(
     image=image,
     secrets=[modal.Secret.from_name("noaa-hrrr-nomads-mirror-pilot-storage-options")],
     timeout=int(PILOT_TIMEOUT.total_seconds()),
@@ -103,7 +105,7 @@ def pilot_copy(
     return {"copied": result.copied, "pending": result.pending}
 
 
-@app.local_entrypoint()
+@pilot_app.local_entrypoint()
 def pilot(
     init_time: str,
     bucket: str,
