@@ -49,7 +49,9 @@ def test_operational_cron_jobs_are_enabled_and_do_not_collide_with_daily(
 
     assert update.name == "ecmwf-ifs-ens-46-day-6-hourly-update"
     assert validate.name == "ecmwf-ifs-ens-46-day-6-hourly-validate"
-    assert update.schedule == "0 10 * * *"
+    # Hourly fires through the window in which the gated archive completes, ten
+    # minutes after the daily product so the two never run together.
+    assert update.schedule == "55 4,5,6,7,10 * * *"
     assert validate.schedule == "20 10 * * *"
     assert update.suspend is False
     assert validate.suspend is False

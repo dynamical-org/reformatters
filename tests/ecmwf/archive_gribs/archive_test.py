@@ -1,4 +1,5 @@
-from collections.abc import Iterator, Sequence
+import time
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -7,6 +8,8 @@ import pandas as pd
 import pytest
 
 from reformatters.ecmwf.archive_gribs.archive import (
+    DEFAULT_PUBLICATION_POLL_INTERVAL,
+    NO_PUBLICATION_WAIT,
     archive_initialization,
     check_available,
     format_init_time,
@@ -93,9 +96,22 @@ def _write_blob(inputs: dict[str, Any], target: Path, **_: object) -> Path:
     return target
 
 
-def archive(tmp_path: Path, selections: Sequence[EcdsSelection] = SELECTIONS) -> None:
+def archive(
+    tmp_path: Path,
+    selections: Sequence[EcdsSelection] = SELECTIONS,
+    wait_for_publication: pd.Timedelta = NO_PUBLICATION_WAIT,
+    publication_poll_interval: pd.Timedelta = DEFAULT_PUBLICATION_POLL_INTERVAL,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
     archive_initialization(
-        INIT_TIME, selections, DST_ROOT, work_dir=tmp_path, poll_seconds=0
+        INIT_TIME,
+        selections,
+        DST_ROOT,
+        work_dir=tmp_path,
+        poll_seconds=0,
+        wait_for_publication=wait_for_publication,
+        publication_poll_interval=publication_poll_interval,
+        sleep=sleep,
     )
 
 
@@ -287,3 +303,65 @@ def test_check_available_queries_constraints_without_the_keys_it_checks() -> Non
     assert "level_value" not in queried
     assert queried["variable"] == list(selection.variables)
     assert queried["day"] == ["10"]
+
+
+def test_waiting_for_publication_probes_until_published_then_retrieves(
+    tmp_path: Path,
+    archive_bucket: dict[str, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published = archive_bucket["constraints"].side_effect
+    probes = {"n": 0}
+
+    def constraints_after_two_probes(
+        inputs: dict[str, Any], **kwargs: object
+    ) -> dict[str, Any]:
+        probes["n"] += 1
+        if probes["n"] <= 2 * len(SELECTIONS):
+            return {"variable": [], "leadtime_hour": [], "level_value": []}
+        result: dict[str, Any] = published(inputs, **kwargs)
+        return result
+
+    archive_bucket["constraints"].side_effect = constraints_after_two_probes
+    sleeps: list[float] = []
+
+    archive(
+        tmp_path,
+        wait_for_publication=pd.Timedelta(minutes=30),
+        publication_poll_interval=pd.Timedelta(minutes=5),
+        sleep=sleeps.append,
+    )
+
+    assert sleeps == [300.0, 300.0]
+    assert archive_bucket["request"].return_value.retrieve.call_count == len(SELECTIONS)
+
+
+def test_waiting_for_publication_gives_up_at_the_deadline(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock]
+) -> None:
+    archive_bucket["constraints"].side_effect = lambda inputs, **_: {
+        "variable": [],
+        "leadtime_hour": [],
+        "level_value": [],
+    }
+    clock = {"t": 0.0}
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock["t"] += seconds
+
+    with patch(
+        "reformatters.ecmwf.archive_gribs.archive.time.monotonic",
+        side_effect=lambda: clock["t"],
+    ):
+        archive(
+            tmp_path,
+            wait_for_publication=pd.Timedelta(minutes=12),
+            publication_poll_interval=pd.Timedelta(minutes=5),
+            sleep=sleep,
+        )
+
+    assert sleeps == [300.0, 300.0, 120.0]
+    archive_bucket["costing"].assert_not_called()
+    archive_bucket["request"].return_value.retrieve.assert_not_called()

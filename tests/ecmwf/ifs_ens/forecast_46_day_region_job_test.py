@@ -11,7 +11,10 @@ from rasterio.env import Env
 
 from reformatters.common.iterating import item
 from reformatters.common.types import Group
-from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import ECDS_VARIABLES
+from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    ARCHIVE_BASE_URL,
+    ECDS_VARIABLES,
+)
 from reformatters.ecmwf.archive_gribs.request_shards import (
     DAILY_LEAD_TIMES,
     initialization_selections,
@@ -27,6 +30,8 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     EcmwfIfsEns46DaySourceFileCoord,
     _deaccumulate_signed_inplace,
     _sub_step_lead_times,
+    archived_initialization_is_complete,
+    newest_complete_archived_initialization,
     selections_by_variable,
 )
 from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
@@ -429,3 +434,51 @@ def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
         )
         # The control member and the perturbed members are archived separately.
         assert len(file_names) == 2
+
+
+def _archive_with(init_dates: dict[str, int]) -> set[str]:
+    """URLs present for each init date holding its first N selections (blob + index)."""
+    present: set[str] = set()
+    for init_date, n in init_dates.items():
+        for selection in initialization_selections(ECDS_VARIABLES)[:n]:
+            url = f"{ARCHIVE_BASE_URL}/{init_date}/{selection.file_name}"
+            present.update({url, url + ".index"})
+    return present
+
+
+def test_an_initialization_is_complete_only_with_every_blob_and_index() -> None:
+    n = len(initialization_selections(ECDS_VARIABLES))
+    complete = _archive_with({"2026-09-21": n})
+    partial = _archive_with({"2026-09-21": n - 1})
+    assert archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"), url_exists=complete.__contains__
+    )
+    assert not archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"), url_exists=partial.__contains__
+    )
+    # A blob whose index has not landed is not complete either.
+    blob_only = {url for url in complete if not url.endswith(".index")}
+    assert not archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"), url_exists=blob_only.__contains__
+    )
+
+
+def test_update_extends_only_to_the_newest_complete_initialization() -> None:
+    n = len(initialization_selections(ECDS_VARIABLES))
+    # Store ends 09-20; 09-21 is complete, 09-22 is mid-transfer, 09-23 absent.
+    present = _archive_with({"2026-09-21": n, "2026-09-22": n // 2})
+    newest = newest_complete_archived_initialization(
+        after=pd.Timestamp("2026-09-20"),
+        until=pd.Timestamp("2026-09-23T04:30"),
+        url_exists=present.__contains__,
+    )
+    assert newest == pd.Timestamp("2026-09-21")
+    # Nothing complete past the store: the update has nothing to extend.
+    assert (
+        newest_complete_archived_initialization(
+            after=pd.Timestamp("2026-09-21"),
+            until=pd.Timestamp("2026-09-23T04:30"),
+            url_exists=present.__contains__,
+        )
+        is None
+    )

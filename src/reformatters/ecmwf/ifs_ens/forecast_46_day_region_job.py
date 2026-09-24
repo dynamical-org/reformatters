@@ -17,6 +17,7 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import rasterio
+import requests
 import xarray as xr
 from rasterio.env import Env
 from zarr.abc.store import Store
@@ -32,6 +33,7 @@ from reformatters.common.region_job import (
     InitLeadSourceFileCoord,
     RegionJob,
 )
+from reformatters.common.retry import retry
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -44,6 +46,7 @@ from reformatters.ecmwf.archive_gribs.archive import format_init_time
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     ARCHIVE_BASE_URL,
     ECDS_VARIABLES,
+    INIT_FREQUENCY,
 )
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     INDEX_SUFFIX,
@@ -281,8 +284,16 @@ class EcmwfIfsEns46DayRegionJob(
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
-        append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
+        # The archive fills an initialization blob by blob over an hour or more. A
+        # template that ran to `now` would let an update fired mid-transfer write the
+        # blobs present and NaN for the rest, and expose that until the next update
+        # rewrote the shard. Only initializations whose archive is complete extend
+        # the template, so the update can run any time after the archive job.
+        newest_complete = newest_complete_archived_initialization(
+            after=append_dim_start, until=pd.Timestamp.now()
+        )
+        append_dim_end = (newest_complete or append_dim_start) + INIT_FREQUENCY
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -294,6 +305,56 @@ class EcmwfIfsEns46DayRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+
+def archived_initialization_is_complete(
+    init_time: pd.Timestamp, url_exists: Callable[[str], bool] | None = None
+) -> bool:
+    """Whether every archived blob of `init_time`, and each blob's index, is present.
+
+    The archiver uploads an index then its validated blob, one selection at a time,
+    so presence of all of them is the completeness signal; there is no marker object.
+    """
+    url_exists = url_exists or _url_exists
+    return all(
+        url_exists(url) and url_exists(url + INDEX_SUFFIX)
+        for url in (
+            f"{ARCHIVE_BASE_URL}/{format_init_time(init_time)}/{selection.file_name}"
+            for selection in initialization_selections(ECDS_VARIABLES)
+        )
+    )
+
+
+def newest_complete_archived_initialization(
+    *,
+    after: pd.Timestamp,
+    until: pd.Timestamp,
+    url_exists: Callable[[str], bool] | None = None,
+) -> pd.Timestamp | None:
+    """The newest initialization in (`after`, `until`] whose archive is complete.
+
+    Checked newest first, so a normal day costs one initialization's probes.
+    """
+    candidates = pd.date_range(
+        start=after + INIT_FREQUENCY, end=until, freq=INIT_FREQUENCY
+    )
+    for init_time in reversed(candidates):
+        if archived_initialization_is_complete(init_time, url_exists):
+            return init_time
+    return None
+
+
+def _url_exists(url: str) -> bool:
+    def head() -> bool:
+        response = requests.head(url, timeout=30, allow_redirects=True)
+        if response.status_code == requests.codes.not_found:
+            return False
+        response.raise_for_status()
+        return True
+
+    return retry(
+        head, max_attempts=3, retryable_exceptions=(requests.RequestException,)
+    )
 
 
 def _deaccumulate_signed_inplace(data_array: xr.DataArray) -> None:

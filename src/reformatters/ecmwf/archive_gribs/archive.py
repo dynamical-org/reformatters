@@ -7,7 +7,8 @@ the presence of an archived object means it is complete.
 """
 
 import shutil
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Final
@@ -30,6 +31,8 @@ ARCHIVE_WORK_DIR: Final[Path] = DOWNLOAD_DIR / "ecmwf-s2s-archive"
 # ECDS serves 8 simultaneous requests without error; 4 keeps most of the queue-time
 # saving while leaving room for other users of the account.
 DEFAULT_CONCURRENT_REQUESTS: Final[int] = 4
+NO_PUBLICATION_WAIT: Final = pd.Timedelta(0)
+DEFAULT_PUBLICATION_POLL_INTERVAL: Final = pd.Timedelta(minutes=5)
 
 
 def archive_initialization(
@@ -43,11 +46,20 @@ def archive_initialization(
     poll_seconds: float = 30,
     maximum_polls: int = 240,
     env_vars: dict[str, Any] | None = None,
+    wait_for_publication: pd.Timedelta = NO_PUBLICATION_WAIT,
+    publication_poll_interval: pd.Timedelta = DEFAULT_PUBLICATION_POLL_INTERVAL,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> None:
     """Transfer the selections of `init_time` that are not already archived.
 
     An initialization ECDS has not published yet is skipped, so a caller working
     backwards through recent initializations reaches the older, published ones.
+    With `wait_for_publication`, an unpublished initialization is instead re-probed
+    every `publication_poll_interval` (the cheap, unauthenticated constraints probe;
+    no retrieval job is queued) until it is published or the wait runs out, so one
+    long-lived run started before ECDS publishes retrieves as soon as it does. A
+    probe that sees ECDS holding only part of the initialization is treated as not
+    yet published while waiting; once the wait runs out it raises as usual.
 
     Args:
         init_time: The initialization to archive. ECMWF S2S initializes at 00 UTC only.
@@ -86,7 +98,14 @@ def archive_initialization(
 
     # Checked over every selection, not the pending subset: an initialization only
     # counts as unpublished when ECDS holds none of it.
-    if not check_available(init_time, selections, api_url=api_url):
+    if not _wait_until_published(
+        init_time,
+        selections,
+        api_url=api_url,
+        wait=wait_for_publication,
+        interval=publication_poll_interval,
+        sleep=sleep,
+    ):
         log.warning("ECDS has not published %s, skipping it", init_time_str)
         return
 
@@ -110,6 +129,38 @@ def archive_initialization(
 
     with ThreadPoolExecutor(concurrent_requests) as pool:
         list(pool.map(archive_one, pending))
+
+
+def _wait_until_published(
+    init_time: pd.Timestamp,
+    selections: Sequence[EcdsSelection],
+    *,
+    api_url: str | None,
+    wait: pd.Timedelta,
+    interval: pd.Timedelta,
+    sleep: Callable[[float], None],
+) -> bool:
+    """`check_available`, re-probed until it is true or `wait` has elapsed."""
+    deadline = time.monotonic() + wait.total_seconds()
+    while True:
+        remaining = deadline - time.monotonic()
+        try:
+            if check_available(init_time, selections, api_url=api_url):
+                return True
+        except AssertionError:
+            if remaining <= 0:
+                raise
+            log.info("ECDS holds part of %s; waiting for the rest", init_time.date())
+        if remaining <= 0:
+            return False
+        pause = min(interval.total_seconds(), remaining)
+        log.info(
+            "ECDS has not published %s; probing again in %.0f s (%.0f min left)",
+            init_time.date(),
+            pause,
+            remaining / 60,
+        )
+        sleep(pause)
 
 
 def check_available(

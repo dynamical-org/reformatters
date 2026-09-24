@@ -71,6 +71,8 @@ def test_operational_cron_jobs_are_not_suspended(
 
     assert update_cron_job.name == "ecmwf-ifs-ens-46-day-daily-update"
     assert update_cron_job.suspend is False
+    # Hourly fires through the window in which the gated archive completes.
+    assert update_cron_job.schedule == "45 4,5,6,7,9 * * *"
     assert validation_cron_job.name == "ecmwf-ifs-ens-46-day-daily-validate"
     assert validation_cron_job.suspend is False
     for cron_job in (update_cron_job, validation_cron_job):

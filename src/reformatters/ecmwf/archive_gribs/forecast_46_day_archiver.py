@@ -32,9 +32,22 @@ ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendat
 
 # ECMWF's licence sets a 48 hour minimum delay, but ECDS publishes an initialization
 # about 51.6 hours after its 00 UTC reference time (measured 51.4-52.1 h daily,
-# 2026-06-26 to 2026-08-11). With the archive cron at 06 UTC, the initialization this
-# selects is one published a couple of hours earlier.
-PUBLICATION_DELAY: Final = pd.Timedelta("53h")
+# 2026-06-26 to 2026-08-11, i.e. 03:24-04:06 UTC two days later). The newest
+# initialization a run considers is `now - PUBLICATION_DELAY`, so 51 h makes the
+# two-day-old initialization a candidate from 03:00 UTC; a fire before ECDS has
+# published it makes only the cheap availability probe and skips it. The delay
+# stays above the licence minimum; it selects candidates, it does not gate access.
+PUBLICATION_DELAY: Final = pd.Timedelta("51h")
+# One fire shortly before the observed publication window. The run then probes
+# ECDS every PUBLICATION_POLL_INTERVAL (cheap, unauthenticated, no retrieval job) for
+# up to PUBLICATION_WAIT and retrieves as soon as the initialization is published,
+# instead of a fixed fire that trails publication by up to a day. A transfer takes
+# 67-102 minutes (2026-09-19 to 09-23); the wait plus a transfer fits the pod's
+# 6 hour deadline. concurrency_policy "Forbid" keeps a late-running job from being
+# replaced (and its in-flight ECDS retrievals abandoned) by the next fire.
+ARCHIVE_CRON_SCHEDULE: Final = "15 3 * * *"
+PUBLICATION_WAIT: Final = pd.Timedelta(hours=3)
+PUBLICATION_POLL_INTERVAL: Final = pd.Timedelta(minutes=5)
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
 EARLIEST_INIT_TIME: Final = pd.Timestamp("2023-06-28")
@@ -124,7 +137,8 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 workers_total=1,
                 parallelism=1,
                 name=f"{self.dataset_id}-archive-grib-files",
-                schedule="0 6 * * *",
+                schedule=ARCHIVE_CRON_SCHEDULE,
+                concurrency_policy="Forbid",
                 pod_active_deadline=timedelta(hours=6),
                 image=image_tag,
                 dataset_id=self.dataset_id,
@@ -143,11 +157,16 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
         init_times_back: int = 3,
         checkers: int = 32,
         concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS,
+        wait_for_publication_minutes: int = int(PUBLICATION_WAIT.total_seconds() // 60),
+        publication_poll_minutes: int = int(
+            PUBLICATION_POLL_INTERVAL.total_seconds() // 60
+        ),
     ) -> None:
         """Retrieve `ECDS_VARIABLES` for recent initializations into the archive.
 
         Initializations are archived newest first, so an interrupted run leaves the most
-        recent data archived.
+        recent data archived. The newest initialization is waited for (see
+        `wait_for_publication_minutes`); older ones are skipped if unpublished, as before.
 
         Args:
             dst_root_path: The destination root in the form rclone expects,
@@ -157,6 +176,9 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 recent initializations is how an interrupted transfer resumes.
             checkers: Passed to `rclone --checkers` when listing the destination.
             concurrent_requests: How many ECDS requests to retrieve at once.
+            wait_for_publication_minutes: How long to keep probing ECDS for the newest
+                initialization when it is not published yet; 0 skips it immediately.
+            publication_poll_minutes: Minutes between those probes.
         """
         with self._monitor(
             CronJob,
@@ -165,7 +187,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
         ):
             _set_ecds_api_key_from_secret()
             selections = initialization_selections(ECDS_VARIABLES)
-            for init_time in self.init_times_to_archive(init_times_back):
+            for i, init_time in enumerate(self.init_times_to_archive(init_times_back)):
                 log.info("Archiving %s", init_time)
                 archive_initialization(
                     init_time,
@@ -174,6 +196,12 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                     checkers=checkers,
                     concurrent_requests=concurrent_requests,
                     env_vars=_source_coop_rclone_env_vars(),
+                    wait_for_publication=pd.Timedelta(
+                        minutes=wait_for_publication_minutes if i == 0 else 0
+                    ),
+                    publication_poll_interval=pd.Timedelta(
+                        minutes=publication_poll_minutes
+                    ),
                 )
 
     def init_times_to_archive(

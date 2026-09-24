@@ -509,3 +509,28 @@ def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
 def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
     with pytest.raises(AssertionError):
         _cron_job(schedule).previous_fire_time(pd.Timestamp("2026-08-02T12:00"))
+
+
+def test_cron_concurrency_policy_defaults_to_replace_and_can_forbid() -> None:
+    replace = ReformatCronJob(
+        name="weather-data-update",
+        schedule="0 * * * *",
+        image="img:v1",
+        dataset_id="weather_data",
+        cpu="1",
+        memory="1Gi",
+    )
+    forbid = CronJob(
+        command=["archive-grib-files"],
+        workers_total=1,
+        parallelism=1,
+        name="weather-data-archive-grib-files",
+        schedule="15 3 * * *",
+        image="img:v1",
+        dataset_id="weather_data",
+        cpu="1",
+        memory="1Gi",
+        concurrency_policy="Forbid",
+    )
+    assert replace.as_kubernetes_object()["spec"]["concurrencyPolicy"] == "Replace"
+    assert forbid.as_kubernetes_object()["spec"]["concurrencyPolicy"] == "Forbid"
