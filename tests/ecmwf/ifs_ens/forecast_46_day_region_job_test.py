@@ -9,6 +9,7 @@ import rasterio
 import xarray as xr
 from rasterio.env import Env
 
+import reformatters.ecmwf.ifs_ens.forecast_46_day_region_job as module
 from reformatters.common.iterating import item
 from reformatters.common.types import Group
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
@@ -436,49 +437,175 @@ def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
         assert len(file_names) == 2
 
 
-def _archive_with(init_dates: dict[str, int]) -> set[str]:
-    """URLs present for each init date holding its first N selections (blob + index)."""
-    present: set[str] = set()
+def _archive_with(
+    init_dates: dict[str, int], landed_at: str = "2026-09-23T04:00"
+) -> dict[str, pd.Timestamp]:
+    """Last-Modified for each init date's first N selections (blob and index)."""
+    landed: dict[str, pd.Timestamp] = {}
     for init_date, n in init_dates.items():
         for selection in initialization_selections(ECDS_VARIABLES)[:n]:
             url = f"{ARCHIVE_BASE_URL}/{init_date}/{selection.file_name}"
-            present.update({url, url + ".index"})
-    return present
+            landed[url] = landed[url + ".index"] = pd.Timestamp(landed_at)
+    return landed
+
+
+FIRE = pd.Timestamp("2026-09-23T05:00")
+N_SELECTIONS = len(initialization_selections(ECDS_VARIABLES))
 
 
 def test_an_initialization_is_complete_only_with_every_blob_and_index() -> None:
-    n = len(initialization_selections(ECDS_VARIABLES))
-    complete = _archive_with({"2026-09-21": n})
-    partial = _archive_with({"2026-09-21": n - 1})
+    complete = _archive_with({"2026-09-21": N_SELECTIONS})
+    partial = _archive_with({"2026-09-21": N_SELECTIONS - 1})
+    init = pd.Timestamp("2026-09-21")
     assert archived_initialization_is_complete(
-        pd.Timestamp("2026-09-21"), url_exists=complete.__contains__
+        init, complete_before=FIRE, object_modified_at=complete.get
     )
     assert not archived_initialization_is_complete(
-        pd.Timestamp("2026-09-21"), url_exists=partial.__contains__
+        init, complete_before=FIRE, object_modified_at=partial.get
     )
     # A blob whose index has not landed is not complete either.
-    blob_only = {url for url in complete if not url.endswith(".index")}
+    blob_only = {u: t for u, t in complete.items() if not u.endswith(".index")}
     assert not archived_initialization_is_complete(
-        pd.Timestamp("2026-09-21"), url_exists=blob_only.__contains__
+        init, complete_before=FIRE, object_modified_at=blob_only.get
     )
 
 
-def test_update_extends_only_to_the_newest_complete_initialization() -> None:
-    n = len(initialization_selections(ECDS_VARIABLES))
-    # Store ends 09-20; 09-21 is complete, 09-22 is mid-transfer, 09-23 absent.
-    present = _archive_with({"2026-09-21": n, "2026-09-22": n // 2})
-    newest = newest_complete_archived_initialization(
-        after=pd.Timestamp("2026-09-20"),
-        until=pd.Timestamp("2026-09-23T04:30"),
-        url_exists=present.__contains__,
+def test_an_object_landing_after_the_fire_does_not_count_for_that_fire() -> None:
+    # Every worker of one fire judges against the fire time, so a blob that lands
+    # while workers are probing is seen the same way by all of them: not yet.
+    landed = _archive_with({"2026-09-21": N_SELECTIONS})
+    last_url = next(u for u in landed if not u.endswith(".index"))
+    landed[last_url] = FIRE + pd.Timedelta(minutes=1)
+    assert not archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"), complete_before=FIRE, object_modified_at=landed.get
     )
-    assert newest == pd.Timestamp("2026-09-21")
-    # Nothing complete past the store: the update has nothing to extend.
+    assert archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"),
+        complete_before=FIRE + pd.Timedelta(hours=1),
+        object_modified_at=landed.get,
+    )
+
+
+def test_update_extends_across_the_contiguous_complete_run_only() -> None:
+    # Store ends 09-19; 09-20 and 09-21 complete, 09-22 mid-transfer, 09-23 absent.
+    landed = _archive_with(
+        {
+            "2026-09-20": N_SELECTIONS,
+            "2026-09-21": N_SELECTIONS,
+            "2026-09-22": N_SELECTIONS // 2,
+        }
+    )
+    assert newest_complete_archived_initialization(
+        after=pd.Timestamp("2026-09-19"),
+        complete_before=FIRE,
+        object_modified_at=landed.get,
+    ) == pd.Timestamp("2026-09-21")
+    # Nothing complete right after the store: nothing to extend.
     assert (
         newest_complete_archived_initialization(
             after=pd.Timestamp("2026-09-21"),
-            until=pd.Timestamp("2026-09-23T04:30"),
-            url_exists=present.__contains__,
+            complete_before=FIRE,
+            object_modified_at=landed.get,
         )
         is None
     )
+
+
+def test_update_does_not_skip_over_an_incomplete_initialization() -> None:
+    # 09-20 failed or is still transferring while 09-21 completed: the template must
+    # stop before 09-20 rather than reach 09-21 and write 09-20 partially.
+    landed = _archive_with(
+        {"2026-09-20": N_SELECTIONS // 2, "2026-09-21": N_SELECTIONS}
+    )
+    assert (
+        newest_complete_archived_initialization(
+            after=pd.Timestamp("2026-09-19"),
+            complete_before=FIRE,
+            object_modified_at=landed.get,
+        )
+        is None
+    )
+
+
+def test_operational_update_jobs_end_the_template_after_the_newest_complete_init(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    landed = _archive_with(
+        {"2026-08-11": N_SELECTIONS, "2026-08-12": N_SELECTIONS // 2}
+    )
+    monkeypatch.setattr(module, "_object_modified_at", landed.get)
+    store_max = pd.Timestamp("2026-08-10")
+    monkeypatch.setattr(
+        module.xr,
+        "open_zarr",
+        lambda *a, **k: xr.Dataset(coords={"init_time": [store_max]}),
+    )
+    seen: dict[str, object] = {}
+
+    def get_template(end: pd.Timestamp) -> xr.DataTree:
+        seen["end"] = pd.Timestamp(end)
+        return xr.DataTree()
+
+    def get_jobs(cls: object, **kwargs: object) -> list[object]:
+        seen["filter_start"] = kwargs["filter_start"]
+        return []
+
+    monkeypatch.setattr(EcmwfIfsEns46DayRegionJob, "get_jobs", classmethod(get_jobs))
+    EcmwfIfsEns46DayRegionJob.operational_update_jobs(
+        primary_store=tmp_path / "unused",
+        tmp_store=tmp_path / "tmp",
+        get_template_fn=get_template,
+        append_dim="init_time",
+        all_data_vars=DAILY_CONFIG.data_vars[:1],
+        reformat_job_name="test",
+        job_fire_time=FIRE,
+    )
+    # 08-11 is complete so the exclusive template end is 08-12; the half-transferred
+    # 08-12 is left for a later fire. The run still starts at the store maximum.
+    assert seen["end"] == pd.Timestamp("2026-08-12")
+    assert seen["filter_start"] == store_max
+
+    seen.clear()
+    monkeypatch.setattr(module, "_object_modified_at", lambda url: None)
+    EcmwfIfsEns46DayRegionJob.operational_update_jobs(
+        primary_store=tmp_path / "unused",
+        tmp_store=tmp_path / "tmp",
+        get_template_fn=get_template,
+        append_dim="init_time",
+        all_data_vars=DAILY_CONFIG.data_vars[:1],
+        reformat_job_name="test",
+        job_fire_time=FIRE,
+    )
+    # Nothing complete: the template ends right after the store maximum, which the
+    # run reprocesses (the shard rewrite that refills a partial newest init).
+    assert seen["end"] == pd.Timestamp("2026-08-11")
+
+
+def test_object_modified_at_treats_missing_and_empty_objects_as_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        def __init__(self, status: int, headers: dict[str, str]) -> None:
+            self.status_code = status
+            self.headers = headers
+
+        def raise_for_status(self) -> None:
+            assert self.status_code < 400
+
+    responses = {
+        "https://x/present": Response(
+            200,
+            {"Content-Length": "10", "Last-Modified": "Wed, 23 Sep 2026 04:00:00 GMT"},
+        ),
+        "https://x/empty": Response(
+            200,
+            {"Content-Length": "0", "Last-Modified": "Wed, 23 Sep 2026 04:00:00 GMT"},
+        ),
+        "https://x/missing": Response(404, {}),
+    }
+    monkeypatch.setattr(module.requests, "head", lambda url, **kw: responses[url])
+    assert module._object_modified_at("https://x/present") == pd.Timestamp(
+        "2026-09-23T04:00"
+    )
+    assert module._object_modified_at("https://x/empty") is None
+    assert module._object_modified_at("https://x/missing") is None

@@ -365,3 +365,36 @@ def test_waiting_for_publication_gives_up_at_the_deadline(
     assert sleeps == [300.0, 300.0, 120.0]
     archive_bucket["costing"].assert_not_called()
     archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+
+def test_a_slow_probe_shortens_the_sleep_and_never_probes_past_the_deadline(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock]
+) -> None:
+    clock = {"t": 0.0}
+
+    def slow_unpublished(inputs: dict[str, Any], **_: object) -> dict[str, Any]:
+        clock["t"] += 100.0 / len(SELECTIONS)  # each probe of the init takes 100 s
+        return {"variable": [], "leadtime_hour": [], "level_value": []}
+
+    archive_bucket["constraints"].side_effect = slow_unpublished
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock["t"] += seconds
+
+    with patch(
+        "reformatters.ecmwf.archive_gribs.archive.time.monotonic",
+        side_effect=lambda: clock["t"],
+    ):
+        archive(
+            tmp_path,
+            wait_for_publication=pd.Timedelta(minutes=10),
+            publication_poll_interval=pd.Timedelta(minutes=5),
+            sleep=sleep,
+        )
+
+    # probe 100 s -> sleep 300 -> probe 100 s -> sleep the 100 s left -> probe -> stop
+    assert sleeps == [300.0, 100.0]
+    assert archive_bucket["constraints"].call_count == 3 * len(SELECTIONS)
+    archive_bucket["request"].return_value.retrieve.assert_not_called()

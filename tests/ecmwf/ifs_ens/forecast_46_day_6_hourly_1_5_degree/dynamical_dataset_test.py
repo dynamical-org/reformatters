@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+import reformatters.ecmwf.ifs_ens.forecast_46_day_region_job as region_job_module
 from reformatters.common import validation
 from reformatters.common.types import DatetimeLike
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
@@ -51,7 +52,7 @@ def test_operational_cron_jobs_are_enabled_and_do_not_collide_with_daily(
     assert validate.name == "ecmwf-ifs-ens-46-day-6-hourly-validate"
     # Hourly fires through the window in which the gated archive completes, ten
     # minutes after the daily product so the two never run together.
-    assert update.schedule == "55 4,5,6,7,10 * * *"
+    assert update.schedule == "10 5,6,7,8,10 * * *"
     assert validate.schedule == "20 10 * * *"
     assert update.suspend is False
     assert validate.suspend is False
@@ -158,6 +159,13 @@ def test_backfill_local_and_operational_update(
     # The update reprocesses the latest existing initialization and appends the next.
     monkeypatch.setattr(
         pd.Timestamp, "now", Mock(return_value=pd.Timestamp("2026-08-12T00:00"))
+    )
+    # The archive-completeness gate judges by object Last-Modified against the fire
+    # time; the fixture archive counts as complete well before this fire.
+    monkeypatch.setattr(
+        region_job_module,
+        "_object_modified_at",
+        lambda url: pd.Timestamp("2026-08-11T00:00"),
     )
     dataset.update("test-update")
     assert_point_values(xr.open_zarr(store, chunks=None), [first_init, second_init])

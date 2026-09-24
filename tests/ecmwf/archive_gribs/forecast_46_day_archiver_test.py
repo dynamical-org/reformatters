@@ -27,7 +27,7 @@ def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> N
     assert not cron_job.suspend
     # One fire before ECDS's observed 03:24-04:06 UTC publication window; the run
     # then waits for publication instead of a later fixed fire trailing it.
-    assert cron_job.schedule == "15 3 * * *"
+    assert cron_job.schedule == "15 3,6 * * *"
     assert cron_job.as_kubernetes_object()["spec"]["concurrencyPolicy"] == "Forbid"
     assert PUBLICATION_WAIT + pd.Timedelta(hours=2) <= cron_job.pod_active_deadline
 

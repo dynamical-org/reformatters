@@ -41,11 +41,13 @@ PUBLICATION_DELAY: Final = pd.Timedelta("51h")
 # One fire shortly before the observed publication window. The run then probes
 # ECDS every PUBLICATION_POLL_INTERVAL (cheap, unauthenticated, no retrieval job) for
 # up to PUBLICATION_WAIT and retrieves as soon as the initialization is published,
-# instead of a fixed fire that trails publication by up to a day. A transfer takes
-# 67-102 minutes (2026-09-19 to 09-23); the wait plus a transfer fits the pod's
-# 6 hour deadline. concurrency_policy "Forbid" keeps a late-running job from being
-# replaced (and its in-flight ECDS retrievals abandoned) by the next fire.
-ARCHIVE_CRON_SCHEDULE: Final = "15 3 * * *"
+# instead of a fixed fire that trails publication by up to a day. A transfer took
+# 67-102 minutes on 2026-09-19 to 09-23; the wait plus a transfer fits the pod's
+# 6 hour deadline. The 06:15 fire keeps a second, independent attempt on a day the
+# first run's wait ran out or the job failed, close to the previous single 06:00
+# fire; if the first run is still transferring, concurrency_policy "Forbid" skips
+# it instead of replacing the run and abandoning its in-flight ECDS retrievals.
+ARCHIVE_CRON_SCHEDULE: Final = "15 3,6 * * *"
 PUBLICATION_WAIT: Final = pd.Timedelta(hours=3)
 PUBLICATION_POLL_INTERVAL: Final = pd.Timedelta(minutes=5)
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
