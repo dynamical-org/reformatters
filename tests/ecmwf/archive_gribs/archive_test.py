@@ -430,3 +430,32 @@ def test_publication_observed_by_a_probe_past_the_deadline_is_not_retrieved(
     # first probe 400 s (unpublished) -> sleep 200 s -> second probe finishes at
     # 1000 s, past the 600 s wait: published, but too late to start retrieving.
     archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+
+def test_a_first_probe_finishing_past_the_deadline_does_not_retrieve(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock]
+) -> None:
+    published = archive_bucket["constraints"].side_effect
+    clock = {"t": 0.0}
+
+    def slow_published(inputs: dict[str, Any], **kwargs: object) -> dict[str, Any]:
+        clock["t"] += 700.0 / len(SELECTIONS)  # the one probe takes 700 s
+        result: dict[str, Any] = published(inputs, **kwargs)
+        return result
+
+    archive_bucket["constraints"].side_effect = slow_published
+    with patch(
+        "reformatters.ecmwf.archive_gribs.archive.time.monotonic",
+        side_effect=lambda: clock["t"],
+    ):
+        archive(tmp_path, wait_for_publication=pd.Timedelta(minutes=10))
+    archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+    # Without a wait the same slow probe's answer stands.
+    clock["t"] = 0.0
+    with patch(
+        "reformatters.ecmwf.archive_gribs.archive.time.monotonic",
+        side_effect=lambda: clock["t"],
+    ):
+        archive(tmp_path)
+    assert archive_bucket["request"].return_value.retrieve.call_count == len(SELECTIONS)
