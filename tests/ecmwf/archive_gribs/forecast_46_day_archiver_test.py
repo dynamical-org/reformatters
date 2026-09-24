@@ -7,6 +7,8 @@ from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EARLIEST_INIT_TIME,
     ECDS_VARIABLES,
     MATERIALIZED_PRODUCT_ECDS_VARIABLES,
+    PUBLICATION_DELAY,
+    PUBLICATION_WAIT,
     EcmwfIfsEns46DayGribArchiver,
 )
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
@@ -23,6 +25,16 @@ def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> N
     assert cron_job.command == ["archive-grib-files"]
     assert cron_job.dataset_id == archiver.dataset_id
     assert not cron_job.suspend
+    # One fire before ECDS's observed 03:24-04:06 UTC publication window; the run
+    # then waits for publication instead of a later fixed fire trailing it.
+    assert cron_job.schedule == "15 3,6 * * *"
+    assert cron_job.as_kubernetes_object()["spec"]["concurrencyPolicy"] == "Forbid"
+    assert PUBLICATION_WAIT + pd.Timedelta(hours=2) <= cron_job.pod_active_deadline
+    # The waiting run has exited before the 06:15 fallback fire, so Forbid does
+    # not skip that fire on a day ECDS published late.
+    assert pd.Timedelta(hours=3, minutes=15) + pd.Timedelta(
+        minutes=10
+    ) + PUBLICATION_WAIT < pd.Timedelta(hours=6, minutes=15)
 
 
 def test_cron_command_matches_a_registered_cli_command() -> None:
@@ -44,15 +56,19 @@ def test_cli_archive_grib_files_help_works() -> None:
 @pytest.mark.parametrize(
     ("now", "expected"),
     [
-        # The 06 UTC fire selects the initialization published a couple of hours
-        # earlier, then walks back.
+        # From 03:00 UTC the two-day-old initialization is the candidate ECDS
+        # publishes during the run's wait, then the run walks back.
+        (
+            "2026-08-20T03:15:00Z",
+            ["2026-08-18", "2026-08-17", "2026-08-16"],
+        ),
         (
             "2026-08-20T06:00:00Z",
             ["2026-08-18", "2026-08-17", "2026-08-16"],
         ),
-        # Just before publication, the same run is still on the previous day.
+        # Before 03:00 UTC the same run is still on the previous day.
         (
-            "2026-08-20T04:00:00Z",
+            "2026-08-20T02:45:00Z",
             ["2026-08-17", "2026-08-16", "2026-08-15"],
         ),
     ],
@@ -65,7 +81,7 @@ def test_init_times_to_archive_is_newest_first(now: str, expected: list[str]) ->
 
 
 def test_init_times_to_archive_stops_at_the_earliest_initialization() -> None:
-    now = EARLIEST_INIT_TIME.tz_localize("UTC") + pd.Timedelta("53h")
+    now = EARLIEST_INIT_TIME.tz_localize("UTC") + PUBLICATION_DELAY
     assert EcmwfIfsEns46DayGribArchiver().init_times_to_archive(3, now=now) == [
         EARLIEST_INIT_TIME
     ]

@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pydantic
 from kubernetes import client, config
@@ -237,6 +237,11 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+    # "Replace" kills a still-running job when the next fire arrives, which suits
+    # short updates that must not fall behind. A long transfer that a schedule
+    # fires more often than it can finish needs "Forbid": the overlapping fire is
+    # skipped and the next one after completion picks up whatever is left.
+    concurrency_policy: Literal["Replace", "Forbid"] = "Replace"
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.
@@ -267,7 +272,7 @@ class CronJob(Job):
             "spec": {
                 "schedule": self.schedule,
                 "suspend": self.suspend,
-                "concurrencyPolicy": "Replace",
+                "concurrencyPolicy": self.concurrency_policy,
                 "jobTemplate": {"spec": job_spec},
             },
         }
