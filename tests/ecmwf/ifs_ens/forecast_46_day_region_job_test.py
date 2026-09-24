@@ -8,10 +8,11 @@ import pytest
 import rasterio
 import xarray as xr
 from rasterio.env import Env
+from zarr.storage import MemoryStore
 
 import reformatters.ecmwf.ifs_ens.forecast_46_day_region_job as module
 from reformatters.common.iterating import item
-from reformatters.common.types import Group
+from reformatters.common.types import DatetimeLike, Group
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     ARCHIVE_BASE_URL,
     ECDS_VARIABLES,
@@ -547,7 +548,7 @@ def test_operational_update_jobs_end_the_template_after_the_newest_complete_init
     )
     seen: dict[str, object] = {}
 
-    def get_template(end: pd.Timestamp) -> xr.DataTree:
+    def get_template(end: DatetimeLike) -> xr.DataTree:
         seen["end"] = pd.Timestamp(end)
         return xr.DataTree()
 
@@ -557,7 +558,7 @@ def test_operational_update_jobs_end_the_template_after_the_newest_complete_init
 
     monkeypatch.setattr(EcmwfIfsEns46DayRegionJob, "get_jobs", classmethod(get_jobs))
     EcmwfIfsEns46DayRegionJob.operational_update_jobs(
-        primary_store=tmp_path / "unused",
+        primary_store=MemoryStore(),
         tmp_store=tmp_path / "tmp",
         get_template_fn=get_template,
         append_dim="init_time",
@@ -573,7 +574,7 @@ def test_operational_update_jobs_end_the_template_after_the_newest_complete_init
     seen.clear()
     monkeypatch.setattr(module, "_object_modified_at", lambda url: None)
     EcmwfIfsEns46DayRegionJob.operational_update_jobs(
-        primary_store=tmp_path / "unused",
+        primary_store=MemoryStore(),
         tmp_store=tmp_path / "tmp",
         get_template_fn=get_template,
         append_dim="init_time",
