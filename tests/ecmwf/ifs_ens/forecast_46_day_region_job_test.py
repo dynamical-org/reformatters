@@ -484,6 +484,11 @@ def test_an_object_landing_after_the_fire_does_not_count_for_that_fire() -> None
         complete_before=FIRE + pd.Timedelta(hours=1),
         object_modified_at=landed.get,
     )
+    # Within the fire's own second counts as after it (second-precision header).
+    landed[last_url] = FIRE
+    assert not archived_initialization_is_complete(
+        pd.Timestamp("2026-09-21"), complete_before=FIRE, object_modified_at=landed.get
+    )
 
 
 def test_update_extends_across_the_contiguous_complete_run_only() -> None:

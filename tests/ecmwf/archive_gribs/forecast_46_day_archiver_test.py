@@ -30,6 +30,11 @@ def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> N
     assert cron_job.schedule == "15 3,6 * * *"
     assert cron_job.as_kubernetes_object()["spec"]["concurrencyPolicy"] == "Forbid"
     assert PUBLICATION_WAIT + pd.Timedelta(hours=2) <= cron_job.pod_active_deadline
+    # The waiting run has exited before the 06:15 fallback fire, so Forbid does
+    # not skip that fire on a day ECDS published late.
+    assert pd.Timedelta(hours=3, minutes=15) + pd.Timedelta(
+        minutes=10
+    ) + PUBLICATION_WAIT < pd.Timedelta(hours=6, minutes=15)
 
 
 def test_cron_command_matches_a_registered_cli_command() -> None:

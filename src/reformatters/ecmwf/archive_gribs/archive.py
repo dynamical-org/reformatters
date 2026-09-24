@@ -142,19 +142,24 @@ def _wait_until_published(
 ) -> bool:
     """`check_available`, re-probed until it is true or `wait` has elapsed."""
     deadline = time.monotonic() + wait.total_seconds()
+    first = True
     while True:
         try:
-            if check_available(init_time, selections, api_url=api_url):
-                return True
+            available = check_available(init_time, selections, api_url=api_url)
         except AssertionError:
             if time.monotonic() >= deadline:
                 raise
+            available = False
             log.info("ECDS holds part of %s; waiting for the rest", init_time.date())
         # Measured after the probe, which itself takes time, so neither the sleep
-        # nor a further probe runs past the wait.
+        # nor a further probe nor a retrieval starts past the wait. The first probe
+        # is the no-wait path and its result stands whenever it finished.
         remaining = deadline - time.monotonic()
+        if available and (first or remaining > 0):
+            return True
         if remaining <= 0:
             return False
+        first = False
         pause = min(interval.total_seconds(), remaining)
         log.info(
             "ECDS has not published %s; probing again in %.0f s (%.0f min left)",

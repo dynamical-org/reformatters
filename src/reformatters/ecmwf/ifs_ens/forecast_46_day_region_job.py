@@ -333,7 +333,10 @@ def archived_initialization_is_complete(
         url = f"{ARCHIVE_BASE_URL}/{format_init_time(init_time)}/{selection.file_name}"
         for object_url in (url + INDEX_SUFFIX, url):
             modified_at = object_modified_at(object_url)
-            if modified_at is None or modified_at > complete_before:
+            # Last-Modified has second precision: an object written within the
+            # cutoff's second is treated as after it, so workers of the same fire
+            # probing on either side of that write still agree.
+            if modified_at is None or modified_at >= complete_before:
                 return False
     return True
 

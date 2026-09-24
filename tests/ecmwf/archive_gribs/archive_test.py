@@ -398,3 +398,35 @@ def test_a_slow_probe_shortens_the_sleep_and_never_probes_past_the_deadline(
     assert sleeps == [300.0, 100.0]
     assert archive_bucket["constraints"].call_count == 3 * len(SELECTIONS)
     archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+
+def test_publication_observed_by_a_probe_past_the_deadline_is_not_retrieved(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock]
+) -> None:
+    published = archive_bucket["constraints"].side_effect
+    clock = {"t": 0.0}
+    probes = {"n": 0}
+
+    def slow_then_published(inputs: dict[str, Any], **kwargs: object) -> dict[str, Any]:
+        probes["n"] += 1
+        clock["t"] += 400.0 / len(SELECTIONS)  # a probe of the init takes 400 s
+        if probes["n"] <= len(SELECTIONS):
+            return {"variable": [], "leadtime_hour": [], "level_value": []}
+        result: dict[str, Any] = published(inputs, **kwargs)
+        return result
+
+    archive_bucket["constraints"].side_effect = slow_then_published
+    with patch(
+        "reformatters.ecmwf.archive_gribs.archive.time.monotonic",
+        side_effect=lambda: clock["t"],
+    ):
+        archive(
+            tmp_path,
+            wait_for_publication=pd.Timedelta(minutes=10),
+            publication_poll_interval=pd.Timedelta(minutes=5),
+            sleep=lambda seconds: clock.__setitem__("t", clock["t"] + seconds),
+        )
+
+    # first probe 400 s (unpublished) -> sleep 200 s -> second probe finishes at
+    # 1000 s, past the 600 s wait: published, but too late to start retrieving.
+    archive_bucket["request"].return_value.retrieve.assert_not_called()
