@@ -91,10 +91,9 @@
 
 # def test_operational_kubernetes_resources(dataset: ExampleVirtualDataset) -> None:
 #     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
-#     assert len(cron_jobs) == 2
-#     update_cron_job, validation_cron_job = cron_jobs
+#     assert len(cron_jobs) == 1
+#     (update_cron_job,) = cron_jobs
 #     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-#     assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 
 
 # def test_validators_include_virtual_checks(dataset: ExampleVirtualDataset) -> None:

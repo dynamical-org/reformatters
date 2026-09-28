@@ -28,8 +28,8 @@ from reformatters.common import kubernetes as reformatters_kubernetes
 from reformatters.common import kubernetes_security
 from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
+    CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 from reformatters.common.kubernetes_security import (
     _JOB_FIELDS,
@@ -371,7 +371,10 @@ def cluster(apiserver: ApiServer) -> Cluster:
             secret_names=["source-credentials"],
             service_account_name="default",
         ),
-        ValidationCronJob(
+        CronJob(
+            command=["validate"],
+            workers_total=1,
+            parallelism=1,
             name=VALIDATE,
             image="busybox:2",
             dataset_id="test-dataset",

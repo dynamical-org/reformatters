@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.nasa.imerg.imerg_config_models import NasaImergDataVar
 from reformatters.nasa.imerg.region_job import (
     NasaImergAnalysisMaterializedRegionJob,
@@ -24,7 +24,6 @@ class NasaImergAnalysisMaterializedDataset(
     region_job_class: type[NasaImergAnalysisMaterializedRegionJob]
 
     update_schedule: ClassVar[str]
-    validate_schedule: ClassVar[str]
     max_expected_delay: ClassVar[timedelta]
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
@@ -45,17 +44,7 @@ class NasaImergAnalysisMaterializedDataset(
                 "nasa-earthdata",
             ],
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule=self.validate_schedule,
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="4G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (

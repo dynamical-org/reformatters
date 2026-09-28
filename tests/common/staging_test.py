@@ -5,7 +5,7 @@ import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.staging import (
     _MAX_KUBERNETES_NAME_LENGTH,
     rename_cronjob_for_staging,
@@ -16,8 +16,7 @@ from reformatters.common.staging import (
 
 
 def _make_cronjob(name: str) -> CronJob:
-    cls = ReformatCronJob if name.endswith("-update") else ValidationCronJob
-    return cls(
+    return ReformatCronJob(
         name=name,
         schedule="0 * * * *",
         image="test:latest",
@@ -36,9 +35,9 @@ class TestStagingCronjobName:
         )
 
     def test_dots_replaced_with_dashes(self) -> None:
-        name = staging_cronjob_name("test", "1.2.3", "validate")
+        name = staging_cronjob_name("test", "1.2.3", "update")
         assert "." not in name
-        assert name == "stage-test-v1-2-3-validate"
+        assert name == "stage-test-v1-2-3-update"
 
     def test_trims_dataset_id_to_fit_kubernetes_limit(self) -> None:
         long_id = "a" * 60
@@ -65,11 +64,6 @@ class TestRenameCronjobForStaging:
         cronjob = _make_cronjob("noaa-gfs-forecast-update")
         result = rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
         assert result.name == "stage-noaa-gfs-forecast-v0-3-0-update"
-
-    def test_renames_validate_cronjob(self) -> None:
-        cronjob = _make_cronjob("noaa-gfs-forecast-validate")
-        result = rename_cronjob_for_staging(cronjob, "noaa-gfs-forecast", "0.3.0")
-        assert result.name == "stage-noaa-gfs-forecast-v0-3-0-validate"
 
     def test_preserves_other_fields(self) -> None:
         cronjob = _make_cronjob("test-dataset-update")
@@ -117,12 +111,9 @@ def test_every_dataset_stages_within_the_kubernetes_limit(
 
 
 class TestStagingCronjobNames:
-    def test_returns_update_and_validate(self) -> None:
+    def test_returns_update(self) -> None:
         names = staging_cronjob_names("noaa-gfs-forecast", "0.3.0")
-        assert names == [
-            "stage-noaa-gfs-forecast-v0-3-0-update",
-            "stage-noaa-gfs-forecast-v0-3-0-validate",
-        ]
+        assert names == ["stage-noaa-gfs-forecast-v0-3-0-update"]
 
 
 class TestStagingBranchName:

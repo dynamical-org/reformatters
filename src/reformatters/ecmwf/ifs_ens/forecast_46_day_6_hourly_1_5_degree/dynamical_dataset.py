@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
 )
@@ -43,18 +43,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
             workers_total=workers,
             parallelism=workers,
         )
-        validate = ValidationCronJob(
-            name="ecmwf-ifs-ens-46-day-6-hourly-validate",
-            schedule="20 10 * * *",
-            suspend=False,
-            pod_active_deadline=timedelta(minutes=15),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-        return [update, validate]
+        return [update]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (

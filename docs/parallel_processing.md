@@ -83,6 +83,8 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 
 After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
 
+Operational validation runs in that last worker after cleanup. A caught validation error exits with code 20 and fails the Job without restarting the finalized index. If a multi-worker Job's last pod is killed during validation, its replacement instead waits for the deleted setup files until its pod deadline; it cannot resume validation. Single-worker replacements rerun the update. Inspect pod termination reasons before retrying the full update as a new Job.
+
 ## Failure modes
 
 ### Any worker dies mid-processing

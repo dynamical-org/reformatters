@@ -11,10 +11,10 @@ A naming convention links git branches, kubernetes cronjobs, and dataset version
 | Component | Convention | Example |
 |---|---|---|
 | Git branch | `stage/{dataset_id}/v{version}` | `stage/noaa-gfs-forecast/v0.3.0` |
-| Kubernetes cronjobs | `stage-{dataset_id}-v{version}-{update\|validate}` | `stage-noaa-gfs-forecast-v0-3-0-update` |
+| Kubernetes cronjob | `stage-{dataset_id}-v{version}-update` | `stage-noaa-gfs-forecast-v0-3-0-update` |
 | Store path | `{base_path}/{dataset_id}/v{version}.{ext}` | `s3://…/noaa-gfs-forecast/v0.3.0.zarr` |
 
-Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the full CI suite, builds a Docker image, and deploys cronjobs (e.g. update and validate) for only the specific dataset in the branch name.
+Pushing to a `stage/**` branch triggers a GitHub Actions workflow that runs the full CI suite, builds a Docker image, and deploys the update cronjob for only the specific dataset in the branch name.
 
 ## Setup a staged version
 
@@ -46,7 +46,7 @@ This triggers the `deploy-staging.yml` workflow which:
 3. Validates the dataset ID exists, the version matches the template, and the version differs from main
 4. Deploys staging cronjobs via `kubectl apply`
 
-The staging cronjobs then run on their defined schedule, writing to the new version's store.
+The staging update cronjob then runs on its defined schedule, writing to the new version's store.
 
 ### 4. Iterate
 
@@ -87,7 +87,7 @@ uv run main cleanup-staging noaa-gfs-forecast 0.3.0 --force
 ```
 
 This deletes:
-- Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
+- Kubernetes cronjob (`stage-noaa-gfs-forecast-v0-3-0-update`)
 - The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
 
 The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
