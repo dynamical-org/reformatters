@@ -93,8 +93,8 @@ def _write_blob(inputs: dict[str, Any], target: Path, **_: object) -> Path:
     return target
 
 
-def archive(tmp_path: Path, selections: Sequence[EcdsSelection] = SELECTIONS) -> None:
-    archive_initialization(
+def archive(tmp_path: Path, selections: Sequence[EcdsSelection] = SELECTIONS) -> bool:
+    return archive_initialization(
         INIT_TIME, selections, DST_ROOT, work_dir=tmp_path, poll_seconds=0
     )
 
@@ -106,7 +106,7 @@ def test_init_time_names_the_archived_directory() -> None:
 def test_every_selection_is_retrieved_validated_then_uploaded(
     tmp_path: Path, archive_bucket: dict[str, MagicMock]
 ) -> None:
-    archive(tmp_path)
+    assert archive(tmp_path)
 
     assert archive_bucket["request"].return_value.retrieve.call_count == len(SELECTIONS)
     assert archive_bucket["check_and_index_archived_blob"].call_count == len(SELECTIONS)
@@ -148,7 +148,7 @@ def test_a_fully_archived_initialization_makes_no_ecds_calls(
         PurePosixPath(selection.file_name) for selection in SELECTIONS
     ]
 
-    archive(tmp_path)
+    assert archive(tmp_path)
 
     archive_bucket["constraints"].assert_not_called()
     archive_bucket["costing"].assert_not_called()
@@ -164,7 +164,7 @@ def test_an_unpublished_initialization_is_skipped(
         "level_value": [],
     }
 
-    archive(tmp_path)
+    assert not archive(tmp_path)
 
     archive_bucket["costing"].assert_not_called()
     archive_bucket["request"].return_value.retrieve.assert_not_called()

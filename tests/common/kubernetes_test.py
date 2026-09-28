@@ -7,15 +7,19 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
 import pytest
+from kubernetes import client
+from kubernetes.client.exceptions import ApiException
 from pydantic import ValidationError
 
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
+    SERVICE_ACCOUNT,
     CronJob,
     Job,
     ReformatCronJob,
     ValidationCronJob,
     _load_secret_from_kubernetes_api,
+    create_job_from_cronjob,
     load_secret,
 )
 
@@ -99,6 +103,12 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 "name": "POD_NAME",
                                 "valueFrom": {
                                     "fieldRef": {"fieldPath": "metadata.name"}
+                                },
+                            },
+                            {
+                                "name": "POD_NAMESPACE",
+                                "valueFrom": {
+                                    "fieldRef": {"fieldPath": "metadata.namespace"}
                                 },
                             },
                             {
@@ -509,3 +519,156 @@ def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
 def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
     with pytest.raises(AssertionError):
         _cron_job(schedule).previous_fire_time(pd.Timestamp("2026-08-02T12:00"))
+
+
+def test_job_service_account_is_optional() -> None:
+    job = Job(
+        command=["update"],
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+        workers_total=1,
+        parallelism=1,
+    )
+    pod_spec = job.as_kubernetes_object()["spec"]["template"]["spec"]
+    assert "serviceAccountName" not in pod_spec
+
+    opted_in = job.model_copy(update={"service_account_name": SERVICE_ACCOUNT})
+    pod_spec = opted_in.as_kubernetes_object()["spec"]["template"]["spec"]
+    assert pod_spec["serviceAccountName"] == SERVICE_ACCOUNT
+
+    cron = _cron_job("0 * * * *")
+    cron_spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
+    assert "serviceAccountName" not in cron_spec["template"]["spec"]
+    assert len(cron_spec["podFailurePolicy"]["rules"]) == 2
+
+
+def _deployed_cronjob(*, suspend: bool = False) -> Mock:
+    cronjob = Mock()
+    cronjob.metadata.uid = "12345678-1234-1234-1234-123456789abc"
+    cronjob.spec.suspend = suspend
+    cronjob.spec.job_template.metadata = client.V1ObjectMeta(
+        labels={"template-label": "value"}, annotations={"template-note": "value"}
+    )
+    cronjob.spec.job_template.spec = client.V1JobSpec(
+        template=client.V1PodTemplateSpec(
+            spec=client.V1PodSpec(containers=[client.V1Container(name="worker")])
+        )
+    )
+    return cronjob
+
+
+def test_create_job_clones_live_template_without_owner_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cronjob = _deployed_cronjob()
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = cronjob
+    load_config = Mock()
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", load_config
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+
+    assert create_job_from_cronjob("weather-update", "weather-retry-r1")
+    load_config.assert_called_once_with()
+    batch.read_namespaced_cron_job.assert_called_once_with("weather-update", "weather")
+    batch.create_namespaced_job.assert_called_once()
+    namespace, job = batch.create_namespaced_job.call_args.args
+    assert namespace == "weather"
+    assert job.metadata.name == "weather-retry-r1"
+    assert job.metadata.owner_references is None
+    assert job.metadata.labels == {
+        "template-label": "value",
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": cronjob.metadata.uid,
+    }
+    assert job.metadata.annotations == {
+        "template-note": "value",
+        "cronjob.kubernetes.io/instantiate": "manual",
+    }
+    assert job.spec == cronjob.spec.job_template.spec
+    assert job.spec is not cronjob.spec.job_template.spec
+
+
+def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = _deployed_cronjob(suspend=True)
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+
+    assert not create_job_from_cronjob("weather-update", "weather-retry-r1")
+    batch.create_namespaced_job.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "job_name", ["", "A-job", "job_name", "-job", "job-", "a" * 64]
+)
+def test_create_job_rejects_invalid_name(job_name: str) -> None:
+    with pytest.raises(AssertionError, match="Invalid Kubernetes Job name"):
+        create_job_from_cronjob("weather-update", job_name)
+
+
+@pytest.mark.parametrize("matching", [True, False])
+def test_create_job_409_requires_matching_identity(
+    monkeypatch: pytest.MonkeyPatch, matching: bool
+) -> None:
+    cronjob = _deployed_cronjob()
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = cronjob
+    batch.create_namespaced_job.side_effect = ApiException(status=409)
+    batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="weather-retry-r1",
+            labels={
+                "dynamical.org/cronjob-name": "weather-update",
+                "dynamical.org/cronjob-uid": (
+                    cronjob.metadata.uid if matching else "different-uid"
+                ),
+            },
+        )
+    )
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+
+    if matching:
+        assert create_job_from_cronjob("weather-update", "weather-retry-r1")
+    else:
+        with pytest.raises(ApiException) as error:
+            create_job_from_cronjob("weather-update", "weather-retry-r1")
+        assert error.value.status == 409
+    batch.read_namespaced_job.assert_called_once_with("weather-retry-r1", "weather")
+
+
+def test_create_job_propagates_non_conflict_api_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = _deployed_cronjob()
+    batch.create_namespaced_job.side_effect = ApiException(status=403)
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+
+    with pytest.raises(ApiException) as error:
+        create_job_from_cronjob("weather-update", "weather-retry-r1")
+    assert error.value.status == 403
+    batch.read_namespaced_job.assert_not_called()

@@ -1,15 +1,33 @@
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
+
 import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.config import Config, Env
+from reformatters.common.kubernetes import (
+    SERVICE_ACCOUNT,
+    CronJob,
+    ReformatCronJob,
+    ValidationCronJob,
+)
+from reformatters.ecmwf.archive_gribs import forecast_46_day_archiver as archiver_module
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
+    ARCHIVE_RCLONE_ROOT,
     EARLIEST_INIT_TIME,
     ECDS_VARIABLES,
     MATERIALIZED_PRODUCT_ECDS_VARIABLES,
     EcmwfIfsEns46DayGribArchiver,
 )
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast46Day15DegreeDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
+)
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 runner = CliRunner()
 
@@ -23,6 +41,7 @@ def test_operational_kubernetes_resources_is_one_unsuspended_archive_cron() -> N
     assert cron_job.command == ["archive-grib-files"]
     assert cron_job.dataset_id == archiver.dataset_id
     assert not cron_job.suspend
+    assert cron_job.service_account_name == SERVICE_ACCOUNT
 
 
 def test_cron_command_matches_a_registered_cli_command() -> None:
@@ -127,3 +146,115 @@ def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
         not isinstance(c, ReformatCronJob | ValidationCronJob) for c in cron_jobs
     )
     assert all(isinstance(c, CronJob) for c in cron_jobs)
+
+
+@pytest.mark.parametrize(
+    ("prod", "in_cluster", "destination", "readiness", "expected_triggers"),
+    [
+        (True, True, ARCHIVE_RCLONE_ROOT, [True, True], 2),
+        (True, True, ARCHIVE_RCLONE_ROOT, [True, False], 2),
+        (True, True, ARCHIVE_RCLONE_ROOT, [False, True], 0),
+        (True, True, ARCHIVE_RCLONE_ROOT, [], 0),
+        (False, True, ARCHIVE_RCLONE_ROOT, [True], 0),
+        (True, False, ARCHIVE_RCLONE_ROOT, [True], 0),
+        (True, True, ":s3:another-bucket/", [True], 0),
+    ],
+)
+def test_archive_triggers_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+    prod: bool,
+    in_cluster: bool,
+    destination: str,
+    readiness: list[bool],
+    expected_triggers: int,
+) -> None:
+    monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
+    if in_cluster:
+        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test")
+    else:
+        monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    init_times = list(pd.date_range("2026-08-10", periods=len(readiness)))[::-1]
+    with (
+        patch.object(
+            EcmwfIfsEns46DayGribArchiver, "_monitor", return_value=nullcontext()
+        ),
+        patch.object(
+            EcmwfIfsEns46DayGribArchiver,
+            "init_times_to_archive",
+            return_value=init_times,
+        ),
+        patch.object(archiver_module.kubernetes, "load_secret", return_value=None),
+        patch.object(
+            archiver_module, "archive_initialization", side_effect=readiness * 2
+        ) as archive,
+        patch.object(archiver_module.kubernetes, "create_job_from_cronjob") as submit,
+    ):
+        parent = Mock()
+        parent.attach_mock(archive, "archive")
+        parent.attach_mock(submit, "submit")
+        archiver = EcmwfIfsEns46DayGribArchiver()
+        archiver.archive_grib_files("archive-job-123", dst_root_path=destination)
+        assert [call[0] for call in parent.mock_calls] == ["archive"] * len(
+            readiness
+        ) + ["submit"] * expected_triggers
+        first_calls = list(submit.call_args_list)
+        assert submit.call_count == expected_triggers
+        if expected_triggers:
+            assert {call.args[0] for call in first_calls} == {
+                "ecmwf-ifs-ens-46-day-daily-update",
+                "ecmwf-ifs-ens-46-day-6-hourly-update",
+            }
+            for call in first_calls:
+                assert len(call.args[1]) <= 63
+                assert not call.kwargs
+        submit.reset_mock()
+        archiver.archive_grib_files("archive-job-123", dst_root_path=destination)
+        assert submit.call_args_list == first_calls
+
+
+def test_trigger_targets_keep_their_cron_backstops() -> None:
+    for dataset, name, schedule in (
+        (
+            EcmwfIfsEnsForecast46Day15DegreeDataset(
+                primary_storage_config=NOOP_STORAGE_CONFIG
+            ),
+            "ecmwf-ifs-ens-46-day-daily-update",
+            "0 9 * * *",
+        ),
+        (
+            EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
+                primary_storage_config=NOOP_STORAGE_CONFIG
+            ),
+            "ecmwf-ifs-ens-46-day-6-hourly-update",
+            "0 10 * * *",
+        ),
+    ):
+        crons = dataset.operational_kubernetes_resources("image")
+        assert len(crons) == 2
+        (cron,) = [c for c in crons if isinstance(c, ReformatCronJob)]
+        assert cron.name == name
+        assert cron.schedule == schedule
+        assert not cron.suspend
+        assert cron.service_account_name is None
+
+
+def test_archive_failure_does_not_submit_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test")
+    with (
+        patch.object(
+            EcmwfIfsEns46DayGribArchiver, "_monitor", return_value=nullcontext()
+        ),
+        patch.object(archiver_module.kubernetes, "load_secret", return_value=None),
+        patch.object(
+            archiver_module,
+            "archive_initialization",
+            side_effect=[True, RuntimeError("archive failed")],
+        ),
+        patch.object(archiver_module.kubernetes, "create_job_from_cronjob") as submit,
+    ):
+        with pytest.raises(RuntimeError, match="archive failed"):
+            EcmwfIfsEns46DayGribArchiver().archive_grib_files("archive-job-123")
+        submit.assert_not_called()
