@@ -5,9 +5,9 @@ labels: ""
 assignees: ""
 ---
 
-Anyone who read the affected data before the first corrected snapshot has to recompute from it. Fill in every field. "All", "unknown" and "pending" are valid answers; blanks are not. The fix PR can merge before the backfill runs, so this issue stays open until the published-correction section is complete.
+Anyone whose reads overlap the affected range while the wrong values were served must apply the remediation named below to the raw values and to anything derived from them. "Pending" and "unknown" are fine while this issue is open; blanks are not. The fix PR can merge before the backfill runs. Close this issue only when the whole affected range is corrected, validated and on `main` in every store, and each downstream item is done or marked not applicable with a reason.
 
-Owner (updates this issue after the backfill):
+Owner (updates this issue through the backfill and the notices):
 
 ## Affected data
 
@@ -16,9 +16,9 @@ Owner (updates this issue after the backfill):
 - `init_time` (or `time`) range, half-open, UTC: `[YYYY-MM-DDTHH:MM:SS, YYYY-MM-DDTHH:MM:SS)`
 - Other dimensions, if only part is affected (`ensemble_member`, `lead_time`, spatial), or "all":
 - What the published values meant, what they should have meant, and by how much (e.g. "1000x too small: the source encodes `tp` in metres before this date"):
-- Whether a consumer can rescale, or must recompute anything derived from these values:
+- Remediation: can consumers rescale raw values, and must anything derived from them be recomputed?
 - How it was established on real data:
-- When the wrong values were being served (first and last publication, or snapshot range, if known):
+- When the wrong values were being served (the `main` heads or times that first and last published them, if known):
 
 ## Fix
 
@@ -27,13 +27,15 @@ Owner (updates this issue after the backfill):
 
 ## Published correction
 
+One entry per store and per corrected range, if the backfill was split:
+
 - [ ] State: pending / partial / complete (if partial, the range actually corrected):
 - [ ] Backfill operation and filters (workflow run or job name):
-- [ ] Completed (UTC):
-- [ ] Last snapshot with the wrong values, and first corrected snapshot, on `main` (Icechunk snapshot IDs and timestamps):
+- [ ] Last `main` head with the wrong values, and first `main` head with the correction (Icechunk snapshot IDs):
+- [ ] When that head became `main` (UTC; a bounded interval with how it was observed, if not exact). This is not the snapshot's creation time:
 - [ ] Validated against real data (how):
 
 ## Downstream
 
-- [ ] Internal consumers told what to recompute (e.g. a dynamical-org/meta issue naming the variables and range above for scorecard):
+- [ ] Internal consumers told what to remediate (e.g. a dynamical-org/meta issue naming the variables, range and `main` transition above for scorecard):
 - [ ] User-facing note (dataset page or dynamical.org updates), if readers could have used the wrong values:
