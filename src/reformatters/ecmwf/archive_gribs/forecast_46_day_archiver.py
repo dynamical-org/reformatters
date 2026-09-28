@@ -15,6 +15,8 @@ import pandas as pd
 import typer
 
 from reformatters.common import kubernetes
+from reformatters.common.config import Config
+from reformatters.common.iterating import digest
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
@@ -132,6 +134,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 memory="8G",
                 ephemeral_storage="60G",
                 secret_names=[SOURCE_COOP_SECRET_NAME, ECDS_API_KEY_SECRET_NAME],
+                service_account_name=kubernetes.SERVICE_ACCOUNT,
             )
         ]
 
@@ -165,9 +168,12 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
         ):
             _set_ecds_api_key_from_secret()
             selections = initialization_selections(ECDS_VARIABLES)
-            for init_time in self.init_times_to_archive(init_times_back):
+            newest_ready = False
+            for index, init_time in enumerate(
+                self.init_times_to_archive(init_times_back)
+            ):
                 log.info("Archiving %s", init_time)
-                archive_initialization(
+                ready = archive_initialization(
                     init_time,
                     selections,
                     dst_root_path,
@@ -175,6 +181,21 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                     concurrent_requests=concurrent_requests,
                     env_vars=_source_coop_rclone_env_vars(),
                 )
+                if index == 0:
+                    newest_ready = ready
+
+            if (
+                newest_ready
+                and Config.is_prod
+                and os.getenv("KUBERNETES_SERVICE_HOST")
+                and dst_root_path == ARCHIVE_RCLONE_ROOT
+            ):
+                for frequency in MATERIALIZED_PRODUCT_ECDS_VARIABLES:
+                    cron_name = f"ecmwf-ifs-ens-46-day-{frequency}-update"
+                    kubernetes.create_job_from_cronjob(
+                        cron_name,
+                        f"{cron_name}-t{digest([reformat_job_name], length=12)}",
+                    )
 
     def init_times_to_archive(
         self, init_times_back: int, now: pd.Timestamp | None = None

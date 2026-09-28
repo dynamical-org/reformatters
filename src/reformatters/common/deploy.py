@@ -51,8 +51,43 @@ def deploy_operational_resources(
         "apiVersion": "v1",
         "kind": "List",
         "items": [
-            reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
-        ],
+            {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "Role",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+                "rules": [
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["cronjobs"],
+                        "verbs": ["get"],
+                    },
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["jobs"],
+                        "verbs": ["create", "get"],
+                    },
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "RoleBinding",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "Role",
+                    "name": kubernetes.SERVICE_ACCOUNT,
+                },
+                "subjects": [
+                    {"kind": "ServiceAccount", "name": kubernetes.SERVICE_ACCOUNT}
+                ],
+            },
+        ]
+        + [reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
     }
 
     subprocess.run(

@@ -14,7 +14,12 @@ from typer.testing import CliRunner
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import deploy, monitoring
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import (
+    SERVICE_ACCOUNT,
+    CronJob,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 
 
 class ExampleDatasetInDevelopment:
@@ -84,17 +89,44 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resources["kind"] == "List"
 
     # Dataset 1
-    assert resources["items"][0]["kind"] == "CronJob"
-    assert resources["items"][0]["metadata"]["name"] == "example-dataset-1-update"
-    container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
+    assert resources["items"][3]["kind"] == "CronJob"
+    assert resources["items"][3]["metadata"]["name"] == "example-dataset-1-update"
+    assert resources["items"][4]["metadata"]["name"] == "example-dataset-1-validate"
+    container_spec = resources["items"][3]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
     assert container_spec["resources"] == {"requests": {"cpu": "14", "memory": "30G"}}
     assert container_spec["image"] == "test-image-tag"
 
     # Dataset 2
-    assert resources["items"][2]["kind"] == "CronJob"
-    assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
+    assert resources["items"][5]["kind"] == "CronJob"
+    assert resources["items"][5]["metadata"]["name"] == "example-dataset-2-update"
+    assert resources["items"][6]["metadata"]["name"] == "example-dataset-2-validate"
+
+    rbac = {
+        item["kind"]: item
+        for item in resources["items"]
+        if item["kind"] in {"ServiceAccount", "Role", "RoleBinding"}
+    }
+    assert set(rbac) == {"ServiceAccount", "Role", "RoleBinding"}
+    assert [item["kind"] for item in resources["items"][:3]] == [
+        "ServiceAccount",
+        "Role",
+        "RoleBinding",
+    ]
+    assert all(item["metadata"]["name"] == SERVICE_ACCOUNT for item in rbac.values())
+    assert rbac["Role"]["rules"] == [
+        {"apiGroups": ["batch"], "resources": ["cronjobs"], "verbs": ["get"]},
+        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create", "get"]},
+    ]
+    assert rbac["RoleBinding"]["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": SERVICE_ACCOUNT,
+    }
+    assert rbac["RoleBinding"]["subjects"] == [
+        {"kind": "ServiceAccount", "name": SERVICE_ACCOUNT}
+    ]
 
 
 def test_deploy_operational_resources_dataset_id_filter(
@@ -115,8 +147,15 @@ def test_deploy_operational_resources_dataset_id_filter(
     )
 
     resources = json.loads(mock_run.call_args.kwargs["input"])
-    names = [item["metadata"]["name"] for item in resources["items"]]
+    names = [
+        item["metadata"]["name"]
+        for item in resources["items"]
+        if item["kind"] == "CronJob"
+    ]
     assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
+    role = next(item for item in resources["items"] if item["kind"] == "Role")
+    assert role["rules"][0]["resources"] == ["cronjobs"]
+    assert "resourceNames" not in role["rules"][0]
 
 
 def test_registered_dataset_schedules_are_parseable() -> None:
