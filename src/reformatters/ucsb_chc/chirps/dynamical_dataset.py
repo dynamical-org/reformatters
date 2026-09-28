@@ -28,7 +28,7 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
-            memory="50G",
+            memory="45G",
             shared_memory="25.5G",
             ephemeral_storage="20G",
             secret_names=self.store_factory.k8s_secret_names(),
@@ -40,7 +40,7 @@ class UcsbChcChirpsAnalysisMaterializedDataset(
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.5",
-            memory="7G",
+            memory="2G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
         return [operational_update_cron_job, validation_cron_job]
