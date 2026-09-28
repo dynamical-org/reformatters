@@ -104,7 +104,19 @@ def garbage_collect(
     *,
     auth: AuthMode,
     k8s_secret: str = K8S_SECRET_NAME,
+    max_snapshots_in_memory: int | None = None,
+    max_compressed_manifest_mem_bytes: int | None = None,
+    max_concurrent_manifest_fetches: int | None = None,
 ) -> None:
+    gc_limits = {
+        name: value
+        for name, value in {
+            "max_snapshots_in_memory": max_snapshots_in_memory,
+            "max_compressed_manifest_mem_bytes": max_compressed_manifest_mem_bytes,
+            "max_concurrent_manifest_fetches": max_concurrent_manifest_fetches,
+        }.items()
+        if value is not None
+    }
     for uri in repos:
         print(f"\n{'=' * 60}")
         print(f"Garbage collecting: {uri}")
@@ -113,7 +125,7 @@ def garbage_collect(
 
         repo = open_repo(uri, auth, k8s_secret)
         dry_run = not force
-        summary = repo.garbage_collect(older_than, dry_run=dry_run)
+        summary = repo.garbage_collect(older_than, dry_run=dry_run, **gc_limits)
         prefix = "Would delete" if dry_run else "Deleted"
         print(
             f"{prefix}: {summary.chunks_deleted} chunks, {summary.manifests_deleted} manifests, "
@@ -218,6 +230,9 @@ def main() -> None:
     gc_parser.add_argument(
         "--force", action="store_true", help="Actually delete (default is dry run)"
     )
+    gc_parser.add_argument("--max-snapshots-in-memory", type=int)
+    gc_parser.add_argument("--max-compressed-manifest-mem-bytes", type=int)
+    gc_parser.add_argument("--max-concurrent-manifest-fetches", type=int)
 
     subparsers.add_parser("count", help="Count snapshots on the main branch")
 
@@ -246,12 +261,23 @@ def main() -> None:
                 k8s_secret=args.k8s_secret,
             )
         case "garbage-collect":
+            assert all(
+                value is None or value > 0
+                for value in (
+                    args.max_snapshots_in_memory,
+                    args.max_compressed_manifest_mem_bytes,
+                    args.max_concurrent_manifest_fetches,
+                )
+            ), "GC limits must be positive"
             garbage_collect(
                 repos,
                 args.older_than,
                 args.force,
                 auth=auth,
                 k8s_secret=args.k8s_secret,
+                max_snapshots_in_memory=args.max_snapshots_in_memory,
+                max_compressed_manifest_mem_bytes=args.max_compressed_manifest_mem_bytes,
+                max_concurrent_manifest_fetches=args.max_concurrent_manifest_fetches,
             )
         case "count":
             count_snapshots(repos, auth=auth, k8s_secret=args.k8s_secret)
