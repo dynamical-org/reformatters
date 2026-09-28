@@ -5,7 +5,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -69,25 +69,13 @@ class EcmwfAifsSingleForecastVirtualDataset(
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # After each update (init+5h20m) + its 1h deadline.
-            schedule="20 0,6,12,18 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Files publish by ~init+6h10m (p99); validation fires at init+6h20m,
-            # just after the update deadline.
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=20)),
+            # The update polls from init+5h20m while files publish through ~init+6h10m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=20)),
             # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

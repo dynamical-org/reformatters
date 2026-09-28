@@ -6,22 +6,25 @@ import random
 import re
 import string
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any
 
+import pandas as pd
 import pydantic
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 
 from reformatters.common.config import Config
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.types import Timestamp
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
 SERVICE_ACCOUNT = "reformat-update-trigger"
+VALIDATION_FAILURE_EXIT_CODE = 20
 _CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
 _CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
 log = get_logger(__name__)
@@ -273,6 +276,9 @@ class CronJob(Job):
             fire_time -= timedelta(hours=1)
         return fire_time
 
+    def next_fire_time(self, now: Timestamp) -> Timestamp:
+        return _next_fire_time(self.schedule, now)
+
     def as_kubernetes_object(self) -> dict[str, Any]:
         job_spec = super().as_kubernetes_object()["spec"]
         job_spec["template"]["spec"]["containers"][0]["env"].append(
@@ -300,13 +306,21 @@ class ReformatCronJob(CronJob):
     # Operational updates expect a single worker
     workers_total: int = 1
     parallelism: int = 1
+    service_account_name: str | None = SERVICE_ACCOUNT
 
-
-class ValidationCronJob(CronJob):
-    name: Annotated[CronJobName, pydantic.Field(pattern=r".+-validate$")]
-    command: Sequence[str] = ["validate"]
-    workers_total: int = 1
-    parallelism: int = 1
+    def as_kubernetes_object(self) -> dict[str, Any]:
+        cronjob = super().as_kubernetes_object()
+        cronjob["spec"]["jobTemplate"]["spec"]["podFailurePolicy"]["rules"].append(
+            {
+                "action": "FailJob",
+                "onExitCodes": {
+                    "containerName": "worker",
+                    "operator": "In",
+                    "values": [VALIDATION_FAILURE_EXIT_CODE],
+                },
+            }
+        )
+        return cronjob
 
 
 def load_secret(secret_name: str) -> dict[str, Any]:
@@ -362,7 +376,12 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     return image
 
 
-def create_job_from_cronjob(cronjob_name: str, job_name: str) -> bool:
+def create_job_from_cronjob(
+    cronjob_name: str,
+    job_name: str,
+    *,
+    skip_if_next_run_within_deadline: bool = False,
+) -> bool:
     assert len(job_name) <= 63, f"Invalid Kubernetes Job name {job_name!r}"
     assert re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", job_name), (
         f"Invalid Kubernetes Job name {job_name!r}"
@@ -376,6 +395,18 @@ def create_job_from_cronjob(cronjob_name: str, job_name: str) -> bool:
         return False
 
     template = cronjob.spec.job_template
+    if skip_if_next_run_within_deadline:
+        deadline = template.spec.template.spec.active_deadline_seconds
+        assert isinstance(deadline, int), "CronJob pod has no active deadline"
+        now = pd.Timestamp(datetime.now(UTC))
+        next_fire = _next_fire_time(cronjob.spec.schedule, now)
+        if next_fire <= now + timedelta(seconds=deadline):
+            log.info(
+                f"Skipping {job_name}: CronJob {cronjob_name} next fires at {next_fire} "
+                f"within its {deadline}s pod deadline"
+            )
+            return False
+
     cronjob_uid = cronjob.metadata.uid
     assert isinstance(cronjob_uid, str), "CronJob has no UID"
     labels = dict(template.metadata.labels or {}) if template.metadata else {}
@@ -409,6 +440,20 @@ def create_job_from_cronjob(cronjob_name: str, job_name: str) -> bool:
     return True
 
 
+def retry_job_name(job_name: str, max_retries: int = 1) -> str | None:
+    match = re.search(r"-r([1-9]\d*)$", job_name)
+    retry = int(match[1]) if match else 0
+    if retry >= max_retries:
+        return None
+    parent = job_name[: match.start()] if match else job_name
+    suffix = f"-r{retry + 1}"
+    if len(parent) + len(suffix) <= 63:
+        return parent + suffix
+    parent_digest = digest([parent], length=8)
+    prefix = parent[: 63 - len(suffix) - len(parent_digest) - 1].rstrip("-")
+    return f"{prefix}-{parent_digest}{suffix}"
+
+
 # Operational schedules use fixed minutes, selected hours, and either every day or
 # every Nth day of the month.
 _SCHEDULE_PATTERN = re.compile(
@@ -434,6 +479,16 @@ def _parse_schedule(schedule: str) -> tuple[int, frozenset[int], frozenset[int]]
     assert max(hours) <= 23, f"Cron schedule {schedule!r} has an hour above 23"
     assert days_of_month, f"Cron schedule {schedule!r} selects no days of month"
     return minute, hours, days_of_month
+
+
+def _next_fire_time(schedule: str, now: Timestamp) -> Timestamp:
+    minute, hours, days_of_month = _parse_schedule(schedule)
+    fire_time = now.normalize() + timedelta(hours=now.hour, minutes=minute)
+    if fire_time <= now:
+        fire_time += timedelta(hours=1)
+    while fire_time.hour not in hours or fire_time.day not in days_of_month:
+        fire_time += timedelta(hours=1)
+    return fire_time
 
 
 def _parse_schedule_field(field: str, start: int, end: int) -> frozenset[int]:

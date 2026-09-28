@@ -11,11 +11,13 @@ import icechunk.store
 import numpy as np
 import pandas as pd
 import pytest
+import typer
 import xarray as xr
 from pydantic import Field, ValidationError, computed_field
 
 from reformatters.common import (
     dynamical_dataset,
+    kubernetes,
     operational,
     storage,
     template_utils,
@@ -29,7 +31,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import (
@@ -57,33 +59,17 @@ NOOP_STORAGE_CONFIG = StorageConfig(
 )
 
 
-def stalled_cycles_before_alerting(
-    max_delay: timedelta,
-    fire: pd.Timestamp,
-    newest_normal: pd.Timestamp,
-    frequency: pd.Timedelta,
-    monkeypatch: pytest.MonkeyPatch,
-) -> int:
-    """The number of consecutive un-ingested cycles at which CheckCurrentData first
-    fails, running the real check rather than re-deriving its due-position arithmetic.
-    One more than the number it tolerates."""
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
+# Partial and historical e2e fixtures commit their data before validation rejects them.
+def assert_update_fails_validation(
+    dataset: DynamicalDataset, job_name: str, expected_check: str
+) -> None:
+    with pytest.raises(typer.Exit) as exc_info:
+        dataset.update(job_name)
 
-    for stalled in range(1, 6):
-        init_times = pd.date_range(
-            newest_normal - 40 * frequency,
-            newest_normal - stalled * frequency,
-            freq=frequency,
-        )
-        context = validation.ValidationContext(
-            store=Mock(),
-            ds=xr.Dataset(coords={"init_time": init_times}),
-            append_dim="init_time",
-            append_dim_frequency=frequency,
-        )
-        if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
-            return stalled
-    raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, validation.OperationalValidationError)
+    assert expected_check in str(cause)
 
 
 def assert_configured_validators(dataset: DynamicalDataset) -> None:
@@ -91,7 +77,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     validate_dataset adds) against the store its e2e test built.
 
     Every validator must return a ValidationResult rather than raising — this catches
-    validator config bugs that would silently crash the validation cronjob (a variable
+    validator config bugs that would crash operational validation (a variable
     name not in the template, or a check that errors on the dataset's real dimension
     structure). CheckCurrentData must additionally pass: we patch pd.Timestamp.now()
     to the store's latest append-dim coordinate so "now" lines up with the freshest
@@ -221,18 +207,6 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
                 ephemeral_storage="1G",
                 secret_names=self.store_factory.k8s_secret_names(),
             ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule="0 0 * * *",
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
         ]
 
 
@@ -255,6 +229,145 @@ def test_dynamical_dataset_init() -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
+
+@pytest.mark.parametrize("worker_index", [0, 1, 2])
+def test_update_validates_only_after_final_worker_finishes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, worker_index: int
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", lambda self: tmp_path)
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        Mock(return_value=([], xr.DataTree())),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_process_region_jobs",
+        Mock(side_effect=lambda **kwargs: events.append("processed")),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "validate_dataset",
+        Mock(side_effect=lambda name: events.append("validated")),
+    )
+
+    ExampleDataset().update("update-123", worker_index=worker_index, workers_total=3)
+
+    assert events == (
+        ["processed", "validated"] if worker_index == 2 else ["processed"]
+    )
+
+
+def test_failed_update_does_not_validate_or_submit_retry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", lambda self: tmp_path)
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        Mock(return_value=([], xr.DataTree())),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_process_region_jobs",
+        Mock(side_effect=RuntimeError("write failed")),
+    )
+    validate = Mock()
+    submit = Mock()
+    monkeypatch.setattr(ExampleDataset, "validate_dataset", validate)
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        ExampleDataset().update("update-123")
+
+    validate.assert_not_called()
+    submit.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("job_name", "in_cluster", "prod", "expected_retry"),
+    [
+        ("update-123", True, True, "update-123-r1"),
+        ("update-123-r1", True, True, None),
+        ("update-123", False, True, None),
+        ("update-123", True, False, None),
+    ],
+)
+def test_failed_validation_reports_failure_and_retries_only_initial_cluster_run(
+    monkeypatch: pytest.MonkeyPatch,
+    job_name: str,
+    in_cluster: bool,
+    prod: bool,
+    expected_retry: str | None,
+) -> None:
+    failure = validation.OperationalValidationError("missing data")
+    monkeypatch.setattr(ExampleDataset, "validate_dataset", Mock(side_effect=failure))
+    monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    if in_cluster:
+        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test-cluster")
+    monkeypatch.setenv("CRON_JOB_NAME", "stage-example-v2-update")
+    submit = Mock()
+    capture = Mock()
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    monkeypatch.setattr(dynamical_dataset.sentry_sdk, "capture_exception", capture)
+    events: list[tuple[str, str]] = []
+    operational.register_run_monitor(_recording_monitor(events))
+    dataset = ExampleDataset()
+
+    with (
+        pytest.raises(typer.Exit) as exc_info,
+        dataset._monitor(ReformatCronJob, job_name),
+    ):
+        dataset._validate_after_update(job_name)
+
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    assert exc_info.value.__cause__ is failure
+    capture.assert_called_once_with(failure)
+    assert events[-1] == ("error", "example-dataset-update")
+    if expected_retry is None:
+        submit.assert_not_called()
+    else:
+        submit.assert_called_once_with(
+            "stage-example-v2-update",
+            expected_retry,
+            skip_if_next_run_within_deadline=True,
+        )
+
+
+@pytest.mark.parametrize("validation_crashes", [False, True])
+def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
+    monkeypatch: pytest.MonkeyPatch, validation_crashes: bool
+) -> None:
+    failure = (
+        RuntimeError("store read failed")
+        if validation_crashes
+        else validation.OperationalValidationError("missing data")
+    )
+    submission_error = RuntimeError("Kubernetes unavailable")
+    submit = Mock(side_effect=submission_error)
+    capture = Mock()
+    monkeypatch.setattr(ExampleDataset, "validate_dataset", Mock(side_effect=failure))
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test-cluster")
+    monkeypatch.setenv("CRON_JOB_NAME", "example-update")
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    monkeypatch.setattr(dynamical_dataset.sentry_sdk, "capture_exception", capture)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        ExampleDataset()._validate_after_update("update-123")
+
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    assert exc_info.value.__cause__ is failure
+    assert capture.call_args_list[0].args == (failure,)
+    if validation_crashes:
+        submit.assert_not_called()
+        assert capture.call_count == 1
+    else:
+        submit.assert_called_once()
+        assert capture.call_args_list[1].args == (submission_error,)
 
 
 def _example_icechunk_virtual_config() -> IcechunkVirtualConfig:
@@ -730,7 +843,7 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
     assert repo.lookup_branch("main") == main_before
 
 
-class ExampleDatasetWithThreeCronJobs(
+class ExampleDatasetWithTwoCronJobs(
     DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
 ):
     """A dataset with an extra base CronJob, like DWD ICON-EU's archive-grib-files."""
@@ -758,18 +871,6 @@ class ExampleDatasetWithThreeCronJobs(
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule="0 0 * * *",
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule="0 1 * * *",
                 pod_active_deadline=timedelta(minutes=30),
                 image=image_tag,
                 dataset_id=self.dataset_id,
@@ -827,8 +928,8 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
     operational.register_run_monitor(_recording_monitor(events))
     operational.register_run_monitor(_recording_monitor(events))
 
-    dataset = ExampleDatasetWithThreeCronJobs()
-    # cron_job_name disambiguates among the three crons; the resolved cron reaches monitors.
+    dataset = ExampleDatasetWithTwoCronJobs()
+    # cron_job_name disambiguates among the two crons; the resolved cron reaches monitors.
     with dataset._monitor(
         CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
     ):
@@ -840,8 +941,8 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
 
 def test_monitor_requires_exactly_one_matching_cron() -> None:
     operational.register_run_monitor(_recording_monitor([]))
-    dataset = ExampleDatasetWithThreeCronJobs()
-    # Base CronJob with no name matches all three -> ambiguous.
+    dataset = ExampleDatasetWithTwoCronJobs()
+    # Base CronJob with no name matches both -> ambiguous.
     with (
         pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
         dataset._monitor(CronJob, "job-name"),

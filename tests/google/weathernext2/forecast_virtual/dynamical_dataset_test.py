@@ -40,11 +40,9 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
         primary_storage_config=_storage(tmp_path)
     )
 
-    update, validate = dataset.operational_kubernetes_resources("test")
+    (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-historical-virtual-update"
     assert update.suspend is True
-    assert validate.name == "google-wn2-forecast-historical-virtual-validate"
-    assert validate.suspend is True
     assert not any(
         isinstance(item, validation.CheckCurrentData) for item in dataset.validators()
     )
@@ -74,10 +72,9 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
         primary_storage_config=_storage(tmp_path)
     )
 
-    update, validate = dataset.operational_kubernetes_resources("test")
+    (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
-    assert validate.schedule == "5 2,8,14,20 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
         "2026-09-04T01:05"
     )
@@ -88,7 +85,6 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
     assert update.suspend is False
-    assert validate.suspend is False
     (current,) = [
         item
         for item in dataset.validators()

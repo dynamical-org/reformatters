@@ -9,7 +9,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (  # noqa: F401
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 from reformatters.common.storage import (  # noqa: F401
     IcechunkVirtualConfig,
@@ -51,14 +50,14 @@ class ExampleVirtualDataset(
     # )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron jobs that operationally update and validate this dataset.
+        """Return the kubernetes cron jobs that operationally update this dataset.
 
         A virtual update is SINGLE-WRITER (it commits to the icechunk branch directly),
         so there is no workers_total/parallelism fan-out - one pod that polls through the
         source's publication window and exits once the manifest is complete, or once its
         poll deadline passes and the remaining files roll to the next fire.
         """
-        # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
+        # suspend = True  # Defaults to False, remove after backfilling to run operational updates
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 6 * * *",
@@ -73,20 +72,8 @@ class ExampleVirtualDataset(
         #     secret_names=self.store_factory.k8s_secret_names(),
         #     suspend=suspend,
         # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
-        #     # After the update's fire + its deadline.
-        #     schedule="0 8 * * *",
-        #     pod_active_deadline=timedelta(minutes=30),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        #     suspend=suspend,
-        # )
 
-        # return [operational_update_cron_job, validation_cron_job]
+        # return [operational_update_cron_job]
         raise NotImplementedError(
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )

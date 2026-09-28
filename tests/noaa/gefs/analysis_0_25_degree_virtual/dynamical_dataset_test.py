@@ -177,9 +177,7 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources(
     dataset: NoaaGefsAnalysis025DegreeVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.schedule == "45 3,9,15,21 * * *"
@@ -189,17 +187,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
 
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
-    # validator never reads the store while the update is still committing.
-    assert validation_cron_job.schedule == "25 4,10,16,22 * * *"
-    assert _fire_minutes(validation_cron_job.schedule) == [
-        minute + int(update_cron_job.pod_active_deadline.total_seconds() // 60) + 10
-        for minute in _fire_minutes(update_cron_job.schedule)
-    ]
-
     assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(
@@ -208,7 +196,7 @@ def test_operational_update_window_spans_three_update_fires(
     """Two consecutive failed or lost updates still self-heal: the span the next fire
     re-sweeps reaches back past both. Derived from the schedule rather than pinned as
     hours, so changing the cron cadence alone cannot silently shrink the recovery."""
-    update_cron_job, _ = dataset.operational_kubernetes_resources("test-image-tag")
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
     fires = _fire_minutes(update_cron_job.schedule)
     intervals = {b - a for a, b in itertools.pairwise(fires)}
     assert len(intervals) == 1, fires
@@ -224,7 +212,7 @@ def test_validators(dataset: NoaaGefsAnalysis025DegreeVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=4, minutes=20)
+    assert current_data.max_delay == timedelta(hours=3, minutes=40)
 
     # discover_available extends time only to a step holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no

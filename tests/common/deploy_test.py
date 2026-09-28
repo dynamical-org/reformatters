@@ -18,7 +18,6 @@ from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 
 
@@ -45,17 +44,7 @@ class ExampleDataset1:
             shared_memory="12G",
             ephemeral_storage="30G",
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="0 0 * * *",
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
 
 class ExampleDataset2(ExampleDataset1):
@@ -91,7 +80,6 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dataset 1
     assert resources["items"][3]["kind"] == "CronJob"
     assert resources["items"][3]["metadata"]["name"] == "example-dataset-1-update"
-    assert resources["items"][4]["metadata"]["name"] == "example-dataset-1-validate"
     container_spec = resources["items"][3]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
@@ -99,9 +87,8 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     assert container_spec["image"] == "test-image-tag"
 
     # Dataset 2
-    assert resources["items"][5]["kind"] == "CronJob"
-    assert resources["items"][5]["metadata"]["name"] == "example-dataset-2-update"
-    assert resources["items"][6]["metadata"]["name"] == "example-dataset-2-validate"
+    assert resources["items"][4]["kind"] == "CronJob"
+    assert resources["items"][4]["metadata"]["name"] == "example-dataset-2-update"
 
     rbac = {
         item["kind"]: item
@@ -152,7 +139,7 @@ def test_deploy_operational_resources_dataset_id_filter(
         for item in resources["items"]
         if item["kind"] == "CronJob"
     ]
-    assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
+    assert names == ["example-dataset-2-update"]
     role = next(item for item in resources["items"] if item["kind"] == "Role")
     assert role["rules"][0]["resources"] == ["cronjobs"]
     assert "resourceNames" not in role["rules"][0]

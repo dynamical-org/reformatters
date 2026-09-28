@@ -6,12 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from reformatters.common.config import Config, Env
-from reformatters.common.kubernetes import (
-    SERVICE_ACCOUNT,
-    CronJob,
-    ReformatCronJob,
-    ValidationCronJob,
-)
+from reformatters.common.kubernetes import SERVICE_ACCOUNT, CronJob, ReformatCronJob
 from reformatters.ecmwf.archive_gribs import forecast_46_day_archiver as archiver_module
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     ARCHIVE_RCLONE_ROOT,
@@ -138,13 +133,11 @@ def test_archive_variables_are_configured_by_materialized_product() -> None:
 
 
 def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
-    """The archive has no store, so it must not deploy update or validate crons."""
+    """The archive has no store, so it must not deploy update crons."""
     cron_jobs = EcmwfIfsEns46DayGribArchiver().operational_kubernetes_resources(
         "test-image"
     )
-    assert all(
-        not isinstance(c, ReformatCronJob | ValidationCronJob) for c in cron_jobs
-    )
+    assert all(not isinstance(c, ReformatCronJob) for c in cron_jobs)
     assert all(isinstance(c, CronJob) for c in cron_jobs)
 
 
@@ -229,13 +222,11 @@ def test_trigger_targets_keep_their_cron_backstops() -> None:
             "0 10 * * *",
         ),
     ):
-        crons = dataset.operational_kubernetes_resources("image")
-        assert len(crons) == 2
-        (cron,) = [c for c in crons if isinstance(c, ReformatCronJob)]
+        (cron,) = dataset.operational_kubernetes_resources("image")
         assert cron.name == name
         assert cron.schedule == schedule
         assert not cron.suspend
-        assert cron.service_account_name is None
+        assert cron.service_account_name == SERVICE_ACCOUNT
 
 
 def test_archive_failure_does_not_submit_updates(

@@ -14,6 +14,7 @@ from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 
@@ -26,8 +27,8 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
     """Test the Kubernetes resource configuration for GEFS 35-day forecast dataset."""
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
 
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
@@ -38,19 +39,12 @@ def test_operational_kubernetes_resources(dataset: GefsForecast35DayDataset) -> 
     assert update_cron_job.shared_memory == "24G"
     assert update_cron_job.ephemeral_storage == "150G"
 
-    # Check validation job
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "5 7 * * *"
-    assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
-    assert validation_cron_job.cpu == "3"
-    assert validation_cron_job.memory == "30G"
-
 
 def test_validators(dataset: GefsForecast35DayDataset) -> None:
     """Test that validators are properly configured."""
     current_data, recent_nans = dataset.validators()
     assert isinstance(current_data, validation.CheckCurrentData)
-    assert current_data.max_delay == timedelta(hours=7, minutes=5)
+    assert current_data.max_delay == timedelta(hours=6, minutes=45)
     assert isinstance(recent_nans, validation.CheckRecentNans)
     assert recent_nans.max_nan_fraction == (0.45, 0.0)
 
@@ -221,7 +215,7 @@ def test_backfill_local_and_operational_update(
             *args, **{**kwargs, "filter_variable_names": filter_variable_names}
         ),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
 
     # Check resulting dataset
     updated_ds = xr.open_zarr(

@@ -6,6 +6,10 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.storage import DatasetFormat
+from reformatters.noaa.gfs.analysis_virtual.dynamical_dataset import (
+    NoaaGfsAnalysisVirtualDataset,
+)
 from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualRegionJob,
     NoaaGfsAnalysisVirtualSourceFileCoord,
@@ -15,6 +19,7 @@ from reformatters.noaa.gfs.analysis_virtual.template_config import (
 )
 from reformatters.noaa.gfs.virtual_region_job import NoaaGfsVirtualRegionJob
 from reformatters.noaa.models import NoaaDataVar
+from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
 
 TEMPLATE_CONFIG = NoaaGfsAnalysisVirtualTemplateConfig()
 
@@ -180,8 +185,19 @@ def test_representative_probe_is_filled_only_by_its_own_product(
         assert dict(job.representative_probe_loc(coord, var)) == expected_loc
 
 
-def test_operational_update_jobs_single_polling_job() -> None:
-    fire_time = pd.Timestamp("2021-05-03T03:29")
+@pytest.mark.parametrize("cycle_end_hour", [6, 12, 18, 24])
+def test_operational_update_jobs_single_polling_job(cycle_end_hour: int) -> None:
+    dataset = NoaaGfsAnalysisVirtualDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG.model_copy(
+            update={"format": DatasetFormat.ICECHUNK}
+        )
+    )
+    (cron_job,) = dataset.operational_kubernetes_resources("test")
+    fire_time = cron_job.previous_fire_time(
+        pd.Timestamp("2021-05-03") + pd.Timedelta(hours=cycle_end_hour)
+    )
+    target_init = fire_time.floor("6h")
+    assert pd.Timedelta("3h") <= fire_time - target_init < pd.Timedelta("6h")
 
     jobs, template_ds = NoaaGfsAnalysisVirtualRegionJob.operational_update_jobs(
         primary_store=Mock(),
@@ -197,11 +213,17 @@ def test_operational_update_jobs_single_polling_job() -> None:
     assert isinstance(job, NoaaGfsAnalysisVirtualRegionJob)
     assert job.processing_mode == "update"
     times = template_ds.to_dataset().get_index("time")
-    # The 00z cycle's hours 04 and 05 publish while this run polls, so candidates
-    # run up to 6 h after the fire; the lookback still starts 12 h before it.
-    assert times[-1] == pd.Timestamp("2021-05-03T09:00")
-    assert times[job.region.start] == pd.Timestamp("2021-05-02T16:00")
+    # The next cycle cannot publish during this fire's 45-minute pod deadline.
+    assert times[-1] == target_init + pd.Timedelta("5h")
+    assert times[job.region.start] == target_init - pd.Timedelta("12h")
     assert job.region.stop == len(times)
+    coords = job.generate_source_file_coords(
+        template_ds.to_dataset().isel(time=job.region), TEMPLATE_CONFIG.data_vars
+    )
+    assert max(coord.init_time for coord in coords) == target_init
+    assert max(coord.valid_time() for coord in coords) == target_init + pd.Timedelta(
+        "5h"
+    )
 
 
 def discover(
