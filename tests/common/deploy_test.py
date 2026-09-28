@@ -80,8 +80,9 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
     deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
-    assert mock_run.call_count == 1
-    args, kwargs = mock_run.call_args
+    assert mock_run.call_count == 2
+    rbac_apply, cronjob_apply = mock_run.call_args_list
+    args, kwargs = cronjob_apply
     assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
 
     resources = json.loads(kwargs["input"])
@@ -89,27 +90,24 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resources["kind"] == "List"
 
     # Dataset 1
-    assert resources["items"][3]["kind"] == "CronJob"
-    assert resources["items"][3]["metadata"]["name"] == "example-dataset-1-update"
-    assert resources["items"][4]["metadata"]["name"] == "example-dataset-1-validate"
-    container_spec = resources["items"][3]["spec"]["jobTemplate"]["spec"]["template"][
+    assert resources["items"][0]["kind"] == "CronJob"
+    assert resources["items"][0]["metadata"]["name"] == "example-dataset-1-update"
+    assert resources["items"][1]["metadata"]["name"] == "example-dataset-1-validate"
+    container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
     assert container_spec["resources"] == {"requests": {"cpu": "14", "memory": "30G"}}
     assert container_spec["image"] == "test-image-tag"
 
     # Dataset 2
-    assert resources["items"][5]["kind"] == "CronJob"
-    assert resources["items"][5]["metadata"]["name"] == "example-dataset-2-update"
-    assert resources["items"][6]["metadata"]["name"] == "example-dataset-2-validate"
+    assert resources["items"][2]["kind"] == "CronJob"
+    assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
+    assert resources["items"][3]["metadata"]["name"] == "example-dataset-2-validate"
 
-    rbac = {
-        item["kind"]: item
-        for item in resources["items"]
-        if item["kind"] in {"ServiceAccount", "Role", "RoleBinding"}
-    }
+    rbac_resources = json.loads(rbac_apply.kwargs["input"])["items"]
+    rbac = {item["kind"]: item for item in rbac_resources}
     assert set(rbac) == {"ServiceAccount", "Role", "RoleBinding"}
-    assert [item["kind"] for item in resources["items"][:3]] == [
+    assert [item["kind"] for item in rbac_resources] == [
         "ServiceAccount",
         "Role",
         "RoleBinding",
@@ -153,9 +151,33 @@ def test_deploy_operational_resources_dataset_id_filter(
         if item["kind"] == "CronJob"
     ]
     assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
-    role = next(item for item in resources["items"] if item["kind"] == "Role")
+    rbac_resources = json.loads(mock_run.call_args_list[0].kwargs["input"])["items"]
+    role = next(item for item in rbac_resources if item["kind"] == "Role")
     assert role["rules"][0]["resources"] == ["cronjobs"]
     assert "resourceNames" not in role["rules"][0]
+
+
+def test_deploy_stops_before_cronjobs_when_rbac_apply_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = subprocess.CalledProcessError(1, ["/usr/bin/kubectl", "apply", "-f", "-"])
+    mock_run = Mock(side_effect=error)
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        deploy.deploy_operational_resources(
+            DYNAMICAL_DATASETS, docker_image="test-image-tag"
+        )
+
+    assert raised.value is error
+    mock_run.assert_called_once()
+    assert mock_run.call_args.kwargs["check"] is True
+    resources = json.loads(mock_run.call_args.kwargs["input"])["items"]
+    assert [item["kind"] for item in resources] == [
+        "ServiceAccount",
+        "Role",
+        "RoleBinding",
+    ]
 
 
 def test_registered_dataset_schedules_are_parseable() -> None:

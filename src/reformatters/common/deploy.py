@@ -47,10 +47,8 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    k8s_resource_list = {
-        "apiVersion": "v1",
-        "kind": "List",
-        "items": [
+    resource_groups: tuple[list[dict[str, Any]], ...] = (
+        [
             {
                 "apiVersion": "v1",
                 "kind": "ServiceAccount",
@@ -86,19 +84,25 @@ def deploy_operational_resources(
                     {"kind": "ServiceAccount", "name": kubernetes.SERVICE_ACCOUNT}
                 ],
             },
-        ]
-        + [reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
-    }
-
-    subprocess.run(
-        ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=json.dumps(k8s_resource_list),
-        text=True,
-        check=True,
+        ],
+        [reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
     )
 
+    for group in resource_groups:
+        subprocess.run(
+            ["/usr/bin/kubectl", "apply", "-f", "-"],
+            input=json.dumps({"apiVersion": "v1", "kind": "List", "items": group}),
+            text=True,
+            check=True,
+        )
+
     log.info(
-        f"Deployed {[item['metadata']['name'] for item in k8s_resource_list['items']]}"  # type: ignore[index]
+        "Deployed %s",
+        [
+            item["metadata"]["name"]
+            for resources in resource_groups
+            for item in resources
+        ],
     )
 
 
