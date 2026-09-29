@@ -62,6 +62,13 @@ class ExampleDataset2(ExampleDataset1):
     dataset_id: str = "example-dataset-2"
 
 
+@pytest.fixture(autouse=True)
+def admission_gate(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    gate = Mock()
+    monkeypatch.setattr(deploy, "verify_trigger_admission", gate)
+    return gate
+
+
 def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
@@ -81,11 +88,13 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
     assert mock_run.call_count == 2
-    rbac_apply, cronjob_apply = mock_run.call_args_list
+    cronjob_apply, rbac_apply = mock_run.call_args_list
     args, kwargs = cronjob_apply
     assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
 
     resources = json.loads(kwargs["input"])
+    service_account = resources["items"].pop(0)
+    assert service_account["kind"] == "ServiceAccount"
     assert resources["apiVersion"] == "v1"
     assert resources["kind"] == "List"
 
@@ -106,9 +115,8 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
     rbac_resources = json.loads(rbac_apply.kwargs["input"])["items"]
     rbac = {item["kind"]: item for item in rbac_resources}
-    assert set(rbac) == {"ServiceAccount", "Role", "RoleBinding"}
+    assert set(rbac) == {"Role", "RoleBinding"}
     assert [item["kind"] for item in rbac_resources] == [
-        "ServiceAccount",
         "Role",
         "RoleBinding",
     ]
@@ -144,40 +152,55 @@ def test_deploy_operational_resources_dataset_id_filter(
         dataset_id_filter="example-dataset-2",
     )
 
-    resources = json.loads(mock_run.call_args.kwargs["input"])
+    resources = json.loads(mock_run.call_args_list[0].kwargs["input"])
     names = [
         item["metadata"]["name"]
         for item in resources["items"]
         if item["kind"] == "CronJob"
     ]
     assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
-    rbac_resources = json.loads(mock_run.call_args_list[0].kwargs["input"])["items"]
+    rbac_resources = json.loads(mock_run.call_args_list[1].kwargs["input"])["items"]
     role = next(item for item in rbac_resources if item["kind"] == "Role")
     assert role["rules"][0]["resources"] == ["cronjobs"]
     assert "resourceNames" not in role["rules"][0]
 
 
-def test_deploy_stops_before_cronjobs_when_rbac_apply_fails(
+@pytest.mark.parametrize("failed_gate", [0, 1])
+def test_deploy_stops_before_grant_when_admission_fails(
     monkeypatch: pytest.MonkeyPatch,
+    admission_gate: Mock,
+    failed_gate: int,
 ) -> None:
-    error = subprocess.CalledProcessError(1, ["/usr/bin/kubectl", "apply", "-f", "-"])
-    mock_run = Mock(side_effect=error)
+    mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
-
-    with pytest.raises(subprocess.CalledProcessError) as raised:
+    admission_gate.side_effect = (
+        [AssertionError("policy missing")]
+        if failed_gate == 0
+        else [None, AssertionError("clone denied")]
+    )
+    with pytest.raises(AssertionError):
         deploy.deploy_operational_resources(
             DYNAMICAL_DATASETS, docker_image="test-image-tag"
         )
+    assert mock_run.call_count == failed_gate
+    for call in mock_run.call_args_list:
+        assert all(
+            item["kind"] not in {"Role", "RoleBinding"}
+            for item in json.loads(call.kwargs["input"])["items"]
+        )
 
-    assert raised.value is error
+
+def test_deploy_stops_before_grant_when_cronjob_apply_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_run = Mock(side_effect=subprocess.CalledProcessError(1, "kubectl"))
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    with pytest.raises(subprocess.CalledProcessError):
+        deploy.deploy_operational_resources(
+            DYNAMICAL_DATASETS, docker_image="test-image-tag"
+        )
     mock_run.assert_called_once()
     assert mock_run.call_args.kwargs["check"] is True
-    resources = json.loads(mock_run.call_args.kwargs["input"])["items"]
-    assert [item["kind"] for item in resources] == [
-        "ServiceAccount",
-        "Role",
-        "RoleBinding",
-    ]
 
 
 def test_registered_dataset_schedules_are_parseable() -> None:

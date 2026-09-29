@@ -11,6 +11,7 @@ from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from pydantic import ValidationError
 
+from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
@@ -126,6 +127,10 @@ def test_as_kubernetes_object_comprehensive() -> None:
                         ],
                         "image": "weather-app:v1.0",
                         "name": "worker",
+                        "securityContext": {
+                            "allowPrivilegeEscalation": False,
+                            "capabilities": {"drop": ["ALL"]},
+                        },
                         "resources": {
                             "requests": {
                                 "cpu": "500m",
@@ -156,6 +161,10 @@ def test_as_kubernetes_object_comprehensive() -> None:
                 "restartPolicy": "Never",
                 "securityContext": {
                     "fsGroup": 999,
+                    "runAsNonRoot": True,
+                    "runAsUser": 999,
+                    "runAsGroup": 999,
+                    "seccompProfile": {"type": "RuntimeDefault"},
                 },
                 "terminationGracePeriodSeconds": 30,
                 "activeDeadlineSeconds": 21600,  # default 6 hours
@@ -185,6 +194,54 @@ def test_as_kubernetes_object_comprehensive() -> None:
     assert k8s_obj["spec"] == expected_spec
 
 
+def _assert_restricted_security(pod_spec: dict[str, Any]) -> None:
+    assert pod_spec["securityContext"] == {
+        "fsGroup": 999,
+        "runAsNonRoot": True,
+        "runAsUser": 999,
+        "runAsGroup": 999,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    assert len(pod_spec["containers"]) == 1
+    assert pod_spec["containers"][0]["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+    }
+
+
+def test_registry_workload_templates_use_restricted_security() -> None:
+    for resource in (*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS):
+        workloads = list(resource.operational_kubernetes_resources("test-image"))
+        assert workloads, resource.dataset_id
+        for workload in workloads:
+            manifest = workload.as_kubernetes_object()
+            assert manifest["kind"] == "CronJob", workload.name
+            pod_spec = manifest["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+            _assert_restricted_security(pod_spec)
+
+
+def test_backfill_job_template_uses_restricted_security() -> None:
+    job = Job(
+        command=["backfill-kubernetes"],
+        image="img:v1",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1Gi",
+        shared_memory="512Mi",
+        workers_total=2,
+        parallelism=2,
+        secret_names=["source-creds"],
+    )
+
+    pod_spec = job.as_kubernetes_object()["spec"]["template"]["spec"]
+    _assert_restricted_security(pod_spec)
+    assert {mount["name"] for mount in pod_spec["containers"][0]["volumeMounts"]} == {
+        "ephemeral-vol",
+        "shared-memory-dir",
+        "source-creds",
+    }
+
+
 def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> CronJob:
     return cron_job_class(
         name=name,
@@ -196,6 +253,16 @@ def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> C
         memory="1Gi",
         workers_total=1,
         parallelism=1,
+    )
+
+
+def test_cron_job_triggerable_is_internal_configuration() -> None:
+    cron = _cron_job_with_name("archive-update")
+    assert cron.triggerable is False
+    assert cron.model_copy(update={"triggerable": True}).triggerable is True
+    assert (
+        cron.as_kubernetes_object()
+        == cron.model_copy(update={"triggerable": True}).as_kubernetes_object()
     )
 
 

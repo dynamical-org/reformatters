@@ -156,6 +156,10 @@ class Job(pydantic.BaseModel):
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",
+                                "securityContext": {
+                                    "allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]},
+                                },
                                 "resources": {
                                     "requests": {
                                         "cpu": f"{self.cpu}",
@@ -198,6 +202,10 @@ class Job(pydantic.BaseModel):
                         ),
                         "securityContext": {
                             "fsGroup": 999,  # this is the `app` group our app runs under
+                            "runAsNonRoot": True,
+                            "runAsUser": 999,
+                            "runAsGroup": 999,
+                            "seccompProfile": {"type": "RuntimeDefault"},
                         },
                         "terminationGracePeriodSeconds": 30,
                         "activeDeadlineSeconds": int(
@@ -258,6 +266,7 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+    triggerable: bool = False
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.
