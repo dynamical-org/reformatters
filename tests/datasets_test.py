@@ -1,12 +1,13 @@
 import json
 import re
-from typing import Any, cast
+from collections.abc import Iterator
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 import zarr
-from click import Command
-from click.testing import CliRunner
 from typer.main import get_command
+from typer.testing import CliRunner
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -21,9 +22,10 @@ DATASET_IDS = [d.dataset_id for d in DYNAMICAL_DATASETS]
 IMPLEMENTED_DATASET_IDS = [d.dataset_id for d in IMPLEMENTED_DATASETS]
 
 
-@pytest.fixture(scope="module")
-def cli_command() -> Command:
-    return cast(Command, get_command(app))
+@pytest.fixture(scope="module", autouse=True)
+def cached_cli_command() -> Iterator[None]:
+    with patch("typer.testing._get_command", return_value=get_command(app)):
+        yield
 
 
 # --- Registry tests ---
@@ -47,51 +49,49 @@ def test_all_datasets_have_unique_versions() -> None:
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_help_works_for_dataset(dataset_id: str, cli_command: Command) -> None:
+def test_cli_help_works_for_dataset(dataset_id: str) -> None:
     """Verify the dataset subcommand is registered and --help doesn't crash."""
-    result = runner.invoke(cli_command, [dataset_id, "--help"])
+    result = runner.invoke(app, [dataset_id, "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_update_command(dataset_id: str, cli_command: Command) -> None:
-    result = runner.invoke(cli_command, [dataset_id, "update", "--help"])
+def test_cli_has_update_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "update", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} update --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_validate_command(dataset_id: str, cli_command: Command) -> None:
-    result = runner.invoke(cli_command, [dataset_id, "validate", "--help"])
+def test_cli_has_validate_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "validate", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} validate --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_update_template_command(dataset_id: str, cli_command: Command) -> None:
-    result = runner.invoke(cli_command, [dataset_id, "update-template", "--help"])
+def test_cli_has_update_template_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "update-template", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} update-template --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_backfill_kubernetes_command(
-    dataset_id: str, cli_command: Command
-) -> None:
-    result = runner.invoke(cli_command, [dataset_id, "backfill-kubernetes", "--help"])
+def test_cli_has_backfill_kubernetes_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "backfill-kubernetes", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} backfill-kubernetes --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_backfill_command(dataset_id: str, cli_command: Command) -> None:
-    result = runner.invoke(cli_command, [dataset_id, "backfill", "--help"])
+def test_cli_has_backfill_command(dataset_id: str) -> None:
+    result = runner.invoke(app, [dataset_id, "backfill", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} backfill --help failed: {result.output}\n{result.exception}"
     )
@@ -102,10 +102,8 @@ def test_cli_has_backfill_command(dataset_id: str, cli_command: Command) -> None
     DYNAMICAL_DATASETS,
     ids=DATASET_IDS,
 )
-def test_cli_dataset_urls_text_format(
-    dataset: DynamicalDataset[Any, Any], cli_command: Command
-) -> None:
-    result = runner.invoke(cli_command, [dataset.dataset_id, "dataset-urls"])
+def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> None:
+    result = runner.invoke(app, [dataset.dataset_id, "dataset-urls"])
     assert result.exit_code == 0, (
         f"{dataset.dataset_id} dataset-urls failed: {result.output}\n{result.exception}"
     )
@@ -126,11 +124,9 @@ def test_cli_dataset_urls_text_format(
     DYNAMICAL_DATASETS,
     ids=DATASET_IDS,
 )
-def test_cli_dataset_urls_json_format(
-    dataset: DynamicalDataset[Any, Any], cli_command: Command
-) -> None:
+def test_cli_dataset_urls_json_format(dataset: DynamicalDataset[Any, Any]) -> None:
     result = runner.invoke(
-        cli_command, [dataset.dataset_id, "dataset-urls", "--format", "json"]
+        app, [dataset.dataset_id, "dataset-urls", "--format", "json"]
     )
     assert result.exit_code == 0, (
         f"{dataset.dataset_id} dataset-urls --format json failed: "
@@ -143,23 +139,23 @@ def test_cli_dataset_urls_json_format(
     }
 
 
-def test_cli_has_deploy_command(cli_command: Command) -> None:
-    result = runner.invoke(cli_command, ["deploy", "--help"])
+def test_cli_has_deploy_command() -> None:
+    result = runner.invoke(app, ["deploy", "--help"])
     assert result.exit_code == 0, f"deploy --help failed: {result.output}"
 
 
-def test_cli_has_deploy_staging_command(cli_command: Command) -> None:
-    result = runner.invoke(cli_command, ["deploy-staging", "--help"])
+def test_cli_has_deploy_staging_command() -> None:
+    result = runner.invoke(app, ["deploy-staging", "--help"])
     assert result.exit_code == 0, f"deploy-staging --help failed: {result.output}"
 
 
-def test_cli_has_cleanup_staging_command(cli_command: Command) -> None:
-    result = runner.invoke(cli_command, ["cleanup-staging", "--help"])
+def test_cli_has_cleanup_staging_command() -> None:
+    result = runner.invoke(app, ["cleanup-staging", "--help"])
     assert result.exit_code == 0, f"cleanup-staging --help failed: {result.output}"
 
 
-def test_cli_has_initialize_new_integration_command(cli_command: Command) -> None:
-    result = runner.invoke(cli_command, ["initialize-new-integration", "--help"])
+def test_cli_has_initialize_new_integration_command() -> None:
+    result = runner.invoke(app, ["initialize-new-integration", "--help"])
     assert result.exit_code == 0, (
         f"initialize-new-integration --help failed: {result.output}"
     )

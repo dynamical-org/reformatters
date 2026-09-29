@@ -13,6 +13,11 @@ from tests.dataset_helpers import IMPLEMENTED_DATASETS
 _VIRTUAL_DATASETS = [
     d for d in IMPLEMENTED_DATASETS if issubclass(d.region_job_class, VirtualRegionJob)
 ]
+_FAST_ROUNDTRIP_IDS = {
+    "noaa-mrms-conus-analysis-hourly",
+    "ecmwf-aifs-single-forecast-virtual",
+}
+assert _FAST_ROUNDTRIP_IDS <= {d.dataset_id for d in IMPLEMENTED_DATASETS}
 
 
 @pytest.fixture(scope="module")
@@ -75,13 +80,7 @@ def test_update_template_matches_existing_template(
             dataset,
             id=dataset.dataset_id,
             marks=(
-                []
-                if dataset.dataset_id
-                in {
-                    "noaa-mrms-conus-analysis-hourly",
-                    "google-weathernext2-forecast-historical-virtual",
-                }
-                else [pytest.mark.slow]
+                [] if dataset.dataset_id in _FAST_ROUNDTRIP_IDS else [pytest.mark.slow]
             ),
         )
         for dataset in IMPLEMENTED_DATASETS
