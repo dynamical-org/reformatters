@@ -1,6 +1,7 @@
 import json
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -27,6 +28,7 @@ def deploy_operational_resources(
 
     reformat_jobs: list[kubernetes.Job] = []
     trigger_templates: dict[str, dict[str, Any]] = {}
+    deployed_trigger_templates: list[dict[str, Any]] = []
 
     for resource in resources:
         try:
@@ -50,11 +52,10 @@ def deploy_operational_resources(
 
         if cronjob_transform is not None:
             dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
-            trigger_templates.update(
-                (cj.name, cj.as_kubernetes_object())
-                for cj in dataset_cronjobs
-                if cj.triggerable
-            )
+
+        deployed_trigger_templates.extend(
+            cj.as_kubernetes_object() for cj in dataset_cronjobs if cj.triggerable
+        )
 
         reformat_jobs.extend(dataset_cronjobs)
 
@@ -62,7 +63,8 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    templates = list(trigger_templates.values())
+    # An archiver-only deploy still grants access to its already-deployed targets.
+    templates = deployed_trigger_templates or list(trigger_templates.values())
     verify_trigger_admission("default", templates, require_params=False)
 
     resource_groups: tuple[list[dict[str, Any]], ...] = (
@@ -112,7 +114,7 @@ def deploy_operational_resources(
         if index == 1:
             verify_trigger_admission("default", templates, require_params=True)
         subprocess.run(
-            ["/usr/bin/kubectl", "apply", "-f", "-"],
+            ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
             input=json.dumps({"apiVersion": "v1", "kind": "List", "items": group}),
             text=True,
             check=True,
@@ -134,18 +136,58 @@ def register_commands(
     archivers: Sequence[OperationalResources] = (),
 ) -> None:
     @app.command()
-    def verify_admission(namespace: str = "default") -> None:
+    def verify_admission(bundle: Path) -> None:
         """Probe admission using server-side dry runs; creates no resources."""
-        templates = []
-        for resource in [*datasets, *archivers]:
-            try:
-                cronjobs = resource.operational_kubernetes_resources("unused")
-            except NotImplementedError:
-                continue
-            templates.extend(
-                cj.as_kubernetes_object() for cj in cronjobs if cj.triggerable
+        items = json.loads(bundle.read_text())["items"]
+        parameters = [
+            item["spec"]["paramRef"] for item in items if "paramRef" in item["spec"]
+        ]
+        namespace = parameters[0]["namespace"]
+        names = [param["name"] for param in parameters]
+        assert items == trigger_admission_resources(namespace, names), (
+            "Bundle does not match the complete generated policy"
+        )
+        for item in items:
+            installed = subprocess.run(  # noqa: S603
+                [
+                    "/usr/bin/kubectl",
+                    "get",
+                    item["kind"],
+                    item["metadata"]["name"],
+                    "-o",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
             )
-        verify_trigger_admission(namespace, templates, require_params=True)
+            assert json.loads(installed.stdout)["spec"] == item["spec"], (
+                f"Installed {item['kind']} {item['metadata']['name']} differs from bundle"
+            )
+        templates = [
+            {
+                "metadata": {"name": name},
+                "spec": {
+                    "jobTemplate": {
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "restartPolicy": "Never",
+                                    "containers": [
+                                        {
+                                            "name": "worker",
+                                            "image": "invalid.example/admission-canary:never-run",
+                                        }
+                                    ],
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            for name in names
+        ]
+        verify_trigger_admission(namespace, templates, require_params=False)
 
     @app.command()
     def render_admission_bundle(

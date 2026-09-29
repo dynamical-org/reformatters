@@ -8,6 +8,7 @@ Also needs `openssl`. Without the assets every test is skipped. Run with `-n0`.
 """
 
 import copy
+import json
 import os
 import shutil
 import socket
@@ -271,7 +272,7 @@ class Cluster:
 
     def new_job_name(self) -> str:
         self._job_count += 1
-        return f"job-{self._job_count}"
+        return f"job-t{self._job_count}"
 
     def trigger_create(
         self,
@@ -859,3 +860,132 @@ def test_missing_parameter_denial_names_the_clone_policy(cluster: Cluster) -> No
     job["metadata"]["labels"][NAME_LABEL] = ABSENT
     job["metadata"]["labels"][UID_LABEL] = "missing"
     cluster.assert_denied(job, "clone", token=ADMIN_TOKEN, dry_run=True)
+
+
+def test_non_trigger_non_dry_run_jobs_are_outside_policy(cluster: Cluster) -> None:
+    job = cluster.job_for(UPDATE)
+    _container(job)["image"] = "different-image"
+    cluster.assert_allowed(job, token=ADMIN_TOKEN)
+
+
+def test_trigger_cannot_take_a_scheduled_job_name(cluster: Cluster) -> None:
+    job = cluster.job_for(UPDATE)
+    job["metadata"]["name"] = f"{UPDATE}-29843978"
+    cluster.assert_denied(job, "clone")
+
+
+def test_operator_verifies_installed_policy_identity(
+    cluster: Cluster,
+    kubectl_against_apiserver: None,
+    tmp_path: Path,
+) -> None:
+    from typer.testing import CliRunner  # noqa: PLC0415
+
+    from reformatters.__main__ import app  # noqa: PLC0415
+
+    resources = trigger_admission_resources(
+        NAMESPACE, [UPDATE, VALIDATE, MINIMAL, WORK_QUEUE, MULTI, ABSENT]
+    )
+    bundle = tmp_path / "admission.json"
+    bundle.write_text(json.dumps({"items": resources}))
+    runner = CliRunner()
+    result = runner.invoke(app, ["verify-admission", str(bundle)])
+    assert result.exit_code == 0, result.exception
+    policy = resources[0]
+    path = f"{_resource_path(policy)}/{policy['metadata']['name']}"
+    live = cluster.server.admin("GET", path).json()
+    original = copy.deepcopy(live)
+    live["spec"]["matchConditions"][0]["expression"] = "true"
+    assert cluster.server.admin("PUT", path, live).status_code == 200
+    try:
+        result = runner.invoke(app, ["verify-admission", str(bundle)])
+        assert result.exit_code != 0
+        assert "differs from bundle" in str(result.exception)
+    finally:
+        original["metadata"]["resourceVersion"] = cluster.server.admin(
+            "GET", path
+        ).json()["metadata"]["resourceVersion"]
+        assert cluster.server.admin("PUT", path, original).status_code == 200
+
+
+def test_two_namespace_bundles_do_not_conflict_and_identity_cannot_cross(
+    cluster: Cluster,
+) -> None:
+    other = "other-triggers"
+    cluster.server.create("/api/v1/namespaces", {"metadata": {"name": other}})
+    for resource in trigger_admission_resources(other, [MINIMAL]):
+        cluster.server.create(_resource_path(resource), resource)
+    cronjob = cluster.server.create(
+        f"/apis/batch/v1/namespaces/{other}/cronjobs", _plain_cronjob(MINIMAL, {})
+    ).json()
+    path = f"/apis/batch/v1/namespaces/{other}/jobs?dryRun=All"
+    job = _canary(clone_job(cronjob, "other-canary"))
+    altered = copy.deepcopy(job)
+    _container(altered)["image"] = "different-image"
+    deadline = time.monotonic() + 30
+    while cluster.server.admin("POST", path, altered).status_code == 201:
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    assert cluster.server.admin("POST", path, job).status_code == 201
+    cluster.assert_allowed(
+        _canary(cluster.job_for(UPDATE)), token=ADMIN_TOKEN, dry_run=True
+    )
+    cluster.server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{other}/roles",
+        {
+            "metadata": {"name": "create"},
+            "rules": [
+                {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create"]}
+            ],
+        },
+    )
+    cluster.server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{other}/rolebindings",
+        {
+            "metadata": {"name": "create"},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": "create",
+            },
+            "subjects": [
+                {
+                    "kind": "User",
+                    "name": f"system:serviceaccount:{NAMESPACE}:{SERVICE_ACCOUNT}",
+                }
+            ],
+        },
+    )
+    response = cluster.server.request("POST", path, TRIGGER_TOKEN, job)
+    assert response.status_code in (403, 422), response.text
+    assert f"{POLICY_PREFIX}-targets" in response.text
+
+
+def test_missing_staging_binding_fails_verification(
+    cluster: Cluster,
+    kubectl_against_apiserver: None,
+) -> None:
+    binding = next(
+        r
+        for r in trigger_admission_resources(NAMESPACE, [ABSENT])
+        if r["spec"].get("paramRef", {}).get("name") == ABSENT
+    )
+    path = _resource_path(binding)
+    response = cluster.server.admin("DELETE", f"{path}/{binding['metadata']['name']}")
+    assert response.status_code == 200, response.text
+    job = _canary(cluster.job_for(MINIMAL))
+    job["metadata"]["labels"][NAME_LABEL] = ABSENT
+    deadline = time.monotonic() + 30
+    try:
+        while (
+            cluster.trigger_create(job, token=ADMIN_TOKEN, dry_run=True).status_code
+            != 201
+        ):
+            assert time.monotonic() < deadline
+            time.sleep(0.1)
+        with pytest.raises(AssertionError, match="Admission allowed canary"):
+            kubernetes_security.verify_trigger_admission(
+                NAMESPACE, [_plain_cronjob(ABSENT, {})], require_params=False
+            )
+    finally:
+        cluster.server.create(path, binding)

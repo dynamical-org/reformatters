@@ -1,6 +1,8 @@
 import copy
 import json
 import subprocess
+import time
+import uuid
 from collections.abc import Sequence
 from typing import Any
 
@@ -79,6 +81,9 @@ def trigger_admission_resources(
     prefix = f"{namespace}-{SERVICE_ACCOUNT}"
     identity = f"system:serviceaccount:{namespace}:{SERVICE_ACCOUNT}"
     constraints = {
+        "matchPolicy": "Equivalent",
+        "namespaceSelector": {},
+        "objectSelector": {},
         "resourceRules": [
             {
                 "apiGroups": ["batch"],
@@ -87,14 +92,15 @@ def trigger_admission_resources(
                 "resources": ["jobs"],
                 "scope": "Namespaced",
             }
-        ]
+        ],
     }
     conditions = [
         {
             "name": "trigger-identity",
             "expression": (
                 f"request.userInfo.username == {json.dumps(identity)} || "
-                "(request.dryRun == true && has(object.metadata.annotations) && "
+                f"(request.namespace == {json.dumps(namespace)} && "
+                "has(request.dryRun) && request.dryRun && has(object.metadata.annotations) && "
                 f"{json.dumps(CANARY_ANNOTATION)} in object.metadata.annotations && "
                 f"object.metadata.annotations[{json.dumps(CANARY_ANNOTATION)}] == 'true')"
             ),
@@ -172,6 +178,7 @@ def trigger_admission_resources(
         f"object.metadata.labels[{json.dumps(uid_key)}] == params.metadata.uid",
         "!has(params.spec.suspend) || !params.spec.suspend",
         "!has(object.metadata.generateName) || object.metadata.generateName == ''",
+        "!object.metadata.name.matches('.*-[0-9]+$')",
         "!has(object.metadata.ownerReferences) || size(object.metadata.ownerReferences) == 0",
         "!has(object.metadata.finalizers) || size(object.metadata.finalizers) == 0",
         _same_map(
@@ -285,6 +292,7 @@ def trigger_admission_resources(
                     "parameterNotFoundAction": "Deny",
                 },
                 "matchResources": {
+                    "matchPolicy": "Equivalent",
                     **namespace_match,
                     "objectSelector": {"matchLabels": {target_key: name}},
                 },
@@ -302,23 +310,36 @@ def verify_trigger_admission(
     prefix = f"{namespace}-{SERVICE_ACCOUNT}"
 
     def probe(job: dict[str, Any], denied_by: str | None) -> None:
-        response = subprocess.run(  # noqa: S603
-            [
-                "/usr/bin/kubectl",
-                "create",
-                "--namespace",
-                namespace,
-                "--dry-run=server",
-                "-f",
-                "-",
-                "-o",
-                "json",
-            ],
-            input=json.dumps(job),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        deadline = time.monotonic() + 15
+        while True:
+            job["metadata"]["name"] = (
+                f"reformat-admission-canary-t{uuid.uuid4().hex[:12]}"
+            )
+            response = subprocess.run(  # noqa: S603
+                [
+                    "/usr/bin/kubectl",
+                    "create",
+                    "--namespace",
+                    namespace,
+                    "--dry-run=server",
+                    "-f",
+                    "-",
+                    "-o",
+                    "json",
+                ],
+                input=json.dumps(job),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            if (
+                denied_by is not None
+                or response.returncode == 0
+                or f"{prefix}-clone" not in response.stderr
+                or time.monotonic() >= deadline
+            ):
+                break
+            time.sleep(0.5)
         if denied_by is None:
             assert response.returncode == 0, response.stderr
         else:
@@ -353,7 +374,6 @@ def verify_trigger_admission(
             "apiVersion": "batch/v1",
             "kind": "Job",
             "metadata": {
-                "name": "reformat-admission-canary",
                 "labels": {
                     **metadata.get("labels", {}),
                     "dynamical.org/cronjob-name": name,

@@ -1,6 +1,6 @@
 # Kubernetes workload security
 
-The trigger ServiceAccount can read approved CronJobs and create/get Jobs. RBAC
+The trigger ServiceAccount can read CronJobs in its namespace and create/get Jobs. RBAC
 cannot limit Job creation to a CronJob template. Admission policy supplies that
 boundary: an identity-based guard requires an approved target, and a fixed-name
 CronJob parameter binding compares the submitted Job to that target. Missing
@@ -12,6 +12,8 @@ and controller labels, the selected CronJob name/UID labels, and the manual
 instantiation annotation. A trigger cannot choose a different image, command,
 service account, Secret reference, resource request, or additional container.
 Unrecognized JobSpec fields are rejected until the policy is updated.
+Names ending in a hyphen and decimal digits are reserved for scheduled Jobs;
+trigger Jobs cannot occupy those names. Other Job names remain caller-selected.
 
 CronJob writers and admission-policy administrators remain trusted: changing a
 template changes what the trigger may execute. A compromised trigger can repeat
@@ -35,8 +37,16 @@ Render from the revision being deployed, retaining every approved staging target
 uv run main render-admission-bundle --namespace default > admission.json
 # Add --staging-target DATASET-VERSION-update for each approved staging version.
 kubectl --context CONTEXT apply -f admission.json
-KUBECONFIG=OPERATOR_CONFIG uv run main verify-admission
+KUBECONFIG=OPERATOR_CONFIG uv run main verify-admission admission.json
 ```
+
+Verification consumes the exact rendered bundle, including every staging approval,
+and rejects an incomplete or edited bundle. The operator command reads every
+installed policy and binding and requires its spec to equal the rendered spec,
+including authenticated-identity matching. It checks missing parameters through
+clone-policy denial, so a staging target can be approved before its CronJob exists.
+Do not restore the create grant until all approved targets pass. Deploy applies
+explicitly to `default`, matching the namespace its probes verify.
 
 The bundle lists every registered `triggerable` CronJob. Each binding names one
 CronJob parameter; an absent or suspended parameter denies cloning. The guard
@@ -58,6 +68,9 @@ unsuspended target. These requests use `--dry-run=server` and an admission-canar
 annotation; they create no Jobs or pods. The policies also match these dry-run
 requests from the deployment identity, without giving it impersonation rights.
 The annotation never exempts a real trigger request from comparison.
+Probe names are randomized. Exact-clone probes retry clone-policy denials for up
+to 15 seconds while the parameter cache catches up with changed CronJobs;
+remaining denials stop deployment.
 
 Only after the initial checks pass does deployment apply the ServiceAccount and
 CronJobs. It checks the live templates again before applying the Role and
@@ -70,6 +83,13 @@ These smoke checks detect inactive or absent policies and bindings, not every
 possible malicious policy edit. Review the installed policy configuration and
 run the full local negative suite for policy changes. Admission administrators
 and API-server exemptions are part of the trusted cluster configuration.
+The operator's spec comparison supplements the smoke tests; ordinary deployment
+does not have cluster-scoped read access and uses only the smoke tests. In a
+multi-replica control plane, successful probes through one endpoint do not prove
+every replica's cache has converged; confirm convergence before restoring grants.
+The identity guard is cluster-wide to reject this account in other namespaces.
+An error in its match condition would have a cluster-wide Job-creation impact;
+non-trigger and cross-namespace requests are included in the local API tests.
 
 ## Pod Security Admission rollout
 
@@ -81,7 +101,8 @@ outside this repository. Do not enforce before inventorying those workloads.
    ReplicaSets. Inspect every regular, init and ephemeral container, pod security
    context, host namespace setting and volume type. Record PSA exemptions too;
    labels cannot override API-server exemptions.
-2. Enable Restricted warnings and audit at the tested Kubernetes version:
+2. Confirm the server minor version with `kubectl --context CONTEXT version`.
+   Enable Restricted warnings and audit at the tested server version (v1.36 here):
 
    ```sh
    kubectl --context CONTEXT label namespace NAMESPACE --overwrite \
@@ -105,6 +126,8 @@ outside this repository. Do not enforce before inventorying those workloads.
    adding PSA labels. Any template missing the four controls above must be fixed,
    as must host access, forbidden volumes, privileged containers or added
    capabilities reported by PSA.
+   Retire obsolete validation CronJobs or update their templates too; otherwise
+   they keep creating Jobs with old security contexts after current Jobs drain.
 5. Dry-run the enforcement label and resolve every warning, then enforce:
 
    ```sh
@@ -120,6 +143,13 @@ PSA rejects Pod creation; creation of a Job containing a noncompliant template
 can still succeed with a warning. Test the resulting Pod template, not only the
 Job API response. Keep warn/audit labels after enforcement and review version
 pins when upgrading Kubernetes.
+
+An API upgrade that introduces a defaulted JobSpec field can make exact clones
+fail the field allowlist. Review the new field, update the generator and run the
+admission suite against that API version before re-rendering the operator bundle.
+Check controller labels/selectors and Job defaults as well as the field list.
+Do not remove the allowlist or switch bindings to Warn to restore triggering.
+Scheduled CronJob-controller Jobs remain outside the trigger-identity policy.
 
 ## Local admission tests
 

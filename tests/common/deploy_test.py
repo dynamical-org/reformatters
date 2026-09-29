@@ -90,7 +90,7 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     assert mock_run.call_count == 2
     cronjob_apply, rbac_apply = mock_run.call_args_list
     args, kwargs = cronjob_apply
-    assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
+    assert args[0] == ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"]
 
     resources = json.loads(kwargs["input"])
     service_account = resources["items"].pop(0)
@@ -163,6 +163,28 @@ def test_deploy_operational_resources_dataset_id_filter(
     role = next(item for item in rbac_resources if item["kind"] == "Role")
     assert role["rules"][0]["resources"] == ["cronjobs"]
     assert "resourceNames" not in role["rules"][0]
+
+
+@pytest.mark.parametrize("staging", [False, True])
+def test_partial_deploy_only_verifies_selected_targets(
+    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock, staging: bool
+) -> None:
+    monkeypatch.setattr(subprocess, "run", Mock())
+    deploy.deploy_operational_resources(
+        DYNAMICAL_DATASETS,
+        docker_image="test-image-tag",
+        dataset_id_filter="ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree",
+        cronjob_transform=(
+            lambda cj: cj.model_copy(update={"name": "staging-" + cj.command[0]})
+        )
+        if staging
+        else None,
+    )
+    assert admission_gate.call_count == 2
+    for call in admission_gate.call_args_list:
+        assert [t["metadata"]["name"] for t in call.args[1]] == [
+            "staging-update" if staging else "ecmwf-ifs-ens-46-day-daily-update"
+        ]
 
 
 @pytest.mark.parametrize("failed_gate", [0, 1])
