@@ -411,6 +411,7 @@ class VirtualRegionJob(
         current_size = self._committed_append_dim_size(readonly_store)
 
         for file_refs_batch in self.process_virtual_refs(remaining):
+            prepare_start = time.monotonic()
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
                 self._assert_probe_chunk_covered(coord, file_refs)
@@ -420,11 +421,13 @@ class VirtualRegionJob(
             stores = [primary_session.store, *(s.store for s in replica_sessions)]
 
             needed_size = self._needed_append_dim_size(refs)
-            if needed_size > current_size:
+            resized = needed_size > current_size
+            if resized:
                 self.sync_dims_to(stores, needed_size)
                 current_size = needed_size
 
             emit_start = time.monotonic()
+            prepare_s = emit_start - prepare_start
             self._emit_refs(stores, refs)
             emit_s = time.monotonic() - emit_start
 
@@ -437,7 +440,9 @@ class VirtualRegionJob(
             )
             log.info(
                 f"Committed {len(refs)} refs "
-                f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s)"
+                f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s) "
+                f"arrays={len({ref.data_var.path for ref in refs})} "
+                f"prepare={prepare_s:.1f}s resized={resized}"
             )
 
     def _assert_probe_chunk_covered(

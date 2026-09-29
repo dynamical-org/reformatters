@@ -1452,7 +1452,9 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     _assert_all_values(dataset, n_inits=4)
 
 
-def test_update_still_commits_per_tick(tmp_path: Path) -> None:
+def test_update_still_commits_per_tick(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     # Batching commits per worker for backfill must not collapse the update cadence:
     # the operational update still commits once per yielded tick, so readers see each
     # tick's files within seconds rather than waiting for the whole window.
@@ -1466,9 +1468,18 @@ def test_update_still_commits_per_tick(tmp_path: Path) -> None:
     job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
 
     before = _snapshot_count(repo)
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    with caplog.at_level("INFO"):
+        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
     assert _snapshot_count(repo) - before == 4
     _assert_all_values(dataset, n_inits=4)
+    commits = [
+        r.getMessage()
+        for r in caplog.records
+        if r.getMessage().startswith("Committed ")
+    ]
+    assert len(commits) == 4
+    assert all("arrays=1 prepare=" in message for message in commits)
+    assert all(message.endswith("resized=True") for message in commits)
 
 
 def test_update_routes_virtual_to_single_writer(
