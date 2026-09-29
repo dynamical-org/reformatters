@@ -457,10 +457,14 @@ def retry_job_name(job_name: str, max_retries: int = 1) -> str | None:
         return None
     parent = job_name[: match.start()] if match else job_name
     suffix = f"-r{retry + 1}"
-    if len(parent) + len(suffix) <= 63:
+    # Indexed pod hostnames append a hyphen and an int32 completion index.
+    max_name_length = 52
+    if len(parent) + len(suffix) <= max_name_length:
         return parent + suffix
     parent_digest = digest([parent], length=8)
-    prefix = parent[: 63 - len(suffix) - len(parent_digest) - 1].rstrip("-")
+    prefix = parent[: max_name_length - len(suffix) - len(parent_digest) - 1].rstrip(
+        "-"
+    )
     return f"{prefix}-{parent_digest}{suffix}"
 
 

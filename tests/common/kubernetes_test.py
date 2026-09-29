@@ -797,7 +797,8 @@ def test_retry_job_name_is_anchored_and_length_safe() -> None:
     second = retry_job_name("a" * 62 + "c")
     assert first is not None
     assert second is not None
-    assert len(first) <= 63
-    assert len(second) <= 63
+    assert len(first) <= 52
+    assert len(second) <= 52
+    assert len(f"{first}-2147483646") <= 63
     assert first != second
     assert first == retry_job_name("a" * 62 + "b")
