@@ -1,5 +1,7 @@
 import json
 import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, get_args
@@ -21,6 +23,26 @@ ECMWF_PARAM_DB_URL = "https://codes.ecmwf.int/grib/param-db/"
 
 # Downloaded from https://cfconventions.org/Data/cf-standard-names/current/src/cf-standard-name-table.xml
 CF_STANDARD_NAME_TABLE_PATH = Path(__file__).parent / "cf-standard-name-table.xml"
+
+
+@pytest.fixture(scope="module")
+def template_dataset() -> Iterator[Callable[[Path, bool], xr.Dataset]]:
+    datasets: dict[tuple[Path, bool], xr.Dataset] = {}
+    with ExitStack() as stack:
+
+        def open_template(path: Path, flattened: bool = False) -> xr.Dataset:
+            key = (path, flattened)
+            if key not in datasets:
+                ds = (
+                    validation.open_flattened_dataset(path, consolidated=False)
+                    if flattened
+                    else xr.open_zarr(path)
+                )
+                stack.callback(ds.close)
+                datasets[key] = ds
+            return datasets[key]
+
+        yield open_template
 
 
 @pytest.fixture(scope="session")
@@ -114,6 +136,7 @@ GEOGRAPHIC_XY_DATASET_IDS = {
 )
 def test_cf_latitude_longitude_recognized(
     dataset: DynamicalDataset[Any, Any],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     Ensure latitude and longitude coordinates are recognized as CF coordinates.
@@ -123,7 +146,7 @@ def test_cf_latitude_longitude_recognized(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    ds = template_dataset(template_path, False)
 
     # Check if this is a projected coordinate system (has x, y as dimension coords)
     if "x" in ds.dims and "y" in ds.dims:
@@ -219,6 +242,7 @@ def test_cf_latitude_longitude_recognized(
 )
 def test_cf_time_coordinates_recognized(
     dataset: DynamicalDataset[Any, Any],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     Ensure time-related coordinates are recognized by cf_xarray.
@@ -227,7 +251,7 @@ def test_cf_time_coordinates_recognized(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    ds = template_dataset(template_path, False)
 
     # Analysis dataset: just time coordinate
     if "time" in ds.coords:
@@ -276,6 +300,7 @@ def test_cf_time_coordinates_recognized(
 )
 def test_cf_ensemble_member_recognized(
     dataset: DynamicalDataset[Any, Any],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     Ensure ensemble_member coordinate is CF compliant where present.
@@ -283,7 +308,7 @@ def test_cf_ensemble_member_recognized(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    ds = template_dataset(template_path, False)
 
     if "ensemble_member" in ds.coords:
         ens_attrs = ds["ensemble_member"].attrs
@@ -357,6 +382,7 @@ def test_cf_dimension_coordinate_axis(
 )
 def test_cf_coordinates_have_long_name(
     dataset: DynamicalDataset[Any, Any],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     Ensure all coordinates have a long_name attribute as recommended by CF.
@@ -364,7 +390,7 @@ def test_cf_coordinates_have_long_name(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    ds = template_dataset(template_path, False)
 
     for coord_name in ds.coords:
         # spatial_ref is a special CRS coordinate and doesn't need long_name
@@ -383,6 +409,7 @@ def test_cf_coordinates_have_long_name(
 )
 def test_cf_data_variables_have_long_name(
     dataset: DynamicalDataset[Any, Any],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     Ensure all data variables have a long_name attribute as required by CF.
@@ -390,7 +417,7 @@ def test_cf_data_variables_have_long_name(
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
-    ds = xr.open_zarr(template_path)
+    ds = template_dataset(template_path, False)
 
     for var_name in ds.data_vars:
         var_attrs = ds[var_name].attrs
@@ -592,6 +619,7 @@ CF_UNITS_VARIANCES_DATASET_ALLOWLIST: set[tuple[str, str, str]] = {
 def test_cf_standard_name_and_units(
     dataset: DynamicalDataset[Any, Any],
     cf_standard_name_to_canonical_units: dict[str, str],
+    template_dataset: Callable[[Path, bool], xr.Dataset],
 ) -> None:
     """
     For each data variable:
@@ -605,7 +633,7 @@ def test_cf_standard_name_and_units(
 
     # Flattened so vertical-group vars (keyed by path, e.g. pressure_level/temperature)
     # are visible; xr.open_zarr would expose only the root group.
-    ds = validation.open_flattened_dataset(template_path, consolidated=False)
+    ds = template_dataset(template_path, True)
     recognized_standard_names = ds.cf.standard_names
 
     errors: list[str] = []

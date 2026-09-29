@@ -1,9 +1,12 @@
 import json
 import re
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from typer.testing import CliRunner
+import zarr
+from click import Command
+from click.testing import CliRunner
+from typer.main import get_command
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -16,6 +19,11 @@ runner = CliRunner()
 
 DATASET_IDS = [d.dataset_id for d in DYNAMICAL_DATASETS]
 IMPLEMENTED_DATASET_IDS = [d.dataset_id for d in IMPLEMENTED_DATASETS]
+
+
+@pytest.fixture(scope="module")
+def cli_command() -> Command:
+    return cast(Command, get_command(app))
 
 
 # --- Registry tests ---
@@ -39,49 +47,51 @@ def test_all_datasets_have_unique_versions() -> None:
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_help_works_for_dataset(dataset_id: str) -> None:
+def test_cli_help_works_for_dataset(dataset_id: str, cli_command: Command) -> None:
     """Verify the dataset subcommand is registered and --help doesn't crash."""
-    result = runner.invoke(app, [dataset_id, "--help"])
+    result = runner.invoke(cli_command, [dataset_id, "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_update_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "update", "--help"])
+def test_cli_has_update_command(dataset_id: str, cli_command: Command) -> None:
+    result = runner.invoke(cli_command, [dataset_id, "update", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} update --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_validate_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "validate", "--help"])
+def test_cli_has_validate_command(dataset_id: str, cli_command: Command) -> None:
+    result = runner.invoke(cli_command, [dataset_id, "validate", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} validate --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_update_template_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "update-template", "--help"])
+def test_cli_has_update_template_command(dataset_id: str, cli_command: Command) -> None:
+    result = runner.invoke(cli_command, [dataset_id, "update-template", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} update-template --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_backfill_kubernetes_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "backfill-kubernetes", "--help"])
+def test_cli_has_backfill_kubernetes_command(
+    dataset_id: str, cli_command: Command
+) -> None:
+    result = runner.invoke(cli_command, [dataset_id, "backfill-kubernetes", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} backfill-kubernetes --help failed: {result.output}\n{result.exception}"
     )
 
 
 @pytest.mark.parametrize("dataset_id", DATASET_IDS)
-def test_cli_has_backfill_command(dataset_id: str) -> None:
-    result = runner.invoke(app, [dataset_id, "backfill", "--help"])
+def test_cli_has_backfill_command(dataset_id: str, cli_command: Command) -> None:
+    result = runner.invoke(cli_command, [dataset_id, "backfill", "--help"])
     assert result.exit_code == 0, (
         f"{dataset_id} backfill --help failed: {result.output}\n{result.exception}"
     )
@@ -92,8 +102,10 @@ def test_cli_has_backfill_command(dataset_id: str) -> None:
     DYNAMICAL_DATASETS,
     ids=DATASET_IDS,
 )
-def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> None:
-    result = runner.invoke(app, [dataset.dataset_id, "dataset-urls"])
+def test_cli_dataset_urls_text_format(
+    dataset: DynamicalDataset[Any, Any], cli_command: Command
+) -> None:
+    result = runner.invoke(cli_command, [dataset.dataset_id, "dataset-urls"])
     assert result.exit_code == 0, (
         f"{dataset.dataset_id} dataset-urls failed: {result.output}\n{result.exception}"
     )
@@ -114,9 +126,11 @@ def test_cli_dataset_urls_text_format(dataset: DynamicalDataset[Any, Any]) -> No
     DYNAMICAL_DATASETS,
     ids=DATASET_IDS,
 )
-def test_cli_dataset_urls_json_format(dataset: DynamicalDataset[Any, Any]) -> None:
+def test_cli_dataset_urls_json_format(
+    dataset: DynamicalDataset[Any, Any], cli_command: Command
+) -> None:
     result = runner.invoke(
-        app, [dataset.dataset_id, "dataset-urls", "--format", "json"]
+        cli_command, [dataset.dataset_id, "dataset-urls", "--format", "json"]
     )
     assert result.exit_code == 0, (
         f"{dataset.dataset_id} dataset-urls --format json failed: "
@@ -129,23 +143,23 @@ def test_cli_dataset_urls_json_format(dataset: DynamicalDataset[Any, Any]) -> No
     }
 
 
-def test_cli_has_deploy_command() -> None:
-    result = runner.invoke(app, ["deploy", "--help"])
+def test_cli_has_deploy_command(cli_command: Command) -> None:
+    result = runner.invoke(cli_command, ["deploy", "--help"])
     assert result.exit_code == 0, f"deploy --help failed: {result.output}"
 
 
-def test_cli_has_deploy_staging_command() -> None:
-    result = runner.invoke(app, ["deploy-staging", "--help"])
+def test_cli_has_deploy_staging_command(cli_command: Command) -> None:
+    result = runner.invoke(cli_command, ["deploy-staging", "--help"])
     assert result.exit_code == 0, f"deploy-staging --help failed: {result.output}"
 
 
-def test_cli_has_cleanup_staging_command() -> None:
-    result = runner.invoke(app, ["cleanup-staging", "--help"])
+def test_cli_has_cleanup_staging_command(cli_command: Command) -> None:
+    result = runner.invoke(cli_command, ["cleanup-staging", "--help"])
     assert result.exit_code == 0, f"cleanup-staging --help failed: {result.output}"
 
 
-def test_cli_has_initialize_new_integration_command() -> None:
-    result = runner.invoke(app, ["initialize-new-integration", "--help"])
+def test_cli_has_initialize_new_integration_command(cli_command: Command) -> None:
+    result = runner.invoke(cli_command, ["initialize-new-integration", "--help"])
     assert result.exit_code == 0, (
         f"initialize-new-integration --help failed: {result.output}"
     )
@@ -356,10 +370,8 @@ def test_virtual_group_manifest_splits_are_explicit(
         if (match := re.search(r'path_matches\("(.*?)"\)', repr(condition)))
     ]
 
-    template = dataset.template_config.get_template(
-        dataset.template_config.append_dim_start
-    )
-    groups = [path.lstrip("/") for path in template.groups if path.strip("/")]
+    template = zarr.open_group(dataset.template_config.template_path(), mode="r")
+    groups = list(template.group_keys())
     unmatched = [
         group
         for group in groups

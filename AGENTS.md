@@ -74,7 +74,7 @@ Defines the **structure** of a dataset: dimensions, coordinates, data variables,
 
 Always regenerate the template after any metadata changes with `uv run main <dataset-id> update-template`.
 
-Run these tests after updating a template: `uv run pytest tests/common/common_template_config_subclasses_test.py tests/common/datasets_cf_compliance_test.py`.
+Run these tests after updating a template: `uv run pytest tests/common/common_template_config_subclasses_test.py tests/common/template_serialization_test.py tests/common/datasets_cf_compliance_test.py`. The fast suite checks every regenerated template and stored encoding; exhaustive metadata round trips are marked `slow`, with representative materialized and virtual round trips kept fast.
 
 #### Metadata conventions
 Metadata attributes for variables and coordinates must follow CF Conventions.
