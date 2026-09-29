@@ -1,12 +1,17 @@
 import json
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from typing import Any
 
 import typer
 
 from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes_security import (
+    trigger_admission_resources,
+    verify_trigger_admission,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
 
@@ -22,11 +27,10 @@ def deploy_operational_resources(
     image_tag = docker_image or docker.build_and_push_image()
 
     reformat_jobs: list[kubernetes.Job] = []
+    trigger_templates: dict[str, dict[str, Any]] = {}
+    deployed_trigger_templates: list[dict[str, Any]] = []
 
     for resource in resources:
-        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
-            continue
-
         try:
             dataset_cronjobs = list(
                 resource.operational_kubernetes_resources(image_tag)
@@ -38,8 +42,20 @@ def deploy_operational_resources(
             )
             continue
 
+        trigger_templates.update(
+            (cj.name, cj.as_kubernetes_object())
+            for cj in dataset_cronjobs
+            if cj.triggerable
+        )
+        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
+            continue
+
         if cronjob_transform is not None:
             dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
+
+        deployed_trigger_templates.extend(
+            cj.as_kubernetes_object() for cj in dataset_cronjobs if cj.triggerable
+        )
 
         reformat_jobs.extend(dataset_cronjobs)
 
@@ -47,23 +63,70 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    k8s_resource_list = {
-        "apiVersion": "v1",
-        "kind": "List",
-        "items": [
-            reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
-        ],
-    }
+    # An archiver-only deploy still grants access to its already-deployed targets.
+    templates = deployed_trigger_templates or list(trigger_templates.values())
+    verify_trigger_admission("default", templates, require_params=False)
 
-    subprocess.run(
-        ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=json.dumps(k8s_resource_list),
-        text=True,
-        check=True,
+    resource_groups: tuple[list[dict[str, Any]], ...] = (
+        [
+            {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+            },
+            *[reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
+        ],
+        [
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "Role",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+                "rules": [
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["cronjobs"],
+                        "verbs": ["get"],
+                    },
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["jobs"],
+                        "verbs": ["create", "get"],
+                    },
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "RoleBinding",
+                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "Role",
+                    "name": kubernetes.SERVICE_ACCOUNT,
+                },
+                "subjects": [
+                    {"kind": "ServiceAccount", "name": kubernetes.SERVICE_ACCOUNT}
+                ],
+            },
+        ],
     )
 
+    for index, group in enumerate(resource_groups):
+        if index == 1:
+            verify_trigger_admission("default", templates, require_params=True)
+        subprocess.run(
+            ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
+            input=json.dumps({"apiVersion": "v1", "kind": "List", "items": group}),
+            text=True,
+            check=True,
+        )
+
     log.info(
-        f"Deployed {[item['metadata']['name'] for item in k8s_resource_list['items']]}"  # type: ignore[index]
+        "Deployed %s",
+        [
+            item["metadata"]["name"]
+            for resources in resource_groups
+            for item in resources
+        ],
     )
 
 
@@ -72,6 +135,84 @@ def register_commands(
     datasets: Sequence[DynamicalDataset[Any, Any]],
     archivers: Sequence[OperationalResources] = (),
 ) -> None:
+    @app.command()
+    def verify_admission(bundle: Path, namespace: str = "default") -> None:
+        """Probe admission using server-side dry runs; creates no resources."""
+        items = json.loads(bundle.read_text())["items"]
+        names = [
+            item["spec"]["paramRef"]["name"]
+            for item in items
+            if "paramRef" in item["spec"]
+        ]
+        assert items == trigger_admission_resources(namespace, names), (
+            "Bundle does not match the complete generated policy"
+        )
+        for item in items:
+            installed = subprocess.run(  # noqa: S603
+                [
+                    "/usr/bin/kubectl",
+                    "get",
+                    item["kind"],
+                    item["metadata"]["name"],
+                    "-o",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert json.loads(installed.stdout)["spec"] == item["spec"], (
+                f"Installed {item['kind']} {item['metadata']['name']} differs from bundle"
+            )
+        templates = [
+            {
+                "metadata": {"name": name},
+                "spec": {
+                    "jobTemplate": {
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "restartPolicy": "Never",
+                                    "containers": [
+                                        {
+                                            "name": "worker",
+                                            "image": "invalid.example/admission-canary:never-run",
+                                        }
+                                    ],
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+            for name in names
+        ]
+        verify_trigger_admission(namespace, templates, require_params=False)
+
+    @app.command()
+    def render_admission_bundle(
+        namespace: str = "default",
+        staging_target: list[str] | None = None,
+    ) -> None:
+        """Render cluster-admin admission resources without contacting Kubernetes."""
+        targets = set(staging_target or [])
+        for resource in [*datasets, *archivers]:
+            try:
+                cronjobs = resource.operational_kubernetes_resources("unused")
+            except NotImplementedError:
+                continue
+            targets.update(cj.name for cj in cronjobs if cj.triggerable)
+        typer.echo(
+            json.dumps(
+                {
+                    "apiVersion": "v1",
+                    "kind": "List",
+                    "items": trigger_admission_resources(namespace, sorted(targets)),
+                },
+                indent=2,
+            )
+        )
+
     @app.command()
     def deploy(
         docker_image: str | None = None,

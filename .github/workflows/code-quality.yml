@@ -65,3 +65,24 @@ jobs:
 
       - name: Run Pytest
         run: uv run pytest -p no:sugar --verbose
+
+  admission:
+    name: Kubernetes admission
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+        with:
+          python-version-file: ".python-version"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --locked
+      - name: Install isolated Kubernetes API server
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/envtest.tar.gz" https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.36.0/envtest-v1.36.0-linux-amd64.tar.gz
+          echo "302d6a4c3b7d79b8a6168cd9fd5f18e718048211d25012d969d320e06b39672d17338bcd008c29adf98b41048a6f7d80c90ab0165b4b861497ef74c7bc6c1531  $RUNNER_TEMP/envtest.tar.gz" | sha512sum --check
+          tar -xzf "$RUNNER_TEMP/envtest.tar.gz" -C "$RUNNER_TEMP"
+      - name: Test admission on a real API server
+        env:
+          REFORMATTERS_ADMISSION_TEST_ASSETS: ${{ runner.temp }}/controller-tools/envtest
+        run: uv run pytest -n 0 tests/common/kubernetes_security_integration_test.py
