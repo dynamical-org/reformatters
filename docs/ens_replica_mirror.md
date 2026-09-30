@@ -19,7 +19,7 @@ explicitly authorized destination.
    or explicit abort. Updated writers refuse new writes and recheck the marker
    before every replica batch and metadata publication. A marker read failure fails
    closed. Schedule the outage and approve its duration and verification cost
-   separately with the operator; this code-only change authorizes none of them.
+   separately with the operator. Code does not authorize any of them.
 2. Drain **every** direct writer, including older deployed images that cannot observe
    the marker. Confirm jobs are terminal and pods/processes absent. Reconcile any
    partial direct writes against the chosen successfully published primary snapshot.
@@ -85,8 +85,8 @@ rechecks the primary tip immediately before copying plain-Zarr metadata and reje
 a detected intervening publication. Another publisher can still advance after that
 check: it cannot make plain Zarr transactional or serialize independent publishers.
 
-Keep complete receipt/pin/result sets while a job identity can retry. This PR
-implements no automatic deletion. Later operator archival is allowed only after
+Keep complete receipt/pin/result sets while a job identity can retry. Nothing
+deletes these records automatically. Later operator archival is allowed only after
 the job is terminal and retries for that identity are permanently disallowed.
 
 `uv run main ecmwf-ifs-ens-forecast-15-day-0-25-degree mirror-replica` finishes a
