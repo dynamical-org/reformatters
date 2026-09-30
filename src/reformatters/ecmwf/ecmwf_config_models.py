@@ -21,6 +21,7 @@ class MarsSourceOverrides(FrozenBaseModel):
     grib_element: str | None = None
     grib_comment: str | None = None
     scale_factor: float | None = None
+    add_offset: float | None = None
 
 
 class InitTimeScaleFactor(FrozenBaseModel):
