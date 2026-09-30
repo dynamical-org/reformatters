@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import rasterio
 
 from reformatters.common import template_utils
 from reformatters.common.iterating import item
@@ -432,10 +433,10 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
     rasterio_reader.count = 1
     # MARS uses different element names and descriptive text but same unit
     rasterio_reader.tags = Mock(
-        return_value={"GRIB_ELEMENT": "2T", "GRIB_COMMENT": "2 metre temperature [C]"}
+        return_value={"GRIB_ELEMENT": "2T", "GRIB_COMMENT": "2 metre temperature [K]"}
     )
-    test_data = np.ones((721, 1440), dtype=np.float32)
-    rasterio_reader.read = Mock(return_value=test_data)
+    test_data = np.full((721, 1440), 280.0, dtype=np.float64)
+    rasterio_reader.read = Mock(return_value=test_data.copy())
     monkeypatch.setattr(
         "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
@@ -443,10 +444,10 @@ def test_region_job_read_data_mars(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = region_job.read_data(source_file_coord, t2m_var)
 
-    assert np.array_equal(result, test_data)
+    np.testing.assert_array_equal(result, (test_data - 273.15).astype(np.float32))
     assert result.shape == (721, 1440)
     assert result.dtype == np.float32
-    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float32)
+    rasterio_reader.read.assert_called_once_with(1, out_dtype=np.float64)
 
 
 def test_region_job_read_data_mars_applies_scale_factor(
@@ -490,8 +491,8 @@ def test_region_job_read_data_mars_applies_scale_factor(
             "GRIB_COMMENT": "Geopotential (at the surface = orography) [m^2/s^2]",
         }
     )
-    test_data = np.full((721, 1440), 54000.0, dtype=np.float32)
-    rasterio_reader.read = Mock(return_value=test_data)
+    test_data = np.full((721, 1440), 54000.0, dtype=np.float64)
+    rasterio_reader.read = Mock(return_value=test_data.copy())
     monkeypatch.setattr(
         "reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.region_job.rasterio.open",
         Mock(return_value=rasterio_reader),
@@ -584,7 +585,10 @@ def test_download_file_from_ecmwf_open_data() -> None:
             downloaded_coord = replace(
                 source_coord, downloaded_path=region_job.download_file(source_coord)
             )
+            with rasterio.open(downloaded_coord.downloaded_path) as reader:
+                expected = reader.read(1, out_dtype=np.float32)
             data = region_job.read_data(downloaded_coord, data_var)
+            np.testing.assert_array_equal(data, expected)
             assert np.all(np.isfinite(data)), (
                 f"Non-finite values for {data_var.name} at lead_time={source_coord.lead_time}"
             )
