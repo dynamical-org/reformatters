@@ -50,11 +50,17 @@ def daily_var(name: str) -> EcmwfIfsEns46DayDataVar:
 
 
 def region_job(
-    data_var: EcmwfIfsEns46DayDataVar, tmp_path: Path
+    data_var: EcmwfIfsEns46DayDataVar,
+    tmp_path: Path,
+    template_ds: xr.DataTree | None = None,
 ) -> EcmwfIfsEns46DayRegionJob:
     return EcmwfIfsEns46DayRegionJob(
         tmp_store=tmp_path / "tmp.zarr",
-        template_ds=DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start),
+        template_ds=(
+            DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start)
+            if template_ds is None
+            else template_ds
+        ),
         data_vars=[data_var],
         append_dim=DAILY_CONFIG.append_dim,
         region=slice(0, 1),
@@ -414,9 +420,10 @@ def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
     archived_file_names = {
         selection.file_name for selection in initialization_selections(ECDS_VARIABLES)
     }
+    template_ds = DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start)
 
     for data_var in DAILY_CONFIG.data_vars:
-        job = region_job(data_var, tmp_path)
+        job = region_job(data_var, tmp_path, template_ds)
         processing_region_ds, _ = job._get_region_datasets()
         coords = job.generate_source_file_coords(
             processing_region_ds.isel(lead_time=slice(1, 3), ensemble_member=[0, 1]),

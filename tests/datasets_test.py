@@ -1,8 +1,12 @@
 import json
 import re
+from collections.abc import Iterator
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+import zarr
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
@@ -16,6 +20,12 @@ runner = CliRunner()
 
 DATASET_IDS = [d.dataset_id for d in DYNAMICAL_DATASETS]
 IMPLEMENTED_DATASET_IDS = [d.dataset_id for d in IMPLEMENTED_DATASETS]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def cached_cli_command() -> Iterator[None]:
+    with patch("typer.testing._get_command", return_value=get_command(app)):
+        yield
 
 
 # --- Registry tests ---
@@ -356,10 +366,8 @@ def test_virtual_group_manifest_splits_are_explicit(
         if (match := re.search(r'path_matches\("(.*?)"\)', repr(condition)))
     ]
 
-    template = dataset.template_config.get_template(
-        dataset.template_config.append_dim_start
-    )
-    groups = [path.lstrip("/") for path in template.groups if path.strip("/")]
+    template = zarr.open_group(dataset.template_config.template_path(), mode="r")
+    groups = list(template.group_keys())
     unmatched = [
         group
         for group in groups

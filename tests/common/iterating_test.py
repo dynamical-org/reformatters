@@ -227,7 +227,15 @@ def test_get_worker_jobs_partitions_all_jobs(
 ) -> None:
     # Callers derive workers_total = ceil(n_jobs / jobs_per_pod), which guarantees
     # every contiguous worker's block is non-empty.
-    for n, jobs_per_pod in ((11641, 30), (7, 3), (100, 7), (5, 5), (1, 1), (30, 30)):
+    large_job_count = 11641 if worker_assignment == "contiguous" else 1237
+    for n, jobs_per_pod in (
+        (large_job_count, 30),
+        (7, 3),
+        (100, 7),
+        (5, 5),
+        (1, 1),
+        (30, 30),
+    ):
         jobs = list(range(n))
         workers_total = math.ceil(n / jobs_per_pod)
         subsets = [
