@@ -1043,7 +1043,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
 
 
 class TestReplicaOrdering:
-    """Replicas are written before the primary in both parallel-setup and
+    """Icechunk replicas are written before the primary in parallel setup and
     finalize, so that if a failure occurs mid-way the primary (which drives
     future work) still reflects the pre-update state.
 
@@ -1052,9 +1052,9 @@ class TestReplicaOrdering:
     commit_if_icechunk. commit_if_icechunk is separately verified to commit
     replicas first in tests/common/storage_test.py.
 
-    Finalize ordering: _finalize publishes zarr v3 stores (only ever replicas)
-    before icechunk ones, and iterates icechunk_repos(sort="primary-last") for
-    the per-repo commit + reset. The tests below observe both end-to-end.
+    Finalize ordering: Icechunk repositories commit and reset in primary-last
+    order; plain-Zarr metadata follows successful primary publication.
+    The tests below observe both end-to-end.
     Ordering under a partial failure between replica and primary resets is
     additionally verified by TestLastWorkerRetryAfterPartialFinalize."""
 

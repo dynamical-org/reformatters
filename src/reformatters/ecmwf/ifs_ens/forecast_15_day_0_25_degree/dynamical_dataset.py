@@ -30,7 +30,11 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             assert self.store_factory.replica_mode() == "active", (
                 "Changed ENS origin requires verified mirror handoff"
             )
-        return self.template_config.model_copy(update={"append_dim_start": origin})
+        return (
+            self.template_config
+            if origin == self.template_config.append_dim_start
+            else self.template_config.model_copy(update={"append_dim_start": origin})
+        )
 
     template_config: EcmwfIfsEnsForecast15Day025DegreeTemplateConfig = (
         EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()

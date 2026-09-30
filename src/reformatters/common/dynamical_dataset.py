@@ -738,7 +738,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             else self.store_factory.primary_store(),
             tmp_store=tmp_store,
             get_template_fn=self._get_template
-            if template_config is None
+            if template_config is None or template_config is self.template_config
             else template_config.get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,

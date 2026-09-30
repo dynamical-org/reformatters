@@ -27,6 +27,7 @@ explicitly authorized destination.
 4. `adopt SNAPSHOT INVENTORY_SHA256 REHEARSAL DRAINED_WRITERS --max-read-bytes BYTES`
    recomputes the inventory under exclusive ownership. The entire residual must
    fit the explicit budget **before the first data GET**; the default is zero.
+   Inline source bytes are compared from manifests and do not consume GET budget.
    Every residual shard is compared byte for byte. Only successful verification
    creates the active checkpoint and durable proof record.
 

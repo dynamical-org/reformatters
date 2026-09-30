@@ -304,6 +304,13 @@ def test_non_ens_operational_setup_preserves_jobs_and_commit_sequence(
     old_jobs, old_template = dataset._operational_update_jobs(
         "daily", tmp_path / "before"
     )
+    template_calls: list[DatetimeLike] = []
+
+    def customized_template(end_time: DatetimeLike) -> xr.DataTree:
+        template_calls.append(end_time)
+        return old_template
+
+    monkeypatch.setattr(dataset, "_get_template", customized_template)
     original = dataset._operational_update_jobs
 
     def check_pinned(
@@ -353,6 +360,7 @@ def test_non_ens_operational_setup_preserves_jobs_and_commit_sequence(
 
         monkeypatch.setattr(ParallelRegionJob, "process_worker_jobs", forbid_ingestion)
     dataset.update("daily")
+    assert template_calls
     history = list(repo.ancestry(branch="main"))
     assert history[3].id == baseline
     assert history[2].message == "Expand dataset"
