@@ -262,8 +262,9 @@ def test_ens_origin_policy_and_temporal_attributes() -> None:
     assert dataset.template_config.append_dim_start == pd.Timestamp("2024-04-01")
 
 
+@pytest.mark.parametrize("crash_after_cas", [False, True])
 def test_non_ens_operational_setup_preserves_jobs_and_commit_sequence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crash_after_cas: bool
 ) -> None:
     monkeypatch.setattr(
         materialized_region_job, "ProcessPoolExecutor", ThreadPoolExecutor
@@ -332,6 +333,25 @@ def test_non_ens_operational_setup_preserves_jobs_and_commit_sequence(
     monkeypatch.setattr(ParallelDataset, "_operational_update_jobs", check_pinned)
     repo = dict(dataset.store_factory.icechunk_repos(sort="primary-first"))["primary"]
     baseline = repo.lookup_branch("main")
+    if crash_after_cas:
+        original_write = StoreFactory.write_coordination_file
+
+        def crash_before_receipt(
+            self: StoreFactory, job_name: str, key: str, data: bytes
+        ) -> None:
+            if key == "publication/primary.json":
+                raise InterruptedError("crash after CAS")
+            original_write(self, job_name, key, data)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(StoreFactory, "write_coordination_file", crash_before_receipt)
+            with pytest.raises(InterruptedError, match="after CAS"):
+                dataset.update("daily")
+
+        def forbid_ingestion(*args: object, **kwargs: object) -> None:
+            pytest.fail("Retry ingested again after successful primary CAS")
+
+        monkeypatch.setattr(ParallelRegionJob, "process_worker_jobs", forbid_ingestion)
     dataset.update("daily")
     history = list(repo.ancestry(branch="main"))
     assert history[3].id == baseline

@@ -556,6 +556,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
         # 2. Process jobs. Each region job variant owns its own store/session
         # lifecycle and commit cadence behind this one call.
+        already_published = (
+            pinned_setup is not None
+            and parallel_coordination.recover_primary_publication(
+                self.store_factory, reformat_job_name, pinned_setup
+            )
+        )
         worker_results: dict[str, list[SourceFileResult]] = (
             self.region_job_class.process_worker_jobs(
                 worker_jobs,
@@ -565,25 +571,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 overwrite_chunks=overwrite_chunks
                 or self.region_job_class.rewrites_whole_region,
             )
-            if worker_jobs
-            and not (
-                pinned_setup is not None
-                and self.store_factory.read_coordination_file(
-                    reformat_job_name, "publication/primary.json"
-                )
-                is not None
-            )
+            if worker_jobs and not already_published
             else {}
         )
 
         # 3. Write results and finalize
-        if (workers_total > 1 or pinned_setup is not None) and not (
-            pinned_setup is not None
-            and self.store_factory.read_coordination_file(
-                reformat_job_name, "publication/primary.json"
-            )
-            is not None
-        ):
+        if (workers_total > 1 or pinned_setup is not None) and not already_published:
             self.store_factory.write_coordination_file(
                 reformat_job_name,
                 f"results/worker-{worker_index}.json",

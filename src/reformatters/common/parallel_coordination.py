@@ -289,6 +289,27 @@ def collect_results(
     return merged
 
 
+def recover_primary_publication(
+    factory: StoreFactory, job_name: str, setup: SetupInfo
+) -> bool:
+    receipt = factory.read_coordination_file(job_name, "publication/primary.json")
+    if receipt is not None:
+        return True
+    repo = dict(factory.icechunk_repos(sort="primary-first"))["primary"]
+    current = repo.lookup_branch("main")
+    if current == setup["repo_snapshots"]["primary"]:
+        return False
+    prepared = factory.read_coordination_file(
+        job_name, "publication/prepared-primary.json"
+    )
+    if prepared is not None and json.loads(prepared)["snapshot"] == current:
+        factory.write_coordination_file(job_name, "publication/primary.json", prepared)
+        return True
+    raise RuntimeError(
+        "main moved during this job; positional writes cannot be retried"
+    )
+
+
 def finalize(
     store_factory: StoreFactory,
     *,
@@ -466,6 +487,12 @@ def _publish_icechunk(
             exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
         new_snapshot = session.commit(commit_message)
+        if "origin" in setup_info:
+            store_factory.write_coordination_file(
+                reformat_job_name,
+                f"publication/prepared-{role}.json",
+                json.dumps({"snapshot": new_snapshot}).encode(),
+            )
         repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         if role == "primary":
             published_snapshot = new_snapshot

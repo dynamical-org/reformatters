@@ -110,7 +110,7 @@ Workers 1+ that were polling for setup will proceed once the file appears.
 Finalization is not atomic. Possible partial states:
 - **Died before any `reset_branch`** — main unchanged, all data is on the temp branch. Retry re-enters finalization and completes it.
 - **Died after resetting some replicas but not primary** — replicas are ahead of primary. On retry, finalize detects a repo whose main is already on the temp branch (reset by the previous attempt) and skips it, then resets the remaining repos, primary last.
-- **Died after primary CAS but before plain-Zarr metadata** — primary is published; replica expansion is still pending. Retry finalization using the durable publication record, or retry the activated ENS mirror.
+- **Died after primary CAS but before plain-Zarr metadata** — primary is published; replica expansion is still pending. The intended publication snapshot is recorded before CAS, so a retry can recover a missing success receipt from actual main without rerunning ingestion. Retry finalization using that durable record, or retry the activated ENS mirror.
 - **Died after resetting all stores but before branch cleanup** — data is fully committed. Orphan branch and coordination files remain but don't affect correctness. A fresh job uses a different job name.
 
 Icechunk readers see atomic snapshots. Plain-Zarr replication is not transactional: updates to existing chunks may be visible before metadata expands, and failures can temporarily leave it behind the primary.
