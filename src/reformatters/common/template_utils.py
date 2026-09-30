@@ -189,6 +189,22 @@ def _non_append_dimension_coords(
     return coords
 
 
+def assert_append_labels_match(
+    template: xr.DataTree, existing: xr.DataTree, append_dim: str
+) -> None:
+    for node in existing.subtree:
+        if append_dim not in node.coords:
+            continue
+        stored = node.coords[append_dim].values
+        labels = template[node.path].coords[append_dim].values
+        assert len(labels) >= len(stored), (
+            f"{node.path}: template labels retract stored prefix"
+        )
+        assert np.array_equal(labels[: len(stored)], stored), (
+            f"{node.path}: template {append_dim} labels differ from writable store"
+        )
+
+
 def assert_no_structural_drift_from_existing_store(
     template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
 ) -> None:
@@ -212,6 +228,7 @@ def assert_no_structural_drift_from_existing_store(
     to the (varying) template length. In production these sizes are fixed config, so any
     change is caught here as well as at PR time by the template-drift test.
     """
+    assert_append_labels_match(template_ds, existing_ds, append_dim)
     mismatches = structural_mismatches(template_ds, existing_ds, append_dim)
     if mismatches:
         raise ValueError(

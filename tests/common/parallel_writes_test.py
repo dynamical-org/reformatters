@@ -1147,12 +1147,10 @@ class TestReplicaOrdering:
 
         assert reset_order == ["replica-0", "replica-1", "primary"]
 
-    def test_finalize_publishes_zarr3_replica_before_icechunk_primary(
+    def test_finalize_publishes_zarr3_replica_after_icechunk_primary(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Zarr v3 stores are published in a separate pass from icechunk stores,
-        and that pass runs first: a zarr v3 replica of an icechunk primary is
-        published before the primary's main branch advances."""
+        """Replica metadata is published only after the primary CAS succeeds."""
         monkeypatch.setattr(
             storage_module,
             "_get_store_path",
@@ -1209,7 +1207,7 @@ class TestReplicaOrdering:
             update_template_with_results=True,
         )
 
-        assert publish_order == ["zarr3-replica", "icechunk-primary"]
+        assert publish_order == ["icechunk-primary", "zarr3-replica"]
 
 
 class TestConcurrentJobs:

@@ -1,9 +1,12 @@
 from collections.abc import Sequence
 from datetime import timedelta
 
+import pandas as pd
+
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.types import Timestamp
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
 )
@@ -16,6 +19,19 @@ from .template_config import EcmwfIfsEnsForecast15Day025DegreeTemplateConfig
 class EcmwfIfsEnsForecast15Day025DegreeDataset(
     DynamicalDataset[EcmwfDataVar, IfsEnsSourceFileCoord]
 ):
+    approved_origins: tuple[Timestamp, ...] = (pd.Timestamp("2024-04-01"),)
+    replica_handoff: bool = True
+
+    def _template_config_for_origin(
+        self, origin: pd.Timestamp
+    ) -> EcmwfIfsEnsForecast15Day025DegreeTemplateConfig:
+        assert origin in self.approved_origins, "Unapproved published ENS origin"
+        if origin != pd.Timestamp("2024-04-01") and self.replica_storage_configs:
+            assert self.store_factory.replica_mode() == "active", (
+                "Changed ENS origin requires verified mirror handoff"
+            )
+        return self.template_config.model_copy(update={"append_dim_start": origin})
+
     template_config: EcmwfIfsEnsForecast15Day025DegreeTemplateConfig = (
         EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
     )
