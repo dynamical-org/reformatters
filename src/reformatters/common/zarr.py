@@ -1,4 +1,4 @@
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
 
 import xarray as xr
@@ -53,6 +53,7 @@ def copy_data_var(
     tmp_store: Path,
     primary_store: Store,
     replica_stores: Iterable[Store] = (),
+    replica_write_guard: Callable[[], None] | None = None,
 ) -> None:
     """Copy one shard's chunk files from `tmp_store` to the output stores.
 
@@ -66,6 +67,8 @@ def copy_data_var(
     relative_dir = f"{data_var_path}/c/{shard_index}/"
 
     for replica_store in replica_stores:
+        if replica_write_guard is not None:
+            replica_write_guard()
         log.info(
             f"Copying data var chunks to replica store ({_store_repr(replica_store)}) for {relative_dir}."
         )
@@ -132,6 +135,7 @@ def copy_zarr_metadata(
     zarr3_only: bool = False,
     skip_unchanged: bool = False,
     exclude_coord_value_chunks: Collection[str] = (),
+    replica_write_guard: Callable[[], None] | None = None,
 ) -> None:
     """
     Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
@@ -174,6 +178,8 @@ def copy_zarr_metadata(
     for replica_store in replica_stores:
         if _should_skip(replica_store):
             continue
+        if replica_write_guard is not None:
+            replica_write_guard()
 
         log.info(
             f"Copying metadata to replica store ({_store_repr(replica_store)}) from {tmp_store}"

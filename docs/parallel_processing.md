@@ -55,9 +55,9 @@ For fresh-store backfills, metadata is written before workers start (the dataset
 
 All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
-1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
+1. **Worker 0 setup** — for materialized operational updates, atomically persists `pin/source.json` before any worker generates templates or positional jobs. The record contains repository snapshots, job branch, origin and checked-in template/config identity. The immutable snapshot identifies published metadata without a chunk inventory scan. Every worker derives jobs from that pinned source; structural guards inspect it rather than reopening moving main. The published first append coordinate must match configured `append_dim_start`, except for ENS explicitly approved origins. Setup creates the job branch from the exact pin, copies expanded metadata, commits, then publishes `setup/ready.json`. Backfills retain their existing setup path.
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
-3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
+3. **Last worker finalization** — writes final metadata on the branch and commits without rebase, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main. Across datasets, plain-Zarr metadata follows successful primary publication; a final primary-tip recheck rejects detected intervening publication. The remaining gap after that check means plain Zarr is still not transactional.
 
 ### Virtual Icechunk operational updates (single-writer exception)
 
@@ -69,11 +69,11 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
+Workers coordinate under `{base_path}/{dataset_id}/_internal/{job_name}/`. Materialized Icechunk operational updates persist pin, ready, results and publication records even for one worker. Other single-worker jobs skip coordination files.
 
 ### Setup signal
 
-Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.
+Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this exact file before writing. Materialized operational workers first wait for the separate immutable `pin/source.json`, derive their jobs, then wait for ready. Before each materialized worker writes, including backfills, it compares its append labels with the actual writable session; finalization repeats that comparison. A changed origin cannot relabel positional writes. Job-branch worker rebases combine disjoint writes only within this fixed layout; final publication never rebases onto a changed main layout.
 
 ### Results
 
@@ -81,7 +81,12 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 
 ### Cleanup
 
-After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
+After successful finalization, the last worker deletes the temporary Icechunk branch. Materialized operational updates retain their pin, results and publication records for retry/audit; other jobs clear their coordination directory. A completed materialized job retries only its post-commit mirror hook. Use a new job identity to process new data.
+
+Keep complete receipt/pin/result sets while that job identity can retry, including
+single-worker jobs. There is no automatic deletion for these records. Later
+operator archival requires the job to be terminal and retries for its identity
+to be permanently disallowed.
 
 ## Failure modes
 
@@ -98,8 +103,9 @@ Other workers are unaffected.
 ### Worker 0 dies during setup, restarted
 
 On restart, worker 0 retries setup:
-- Branch creation catches "already exists" and reuses the existing branch
-- Metadata write is idempotent
+- Materialized operational updates reuse the atomic pin, including after a crash before branch creation or ready. An orphan branch without a pin fails closed. A changed template identity requires a new job.
+- Branch creation reuses the existing branch
+- A pinned job with a completed ready record skips expansion; otherwise metadata expansion is retried
 - `setup/ready.json` is written (or overwritten) when setup completes
 
 Workers 1+ that were polling for setup will proceed once the file appears.
@@ -109,9 +115,10 @@ Workers 1+ that were polling for setup will proceed once the file appears.
 Finalization is not atomic. Possible partial states:
 - **Died before any `reset_branch`** — main unchanged, all data is on the temp branch. Retry re-enters finalization and completes it.
 - **Died after resetting some replicas but not primary** — replicas are ahead of primary. On retry, finalize detects a repo whose main is already on the temp branch (reset by the previous attempt) and skips it, then resets the remaining repos, primary last.
+- **Died after primary CAS but before plain-Zarr metadata** — primary is published; replica expansion is still pending. The intended publication snapshot is recorded before CAS, so a retry can recover a missing success receipt from actual main without rerunning ingestion. Retry finalization using that durable record, or retry the activated ENS mirror.
 - **Died after resetting all stores but before branch cleanup** — data is fully committed. Orphan branch and coordination files remain but don't affect correctness. A fresh job uses a different job name.
 
-In all cases, `main` either hasn't moved (safe) or has moved to the correct final state. Reader-visible data is never corrupted.
+Icechunk readers see atomic snapshots. Plain-Zarr replication is not transactional: updates to existing chunks may be visible before metadata expands, and failures can temporarily leave it behind the primary.
 
 ### Worker exhausts per-index retry limit
 
@@ -125,6 +132,6 @@ Because any operational update that publishes during an overwrite backfill makes
 
 ## Replica ordering
 
-Replicas are always updated before the primary store. This ensures that if a failure occurs between updating replicas and primary, the primary (which drives what work needs to be done) still reflects the pre-update state, causing a retry to redo all the work including re-updating replicas.
+Direct data writes still copy replicas before primary workers commit. Icechunk replica repositories finalize before the Icechunk primary. Plain-Zarr coordinate/metadata publication follows successful primary CAS, so a job that loses publication cannot expand replica metadata. This ordering does not make direct plain-Zarr chunk rewrites transactional.
 
-Finalization publishes in two passes by format — zarr v3 stores, then icechunk stores. Zarr v3 is deprecated: no new zarr v3 store is created and the remaining ones are only ever replicas of an icechunk primary (a registry test in `tests/datasets_test.py` enforces this), so publishing that format first keeps the primary the last store to advance.
+ENS retains direct replication on ordinary deployment. Only a verified operator handoff switches it to an independent fixed-April-2024 mirror. The mirror copies successfully published snapshots by timestamp, expands metadata last and checkpoints success. See [ENS replica handoff](ens_replica_mirror.md) for the pending marker, non-expiring lock, budgeted adoption proof, epoch protocol and retries.
