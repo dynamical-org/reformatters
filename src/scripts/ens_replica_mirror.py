@@ -26,6 +26,13 @@ def pending(handoff_id: str) -> None:
 
 
 @app.command()
+def abort_handoff(drained_writers: str, operator_evidence: str) -> None:
+    mirror.abort_handoff(
+        factory(), drained_writers=drained_writers, operator_evidence=operator_evidence
+    )
+
+
+@app.command()
 def adoption_dry_run(snapshot: str, report: Path) -> None:
     report.write_text(
         json.dumps(mirror.adoption_dry_run(factory(), snapshot), indent=2)

@@ -7,6 +7,7 @@ import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
+from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 
 from reformatters.common import materialized_region_job, template_utils
@@ -96,6 +97,27 @@ def test_pin_rejects_changed_template_identity() -> None:
             append_dim="time",
             template_identity="two",
         )
+
+
+def test_pin_does_not_enumerate_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+    sf = factory()
+    repo = sf.icechunk_repos(sort="primary-first")[0][1]
+    snapshot = write_origin(repo, "2024-04-01")
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("Pin enumerated chunks")
+
+    monkeypatch.setattr(IcechunkStore, "list", forbidden)
+    monkeypatch.setattr(IcechunkStore, "array_chunk_iterator", forbidden)
+    pin = pc.pin_operational_update(
+        sf,
+        is_first=True,
+        reformat_job_name="daily",
+        append_dim="time",
+        template_identity="template",
+    )
+    assert pin["repo_snapshots"]["primary"] == snapshot
+    assert "published_layout_identity" not in pin
 
 
 def test_stale_worker_labels_rejected_before_write() -> None:

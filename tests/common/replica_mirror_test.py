@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import multiprocessing
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,168 @@ def test_pending_marker_blocks_direct_writers() -> None:
         sf.assert_direct_replica_writes()
     with pytest.raises(AssertionError, match="pending"):
         sf.primary_store(writable=True)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("after_write", [False, True])
+@pytest.mark.parametrize(
+    "crash_key",
+    [
+        "init_time/c/0",
+        "ingested_forecast_length/zarr.json",
+        "init_time/zarr.json",
+        "temperature/zarr.json",
+        "zarr.json",
+    ],
+)
+def test_replay_partial_coordinate_metadata(
+    monkeypatch: pytest.MonkeyPatch, reverse: bool, after_write: bool, crash_key: str
+) -> None:
+    sf, repo = stores()
+    activate(sf, repo)
+    target = append_days(repo, 5)
+    mapping = mirror._mapping
+
+    def ordered_mapping(
+        source: Store, destination: Store, *, checkpoint_length: int | None = None
+    ) -> tuple[dict[str, zarr.Array], dict[str, zarr.Array], set[str], int, int]:
+        arrays, replicas, coords, offset, length = mapping(
+            source, destination, checkpoint_length=checkpoint_length
+        )
+        return (
+            dict(sorted(arrays.items(), reverse=reverse)),
+            replicas,
+            coords,
+            offset,
+            length,
+        )
+
+    monkeypatch.setattr(mirror, "_mapping", ordered_mapping)
+    original = mirror._put
+
+    def interrupted(store: Store, key: str, value: bytes | None) -> None:
+        crash = isinstance(store, zarr.storage.LocalStore) and key == crash_key
+        if crash and not after_write:
+            raise InterruptedError("metadata crash")
+        original(store, key, value)
+        if crash:
+            raise InterruptedError("metadata crash")
+
+    monkeypatch.setattr(mirror, "_put", interrupted)
+    with pytest.raises(InterruptedError, match="metadata crash"):
+        mirror.mirror_published(sf, target)
+    assert mirror.read_state(sf)["pending"] == target
+    monkeypatch.setattr(mirror, "_put", original)
+    mirror.retry_mirror(sf)
+    mirror.retry_mirror(sf)
+    assert mirror.read_state(sf)["snapshot"] == target
+    assert mirror.read_state(sf)["pending"] is None
+    for consolidated in (False, True):
+        with xr.open_zarr(
+            sf.replica_stores()[0], consolidated=consolidated, decode_timedelta=True
+        ) as actual:
+            xr.testing.assert_equal(actual, dataset("2024-04-01", 5))
+            assert np.isnat(actual.ingested_forecast_length.values).all()
+
+
+@pytest.mark.parametrize("corruption", ["nat", "old-label", "short", "long", "schema"])
+def test_pending_replay_rejects_corruption(corruption: str) -> None:
+    sf, repo = stores()
+    activate(sf, repo)
+    target = append_days(repo, 5)
+    state = mirror.read_state(sf)
+    state["pending"] = target
+    mirror._save(sf, state)
+    destination = sf.replica_stores(writable=True, mirror=True)[0]
+    if corruption in {"nat", "old-label"}:
+        array = zarr.open_array(destination, path="init_time", mode="r+")
+        array[1] = np.nan if corruption == "nat" else array[0]
+    else:
+        metadata = json.loads(
+            mirror._bytes(destination, "temperature/zarr.json") or b""
+        )
+        if corruption == "schema":
+            metadata["attributes"]["units"] = "corrupt"
+        else:
+            metadata["shape"] = [2 if corruption == "short" else 6]
+        mirror._put(destination, "temperature/zarr.json", json.dumps(metadata).encode())
+    with pytest.raises(AssertionError, match=r"labels|daily grid|bounds|layout drift"):
+        mirror.retry_mirror(sf)
+    assert mirror.read_state(sf) == state
+
+
+def test_abort_pending_handoff_records_audit_before_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sf, repo = stores()
+    initialize(sf, repo)
+    mirror.begin_handoff(sf, "handoff")
+    delete = StoreFactory.delete_coordination_file
+
+    def checked_delete(self: StoreFactory, job: str, key: str) -> None:
+        if key == "state.json":
+            audits = self.read_all_coordination_files(job, "aborted")
+            assert len(audits) == 1
+            audit = json.loads(audits[0])
+            assert audit["state"] == mirror.read_state(self)
+            assert audit["drained_writers"] == "all writers terminal and absent"
+            assert audit["operator_evidence"] == "operator approves return to direct"
+            assert pd.Timestamp(audit["aborted_at"]).utcoffset() == pd.Timedelta(0)
+        delete(self, job, key)
+
+    monkeypatch.setattr(StoreFactory, "delete_coordination_file", checked_delete)
+    mirror.abort_handoff(
+        sf,
+        drained_writers="all writers terminal and absent",
+        operator_evidence="operator approves return to direct",
+    )
+    assert sf.replica_mode() == "direct"
+    sf.primary_store(writable=True)
+    sf.assert_direct_replica_writes()
+
+
+@pytest.mark.parametrize(
+    "failure", ["audit", "removal", "lock", "active", "drain", "operator"]
+)
+def test_abort_handoff_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    sf, repo = stores()
+    if failure == "active":
+        activate(sf, repo)
+    else:
+        initialize(sf, repo)
+        mirror.begin_handoff(sf, "handoff")
+    state = mirror.read_state(sf)
+    create = StoreFactory.create_coordination_file
+    delete = StoreFactory.delete_coordination_file
+
+    def create_failure(self: StoreFactory, job: str, key: str, data: bytes) -> None:
+        if key.startswith("aborted/"):
+            raise OSError("audit failure")
+        create(self, job, key, data)
+
+    def delete_failure(self: StoreFactory, job: str, key: str) -> None:
+        if key == "state.json":
+            raise OSError("removal failure")
+        delete(self, job, key)
+
+    if failure == "audit":
+        monkeypatch.setattr(StoreFactory, "create_coordination_file", create_failure)
+    elif failure == "removal":
+        monkeypatch.setattr(StoreFactory, "delete_coordination_file", delete_failure)
+    elif failure == "lock":
+        create(sf, mirror._JOB, "lock.json", b"another owner")
+    with pytest.raises((AssertionError, OSError)):
+        mirror.abort_handoff(
+            sf,
+            drained_writers="  " if failure == "drain" else "drained",
+            operator_evidence="" if failure == "operator" else "approved",
+        )
+    assert mirror.read_state(sf) == state
+    if failure != "active":
+        with pytest.raises(AssertionError, match="pending"):
+            sf.primary_store(writable=True)
 
 
 def test_mirror_copies_published_append_and_retries() -> None:

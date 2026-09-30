@@ -14,9 +14,12 @@ commands live in `uv run src/scripts/ens_replica_mirror.py`; `--help` describes 
 arguments. They use the configured ENS stores and must only be run against an
 explicitly authorized destination.
 
-1. `pending HANDOFF_ID` atomically persists a pending marker. Updated writers refuse
-   new direct writes and recheck the marker before every replica batch and metadata
-   publication. A marker read failure fails closed.
+1. `pending HANDOFF_ID` atomically persists a pending marker. This stops **all ENS
+   primary daily publication**, not just replica writes, until successful adoption
+   or explicit abort. Updated writers refuse new writes and recheck the marker
+   before every replica batch and metadata publication. A marker read failure fails
+   closed. Schedule the outage and approve its duration and verification cost
+   separately with the operator; this code-only change authorizes none of them.
 2. Drain **every** direct writer, including older deployed images that cannot observe
    the marker. Confirm jobs are terminal and pods/processes absent. Reconcile any
    partial direct writes against the chosen successfully published primary snapshot.
@@ -38,6 +41,15 @@ decision. A dry run does not authorize those reads. Rehearsal and drain attestat
 are prerequisites, not evidence of byte equality. Snapshot, destination identity,
 schema, coordinates, keys and reference inventory bind the reviewed digest.
 
+To abandon a pending handoff, drain all writers and obtain explicit operator
+approval to resume direct publication, reconciling any partial direct writes first.
+`abort-handoff DRAINED_WRITERS OPERATOR_EVIDENCE` requires nonempty evidence for both,
+holds the same exclusive lock, and persists an audit containing the pending state,
+evidence and UTC timestamp before removing the marker. An audit or marker-removal
+failure leaves the marker blocking writes. Active handoffs cannot be aborted by
+this command. Retain abort audits; removing the marker permits new direct writes
+and primary daily publication again. It does not repair partial data or restart jobs.
+
 ## Daily mirroring and retry
 
 An active handoff disables direct ENS replica writes. After successful primary
@@ -52,6 +64,30 @@ Data and coordinates precede metadata publication. Replica root coverage and
 attribution stay replica-specific. The checkpoint advances only after success.
 Plain Zarr is not transactional: readers can observe partially replaced existing
 chunks during an interrupted copy, even though expanded metadata is published last.
+Pending replay reads `init_time` independently and validates each array's append
+length against the durable checkpoint and target. It tolerates interrupted metadata
+growth while still rejecting invalid labels, incompatible schemas and out-of-range
+lengths. Array metadata precedes the final consolidated root metadata write.
+
+## Shared materialized-dataset behavior and retention
+
+The coordination changes apply to all materialized Icechunk operational updates,
+including single-worker jobs: the source pin, ready marker, worker results and
+publication receipts remain durable. The published first append coordinate must
+equal the configured `append_dim_start`; ENS alone can select an explicitly approved
+origin. All materialized writers, including backfills, compare actual writable
+stored append labels before writing and again during finalization.
+
+The shared final Icechunk branch commit does not rebase. A stale main CAS fails;
+worker commits on the job branch retain their existing conflict handling. Across
+datasets, plain-Zarr metadata follows successful primary publication. The finalizer
+rechecks the primary tip immediately before copying plain-Zarr metadata and rejects
+a detected intervening publication. Another publisher can still advance after that
+check: it cannot make plain Zarr transactional or serialize independent publishers.
+
+Keep complete receipt/pin/result sets while a job identity can retry. This PR
+implements no automatic deletion. Later operator archival is allowed only after
+the job is terminal and retries for that identity are permanently disallowed.
 
 `uv run main ecmwf-ifs-ens-forecast-15-day-0-25-degree mirror-replica` finishes a
 durable pending target before catching up to the pinned main snapshot. A later

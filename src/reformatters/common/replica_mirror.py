@@ -177,6 +177,29 @@ def begin_handoff(factory: StoreFactory, handoff_id: str) -> None:
         )
 
 
+def abort_handoff(
+    factory: StoreFactory, *, drained_writers: str, operator_evidence: str
+) -> None:
+    assert drained_writers.strip(), "Drained-writer evidence is required"
+    assert operator_evidence.strip(), "Operator evidence is required"
+    with ownership(factory):
+        assert factory.replica_mode() == "pending", "Only pending handoff can abort"
+        state = read_state(factory)
+        factory.create_coordination_file(
+            _JOB,
+            f"aborted/{uuid4().hex}.json",
+            json.dumps(
+                {
+                    "state": state,
+                    "drained_writers": drained_writers,
+                    "operator_evidence": operator_evidence,
+                    "aborted_at": pd.Timestamp.now(tz="UTC").isoformat(),
+                }
+            ).encode(),
+        )
+        factory.delete_coordination_file(_JOB, "state.json")
+
+
 def _repo(factory: StoreFactory) -> icechunk.Repository:
     return dict(factory.icechunk_repos(sort="primary-first"))["primary"]
 
@@ -222,7 +245,7 @@ def _contract(metadata: dict[str, Any]) -> str:
 
 
 def _mapping(
-    source: Store, destination: Store
+    source: Store, destination: Store, *, checkpoint_length: int | None = None
 ) -> tuple[dict[str, zarr.Array], dict[str, zarr.Array], set[str], int, int]:
     src = zarr.open_group(source, mode="r", use_consolidated=False)
     dst = zarr.open_group(destination, mode="r", use_consolidated=False)
@@ -236,12 +259,16 @@ def _mapping(
     ) as ds:
         coordinates = set(ds.coords)
         times = pd.DatetimeIndex(ds[_DIM].values)
-    with xr.open_zarr(
-        destination, chunks=None, decode_timedelta=True, consolidated=False
-    ) as ds:
-        replica_times = pd.DatetimeIndex(ds[_DIM].values)
+    time_array = replicas[_DIM]
+    replica_times = pd.DatetimeIndex(
+        xr.decode_cf(
+            xr.Dataset({_DIM: ((_DIM,), time_array[:], dict(time_array.attrs))})
+        )[_DIM].values
+    )
     assert len(times)
     assert len(replica_times)
+    assert not times.hasnans, "Invalid source init_time labels"
+    assert not replica_times.hasnans, "Invalid replica init_time labels"
     assert replica_times[0] == _ORIGIN, "Replica origin changed"
     assert times.equals(pd.date_range(times[0], periods=len(times), freq="D")), (
         "Source is not a daily grid"
@@ -256,6 +283,15 @@ def _mapping(
     assert length >= len(replica_times), "Mirror cannot retract replica coverage"
     for name, array in arrays.items():
         metadata = _metadata(array)
+        dims = metadata["dimension_names"]
+        if _DIM in dims:
+            size = replicas[name].shape[dims.index(_DIM)]
+            if checkpoint_length is None:
+                assert size == len(replica_times), "Inconsistent replica coverage"
+            else:
+                assert checkpoint_length <= size <= length, (
+                    f"Replica coverage outside checkpoint/target bounds: {name}"
+                )
         assert _contract(metadata) == _contract(_metadata(replicas[name])), (
             f"Mirror encoding/layout drift: {name}"
         )
@@ -579,8 +615,12 @@ def _reconcile_epoch(repo: icechunk.Repository, state: dict[str, Any]) -> None:
         raise AssertionError("Main does not match mirror epoch intent")
 
 
-def _copy_coordinates_and_metadata(source: Store, destination: Store) -> None:
-    arrays, replicas, coordinates, offset, length = _mapping(source, destination)
+def _copy_coordinates_and_metadata(
+    source: Store, destination: Store, *, checkpoint_length: int
+) -> None:
+    arrays, replicas, coordinates, offset, length = _mapping(
+        source, destination, checkpoint_length=checkpoint_length
+    )
     stage = zarr.storage.MemoryStore()
     root = zarr.open_group(
         destination, mode="r", use_consolidated=False
@@ -664,10 +704,21 @@ def _mirror_published(factory: StoreFactory, snapshot: str) -> None:
         assert current[_DIM].values[0] == previous[_DIM].values[0], (
             "Origin changed without a mirror epoch"
         )
+        checkpoint_length = int(
+            (previous[_DIM].values >= _ORIGIN.to_datetime64()).sum()
+        )
     replicas = factory.replica_stores(writable=True, mirror=True)
     assert len(replicas) == 1
     destination = replicas[0]
-    arrays, _, coordinates, offset, _ = _mapping(source, destination)
+    arrays, replica_arrays, coordinates, offset, _ = _mapping(
+        source,
+        destination,
+        checkpoint_length=checkpoint_length if state.get("pending") else None,
+    )
+    if not state.get("pending"):
+        assert replica_arrays[_DIM].shape == (checkpoint_length,), (
+            "Replica coverage differs from checkpoint"
+        )
     state["pending"] = snapshot
     _save(factory, state)
     if baseline != snapshot:
@@ -691,6 +742,8 @@ def _mirror_published(factory: StoreFactory, snapshot: str) -> None:
                 mapped = _mapped_key(key, offset)
                 if mapped is not None:
                     _put(destination, mapped, _bytes(source, key))
-    _copy_coordinates_and_metadata(source, destination)
+    _copy_coordinates_and_metadata(
+        source, destination, checkpoint_length=checkpoint_length
+    )
     state.update(snapshot=snapshot, pending=None)
     _save(factory, state)

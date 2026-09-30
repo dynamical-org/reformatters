@@ -1147,8 +1147,9 @@ class TestReplicaOrdering:
 
         assert reset_order == ["replica-0", "replica-1", "primary"]
 
+    @pytest.mark.parametrize("advance_after_cas", [False, True])
     def test_finalize_publishes_zarr3_replica_after_icechunk_primary(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advance_after_cas: bool
     ) -> None:
         """Replica metadata is published only after the primary CAS succeeds."""
         monkeypatch.setattr(
@@ -1192,6 +1193,21 @@ class TestReplicaOrdering:
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", recording_copy)
 
+        original_publish = pc_module._publish_icechunk
+
+        def publish_then_advance(*args: object, **kwargs: object) -> str | None:
+            snapshot = original_publish(*args, **kwargs)  # ty: ignore[invalid-argument-type]
+            if advance_after_cas:
+                repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+                session = repo.writable_session("main")
+                xr.Dataset(attrs={"concurrent_publication": True}).to_zarr(
+                    session.store, mode="a", consolidated=False
+                )
+                session.commit("concurrent publisher")
+            return snapshot
+
+        monkeypatch.setattr(pc_module, "_publish_icechunk", publish_then_advance)
+
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -1199,6 +1215,17 @@ class TestReplicaOrdering:
             all_data_vars=ParallelTemplateConfig().data_vars,
             reformat_job_name="test",
         )
+        if advance_after_cas:
+            with pytest.raises(AssertionError, match="Primary advanced"):
+                _run_workers(
+                    dataset,
+                    all_jobs,
+                    template_ds,
+                    workers_total=1,
+                    update_template_with_results=True,
+                )
+            assert publish_order == ["icechunk-primary"]
+            return
         _run_workers(
             dataset,
             all_jobs,

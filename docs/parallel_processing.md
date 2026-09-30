@@ -55,9 +55,9 @@ For fresh-store backfills, metadata is written before workers start (the dataset
 
 All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
-1. **Worker 0 setup** — for materialized operational updates, atomically persists `pin/source.json` before any worker generates templates or positional jobs. The record contains repository snapshots, job branch, origin, checked-in template/config identity and published metadata identity. Every worker derives jobs from that pinned source; structural guards inspect it rather than reopening moving main. Setup creates the job branch from the exact pin, copies expanded metadata, commits, then publishes `setup/ready.json`. Backfills retain their existing setup path.
+1. **Worker 0 setup** — for materialized operational updates, atomically persists `pin/source.json` before any worker generates templates or positional jobs. The record contains repository snapshots, job branch, origin and checked-in template/config identity. The immutable snapshot identifies published metadata without a chunk inventory scan. Every worker derives jobs from that pinned source; structural guards inspect it rather than reopening moving main. The published first append coordinate must match configured `append_dim_start`, except for ENS explicitly approved origins. Setup creates the job branch from the exact pin, copies expanded metadata, commits, then publishes `setup/ready.json`. Backfills retain their existing setup path.
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
-3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
+3. **Last worker finalization** — writes final metadata on the branch and commits without rebase, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main. Across datasets, plain-Zarr metadata follows successful primary publication; a final primary-tip recheck rejects detected intervening publication. The remaining gap after that check means plain Zarr is still not transactional.
 
 ### Virtual Icechunk operational updates (single-writer exception)
 
@@ -73,7 +73,7 @@ Workers coordinate under `{base_path}/{dataset_id}/_internal/{job_name}/`. Mater
 
 ### Setup signal
 
-Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this exact file before writing. Materialized operational workers first wait for the separate immutable `pin/source.json`, derive their jobs, then wait for ready. Before each worker writes, it compares its append labels with the actual writable session; finalization repeats that comparison. A changed origin cannot relabel positional writes. Job-branch worker rebases combine disjoint writes only within this fixed layout; final publication never rebases onto a changed main layout.
+Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this exact file before writing. Materialized operational workers first wait for the separate immutable `pin/source.json`, derive their jobs, then wait for ready. Before each materialized worker writes, including backfills, it compares its append labels with the actual writable session; finalization repeats that comparison. A changed origin cannot relabel positional writes. Job-branch worker rebases combine disjoint writes only within this fixed layout; final publication never rebases onto a changed main layout.
 
 ### Results
 
@@ -82,6 +82,11 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 ### Cleanup
 
 After successful finalization, the last worker deletes the temporary Icechunk branch. Materialized operational updates retain their pin, results and publication records for retry/audit; other jobs clear their coordination directory. A completed materialized job retries only its post-commit mirror hook. Use a new job identity to process new data.
+
+Keep complete receipt/pin/result sets while that job identity can retry, including
+single-worker jobs. There is no automatic deletion for these records. Later
+operator archival requires the job to be terminal and retries for its identity
+to be permanently disallowed.
 
 ## Failure modes
 

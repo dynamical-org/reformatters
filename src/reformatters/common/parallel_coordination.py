@@ -3,7 +3,6 @@
 See docs/parallel_processing.md for the overall design.
 """
 
-import hashlib
 import json
 import re
 import time
@@ -15,9 +14,6 @@ import icechunk
 import pandas as pd
 import xarray as xr
 from pydantic import TypeAdapter
-from zarr.abc.store import Store
-from zarr.core.buffer import default_buffer_prototype
-from zarr.core.sync import sync
 
 from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
@@ -47,19 +43,7 @@ class SetupInfo(TypedDict, total=False):
     branch_name: str
     origin: str
     template_identity: str
-    published_layout_identity: str
     append_dim: str
-
-
-async def _metadata_identity(store: Store) -> str:
-    digest = hashlib.sha256()
-    keys = sorted([key async for key in store.list() if key.endswith("zarr.json")])
-    for key in keys:
-        value = await store.get(key, default_buffer_prototype())
-        assert value is not None
-        digest.update(key.encode())
-        digest.update(value.to_bytes())
-    return digest.hexdigest()
 
 
 def pin_operational_update(
@@ -75,7 +59,6 @@ def pin_operational_update(
         repos = store_factory.icechunk_repos(sort="primary-first")
         snapshots = {role: repo.lookup_branch("main") for role, repo in repos}
         primary = dict(repos)["primary"]
-        source = primary.readonly_session(snapshot_id=snapshots["primary"]).store
         with xr.open_datatree(
             primary.readonly_session(snapshot_id=snapshots["primary"]).store,  # ty: ignore[invalid-argument-type]
             engine="zarr",
@@ -88,7 +71,6 @@ def pin_operational_update(
             branch_name=f"_job_{reformat_job_name}",
             origin=origin,
             template_identity=template_identity,
-            published_layout_identity=sync(_metadata_identity(source)),
             append_dim=append_dim,
         )
         assert all(
@@ -376,6 +358,12 @@ def finalize(
     if publish_zarr3_metadata:
         primary_store = store_factory.primary_store(writable=True)
         replica_stores = store_factory.replica_stores(writable=True)
+        assert published_snapshot is None or (
+            dict(store_factory.icechunk_repos(sort="primary-first"))[
+                "primary"
+            ].lookup_branch("main")
+            == published_snapshot
+        ), "Primary advanced before plain-Zarr metadata publication"
         copy_zarr_metadata(
             updated_template,
             tmp_store,
