@@ -107,8 +107,16 @@ def _verify_residual(
     for entry in report["entries"]:
         if entry["tier"] != "residual":
             continue
-        left = _bytes(source, entry["source_key"])
-        right = _bytes(destination, entry["destination_key"])
+        left = (
+            bytes.fromhex(entry["source_inline"])
+            if entry["source_inline"] is not None
+            else _bytes(source, entry["source_key"])
+        )
+        right = (
+            bytes.fromhex(entry["destination_inline"])
+            if entry["destination_inline"] is not None
+            else _bytes(destination, entry["destination_key"])
+        )
         assert left is not None, "Source shard disappeared during verification"
         assert right is not None, "Replica shard disappeared during verification"
         assert len(left) == len(right) == entry["length"]
@@ -141,9 +149,9 @@ def ownership(factory: StoreFactory) -> Iterator[None]:
 def recover_abandoned_lock(
     factory: StoreFactory, owner: str, *, evidence: DeadWriterAttestation
 ) -> None:
-    assert evidence, (
-        "Confirm the owning job is terminal and its pods/processes are gone"
-    )
+    checked = pd.Timestamp(evidence.pods_absent_checked_at)
+    assert checked.tzinfo is not None, "Pod-absence check timestamp must be UTC-aware"
+    assert checked.utcoffset() == pd.Timedelta(0), "Pod-absence check must use UTC"
     assert factory.read_coordination_file(_JOB, "lock.json") == owner.encode()
     factory.write_coordination_file(
         _JOB, f"recovery/{owner}.json", evidence.model_dump_json().encode()
@@ -311,6 +319,15 @@ def _verify_inventory(source: Store, destination: Store) -> tuple[str, int]:
     return digest.hexdigest(), count
 
 
+def _object_size(store: Store, key: str) -> int:
+    if isinstance(store, zarr.storage.LocalStore):
+        return (store.root / key).stat().st_size
+    assert isinstance(store, zarr.storage.FsspecStore)
+    info = sync(store.fs._info(f"{store.path}/{key}"))  # noqa: SLF001
+    assert isinstance(info.get("size"), int), "Metadata-only object size required"
+    return info["size"]
+
+
 def adoption_dry_run(factory: StoreFactory, snapshot: str) -> dict[str, Any]:
     repo = _repo(factory)
     _published(repo, snapshot)
@@ -326,7 +343,7 @@ def adoption_dry_run(factory: StoreFactory, snapshot: str) -> dict[str, Any]:
     references = sync(_references(source, set(arrays) - coordinates, offset))
     entries: list[dict[str, Any]] = []
     for key, ref in sorted(references.items()):
-        size = sync(destination.getsize(key))
+        size = _object_size(destination, key)
         assert size == ref.length, f"Shard length mismatch: {key}"
         entries.append(
             {
@@ -334,7 +351,10 @@ def adoption_dry_run(factory: StoreFactory, snapshot: str) -> dict[str, Any]:
                 "source_key": ref.key,
                 "destination_key": key,
                 "source_reference": ref.manifest(),
+                "source_inline": ref.inline.hex() if ref.inline is not None else None,
+                "destination_inline": None,
                 "length": size,
+                "read_bytes": size + (size if ref.inline is None else 0),
                 "tier": "residual",
             }
         )
@@ -344,7 +364,8 @@ def adoption_dry_run(factory: StoreFactory, snapshot: str) -> dict[str, Any]:
         "replica_urls": factory.replica_urls(),
         "labels_layout_keys_sha256": digest,
         "shard_count": count,
-        "residual_read_bytes": sum(2 * entry["length"] for entry in entries),
+        "residual_shard_count": len(entries),
+        "residual_read_bytes": sum(entry["read_bytes"] for entry in entries),
         "entries": entries,
     }
     report["inventory_sha256"] = _digest(report)
@@ -456,7 +477,13 @@ def epoch_dry_run(factory: StoreFactory, before: str, after: str) -> dict[str, A
                 "destination_key": right.key,
                 "source_reference": left.manifest(),
                 "destination_reference": right.manifest(),
+                "source_inline": left.inline.hex() if left.inline is not None else None,
+                "destination_inline": right.inline.hex()
+                if right.inline is not None
+                else None,
                 "length": left.length,
+                "read_bytes": (left.length if left.inline is None else 0)
+                + (right.length if right.inline is None else 0),
                 "tier": "reference-identical" if same else "residual",
             }
         )
@@ -465,8 +492,9 @@ def epoch_dry_run(factory: StoreFactory, before: str, after: str) -> dict[str, A
         "before": before,
         "after": after,
         "entries": entries,
+        "residual_shard_count": sum(entry["tier"] == "residual" for entry in entries),
         "residual_read_bytes": sum(
-            2 * entry["length"] for entry in entries if entry["tier"] == "residual"
+            entry["read_bytes"] for entry in entries if entry["tier"] == "residual"
         ),
     }
     report["inventory_sha256"] = _digest(report)

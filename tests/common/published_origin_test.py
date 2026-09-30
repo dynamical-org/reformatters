@@ -344,3 +344,115 @@ def test_non_ens_operational_setup_preserves_jobs_and_commit_sequence(
         )
         is not None
     )
+
+
+def test_follower_waits_for_pin_before_deriving_and_ready_before_writing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sf = factory()
+    repo = sf.icechunk_repos(sort="primary-first")[0][1]
+    template = _create_template_ds(4)
+    template_utils.write_metadata(template, sf)
+    slept: list[str] = []
+
+    def publish_pin(seconds: float) -> None:
+        slept.append("pin")
+        pc.pin_operational_update(
+            sf,
+            is_first=True,
+            reformat_job_name="daily",
+            append_dim="time",
+            template_identity="test",
+        )
+
+    monkeypatch.setattr(pc.time, "sleep", publish_pin)
+    info = pc.pin_operational_update(
+        sf,
+        is_first=False,
+        reformat_job_name="daily",
+        append_dim="time",
+        template_identity="test",
+    )
+    assert slept == ["pin"]
+    assert info["branch_name"] not in repo.list_branches()
+
+    def publish_ready(seconds: float) -> None:
+        slept.append("ready")
+        pc.parallel_setup(
+            sf,
+            is_first=True,
+            workers_total=2,
+            reformat_job_name="daily",
+            branch_name=info["branch_name"],
+            template_ds=template,
+            tmp_store=tmp_path / "leader",
+            icechunk_repos=sf.icechunk_repos(sort="primary-first"),
+            consolidated=False,
+            pinned_setup=info,
+        )
+
+    monkeypatch.setattr(pc.time, "sleep", publish_ready)
+    assert (
+        pc.parallel_setup(
+            sf,
+            is_first=False,
+            workers_total=2,
+            reformat_job_name="daily",
+            branch_name=info["branch_name"],
+            template_ds=template,
+            tmp_store=tmp_path / "follower",
+            icechunk_repos=sf.icechunk_repos(sort="primary-first"),
+            consolidated=False,
+            pinned_setup=info,
+        )
+        == info
+    )
+    assert slept == ["pin", "ready"]
+
+
+def test_finalizer_rechecks_actual_branch_labels(tmp_path: Path) -> None:
+    sf = factory()
+    repo = sf.icechunk_repos(sort="primary-first")[0][1]
+    template = _create_template_ds(4)
+    template_utils.write_metadata(template, sf)
+    info = pc.pin_operational_update(
+        sf,
+        is_first=True,
+        reformat_job_name="daily",
+        append_dim="time",
+        template_identity="test",
+    )
+    pc.parallel_setup(
+        sf,
+        is_first=True,
+        workers_total=1,
+        reformat_job_name="daily",
+        branch_name=info["branch_name"],
+        template_ds=template,
+        tmp_store=tmp_path / "setup",
+        icechunk_repos=sf.icechunk_repos(sort="primary-first"),
+        consolidated=False,
+        pinned_setup=info,
+    )
+    session = repo.writable_session(info["branch_name"])
+    changed = template.to_dataset().assign_coords(
+        time=pd.date_range("2024-12-31", periods=4, freq="h")
+    )
+    changed.load().to_zarr(session.store, mode="w", consolidated=False)
+    session.commit("unexpected branch coordinate reset")
+    with pytest.raises(AssertionError, match="labels"):
+        pc.finalize(
+            sf,
+            all_jobs=[],
+            merged_results={},
+            reformat_job_name="daily",
+            branch_name=info["branch_name"],
+            template_ds=template,
+            tmp_store=tmp_path / "final",
+            setup_info=info,
+            workers_total=1,
+            update_template_with_results=False,
+            consolidated=False,
+        )
+    assert repo.lookup_branch("main") == info["repo_snapshots"]["primary"]

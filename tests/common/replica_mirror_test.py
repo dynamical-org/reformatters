@@ -10,6 +10,8 @@ import pytest
 import xarray as xr
 import zarr
 import zarr.storage
+from fsspec.implementations.asyn_wrapper import AsyncFileSystemWrapper
+from fsspec.implementations.memory import MemoryFileSystem
 from zarr.abc.store import Store
 
 from reformatters.common import replica_mirror as mirror
@@ -19,14 +21,16 @@ from reformatters.common.zarr import copy_data_var
 
 
 @pytest.fixture(autouse=True)
-def native_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
+def native_chunks(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
     original = storage._repository_config_and_credentials
 
     def config(
         virtual_config: storage.IcechunkVirtualConfig | None,
     ) -> tuple[icechunk.RepositoryConfig, dict[str, Any] | None]:
         result, credentials = original(virtual_config)
-        result.inline_chunk_threshold_bytes = 0
+        result.inline_chunk_threshold_bytes = getattr(request, "param", 0)
         return result, credentials
 
     monkeypatch.setattr(storage, "_repository_config_and_credentials", config)
@@ -437,3 +441,108 @@ def test_lock_exclusion_across_processes(tmp_path: Path) -> None:
         process.join(timeout=30)
         assert process.exitcode == 0
         assert result.read_text() == "blocked"
+
+
+def test_adoption_rejects_changed_reviewed_digest() -> None:
+    sf, repo = stores()
+    snapshot = initialize(sf, repo)
+    mirror.begin_handoff(sf, "pending")
+    with pytest.raises(AssertionError, match="inventory changed"):
+        mirror.adopt(
+            sf,
+            snapshot,
+            inventory_sha256="0" * 64,
+            rehearsal="test",
+            drained_writers="test",
+            max_read_bytes=100_000,
+        )
+    assert sf.replica_mode() == "pending"
+
+
+def test_mirror_replays_deleted_shard() -> None:
+    sf, repo = stores()
+    activate(sf, repo)
+    session = repo.writable_session("main")
+    mirror._put(session.store, "temperature/c/1", None)
+    snapshot = session.commit("remove invalid shard")
+    mirror.mirror_published(sf, snapshot)
+    assert mirror._bytes(sf.replica_stores()[0], "temperature/c/1") is None
+    assert mirror.read_state(sf)["snapshot"] == snapshot
+
+
+def test_lock_recovery_requires_utc_dead_writer_attestation() -> None:
+    sf, repo = stores()
+    initialize(sf, repo)
+    sf.create_coordination_file("replica-mirror", "lock.json", b"owner")
+    evidence = mirror.DeadWriterAttestation(
+        job_name="mirror-job",
+        terminal_state="Failed",
+        pods_absent_checked_at="2026-09-30T12:00:00",
+        confirmed_by="operator",
+    )
+    with pytest.raises(AssertionError, match="UTC"):
+        mirror.recover_abandoned_lock(sf, "owner", evidence=evidence)
+    assert sf.read_coordination_file("replica-mirror", "lock.json") == b"owner"
+    evidence = evidence.model_copy(
+        update={"pods_absent_checked_at": "2026-09-30T12:00:00Z"}
+    )
+    mirror.recover_abandoned_lock(sf, "owner", evidence=evidence)
+    assert sf.read_coordination_file("replica-mirror", "lock.json") is None
+    assert (
+        sf.read_coordination_file("replica-mirror", "recovery/owner.json") is not None
+    )
+
+
+def test_object_size_never_falls_back_to_payload_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fs = AsyncFileSystemWrapper(fs=MemoryFileSystem(), asynchronous=True)
+    destination = zarr.storage.FsspecStore(fs, path="/replica")
+
+    async def absent_size(path: str, **kwargs: object) -> dict[str, object]:
+        return {"name": path, "type": "file"}
+
+    async def no_get(*args: object, **kwargs: object) -> bytes:
+        pytest.fail("object-size fallback read payload")
+
+    monkeypatch.setattr(fs, "_info", absent_size)
+    monkeypatch.setattr(fs, "_cat_file", no_get)
+    with pytest.raises(AssertionError, match="size"):
+        mirror._object_size(destination, "temperature/c/1")
+
+
+@pytest.mark.parametrize("native_chunks", [10_000], indirect=True)
+def test_inline_adoption_budget_counts_only_replica_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sf, repo = stores()
+    snapshot = initialize(sf, repo)
+    mirror.begin_handoff(sf, "inline")
+    report = mirror.adoption_dry_run(sf, snapshot)
+    assert all(entry["source_reference"]["kind"] == 3 for entry in report["entries"])
+    assert report["residual_read_bytes"] == sum(
+        entry["length"] for entry in report["entries"]
+    )
+    original = mirror._bytes
+
+    def no_source_get(store: Store, key: str) -> bytes | None:
+        assert not isinstance(store, mirror.IcechunkStore), (
+            "Inline bytes are in manifests"
+        )
+        return original(store, key)
+
+    monkeypatch.setattr(mirror, "_bytes", no_source_get)
+    mirror.adopt(
+        sf,
+        snapshot,
+        inventory_sha256=report["inventory_sha256"],
+        rehearsal="test",
+        drained_writers="test",
+        max_read_bytes=report["residual_read_bytes"],
+    )
+    after = shifted_branch(repo, snapshot)
+    epoch = mirror.epoch_dry_run(sf, snapshot, after)
+    assert epoch["residual_read_bytes"] == 0
+    mirror.prepare_epoch(
+        sf, snapshot, after, inventory_sha256=epoch["inventory_sha256"]
+    )

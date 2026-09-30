@@ -1036,3 +1036,46 @@ class TestAllStoresExistWithIcechunk:
         store.session.commit(message="init")
 
         assert factory.all_stores_exist() is True
+
+
+def test_s3_coordination_create_uses_backend_conditional_put(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fs = fsspec.filesystem("s3", anon=True, skip_instance_cache=True)
+    objects: dict[str, bytes] = {}
+
+    def s3_call(method: str, *args: object, **kwargs: object) -> dict[str, str]:
+        assert method == "put_object"
+        assert kwargs["IfNoneMatch"] == "*"
+        key = kwargs["Key"]
+        assert isinstance(key, str)
+        if key in objects:
+            raise FileExistsError(key)
+        body = kwargs["Body"]
+        assert isinstance(body, bytes)
+        objects[key] = body
+        return {"ETag": "local-test"}
+
+    async def no_client(*args: object, **kwargs: object) -> None:
+        pytest.fail("S3 test must not create a network client")
+
+    monkeypatch.setattr(fs, "set_session", no_client)
+    monkeypatch.setattr(fs, "call_s3", s3_call)
+    monkeypatch.setattr(fs, "mkdirs", lambda *args, **kwargs: None)
+    monkeypatch.setattr(StoreFactory, "_coordination_fs", lambda self: fs)
+    monkeypatch.setattr(
+        StoreFactory,
+        "_coordination_base_path",
+        lambda self: "s3://test-bucket/coordination",
+    )
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="unused", format=DatasetFormat.ICECHUNK
+        ),
+        dataset_id="test",
+        template_config_version="1",
+    )
+    factory.create_coordination_file("mirror", "lock.json", b"first")
+    with pytest.raises(FileExistsError):
+        factory.create_coordination_file("mirror", "lock.json", b"second")
+    assert list(objects.values()) == [b"first"]
