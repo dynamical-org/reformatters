@@ -1,0 +1,1679 @@
+[
+  {
+    "name": "pressure_surface",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      56036812,
+      58113453
+    ],
+    "source_sha256": "a8b864fa86f3bb1a9ff470d2ed8594d1ad730c0c0d8278d4692cb4a4a25c5ed2",
+    "source_index": {
+      "type": "cf",
+      "param": "sp",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 56036812.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "Pa",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[Pa]",
+      "comment": "Surface pressure [Pa]",
+      "element": "SP",
+      "min": 48058.5703125,
+      "max": 106582.5703125,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[Pa]",
+      "comment": "Surface pressure [Pa]",
+      "element": "SP",
+      "min": 48058.5703125,
+      "max": 106582.5703125,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 101734.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 98492.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 99884.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 90500.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 100760.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 99370.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 98164.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 99294.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 98912.0
+      }
+    ],
+    "fixture_sha256": "e583bb75736fd52e4e5b4708f08c14d9b4889c063cb2e4ce2a858cb5827af4f7",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "temperature_2m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      58113454,
+      60190095
+    ],
+    "source_sha256": "55c07d7dd9ac0cbefef5856c747c50f87cca42676b8fa0d1ef00b632024fd0a9",
+    "source_index": {
+      "type": "cf",
+      "param": "2t",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 58113454.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "K",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[K]",
+      "comment": "2 metre temperature [K]",
+      "element": "2T",
+      "min": 218.78466796875,
+      "max": 319.21240234375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[C]",
+      "comment": "2 metre temperature [C]",
+      "element": "2T",
+      "min": 218.78466796875,
+      "max": 319.21240234375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 248.1328125
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 273.078125
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 264.0546875
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 296.6484375
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 300.53125
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 296.46875
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 273.484375
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 276.375
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 275.9140625
+      }
+    ],
+    "fixture_sha256": "ade6df82221a35f283e15f9767b4211098807f04f3bd8af9b254315721078e66",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "wind_u_10m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      60190096,
+      62266737
+    ],
+    "source_sha256": "1199a93ff3d5cb518c3d3c3ecf863a1dc28796f10076960dd21677c9035d0a0d",
+    "source_index": {
+      "type": "cf",
+      "param": "10u",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 60190096.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m s**-1",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m/s]",
+      "comment": "10 metre u wind component [m/s]",
+      "element": "10U",
+      "min": -27.1591796875,
+      "max": 23.005859375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m/s]",
+      "comment": "10 metre u wind component [m/s]",
+      "element": "10U",
+      "min": -27.1591796875,
+      "max": 23.005859375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": -5.056640625
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": -8.9990234375
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 5.56640625
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": -0.869140625
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": -5.9287109375
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": -1.56640625
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 4.6181640625
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 7.845703125
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 3.236328125
+      }
+    ],
+    "fixture_sha256": "3da8a5a27796bbb62957647a8161dbff1f43cce569a7f70fb43e89030b414390",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "wind_v_10m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      62266738,
+      64343379
+    ],
+    "source_sha256": "2982d68cb83a6668f6189d570d8ea69f048557d587d68f3c83f3ee4601415232",
+    "source_index": {
+      "type": "cf",
+      "param": "10v",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 62266738.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m s**-1",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m/s]",
+      "comment": "10 metre v wind component [m/s]",
+      "element": "10V",
+      "min": -22.695266723632812,
+      "max": 20.032272338867188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m/s]",
+      "comment": "10 metre v wind component [m/s]",
+      "element": "10V",
+      "min": -22.695266723632812,
+      "max": 20.032272338867188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 4.57763671875e-05,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": -0.0556182861328125
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": -12.165969848632812
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 7.7939910888671875
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": -0.5624542236328125
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 1.1357879638671875
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": -1.0888214111328125
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": -7.2362823486328125
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": -0.2216339111328125
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": -6.4794464111328125
+      }
+    ],
+    "fixture_sha256": "83e2bc29a40faae14be508920edefd1ff5cad093552e4cbdefe2161772a1f4e8",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "wind_u_100m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      64343380,
+      66420021
+    ],
+    "source_sha256": "7cbb50fdc32b6c8f0429472d42edc8c7d018deb0dd8b7711c8b722942741cf23",
+    "source_index": {
+      "type": "cf",
+      "param": "100u",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 64343380.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m s**-1",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var246 of table 228 of center ECMWF",
+      "min": -34.49485778808594,
+      "max": 28.352798461914062,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var246 of table 228 of center ECMWF",
+      "min": -34.49485778808594,
+      "max": 28.352798461914062,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": -0.0002288818359375,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": -7.1364593505859375
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": -10.655014038085938
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 5.9885406494140625
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": -1.3464202880859375
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": -6.4704437255859375
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": -3.5368499755859375
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 6.5891265869140625
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 8.501235961914062
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 5.4260406494140625
+      }
+    ],
+    "fixture_sha256": "16ed4dc978029f3c8dd43edb1764cf6bf7a6352a12ddd6e916a4526b84b0502d",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "wind_v_100m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      66420022,
+      68496663
+    ],
+    "source_sha256": "77d763fe524c210923a28247e146948c89d9761d461a720b59678dd9a1dfe146",
+    "source_index": {
+      "type": "cf",
+      "param": "100v",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 66420022.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m s**-1",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var247 of table 228 of center ECMWF",
+      "min": -28.184036254882812,
+      "max": 25.364791870117188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var247 of table 228 of center ECMWF",
+      "min": -28.184036254882812,
+      "max": 25.364791870117188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 4.57763671875e-05,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": -0.1166534423828125
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": -14.150833129882812
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 8.382369995117188
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": -0.4272003173828125
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 1.2886199951171875
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": -2.8168487548828125
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": -8.944778442382812
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": -0.1908721923828125
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": -8.808059692382812
+      }
+    ],
+    "fixture_sha256": "4cbe133fe48a50ebd1b7691f05e61aaac22cab2b95b1538610fd2c04e20dfe70",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "precipitation_surface",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      68496664,
+      70573305
+    ],
+    "source_sha256": "9ee1a29ca9b2b58da2d87155f0f6d56b225660f236b47179a46f2b4ec3b11b6d",
+    "source_index": {
+      "type": "cf",
+      "param": "tp",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 68496664.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m]",
+      "comment": "Total precipitation [m]",
+      "element": "TP",
+      "min": 0.0,
+      "max": 0.22855758666992188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m]",
+      "comment": "Total precipitation [m]",
+      "element": "TP",
+      "min": 0.0,
+      "max": 0.22855758666992188,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 7.62939453125e-06
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 0.00164031982421875
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 0.000461578369140625
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 0.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 0.00418853759765625
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 0.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 0.003925323486328125
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 6.866455078125e-05
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 0.005748748779296875
+      }
+    ],
+    "fixture_sha256": "d0d81b8c51f7218a6217906ccfb4d19f2c886a15d9e9ac1e5173961ea606bee2",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "categorical_precipitation_type_surface",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      78879874,
+      79897416
+    ],
+    "source_sha256": "a7a6126a762aba17a57ad54d2f143c0743791de754f576b04f77efeeedb53720",
+    "source_index": {
+      "type": "cf",
+      "param": "ptype",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 78879874.0,
+      "_length": 1017543
+    },
+    "edition": 2,
+    "packing": "grid_ccsds",
+    "eccodes_units": "(Code table 4.201)",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+      "comment": "Precipitation type [0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+      "element": "PTYPE",
+      "min": 0.0,
+      "max": 12.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+      "comment": "Precipitation type [0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+      "element": "PTYPE",
+      "min": 0.0,
+      "max": 12.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 5.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 5.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 5.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 0.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 1.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 0.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 6.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 1.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 1.0
+      }
+    ],
+    "fixture_sha256": "530e6d3abb2f147a969f352bdc64e0abba7700ea64c3837f6724b6c4685ad467",
+    "fixture_bytes": 1751
+  },
+  {
+    "name": "downward_long_wave_radiation_flux_surface",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      70573306,
+      72649947
+    ],
+    "source_sha256": "044619c7b59fa88fe7905e223f0f12a9b6806770ada26d473ab3e5a9ba2fa293",
+    "source_index": {
+      "type": "cf",
+      "param": "strd",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 70573306.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "J m**-2",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[W*s/m^2]",
+      "comment": "Surface thermal radiation downwards [W*s/m^2]",
+      "element": "STRD",
+      "min": 1976984.0,
+      "max": 10291224.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[W*s/m^2]",
+      "comment": "Surface thermal radiation downwards [W*s/m^2]",
+      "element": "STRD",
+      "min": 1976984.0,
+      "max": 10291224.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 3510784.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 6458112.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 5129216.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 7666432.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 9472000.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 8475904.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 6645504.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 6577152.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 7019776.0
+      }
+    ],
+    "fixture_sha256": "91e66e4d11d934abbb7308ddf1712fe8c8c5fae048484a9236766b618268e19f",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "downward_short_wave_radiation_flux_surface",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      72649948,
+      74726589
+    ],
+    "source_sha256": "0148d0df58f4dac59a90e9b1d0ada8301ca83a725ba9951f0a75125c1f346dfd",
+    "source_index": {
+      "type": "cf",
+      "param": "ssrd",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 72649948.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "J m**-2",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[W*s/m^2]",
+      "comment": "Surface solar radiation downwards [W*s/m^2]",
+      "element": "SSRD",
+      "min": 0.0,
+      "max": 21206016.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[W*s/m^2]",
+      "comment": "Surface solar radiation downwards [W*s/m^2]",
+      "element": "SSRD",
+      "min": 0.0,
+      "max": 21206016.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 0.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 120320.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 0.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 1108992.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 5721600.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 0.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 667648.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 5824512.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 19968.0
+      }
+    ],
+    "fixture_sha256": "6623aca875b2f327e038cd7d4850e2d386ca2babc6660ee1acfc58814b3fc19c",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "pressure_reduced_to_mean_sea_level",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      74726590,
+      76803231
+    ],
+    "source_sha256": "f4397d39a2b5ba6ff8fb43c1a3fd368433962fbcfc89ffc7da7cc5366f587a22",
+    "source_index": {
+      "type": "cf",
+      "param": "msl",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 74726590.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "Pa",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[Pa]",
+      "comment": "Mean sea level pressure [Pa]",
+      "element": "MSL",
+      "min": 95319.0,
+      "max": 103997.5,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[Pa]",
+      "comment": "Mean sea level pressure [Pa]",
+      "element": "MSL",
+      "min": 95319.0,
+      "max": 103997.5,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 101660.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 98490.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 99884.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 101590.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 100762.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 100972.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 98164.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 99296.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 98922.0
+      }
+    ],
+    "fixture_sha256": "bdb2104dd5d822ad1959d7688a405dad3c01e44f6caea9fa81dd0c397bc9ab00",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "dew_point_temperature_2m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      76803232,
+      78879873
+    ],
+    "source_sha256": "c6bffbd0854cfd243389b83f0aa39f33bf5a4c888c504207f73dcf542a49546d",
+    "source_index": {
+      "type": "cf",
+      "param": "2d",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 76803232.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "K",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[K]",
+      "comment": "2 metre dewpoint temperature [K]",
+      "element": "2D",
+      "min": 214.76010131835938,
+      "max": 301.3479919433594,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[C]",
+      "comment": "2 metre dewpoint temperature [C]",
+      "element": "2D",
+      "min": 214.76010131835938,
+      "max": 301.3479919433594,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 244.703125
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 270.6953125
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 259.5859375
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 289.2421875
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 297.1796875
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 293.0234375
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 272.921875
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 272.5859375
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 274.7109375
+      }
+    ],
+    "fixture_sha256": "18ad2eaff1a12d7b74f293552d335d2355fa6305a2f57207de8c0a9cc857b363",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "geopotential_height_500hpa",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_pl.grib",
+    "byte_range": [
+      24919704,
+      26996345
+    ],
+    "source_sha256": "c36918913bd8f17beccfb50110b6462ebd90d4aa5aca9a4854e4e83ee08a07a8",
+    "source_index": {
+      "type": "cf",
+      "param": "z",
+      "step": 6,
+      "levtype": "pl",
+      "_offset": 24919704.0,
+      "_length": 2076642,
+      "levelist": 500
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m**2 s**-2",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 47239.66796875,
+      "max": 58088.66796875,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 47239.66796875,
+      "max": 58088.66796875,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 50976.0
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 50242.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 48487.0
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 57789.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 57624.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 57571.0
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 50646.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 51102.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 51718.0
+      }
+    ],
+    "fixture_sha256": "3975b7ac4f96cd755ee2083216a11aa13aa15b830dbf8236d16b088b47184472",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "geopotential_height_850hpa",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_pl.grib",
+    "byte_range": [
+      29072988,
+      31149629
+    ],
+    "source_sha256": "95fc56e09ec444723ac07d0e971863f8c3d05b6d2a61c7c850a5c6e847392e4a",
+    "source_index": {
+      "type": "cf",
+      "param": "z",
+      "step": 6,
+      "levtype": "pl",
+      "_offset": 29072988.0,
+      "_length": 2076642,
+      "levelist": 850
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m**2 s**-2",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 9012.81640625,
+      "max": 16012.44140625,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 9012.81640625,
+      "max": 16012.44140625,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 13045.5
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 11357.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 11906.75
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 15067.0
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 14563.5
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 14742.5
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 11174.25
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 12115.75
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 11981.75
+      }
+    ],
+    "fixture_sha256": "084269359a3554ef35af791c009ae6919b6e31c17308210abdd6d9de5e77c044",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "geopotential_height_925hpa",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_pl.grib",
+    "byte_range": [
+      33226272,
+      35302913
+    ],
+    "source_sha256": "d6f1b456ad17c467b7bea32310af77eacb2b65f96f250f0c43f5b409dc573b6d",
+    "source_index": {
+      "type": "cf",
+      "param": "z",
+      "step": 6,
+      "levtype": "pl",
+      "_offset": 33226272.0,
+      "_length": 2076642,
+      "levelist": 925
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m**2 s**-2",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 2387.01318359375,
+      "max": 9171.88818359375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[m^2/s^2]",
+      "comment": "Geopotential (at the surface = orography) [m^2/s^2]",
+      "element": "Z",
+      "min": 2387.01318359375,
+      "max": 9171.88818359375,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 6819.75
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 4870.625
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 5732.875
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 7928.75
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 7372.125
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 7551.125
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 4648.25
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 5579.375
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 5332.625
+      }
+    ],
+    "fixture_sha256": "337c877ec5578aa6e20c886b7368612c3cb949b161e172d6be94f195ff85a1a3",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "temperature_850hpa",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_pl.grib",
+    "byte_range": [
+      31149630,
+      33226271
+    ],
+    "source_sha256": "a23c0a49b4f6fd5beeb38c93f131140b1bce26e10638fe85fc22165adb94a99d",
+    "source_index": {
+      "type": "cf",
+      "param": "t",
+      "step": 6,
+      "levtype": "pl",
+      "_offset": 31149630.0,
+      "_length": 2076642,
+      "levelist": 850
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "K",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[K]",
+      "comment": "Temperature [K]",
+      "element": "T",
+      "min": 238.24241638183594,
+      "max": 302.63694763183594,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[C]",
+      "comment": "Temperature [C]",
+      "element": "T",
+      "min": -34.90758361816404,
+      "max": 29.48694763183596,
+      "max_difference_from_eccodes": 273.15
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 257.609375
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 267.0625
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 252.421875
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 292.328125
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 291.828125
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 291.34375
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 267.2109375
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 266.6015625
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 272.1640625
+      }
+    ],
+    "fixture_sha256": "ac806a8b3d300069a92dd710ff1fa9930629027e6e506742dbb598f444368d6a",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "temperature_925hpa",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_pl.grib",
+    "byte_range": [
+      35302914,
+      37379555
+    ],
+    "source_sha256": "3332e8369a8751608bb3662da269c2ab23a3cff5572b537eb27c4945b08ccaeb",
+    "source_index": {
+      "type": "cf",
+      "param": "t",
+      "step": 6,
+      "levtype": "pl",
+      "_offset": 35302914.0,
+      "_length": 2076642,
+      "levelist": 925
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "K",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[K]",
+      "comment": "Temperature [K]",
+      "element": "T",
+      "min": 225.19960021972656,
+      "max": 310.21717834472656,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[C]",
+      "comment": "Temperature [C]",
+      "element": "T",
+      "min": -47.950399780273415,
+      "max": 37.067178344726585,
+      "max_difference_from_eccodes": 273.15
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 256.3984375
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 267.796875
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 256.8828125
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 296.59375
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 295.09375
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 297.1953125
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 270.265625
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 271.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 274.375
+      }
+    ],
+    "fixture_sha256": "93a999d4e6c5f2e5d1fac32bdf39b510dbfdf783f5f8319028f582f013047560",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "wind_gust_10m",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      79897417,
+      81974058
+    ],
+    "source_sha256": "84aa2cadd37cbe5b78d79ed9fee6ed3a082f91243c64c9f46a5f2261ce5d56b1",
+    "source_index": {
+      "type": "cf",
+      "param": "10fg",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 79897417.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "m s**-1",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var49 of table 128 of center ECMWF",
+      "min": 0.2500179409980774,
+      "max": 35.74318200349808,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[-]",
+      "comment": "undefined [-]",
+      "element": "var49 of table 128 of center ECMWF",
+      "min": 0.2500179409980774,
+      "max": 35.74318200349808,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 9.23828125
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 20.9189453125
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 13.251953125
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 3.7822265625
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 10.279296875
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 4.0576171875
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 11.2705078125
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 10.6181640625
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 11.29296875
+      }
+    ],
+    "fixture_sha256": "dce5736ec0e08d846b86b51fe56727511ba3fd5faedead912c50e41d98061920",
+    "fixture_bytes": 2076642
+  },
+  {
+    "name": "total_cloud_cover_atmosphere",
+    "url": "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens/2024-01-04/cf_sfc.grib",
+    "byte_range": [
+      81974059,
+      84050700
+    ],
+    "source_sha256": "4ded5fe3800c89076bd91174bf2d9c02dbb39ffd0e9a6bc93380b47704f25064",
+    "source_index": {
+      "type": "cf",
+      "param": "tcc",
+      "step": 6,
+      "levtype": "sfc",
+      "_offset": 81974059.0,
+      "_length": 2076642
+    },
+    "edition": 1,
+    "packing": "grid_simple",
+    "eccodes_units": "(0 - 1)",
+    "eccodes_version": "2.49.0",
+    "gdal_version": "3.12.4",
+    "NO": {
+      "unit": "[-]",
+      "comment": "Total cloud cover (0 - 1) [-]",
+      "element": "TCC",
+      "min": 0.0,
+      "max": 1.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "YES": {
+      "unit": "[-]",
+      "comment": "Total cloud cover (0 - 1) [-]",
+      "element": "TCC",
+      "min": 0.0,
+      "max": 1.0,
+      "max_difference_from_eccodes": 0.0
+    },
+    "background_value": 0.0,
+    "samples": [
+      {
+        "row": 120,
+        "column": 840,
+        "value": 0.359283447265625
+      },
+      {
+        "row": 120,
+        "column": 0,
+        "value": 1.0
+      },
+      {
+        "row": 120,
+        "column": 480,
+        "value": 0.970611572265625
+      },
+      {
+        "row": 360,
+        "column": 840,
+        "value": 0.72576904296875
+      },
+      {
+        "row": 360,
+        "column": 0,
+        "value": 1.0
+      },
+      {
+        "row": 360,
+        "column": 480,
+        "value": 0.025390625
+      },
+      {
+        "row": 600,
+        "column": 840,
+        "value": 1.0
+      },
+      {
+        "row": 600,
+        "column": 0,
+        "value": 1.0
+      },
+      {
+        "row": 600,
+        "column": 480,
+        "value": 1.0
+      }
+    ],
+    "fixture_sha256": "ef51cbfdc36fe1e010f86c504e6d440a7de8d43366de64cccb110d82f6ecdc4b",
+    "fixture_bytes": 2076642
+  }
+]

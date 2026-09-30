@@ -397,7 +397,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="TMP",
                     grib_index_param="2t",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    mars=MarsSourceOverrides(grib_element="2T"),
+                    mars=MarsSourceOverrides(
+                        grib_element="2T",
+                        grib_comment="2 metre temperature [K]",
+                        add_offset=-273.15,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -620,7 +624,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_element="DPT",
                     grib_index_param="2d",
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    mars=MarsSourceOverrides(grib_element="2D"),
+                    mars=MarsSourceOverrides(
+                        grib_element="2D",
+                        grib_comment="2 metre dewpoint temperature [K]",
+                        add_offset=-273.15,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -719,7 +727,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=850,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    mars=MarsSourceOverrides(grib_element="T"),
+                    mars=MarsSourceOverrides(
+                        grib_element="T",
+                        grib_comment="Temperature [K]",
+                        add_offset=-273.15,
+                    ),
                 ),
             ),
             EcmwfDataVar(
@@ -740,7 +752,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
                     grib_index_level_type="pl",
                     grib_index_level_value=925,
                     keep_mantissa_bits=default_keep_mantissa_bits,
-                    mars=MarsSourceOverrides(grib_element="T"),
+                    mars=MarsSourceOverrides(
+                        grib_element="T",
+                        grib_comment="Temperature [K]",
+                        add_offset=-273.15,
+                    ),
                 ),
             ),
             EcmwfDataVar(

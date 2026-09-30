@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from pathlib import Path
 from typing import ClassVar, assert_never
 
@@ -172,7 +173,11 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         )
         expected_shape = (721, 1440)
 
-        with rasterio.open(coord.downloaded_path) as reader:
+        is_mars = isinstance(coord, MarsSourceFileCoord)
+        with (
+            rasterio.Env(GRIB_NORMALIZE_UNITS="NO") if is_mars else nullcontext(),
+            rasterio.open(coord.downloaded_path) as reader,
+        ):
             assert reader.count == 1, f"Expected 1 band, found {reader.count}"
             _validate_grib_metadata(
                 reader,
@@ -182,23 +187,21 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 data_var.name,
                 unit_only=coord.validate_grib_comment_unit_only,
             )
-            result: ArrayFloat32 = reader.read(1, out_dtype=np.float32)
+            result = reader.read(1, out_dtype=np.float64 if is_mars else np.float32)
             assert result.shape == expected_shape, (
                 f"Expected {expected_shape} shape, found {result.shape}"
             )
 
-            # Apply MARS-specific scale factor (e.g. geopotential m^2/s^2 to
-            # geopotential height gpm). Applied here rather than in
+            # Apply MARS-specific scale and offset here rather than in
             # apply_data_transformations because a shard could mix sources and
             # the conversion must only apply to MARS-sourced values.
-            if (
-                isinstance(coord, MarsSourceFileCoord)
-                and data_var.internal_attrs.mars is not None
-                and data_var.internal_attrs.mars.scale_factor is not None
-            ):
-                result = result * data_var.internal_attrs.mars.scale_factor
+            if is_mars and (mars := data_var.internal_attrs.mars) is not None:
+                if mars.scale_factor is not None:
+                    result *= mars.scale_factor
+                if mars.add_offset is not None:
+                    result += mars.add_offset
 
-            return result
+            return result.astype(np.float32, copy=False)
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: EcmwfDataVar

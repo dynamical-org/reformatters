@@ -108,7 +108,9 @@ def _resolve_mars_data_var(data_var: EcmwfDataVar) -> EcmwfDataVar:
         overrides.update(
             {
                 k: v
-                for k, v in data_var.internal_attrs.mars.model_dump().items()
+                for k, v in data_var.internal_attrs.mars.model_dump(
+                    exclude={"add_offset"}
+                ).items()
                 if v is not None
             }
         )
