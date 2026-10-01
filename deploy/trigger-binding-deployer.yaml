@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reformatters-trigger-binding-deployer
+rules:
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingadmissionpolicybindings]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reformatters-trigger-binding-deployer
+  namespace: default
+rules:
+  - apiGroups: [batch]
+    resources: [cronjobs]
+    verbs: [get, trigger]

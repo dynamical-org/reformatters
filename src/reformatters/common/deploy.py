@@ -1,12 +1,21 @@
 import json
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
 from typing import Any
 
 import typer
 
 from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes_security import (
+    create_trigger_bindings,
+    trigger_admission_resources,
+    trigger_deployment_resources,
+    trigger_role_targets,
+    verify_trigger_admission,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
 
@@ -21,12 +30,9 @@ def deploy_operational_resources(
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
-    reformat_jobs: list[kubernetes.Job] = []
+    reformat_jobs: list[kubernetes.CronJob] = []
 
     for resource in resources:
-        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
-            continue
-
         try:
             dataset_cronjobs = list(
                 resource.operational_kubernetes_resources(image_tag)
@@ -38,6 +44,9 @@ def deploy_operational_resources(
             )
             continue
 
+        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
+            continue
+
         if cronjob_transform is not None:
             dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
 
@@ -47,23 +56,29 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    k8s_resource_list = {
-        "apiVersion": "v1",
-        "kind": "List",
-        "items": [
-            reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs
-        ],
-    }
-
-    subprocess.run(
-        ["/usr/bin/kubectl", "apply", "-f", "-"],
-        input=json.dumps(k8s_resource_list),
-        text=True,
-        check=True,
-    )
+    verify_trigger_admission("default", [])
+    authorized_targets = trigger_role_targets("default")
+    workloads, _ = trigger_deployment_resources(reformat_jobs)
+    _apply_resources(workloads)
+    names = sorted(authorized_targets | {job.name for job in reformat_jobs})
+    created_bindings = create_trigger_bindings("default", names)
+    live_targets = verify_trigger_admission("default", names)
+    if created_bindings or set(names) - authorized_targets:
+        time.sleep(10)
+    _, permissions = trigger_deployment_resources([], sorted(live_targets))
+    _apply_resources(permissions)
 
     log.info(
-        f"Deployed {[item['metadata']['name'] for item in k8s_resource_list['items']]}"  # type: ignore[index]
+        "Deployed %s", [item["metadata"]["name"] for item in workloads + permissions]
+    )
+
+
+def _apply_resources(resources: list[dict[str, Any]]) -> None:
+    subprocess.run(
+        ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
+        input=json.dumps({"apiVersion": "v1", "kind": "List", "items": resources}),
+        text=True,
+        check=True,
     )
 
 
@@ -72,6 +87,48 @@ def register_commands(
     datasets: Sequence[DynamicalDataset[Any, Any]],
     archivers: Sequence[OperationalResources] = (),
 ) -> None:
+    @app.command()
+    def verify_kubernetes_admission(bundle: Path, namespace: str = "default") -> None:
+        """Probe admission using server-side dry runs; creates no resources."""
+        items = json.loads(bundle.read_text())["items"]
+        assert items == trigger_admission_resources(namespace), (
+            "Bundle does not match the complete generated policy"
+        )
+        for item in items:
+            installed = subprocess.run(  # noqa: S603
+                [
+                    "/usr/bin/kubectl",
+                    "get",
+                    item["kind"],
+                    item["metadata"]["name"],
+                    "-o",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert json.loads(installed.stdout)["spec"] == item["spec"], (
+                f"Installed {item['kind']} {item['metadata']['name']} differs from bundle"
+            )
+        verify_trigger_admission(namespace, [])
+
+    @app.command()
+    def render_kubernetes_admission_bundle(
+        namespace: str = "default",
+    ) -> None:
+        """Render cluster-admin admission resources without contacting Kubernetes."""
+        typer.echo(
+            json.dumps(
+                {
+                    "apiVersion": "v1",
+                    "kind": "List",
+                    "items": trigger_admission_resources(namespace),
+                },
+                indent=2,
+            )
+        )
+
     @app.command()
     def deploy(
         docker_image: str | None = None,

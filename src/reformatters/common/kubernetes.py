@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 import os
 import random
@@ -12,12 +13,18 @@ from typing import Annotated, Any
 
 import pydantic
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
 from reformatters.common.config import Config
+from reformatters.common.logging import get_logger
 from reformatters.common.types import Timestamp
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
+SERVICE_ACCOUNT = "reformatters-update-trigger"
+_CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
+_CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
+log = get_logger(__name__)
 
 
 class Job(pydantic.BaseModel):
@@ -42,6 +49,7 @@ class Job(pydantic.BaseModel):
     pod_annotations: dict[str, str] = {"karpenter.sh/do-not-disrupt": "true"}
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
+    service_account_name: str | None = None
 
     def mounted_secret_names(self) -> Sequence[str]:
         """Secrets mounted as JSON files at /secrets/<name>.json in the pod."""
@@ -126,6 +134,14 @@ class Job(pydantic.BaseModel):
                                         },
                                     },
                                     {
+                                        "name": "POD_NAMESPACE",
+                                        "valueFrom": {
+                                            "fieldRef": {
+                                                "fieldPath": "metadata.namespace"
+                                            }
+                                        },
+                                    },
+                                    {
                                         "name": "WORKER_INDEX",
                                         "valueFrom": {
                                             "fieldRef": {
@@ -140,6 +156,10 @@ class Job(pydantic.BaseModel):
                                 ],
                                 "image": f"{self.image}",
                                 "name": "worker",
+                                "securityContext": {
+                                    "allowPrivilegeEscalation": False,
+                                    "capabilities": {"drop": ["ALL"]},
+                                },
                                 "resources": {
                                     "requests": {
                                         "cpu": f"{self.cpu}",
@@ -175,8 +195,17 @@ class Job(pydantic.BaseModel):
                             "karpenter.sh/capacity-type": "spot",
                         },
                         "restartPolicy": "Never",
+                        **(
+                            {"serviceAccountName": self.service_account_name}
+                            if self.service_account_name is not None
+                            else {}
+                        ),
                         "securityContext": {
                             "fsGroup": 999,  # this is the `app` group our app runs under
+                            "runAsNonRoot": True,
+                            "runAsUser": 999,
+                            "runAsGroup": 999,
+                            "seccompProfile": {"type": "RuntimeDefault"},
                         },
                         "terminationGracePeriodSeconds": 30,
                         "activeDeadlineSeconds": int(
@@ -339,6 +368,53 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     assert isinstance(image, str), f"CronJob {cronjob_name} image is not a string"
     assert len(image) > 0, f"CronJob {cronjob_name} has no container image"
     return image
+
+
+def create_job_from_cronjob(cronjob_name: str, job_name: str) -> bool:
+    assert len(job_name) <= 63, f"Invalid Kubernetes Job name {job_name!r}"
+    assert re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", job_name), (
+        f"Invalid Kubernetes Job name {job_name!r}"
+    )
+    config.load_incluster_config()
+    namespace = os.environ["POD_NAMESPACE"]
+    batch_v1 = client.BatchV1Api()
+    cronjob = batch_v1.read_namespaced_cron_job(cronjob_name, namespace)
+    if cronjob.spec.suspend:
+        log.info(f"Skipping {job_name}: CronJob {cronjob_name} is suspended")
+        return False
+
+    template = cronjob.spec.job_template
+    cronjob_uid = cronjob.metadata.uid
+    assert isinstance(cronjob_uid, str), "CronJob has no UID"
+    labels = dict(template.metadata.labels or {}) if template.metadata else {}
+    labels.update({_CRONJOB_NAME_LABEL: cronjob_name, _CRONJOB_UID_LABEL: cronjob_uid})
+    annotations = dict(template.metadata.annotations or {}) if template.metadata else {}
+    annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+    job = client.V1Job(
+        api_version="batch/v1",
+        kind="Job",
+        metadata=client.V1ObjectMeta(
+            name=job_name, labels=labels, annotations=annotations
+        ),
+        spec=copy.deepcopy(template.spec),
+    )
+    try:
+        batch_v1.create_namespaced_job(namespace, job)
+        log.info(f"Created Job {job_name} from CronJob {cronjob_name}")
+    except ApiException as error:
+        if error.status != 409:
+            raise
+        existing = batch_v1.read_namespaced_job(job_name, namespace)
+        if existing.metadata.name != job_name or any(
+            (existing.metadata.labels or {}).get(key) != value
+            for key, value in (
+                (_CRONJOB_NAME_LABEL, cronjob_name),
+                (_CRONJOB_UID_LABEL, cronjob_uid),
+            )
+        ):
+            raise
+        log.info(f"Job {job_name} already exists from CronJob {cronjob_name}")
+    return True
 
 
 # Operational schedules use fixed minutes, selected hours, and either every day or

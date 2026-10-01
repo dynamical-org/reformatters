@@ -90,6 +90,8 @@ This deletes:
 - Kubernetes cronjobs (`stage-noaa-gfs-forecast-v0-3-0-update`, `stage-noaa-gfs-forecast-v0-3-0-validate`)
 - The remote git branch (`stage/noaa-gfs-forecast/v0.3.0`)
 
+The next deploy removes deleted CronJobs from the trigger Role; their kubernetes admission bindings remain and deny missing templates.
+
 The dataset store and Sentry cron monitors are **not** deleted. Clean them up manually when ready.
 
 ## Constraints

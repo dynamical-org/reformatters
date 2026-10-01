@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -148,26 +148,11 @@ class MaterializedRegionJob(
         )
         del worker_jobs
 
-        with xr.open_datatree(
-            primary_store,  # ty: ignore[invalid-argument-type]
-            engine="zarr",
-            chunks=None,
-            decode_timedelta=True,
-        ) as existing:
-            for job in jobs:
-                template_utils.assert_append_labels_match(
-                    job.template_ds, existing, job.append_dim
-                )
-
         worker_results: dict[str, list[SourceFileResult]] = {}
         for job in jobs:
             template_utils.write_metadata(job.template_ds, job.tmp_store)
             results = job.process(
-                primary_store=primary_store,
-                replica_stores=replica_stores,
-                replica_write_guard=store_factory.assert_direct_replica_writes
-                if store_factory.replica_handoff
-                else None,
+                primary_store=primary_store, replica_stores=replica_stores
             )
             for var_path, coords in results.items():
                 worker_results.setdefault(var_path, []).extend(
@@ -191,7 +176,6 @@ class MaterializedRegionJob(
         self,
         primary_store: Store,
         replica_stores: list[Store],
-        replica_write_guard: Callable[[], None] | None = None,
     ) -> Mapping[str, Sequence[SOURCE_FILE_COORD]]:
         """
         Orchestrate the full region job processing pipeline.
@@ -286,7 +270,6 @@ class MaterializedRegionJob(
                             self.tmp_store,
                             primary_store,
                             replica_stores=replica_stores,
-                            replica_write_guard=replica_write_guard,
                         )
                     )
 

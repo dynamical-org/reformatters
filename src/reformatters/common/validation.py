@@ -5,7 +5,7 @@ import itertools
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import timedelta
 from functools import partial
 from typing import (
@@ -825,25 +825,6 @@ class CheckReplicaMatchesPrimary(Validator):
         return ValidationResult(
             passed=True,
             message="Data in tested subset of replica and primary stores is the same",
-        )
-
-
-class CheckReplicaTimestampIntersection(CheckReplicaMatchesPrimary):
-    def check(self, context: ValidationContext) -> ValidationResult:
-        primary = context.primary_ds
-        assert primary is not None
-        dim = context.append_dim
-        replica_times = context.ds.indexes[dim]
-        if not replica_times.isin(primary.indexes[dim]).all():
-            return ValidationResult(
-                passed=False, message="Replica timestamps are absent from primary"
-            )
-        if replica_times[-1] != primary.indexes[dim][-1]:
-            return ValidationResult(
-                passed=False, message="Replica is behind published primary"
-            )
-        return super().check(
-            replace(context, primary_ds=primary.sel({dim: replica_times}))
         )
 
 

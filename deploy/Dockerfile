@@ -87,8 +87,8 @@ ENV PATH=/app/bin:$PATH
 
 # Don't run app as root.
 RUN <<EOT
-groupadd -r app
-useradd -r -d /app -g app -N app
+groupadd -r -g 999 app
+useradd -r -u 999 -d /app -g 999 -N app
 EOT
 
 ENTRYPOINT ["python", "src/reformatters/__main__.py"]
@@ -129,7 +129,7 @@ COPY --from=build --chown=app:app /app /app
 
 COPY . /app/
 
-USER app
+USER app:app
 WORKDIR /app
 
 # Light test that the app can be run

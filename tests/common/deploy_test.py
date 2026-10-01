@@ -14,7 +14,12 @@ from typer.testing import CliRunner
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import deploy, monitoring
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import (
+    SERVICE_ACCOUNT,
+    CronJob,
+    ReformatCronJob,
+    ValidationCronJob,
+)
 
 
 class ExampleDatasetInDevelopment:
@@ -57,6 +62,20 @@ class ExampleDataset2(ExampleDataset1):
     dataset_id: str = "example-dataset-2"
 
 
+class ExampleDataset3(ExampleDataset1):
+    dataset_id: str = "example-dataset-3"
+
+
+@pytest.fixture(autouse=True)
+def admission_gate(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    gate = Mock(side_effect=lambda ns, names: set(names))
+    monkeypatch.setattr(deploy, "verify_trigger_admission", gate)
+    monkeypatch.setattr(deploy, "trigger_role_targets", Mock(return_value=set()))
+    monkeypatch.setattr(deploy, "create_trigger_bindings", Mock(return_value=False))
+    monkeypatch.setattr(deploy.time, "sleep", Mock())
+    return gate
+
+
 def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_run = Mock()
     monkeypatch.setattr(subprocess, "run", mock_run)
@@ -75,17 +94,21 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
     deploy.deploy_operational_resources(test_datasets, docker_image="test-image-tag")
 
-    assert mock_run.call_count == 1
-    args, kwargs = mock_run.call_args
-    assert args[0] == ["/usr/bin/kubectl", "apply", "-f", "-"]
+    assert mock_run.call_count == 2
+    cronjob_apply, rbac_apply = mock_run.call_args_list
+    args, kwargs = cronjob_apply
+    assert args[0] == ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"]
 
     resources = json.loads(kwargs["input"])
+    service_account = resources["items"].pop(0)
+    assert service_account["kind"] == "ServiceAccount"
     assert resources["apiVersion"] == "v1"
     assert resources["kind"] == "List"
 
     # Dataset 1
     assert resources["items"][0]["kind"] == "CronJob"
     assert resources["items"][0]["metadata"]["name"] == "example-dataset-1-update"
+    assert resources["items"][1]["metadata"]["name"] == "example-dataset-1-validate"
     container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
@@ -95,6 +118,35 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dataset 2
     assert resources["items"][2]["kind"] == "CronJob"
     assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
+    assert resources["items"][3]["metadata"]["name"] == "example-dataset-2-validate"
+
+    rbac_resources = json.loads(rbac_apply.kwargs["input"])["items"]
+    rbac = {item["kind"]: item for item in rbac_resources}
+    assert set(rbac) == {"Role", "RoleBinding"}
+    assert [item["kind"] for item in rbac_resources] == [
+        "Role",
+        "RoleBinding",
+    ]
+    assert all(item["metadata"]["name"] == SERVICE_ACCOUNT for item in rbac.values())
+    assert rbac["Role"]["rules"] == [
+        {
+            "apiGroups": ["batch"],
+            "resources": ["cronjobs"],
+            "verbs": ["get", "trigger"],
+            "resourceNames": sorted(
+                item["metadata"]["name"] for item in resources["items"]
+            ),
+        },
+        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create", "get"]},
+    ]
+    assert rbac["RoleBinding"]["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": SERVICE_ACCOUNT,
+    }
+    assert rbac["RoleBinding"]["subjects"] == [
+        {"kind": "ServiceAccount", "name": SERVICE_ACCOUNT}
+    ]
 
 
 def test_deploy_operational_resources_dataset_id_filter(
@@ -114,9 +166,159 @@ def test_deploy_operational_resources_dataset_id_filter(
         dataset_id_filter="example-dataset-2",
     )
 
-    resources = json.loads(mock_run.call_args.kwargs["input"])
-    names = [item["metadata"]["name"] for item in resources["items"]]
+    resources = json.loads(mock_run.call_args_list[0].kwargs["input"])
+    names = [
+        item["metadata"]["name"]
+        for item in resources["items"]
+        if item["kind"] == "CronJob"
+    ]
     assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
+    rbac_resources = json.loads(mock_run.call_args_list[1].kwargs["input"])["items"]
+    role = next(item for item in rbac_resources if item["kind"] == "Role")
+    assert role["rules"][0]["resources"] == ["cronjobs"]
+    assert role["rules"][0]["resourceNames"] == names
+
+
+@pytest.mark.parametrize("staging", [False, True])
+def test_partial_deploy_registers_selected_targets(
+    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock, staging: bool
+) -> None:
+    monkeypatch.setattr(subprocess, "run", Mock())
+    deploy.deploy_operational_resources(
+        [ExampleDataset1(), ExampleDataset3()],  # ty: ignore[invalid-argument-type]
+        docker_image="test-image-tag",
+        dataset_id_filter="example-dataset-3",
+        cronjob_transform=(
+            lambda cj: cj.model_copy(update={"name": f"staging-{cj.name}"})
+        )
+        if staging
+        else None,
+    )
+    assert admission_gate.call_count == 2
+    assert admission_gate.call_args_list[0].args == ("default", [])
+    prefix = "staging-" if staging else ""
+    assert admission_gate.call_args_list[1].args[1] == [
+        f"{prefix}example-dataset-3-update",
+        f"{prefix}example-dataset-3-validate",
+    ]
+
+
+def test_deploy_registers_all_cronjobs_before_probe_and_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = []
+    monkeypatch.setattr(
+        deploy,
+        "verify_trigger_admission",
+        lambda ns, ts: events.append(("probe", ts)) or set(ts),
+    )
+    monkeypatch.setattr(
+        deploy,
+        "_apply_resources",
+        lambda rs: events.append(("apply", [r["kind"] for r in rs])),
+    )
+    monkeypatch.setattr(
+        deploy,
+        "create_trigger_bindings",
+        lambda ns, names: events.append(("bindings", names)),
+    )
+    monkeypatch.setattr(
+        deploy.time, "sleep", lambda seconds: events.append(("wait", seconds))
+    )
+    monkeypatch.setattr(deploy, "trigger_role_targets", lambda ns: {"existing-update"})
+    deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
+    names = [
+        "example-dataset-1-update",
+        "example-dataset-1-validate",
+        "existing-update",
+    ]
+    assert events == [
+        ("probe", []),
+        ("apply", ["ServiceAccount", "CronJob", "CronJob"]),
+        ("bindings", names),
+        ("probe", names),
+        ("wait", 10),
+        ("apply", ["Role", "RoleBinding"]),
+    ]
+
+
+def test_partial_deploy_preserves_previous_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        deploy, "trigger_role_targets", lambda ns: {"previous-staging-update"}
+    )
+    apply = Mock()
+    monkeypatch.setattr(deploy, "_apply_resources", apply)
+    deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
+    role = apply.call_args.args[0][0]
+    assert role["rules"][0]["resourceNames"] == [
+        "example-dataset-1-update",
+        "example-dataset-1-validate",
+        "previous-staging-update",
+    ]
+
+
+@pytest.mark.parametrize("failed_gate", [0, 1])
+def test_deploy_without_trigger_targets_stops_before_grant_on_guard_failure(
+    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock, failed_gate: int
+) -> None:
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    admission_gate.side_effect = (
+        [AssertionError("guard missing")]
+        if failed_gate == 0
+        else [None, AssertionError("guard missing")]
+    )
+    with pytest.raises(AssertionError, match="guard missing"):
+        deploy.deploy_operational_resources(
+            [ExampleDataset1()],  # ty: ignore[invalid-argument-type]
+            docker_image="test-image-tag",
+        )
+    assert mock_run.call_count == failed_gate
+    for call in mock_run.call_args_list:
+        assert all(
+            item["kind"] not in {"Role", "RoleBinding"}
+            for item in json.loads(call.kwargs["input"])["items"]
+        )
+
+
+@pytest.mark.parametrize("failed_gate", [0, 1])
+def test_deploy_stops_before_grant_when_admission_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    admission_gate: Mock,
+    failed_gate: int,
+) -> None:
+    mock_run = Mock()
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    admission_gate.side_effect = (
+        [AssertionError("policy missing")]
+        if failed_gate == 0
+        else [None, AssertionError("clone denied")]
+    )
+    with pytest.raises(AssertionError):
+        deploy.deploy_operational_resources(
+            DYNAMICAL_DATASETS, docker_image="test-image-tag"
+        )
+    assert mock_run.call_count == failed_gate
+    for call in mock_run.call_args_list:
+        assert all(
+            item["kind"] not in {"Role", "RoleBinding"}
+            for item in json.loads(call.kwargs["input"])["items"]
+        )
+
+
+def test_deploy_stops_before_grant_when_cronjob_apply_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_run = Mock(side_effect=subprocess.CalledProcessError(1, "kubectl"))
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    with pytest.raises(subprocess.CalledProcessError):
+        deploy.deploy_operational_resources(
+            DYNAMICAL_DATASETS, docker_image="test-image-tag"
+        )
+    mock_run.assert_called_once()
+    assert mock_run.call_args.kwargs["check"] is True
 
 
 def test_registered_dataset_schedules_are_parseable() -> None:
@@ -198,3 +400,18 @@ class TestDeployCommandsRegistered:
         assert "deploy " in result.output or "deploy\n" in result.output
         assert "deploy-staging" in result.output
         assert "cleanup-staging" in result.output
+
+
+def test_deploy_drops_deleted_cronjob_grants(
+    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock
+) -> None:
+    monkeypatch.setattr(deploy, "trigger_role_targets", lambda ns: {"retired-staging"})
+    admission_gate.side_effect = lambda ns, names: set(names) - {"retired-staging"}
+    apply = Mock()
+    monkeypatch.setattr(deploy, "_apply_resources", apply)
+    deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
+    role = apply.call_args.args[0][0]
+    assert role["rules"][0]["resourceNames"] == [
+        "example-dataset-1-update",
+        "example-dataset-1-validate",
+    ]
