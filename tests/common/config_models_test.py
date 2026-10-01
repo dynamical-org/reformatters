@@ -304,3 +304,30 @@ class TestDataVarAttrs:
                 flag_values=(0, 1, 2),
                 flag_meanings="no yes",
             )
+
+
+@pytest.mark.parametrize(
+    ("dtype", "fill_value"),
+    [("str", 0), ("str", np.nan), ("float32", ""), ("bool", "missing")],
+)
+def test_string_encoding_requires_string_fill_value(
+    dtype: str, fill_value: str | float
+) -> None:
+    with pytest.raises(ValidationError, match="String dtype and string fill_value"):
+        Encoding.model_validate(
+            {"dtype": dtype, "chunks": 1, "shards": None, "fill_value": fill_value}
+        )
+
+
+def test_string_encoding_supported_only_for_coordinates() -> None:
+    encoding = Encoding(dtype="str", chunks=1, shards=None, fill_value="")
+    assert encoding.fill_value == ""
+    with pytest.raises(ValidationError, match="only for coordinates"):
+        DataVar(
+            name="strings",
+            encoding=encoding,
+            attrs=DataVarAttrs(
+                long_name="Strings", short_name="s", units="1", step_type="instant"
+            ),
+            internal_attrs=BaseInternalAttrs(keep_mantissa_bits="no-rounding"),
+        )

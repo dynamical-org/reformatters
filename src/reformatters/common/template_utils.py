@@ -483,6 +483,13 @@ def assign_var_metadata(
     var: xr.DataArray, var_config: DataVar[BaseInternalAttrs] | Coordinate
 ) -> xr.DataArray:
     var.encoding = var_config.encoding.model_dump(exclude_none=True)
+    if var_config.encoding.dtype == "str":
+        assert isinstance(var_config, Coordinate)
+        assert all(isinstance(value, str) for value in var.values.flat), (
+            f"{var.name}: string coordinates must contain only string labels"
+        )
+        # Object dtype selects Zarr's variable-length UTF-8 representation in xarray.
+        var.encoding["dtype"] = "object"
 
     if not isinstance(var_config, Coordinate) and _should_write_cf_fill_value(
         var_config
