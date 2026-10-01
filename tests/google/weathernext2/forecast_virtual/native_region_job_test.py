@@ -19,9 +19,6 @@ from reformatters.google.weathernext2.forecast_virtual import (
     region_job as region_job_module,
 )
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
-    OBJECTS_LOCATION,
-    PROXY_LOCATION_PREFIX,
-    PUBLICATION_HOLDBACK,
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
@@ -29,6 +26,12 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
+)
+from reformatters.google.weathernext_virtual import listing as listing_module
+from reformatters.google.weathernext_virtual.holdback import PUBLICATION_HOLDBACK
+from reformatters.google.weathernext_virtual.listing import (
+    OBJECTS_LOCATION,
+    PROXY_LOCATION_PREFIX,
 )
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
@@ -125,7 +128,7 @@ def _mock_native_listing(
         return response
 
     client.get.side_effect = get
-    monkeypatch.setattr(region_job_module.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(listing_module.httpx, "Client", lambda **kwargs: client)
     return client
 
 
@@ -484,13 +487,13 @@ def test_object_listing_retries_transient_response() -> None:
     client = Mock()
     client.get.side_effect = [transient, success]
 
-    objects = region_job_module._list_objects(
+    objects = listing_module.list_objects(
         client,
-        region_job_module.ObjectListingQuery(prefix),
+        listing_module.ObjectListingQuery(prefix),
     )
 
     assert objects == {
-        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": region_job_module.NativeObjectMetadata(
+        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": listing_module.NativeObjectMetadata(
             size=100,
             etag_checksum='"00000000000000000000000000000000"',
         )
