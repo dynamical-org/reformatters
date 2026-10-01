@@ -123,6 +123,10 @@ def cf_standard_name_to_canonical_units() -> dict[str, str]:
 GEOGRAPHIC_XY_DATASET_IDS = {
     "google-weathernext2-forecast-historical-virtual",
     "google-weathernext2-forecast-operational-virtual",
+    "google-weathernext3-forecast-15-day-0-1-degree-virtual",
+    "google-weathernext3-forecast-15-day-0-05-degree-virtual",
+    "google-weathernext3-forecast-48-hour-0-1-degree-virtual",
+    "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
 }
 
 

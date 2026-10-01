@@ -1,10 +1,20 @@
-# WeatherNext 2 publication holdback
+# WeatherNext publication holdback
 
 The operational virtual product admits a forecast step when `init_time + lead_time <= scheduled_fire_time - 1h`. Each backfill process captures one cutoff per `get_jobs()` invocation for the same rule. Workers starting later may admit additional eligible steps; their job partitions remain identical. Newly eligible omissions are filled by the operational sweep. The historical 2022–2024 product is independent of this clock. The boundary follows [Google's terms](https://storage.googleapis.com/weathernext-public/terms-of-use.pdf) and the valid-time interpretation recorded in [meta #201](https://github.com/dynamical-org/meta/issues/201).
 
 Operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. Recent initializations are intentionally partial. Coordinates retain all 60 leads; unpublished steps read as NaN. `expected_forecast_length` describes the source horizon, not the number of leads currently published. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill.
 
 The update schedule is `5 1,7,13,19 * * *`; validation follows at `5 2,8,14,20 * * *`. Decode health samples both ends of the update window so a partial newest initialization does not eliminate long-lead coverage. `CheckNoRefsInsideHoldback` in `reformatters.google.weathernext_virtual.validation` checks representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
+
+## WeatherNext 3
+
+The four `google-weathernext3-forecast-{15-day,48-hour}-{0-1,0-05}-degree-virtual` products use the same one-hour valid-time holdback. The 15-day products initialize every six hours and carry hourly leads 1–360; the 48-hour products include every hourly initialization, including synoptic cycles truncated to leads 1–48. Each variable and lead is admitted only when all six statistics (`mean`, `p10`, `p25`, `p50`, `p75`, `p90`) are listed. Neither `success` nor `zarr.json` proves completeness.
+
+Updates run at `10 * * * *` with a 40-minute deadline and a 30-second polling interval. Validation runs at `55 * * * *` with a 30-minute deadline. Both crons remain suspended until backfill and validation are complete. Update windows cover the product horizon plus two days, aligned to the newest init whose first lead passes the scheduled fire's cutoff. A whole-variable listing is used only after the source's final lead is publishable: synoptic sources retain their 360-hour horizon even in a 48-hour product.
+
+Decode validation samples two initialization positions, one lead per position, every statistic, and every variable, using two workers. This bounds each run to 228 chunks on 0.1° or 24 chunks on 0.05°; one 0.05° decoded chunk occupies about 99 MiB. Measure production runtime before unsuspending. Manifest splits contain 64 initializations for 15-day products and 384 for 48-hour products.
+
+The 0.1° products contain 19 variables, including three separately named precipitation forecast heads served as rates. The 0.05° products contain station-trained temperature and dewpoint fields defined everywhere. Unit conversions decode source Kelvin to Celsius, one-hour precipitation totals to kg m-2 s-1, one-hour radiation totals to W m-2, and cloud fractions to percent.
 
 ## Audit
 
