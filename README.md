@@ -53,3 +53,31 @@ We use
 1. Setup a docker image repository and export the `DOCKER_REPOSITORY` environment variable in your local shell. e.g. `export DOCKER_REPOSITORY=container.registry/<project-id>/reformatters/main`. Follow your registry's instructions to allow your docker to authenticate and push images to the registry.
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. e.g. `aws eks update-kubeconfig --region <region> --name <cluster-name>`, `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`, etc.
 1. Create a kubectl secret containing a single json encoded value to be passed to fsspec `storage_options` or splatted as keyword arguments to an icechunk storage opener `kubectl create secret generic your-destination-storage-options-key --from-literal=contents='{"key": "...", "secret": "..."}'`. See `storage.py`.
+
+1. As a cluster administrator, install the trigger admission policies before deploying workloads. Re-render when adding trigger targets; include `--staging-target NAME` with the staging CronJob’s name for each staging target. When replacing an active policy, pause deployments and trigger workloads and revoke the trigger RoleBinding until verification passes and the policy is active on all API servers.
+
+   ```sh
+   uv run main render-admission-bundle --namespace default > admission.json
+   kubectl apply -f admission.json
+   uv run main verify-admission admission.json --namespace default
+   ```
+
+   Ordinary deployment creates the `reformatters-update-trigger` ServiceAccount and its namespaced Role/RoleBinding after checking admission. The deploy identity needs ServiceAccount/CronJob and Role/RoleBinding write permissions, CronJob `get`, and Job `create/get`; it needs no cluster-scoped policy write permission. It must hold the permissions it grants, or have RBAC `bind`/`escalate` authority.
+
+1. Enable Restricted Pod Security warnings and audit before enforcement:
+
+   ```sh
+   kubectl label namespace default --overwrite \
+     pod-security.kubernetes.io/warn=restricted \
+     pod-security.kubernetes.io/warn-version=v1.36 \
+     pod-security.kubernetes.io/audit=restricted \
+     pod-security.kubernetes.io/audit-version=v1.36
+   ```
+
+   Check all workloads in the namespace, including those deployed elsewhere. Deploy the compliant templates, confirm replacement pods start and storage remains writable, and let Jobs using old templates finish. Old templates lacking the required security contexts will have replacement pods rejected. Once warnings are resolved, enforce:
+
+   ```sh
+   kubectl label namespace default --overwrite \
+     pod-security.kubernetes.io/enforce=restricted \
+     pod-security.kubernetes.io/enforce-version=v1.36
+   ```

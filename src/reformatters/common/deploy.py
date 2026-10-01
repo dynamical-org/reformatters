@@ -10,6 +10,7 @@ from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes_security import (
     trigger_admission_resources,
+    trigger_deployment_resources,
     verify_trigger_admission,
 )
 from reformatters.common.logging import get_logger
@@ -67,66 +68,22 @@ def deploy_operational_resources(
     templates = deployed_trigger_templates or list(trigger_templates.values())
     verify_trigger_admission("default", templates, require_params=False)
 
-    resource_groups: tuple[list[dict[str, Any]], ...] = (
-        [
-            {
-                "apiVersion": "v1",
-                "kind": "ServiceAccount",
-                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
-            },
-            *[reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
-        ],
-        [
-            {
-                "apiVersion": "rbac.authorization.k8s.io/v1",
-                "kind": "Role",
-                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
-                "rules": [
-                    {
-                        "apiGroups": ["batch"],
-                        "resources": ["cronjobs"],
-                        "verbs": ["get"],
-                    },
-                    {
-                        "apiGroups": ["batch"],
-                        "resources": ["jobs"],
-                        "verbs": ["create", "get"],
-                    },
-                ],
-            },
-            {
-                "apiVersion": "rbac.authorization.k8s.io/v1",
-                "kind": "RoleBinding",
-                "metadata": {"name": kubernetes.SERVICE_ACCOUNT},
-                "roleRef": {
-                    "apiGroup": "rbac.authorization.k8s.io",
-                    "kind": "Role",
-                    "name": kubernetes.SERVICE_ACCOUNT,
-                },
-                "subjects": [
-                    {"kind": "ServiceAccount", "name": kubernetes.SERVICE_ACCOUNT}
-                ],
-            },
-        ],
-    )
-
-    for index, group in enumerate(resource_groups):
-        if index == 1:
-            verify_trigger_admission("default", templates, require_params=True)
-        subprocess.run(
-            ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
-            input=json.dumps({"apiVersion": "v1", "kind": "List", "items": group}),
-            text=True,
-            check=True,
-        )
+    workloads, permissions = trigger_deployment_resources(reformat_jobs)
+    _apply_resources(workloads)
+    verify_trigger_admission("default", templates, require_params=True)
+    _apply_resources(permissions)
 
     log.info(
-        "Deployed %s",
-        [
-            item["metadata"]["name"]
-            for resources in resource_groups
-            for item in resources
-        ],
+        "Deployed %s", [item["metadata"]["name"] for item in workloads + permissions]
+    )
+
+
+def _apply_resources(resources: list[dict[str, Any]]) -> None:
+    subprocess.run(
+        ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
+        input=json.dumps({"apiVersion": "v1", "kind": "List", "items": resources}),
+        text=True,
+        check=True,
     )
 
 

@@ -698,13 +698,15 @@ def test_minimal_job_cannot_change_a_defaulted_field(cluster: Cluster) -> None:
         cluster.assert_denied(job)
 
 
-def test_policy_lists_every_job_spec_field(cluster: Cluster) -> None:
+def test_new_job_spec_fields_need_policy_review(cluster: Cluster) -> None:
     """A JobSpec field added by a newer Kubernetes must be reviewed before the policy is trusted."""
     schema = cluster.server.admin("GET", "/openapi/v3/apis/batch/v1").json()
     api_fields = set(
         schema["components"]["schemas"]["io.k8s.api.batch.v1.JobSpec"]["properties"]
     )
-    assert api_fields == {*_JOB_FIELDS, "selector", "template"}
+    assert api_fields == {*_JOB_FIELDS, "selector", "template"}, (
+        "Kubernetes JobSpec changed; review new fields for execution or privilege controls"
+    )
 
 
 def test_unknown_job_spec_key_is_pruned_by_the_api_server(cluster: Cluster) -> None:

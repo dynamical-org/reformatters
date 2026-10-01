@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from reformatters.common.kubernetes import SERVICE_ACCOUNT
+from reformatters.common.kubernetes import SERVICE_ACCOUNT, Job
 
 CANARY_ANNOTATION = "dynamical.org/admission-canary"
 
@@ -172,7 +172,6 @@ def trigger_admission_resources(
     ]
     expressions = [
         "params != null",
-        f"object.spec.all(k, k in {json.dumps([*_JOB_FIELDS, 'selector', 'template'])})",
         f"object.metadata.labels[{json.dumps(target_key)}] == params.metadata.name",
         f"object.metadata.labels[{json.dumps(uid_key)}] == params.metadata.uid",
         "!has(params.spec.suspend) || !params.spec.suspend",
@@ -424,3 +423,48 @@ def verify_trigger_admission(
         probe(altered, f"{prefix}-clone")
         if source is not None and not source["spec"].get("suspend", False):
             probe(job, None)
+
+
+def trigger_deployment_resources(
+    reformat_jobs: Sequence[Job],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    return (
+        [
+            {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": SERVICE_ACCOUNT},
+            },
+            *[reformat_job.as_kubernetes_object() for reformat_job in reformat_jobs],
+        ],
+        [
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "Role",
+                "metadata": {"name": SERVICE_ACCOUNT},
+                "rules": [
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["cronjobs"],
+                        "verbs": ["get"],
+                    },
+                    {
+                        "apiGroups": ["batch"],
+                        "resources": ["jobs"],
+                        "verbs": ["create", "get"],
+                    },
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "RoleBinding",
+                "metadata": {"name": SERVICE_ACCOUNT},
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "Role",
+                    "name": SERVICE_ACCOUNT,
+                },
+                "subjects": [{"kind": "ServiceAccount", "name": SERVICE_ACCOUNT}],
+            },
+        ],
+    )

@@ -21,7 +21,7 @@ from reformatters.common.types import Timestamp
 
 _SECRET_MOUNT_PATH = "/secrets"  # noqa: S105
 _SECRET_CONTENTS_KEY = "contents"  # noqa: S105
-SERVICE_ACCOUNT = "reformat-update-trigger"
+SERVICE_ACCOUNT = "reformatters-update-trigger"
 _CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
 _CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
 log = get_logger(__name__)

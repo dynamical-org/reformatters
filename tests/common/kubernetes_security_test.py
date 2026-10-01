@@ -23,12 +23,14 @@ def test_empty_targets_generate_bound_deny_all_guard() -> None:
         "ValidatingAdmissionPolicy",
     ]
     assert resources[0]["metadata"]["name"] == (
-        "default-reformat-update-trigger-targets"
+        "default-reformatters-update-trigger-targets"
     )
     assert resources[1]["spec"]["policyName"] == resources[0]["metadata"]["name"]
     assert resources[1]["spec"]["validationActions"] == ["Deny"]
     assert " in []" in resources[0]["spec"]["validations"][0]["expression"]
-    assert resources[2]["metadata"]["name"] == "default-reformat-update-trigger-clone"
+    assert (
+        resources[2]["metadata"]["name"] == "default-reformatters-update-trigger-clone"
+    )
 
 
 @pytest.mark.parametrize(
@@ -58,7 +60,7 @@ def test_empty_targets_accept_named_guard_denial(
 ) -> None:
     run = Mock(
         return_value=subprocess.CompletedProcess(
-            [], 1, stderr="default-reformat-update-trigger-targets"
+            [], 1, stderr="default-reformatters-update-trigger-targets"
         )
     )
     monkeypatch.setattr(subprocess, "run", run)
@@ -134,7 +136,7 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
             }
         },
     }
-    prefix = "default-reformat-update-trigger"
+    prefix = "default-reformatters-update-trigger"
     run = Mock(
         side_effect=[
             subprocess.CompletedProcess([], 0, stdout=json.dumps(source)),

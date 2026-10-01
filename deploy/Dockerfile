@@ -129,7 +129,7 @@ COPY --from=build --chown=app:app /app /app
 
 COPY . /app/
 
-USER 999:999
+USER app:app
 WORKDIR /app
 
 # Light test that the app can be run
