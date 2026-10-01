@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 import pytest
+import yaml
 from kubernetes import client
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
@@ -34,6 +35,7 @@ from reformatters.common.kubernetes import (
 from reformatters.common.kubernetes_security import (
     _JOB_FIELDS,
     CANARY_ANNOTATION,
+    trigger_admission_binding,
     trigger_admission_resources,
 )
 
@@ -42,6 +44,7 @@ NAMESPACE = "dynamical-triggers"
 PSA_NAMESPACE = "psa-restricted"
 ADMIN_TOKEN = "admin-token"  # noqa: S105
 TRIGGER_TOKEN = "trigger-token"  # noqa: S105
+DEPLOY_TOKEN = "deploy-token"  # noqa: S105
 EMPTY_TOKEN = "empty-token"  # noqa: S105
 EMPTY_NAMESPACE = "empty-triggers"
 POLICY_PREFIX = f"{NAMESPACE}-{SERVICE_ACCOUNT}"
@@ -128,6 +131,7 @@ def apiserver(tmp_path_factory: pytest.TempPathFactory) -> Iterator[ApiServer]:
     )
     (work / "tokens.csv").write_text(
         f'{ADMIN_TOKEN},admin,admin-uid,"system:masters"\n'
+        f'{DEPLOY_TOKEN},binding-deployer,deploy-uid,"system:authenticated"\n'
         f"{TRIGGER_TOKEN},system:serviceaccount:{NAMESPACE}:{SERVICE_ACCOUNT},trigger-uid,"
         f'"system:serviceaccounts,system:serviceaccounts:{NAMESPACE}"\n'
         f"{EMPTY_TOKEN},system:serviceaccount:{EMPTY_NAMESPACE}:{SERVICE_ACCOUNT},empty-uid,"
@@ -341,9 +345,22 @@ def cluster(apiserver: ApiServer) -> Cluster:
             "rules": [
                 {
                     "apiGroups": ["batch"],
+                    "resources": ["cronjobs"],
+                    "resourceNames": [
+                        UPDATE,
+                        VALIDATE,
+                        MINIMAL,
+                        WORK_QUEUE,
+                        MULTI,
+                        ABSENT,
+                    ],
+                    "verbs": ["get", "trigger"],
+                },
+                {
+                    "apiGroups": ["batch"],
                     "resources": ["jobs"],
                     "verbs": ["create", "get"],
-                }
+                },
             ],
         },
     )
@@ -397,7 +414,10 @@ def cluster(apiserver: ApiServer) -> Cluster:
         cluster.cronjobs[stored["metadata"]["name"]] = stored
 
     names = [UPDATE, VALIDATE, MINIMAL, WORK_QUEUE, MULTI, ABSENT]
-    for resource in trigger_admission_resources(NAMESPACE, names):
+    for resource in [
+        *trigger_admission_resources(NAMESPACE),
+        *(trigger_admission_binding(NAMESPACE, name) for name in names),
+    ]:
         apiserver.create(_resource_path(resource), resource)
 
     # Policies become active asynchronously; wait until a forged Job is denied
@@ -845,23 +865,15 @@ def kubectl_against_apiserver(
 def test_verify_trigger_admission_accepts_deployed_templates(
     cluster: Cluster, kubectl_against_apiserver: None
 ) -> None:
-    templates = [cluster.cronjobs[name] for name in (UPDATE, VALIDATE, MINIMAL)]
-    kubernetes_security.verify_trigger_admission(
-        NAMESPACE, templates, require_params=True
-    )
+    assert kubernetes_security.verify_trigger_admission(
+        NAMESPACE, [UPDATE, VALIDATE, MINIMAL]
+    ) == {UPDATE, VALIDATE, MINIMAL}
 
 
 def test_verify_trigger_admission_reports_missing_cronjob_by_clone_policy(
     cluster: Cluster, kubectl_against_apiserver: None
 ) -> None:
-    not_deployed = _plain_cronjob(ABSENT, {})
-    kubernetes_security.verify_trigger_admission(
-        NAMESPACE, [not_deployed], require_params=False
-    )
-    with pytest.raises(AssertionError, match="Missing CronJob absent-template"):
-        kubernetes_security.verify_trigger_admission(
-            NAMESPACE, [not_deployed], require_params=True
-        )
+    assert kubernetes_security.verify_trigger_admission(NAMESPACE, [ABSENT]) == set()
 
 
 def test_missing_parameter_denial_names_the_clone_policy(cluster: Cluster) -> None:
@@ -892,9 +904,7 @@ def test_operator_verifies_installed_policy_identity(
 
     from reformatters.__main__ import app  # noqa: PLC0415
 
-    resources = trigger_admission_resources(
-        NAMESPACE, [UPDATE, VALIDATE, MINIMAL, WORK_QUEUE, MULTI, ABSENT]
-    )
+    resources = trigger_admission_resources(NAMESPACE)
     bundle = tmp_path / "admission.json"
     bundle.write_text(json.dumps({"items": resources}))
     runner = CliRunner()
@@ -975,7 +985,7 @@ def test_empty_target_bundle_denies_all_trigger_jobs_and_verifies(
             ],
         },
     )
-    resources = trigger_admission_resources(EMPTY_NAMESPACE, [])
+    resources = trigger_admission_resources(EMPTY_NAMESPACE)
     for resource in resources:
         server.create(_resource_path(resource), resource)
 
@@ -995,9 +1005,7 @@ def test_empty_target_bundle_denies_all_trigger_jobs_and_verifies(
         assert time.monotonic() < deadline, "empty-target guard never became active"
         time.sleep(0.1)
 
-    kubernetes_security.verify_trigger_admission(
-        EMPTY_NAMESPACE, [], require_params=True
-    )
+    kubernetes_security.verify_trigger_admission(EMPTY_NAMESPACE, [])
     bundle = tmp_path / "empty-admission.json"
     bundle.write_text(json.dumps({"items": resources}))
     result = CliRunner().invoke(
@@ -1011,7 +1019,10 @@ def test_two_namespace_bundles_do_not_conflict_and_identity_cannot_cross(
 ) -> None:
     other = "other-triggers"
     cluster.server.create("/api/v1/namespaces", {"metadata": {"name": other}})
-    for resource in trigger_admission_resources(other, [MINIMAL]):
+    for resource in [
+        *trigger_admission_resources(other),
+        trigger_admission_binding(other, MINIMAL),
+    ]:
         cluster.server.create(_resource_path(resource), resource)
     cronjob = cluster.server.create(
         f"/apis/batch/v1/namespaces/{other}/cronjobs", _plain_cronjob(MINIMAL, {})
@@ -1063,16 +1074,12 @@ def test_missing_staging_binding_fails_verification(
     cluster: Cluster,
     kubectl_against_apiserver: None,
 ) -> None:
-    binding = next(
-        r
-        for r in trigger_admission_resources(NAMESPACE, [ABSENT])
-        if r["spec"].get("paramRef", {}).get("name") == ABSENT
-    )
+    binding = trigger_admission_binding(NAMESPACE, MINIMAL)
     path = _resource_path(binding)
     response = cluster.server.admin("DELETE", f"{path}/{binding['metadata']['name']}")
     assert response.status_code == 200, response.text
     job = _canary(cluster.job_for(MINIMAL))
-    job["metadata"]["labels"][NAME_LABEL] = ABSENT
+    _container(job)["image"] = "attacker/image"
     deadline = time.monotonic() + 30
     try:
         while (
@@ -1082,8 +1089,185 @@ def test_missing_staging_binding_fails_verification(
             assert time.monotonic() < deadline
             time.sleep(0.1)
         with pytest.raises(AssertionError, match="Admission allowed canary"):
-            kubernetes_security.verify_trigger_admission(
-                NAMESPACE, [_plain_cronjob(ABSENT, {})], require_params=False
-            )
+            kubernetes_security.verify_trigger_admission(NAMESPACE, [MINIMAL])
     finally:
         cluster.server.create(path, binding)
+
+
+def test_read_only_cronjob_grant_cannot_bypass_guard(cluster: Cluster) -> None:
+    server = cluster.server
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/roles",
+        {
+            "metadata": {"name": "read-every-cronjob"},
+            "rules": [
+                {
+                    "apiGroups": ["batch"],
+                    "resources": ["cronjobs"],
+                    "verbs": ["get", "list", "watch"],
+                }
+            ],
+        },
+    )
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/rolebindings",
+        {
+            "metadata": {"name": "read-every-cronjob"},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": "read-every-cronjob",
+            },
+            "subjects": [
+                {"kind": "Group", "name": f"system:serviceaccounts:{NAMESPACE}"}
+            ],
+        },
+    )
+    cronjob = server.create(
+        f"/apis/batch/v1/namespaces/{NAMESPACE}/cronjobs",
+        _plain_cronjob("foreign-cronjob", {}),
+    ).json()
+    deadline = time.monotonic() + 15
+    while (
+        server.request(
+            "GET",
+            f"/apis/batch/v1/namespaces/{NAMESPACE}/cronjobs/foreign-cronjob",
+            TRIGGER_TOKEN,
+        ).status_code
+        != 200
+    ):
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    job = clone_job(cronjob, "foreign-job")
+    cluster.assert_denied(job, "targets")
+    cluster.assert_denied(_canary(job), "targets", dry_run=True)
+
+
+def test_binding_is_probed_before_target_is_authorized(
+    cluster: Cluster, kubectl_against_apiserver: None
+) -> None:
+    server = cluster.server
+    name = "newly-deployed-cronjob"
+    body = _plain_cronjob(name, {})
+    body["spec"]["suspend"] = True
+    cronjob = server.create(
+        f"/apis/batch/v1/namespaces/{NAMESPACE}/cronjobs", body
+    ).json()
+    job = clone_job(cronjob, "newly-deployed-job")
+    cluster.assert_denied(job, "targets", dry_run=True)
+    assert kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
+    assert not kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
+    altered = _canary(copy.deepcopy(job))
+    _container(altered)["image"] = "attacker/image"
+    kubernetes_security.verify_trigger_admission(NAMESPACE, [name])
+    cluster.assert_denied(job, "targets", dry_run=True)
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/roles",
+        {
+            "metadata": {"name": name},
+            "rules": [
+                {
+                    "apiGroups": ["batch"],
+                    "resources": ["cronjobs"],
+                    "resourceNames": [name],
+                    "verbs": ["get", "trigger"],
+                }
+            ],
+        },
+    )
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/rolebindings",
+        {
+            "metadata": {"name": name},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": name,
+            },
+            "subjects": [
+                {
+                    "kind": "User",
+                    "name": f"system:serviceaccount:{NAMESPACE}:{SERVICE_ACCOUNT}",
+                }
+            ],
+        },
+    )
+    deadline = time.monotonic() + 15
+    while cluster.trigger_create(job, dry_run=True).status_code != 201:
+        assert time.monotonic() < deadline
+        time.sleep(0.1)
+    cluster.assert_denied(altered, "clone", dry_run=True)
+
+
+def test_binding_deployer_permissions_are_create_get_only(cluster: Cluster) -> None:
+    role, namespace_role = list(
+        yaml.safe_load_all(Path("deploy/trigger-binding-deployer.yaml").read_text())
+    )
+    server = cluster.server
+    server.create("/apis/rbac.authorization.k8s.io/v1/clusterroles", role)
+    server.create(
+        "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+        {
+            "metadata": {"name": "binding-deployer"},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "ClusterRole",
+                "name": role["metadata"]["name"],
+            },
+            "subjects": [{"kind": "User", "name": "binding-deployer"}],
+        },
+    )
+    namespace_role["metadata"]["namespace"] = NAMESPACE
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/roles",
+        namespace_role,
+    )
+    server.create(
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/rolebindings",
+        {
+            "metadata": {"name": "binding-deployer"},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": namespace_role["metadata"]["name"],
+            },
+            "subjects": [{"kind": "User", "name": "binding-deployer"}],
+        },
+    )
+    binding = trigger_admission_binding(NAMESPACE, MINIMAL)
+    binding["metadata"]["name"] += "-permission-test"
+    path = _resource_path(binding)
+    deadline = time.monotonic() + 15
+    while True:
+        response = server.request("POST", path, DEPLOY_TOKEN, binding)
+        if response.status_code == 201:
+            break
+        assert response.status_code == 403, response.text
+        assert time.monotonic() < deadline, response.text
+        time.sleep(0.1)
+    existing = response.json()
+    target = f"{path}/{binding['metadata']['name']}"
+    assert server.request("GET", target, DEPLOY_TOKEN).status_code == 200
+    assert server.request("GET", path, DEPLOY_TOKEN).status_code == 403
+    assert server.request("PUT", target, DEPLOY_TOKEN, existing).status_code == 403
+    assert (
+        server.http.patch(
+            target,
+            headers={
+                "Authorization": f"Bearer {DEPLOY_TOKEN}",
+                "Content-Type": "application/merge-patch+json",
+            },
+            json={"spec": {"validationActions": ["Warn"]}},
+        ).status_code
+        == 403
+    )
+    assert server.request("DELETE", target, DEPLOY_TOKEN).status_code == 403
+    assert (
+        server.request(
+            "POST",
+            "/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicies",
+            DEPLOY_TOKEN,
+            trigger_admission_resources(NAMESPACE)[0],
+        ).status_code
+        == 403
+    )

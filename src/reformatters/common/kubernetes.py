@@ -266,7 +266,6 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
-    triggerable: bool = False
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.

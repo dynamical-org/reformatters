@@ -256,16 +256,6 @@ def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> C
     )
 
 
-def test_cron_job_triggerable_is_internal_configuration() -> None:
-    cron = _cron_job_with_name("archive-update")
-    assert cron.triggerable is False
-    assert cron.model_copy(update={"triggerable": True}).triggerable is True
-    assert (
-        cron.as_kubernetes_object()
-        == cron.model_copy(update={"triggerable": True}).as_kubernetes_object()
-    )
-
-
 @pytest.mark.parametrize(
     ("cron_job_class", "suffix"),
     [

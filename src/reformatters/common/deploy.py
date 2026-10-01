@@ -1,5 +1,6 @@
 import json
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,10 @@ import typer
 from reformatters.common import docker, kubernetes, staging
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes_security import (
+    create_trigger_bindings,
     trigger_admission_resources,
     trigger_deployment_resources,
+    trigger_role_targets,
     verify_trigger_admission,
 )
 from reformatters.common.logging import get_logger
@@ -27,9 +30,7 @@ def deploy_operational_resources(
 ) -> None:
     image_tag = docker_image or docker.build_and_push_image()
 
-    reformat_jobs: list[kubernetes.Job] = []
-    trigger_templates: dict[str, dict[str, Any]] = {}
-    deployed_trigger_templates: list[dict[str, Any]] = []
+    reformat_jobs: list[kubernetes.CronJob] = []
 
     for resource in resources:
         try:
@@ -43,20 +44,11 @@ def deploy_operational_resources(
             )
             continue
 
-        trigger_templates.update(
-            (cj.name, cj.as_kubernetes_object())
-            for cj in dataset_cronjobs
-            if cj.triggerable
-        )
         if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
             continue
 
         if cronjob_transform is not None:
             dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
-
-        deployed_trigger_templates.extend(
-            cj.as_kubernetes_object() for cj in dataset_cronjobs if cj.triggerable
-        )
 
         reformat_jobs.extend(dataset_cronjobs)
 
@@ -64,13 +56,16 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    # An archiver-only deploy still grants access to its already-deployed targets.
-    templates = deployed_trigger_templates or list(trigger_templates.values())
-    verify_trigger_admission("default", templates, require_params=False)
-
-    workloads, permissions = trigger_deployment_resources(reformat_jobs)
+    verify_trigger_admission("default", [])
+    authorized_targets = trigger_role_targets("default")
+    workloads, _ = trigger_deployment_resources(reformat_jobs)
     _apply_resources(workloads)
-    verify_trigger_admission("default", templates, require_params=True)
+    names = sorted(authorized_targets | {job.name for job in reformat_jobs})
+    created_bindings = create_trigger_bindings("default", names)
+    live_targets = verify_trigger_admission("default", names)
+    if created_bindings or set(names) - authorized_targets:
+        time.sleep(10)
+    _, permissions = trigger_deployment_resources([], sorted(live_targets))
     _apply_resources(permissions)
 
     log.info(
@@ -96,12 +91,7 @@ def register_commands(
     def verify_admission(bundle: Path, namespace: str = "default") -> None:
         """Probe admission using server-side dry runs; creates no resources."""
         items = json.loads(bundle.read_text())["items"]
-        names = [
-            item["spec"]["paramRef"]["name"]
-            for item in items
-            if "paramRef" in item["spec"]
-        ]
-        assert items == trigger_admission_resources(namespace, names), (
+        assert items == trigger_admission_resources(namespace), (
             "Bundle does not match the complete generated policy"
         )
         for item in items:
@@ -121,50 +111,19 @@ def register_commands(
             assert json.loads(installed.stdout)["spec"] == item["spec"], (
                 f"Installed {item['kind']} {item['metadata']['name']} differs from bundle"
             )
-        templates = [
-            {
-                "metadata": {"name": name},
-                "spec": {
-                    "jobTemplate": {
-                        "spec": {
-                            "template": {
-                                "spec": {
-                                    "restartPolicy": "Never",
-                                    "containers": [
-                                        {
-                                            "name": "worker",
-                                            "image": "invalid.example/admission-canary:never-run",
-                                        }
-                                    ],
-                                }
-                            }
-                        }
-                    }
-                },
-            }
-            for name in names
-        ]
-        verify_trigger_admission(namespace, templates, require_params=False)
+        verify_trigger_admission(namespace, [])
 
     @app.command()
     def render_admission_bundle(
         namespace: str = "default",
-        staging_target: list[str] | None = None,
     ) -> None:
         """Render cluster-admin admission resources without contacting Kubernetes."""
-        targets = set(staging_target or [])
-        for resource in [*datasets, *archivers]:
-            try:
-                cronjobs = resource.operational_kubernetes_resources("unused")
-            except NotImplementedError:
-                continue
-            targets.update(cj.name for cj in cronjobs if cj.triggerable)
         typer.echo(
             json.dumps(
                 {
                     "apiVersion": "v1",
                     "kind": "List",
-                    "items": trigger_admission_resources(namespace, sorted(targets)),
+                    "items": trigger_admission_resources(namespace),
                 },
                 indent=2,
             )

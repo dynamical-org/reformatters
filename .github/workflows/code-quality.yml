@@ -89,7 +89,8 @@ jobs:
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           if ! git diff --quiet "$BASE_SHA" HEAD -- \
-            .github/workflows/code-quality.yml deploy/Dockerfile .python-version pyproject.toml uv.lock \
+            .github/workflows/code-quality.yml deploy/Dockerfile deploy/trigger-binding-deployer.yaml \
+            .python-version pyproject.toml uv.lock \
             src/reformatters/__main__.py src/reformatters/common/kubernetes.py \
             src/reformatters/common/kubernetes_security.py src/reformatters/common/deploy.py \
             src/reformatters/common/operational.py src/reformatters/common/staging.py \

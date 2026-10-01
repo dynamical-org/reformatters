@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from reformatters.common.kubernetes import SERVICE_ACCOUNT, Job
+from reformatters.common.kubernetes import SERVICE_ACCOUNT, CronJob
 
 CANARY_ANNOTATION = "dynamical.org/admission-canary"
 
@@ -72,11 +72,8 @@ def _same_map(
     )
 
 
-def trigger_admission_resources(
-    namespace: str, cronjob_names: Sequence[str]
-) -> list[dict[str, Any]]:
+def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
     assert namespace
-    names = sorted(set(cronjob_names))
     prefix = f"{namespace}-{SERVICE_ACCOUNT}"
     identity = f"system:serviceaccount:{namespace}:{SERVICE_ACCOUNT}"
     constraints = {
@@ -105,9 +102,6 @@ def trigger_admission_resources(
             ),
         }
     ]
-    namespace_match = {
-        "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": namespace}}
-    }
     target_key = "dynamical.org/cronjob-name"
     uid_key = "dynamical.org/cronjob-uid"
     guard_name = f"{prefix}-targets"
@@ -127,9 +121,14 @@ def trigger_admission_resources(
                             f"request.namespace == {json.dumps(namespace)} && "
                             "has(object.metadata.labels) && "
                             f"{json.dumps(target_key)} in object.metadata.labels && "
-                            f"object.metadata.labels[{json.dumps(target_key)}] in {json.dumps(names)}"
+                            f"(request.userInfo.username != {json.dumps(identity)} || "
+                            f"authorizer.serviceAccount({json.dumps(namespace)}, {json.dumps(SERVICE_ACCOUNT)})"
+                            ".group('batch').resource('cronjobs')"
+                            f".namespace({json.dumps(namespace)})"
+                            f".name(object.metadata.labels[{json.dumps(target_key)}])"
+                            ".check('trigger').allowed())"
                         ),
-                        "message": "Trigger Jobs must select an approved CronJob template",
+                        "message": "Trigger Jobs must select a registered CronJob template",
                     }
                 ],
             },
@@ -174,7 +173,6 @@ def trigger_admission_resources(
         "params != null",
         f"object.metadata.labels[{json.dumps(target_key)}] == params.metadata.name",
         f"object.metadata.labels[{json.dumps(uid_key)}] == params.metadata.uid",
-        "!has(params.spec.suspend) || !params.spec.suspend",
         "!has(object.metadata.generateName) || object.metadata.generateName == ''",
         "!object.metadata.name.matches('.*-[0-9]+$')",
         "!has(object.metadata.ownerReferences) || size(object.metadata.ownerReferences) == 0",
@@ -276,41 +274,109 @@ def trigger_admission_resources(
             },
         }
     )
-    resources.extend(
-        {
-            "apiVersion": "admissionregistration.k8s.io/v1",
-            "kind": "ValidatingAdmissionPolicyBinding",
-            "metadata": {"name": f"{prefix}-{name}"},
-            "spec": {
-                "policyName": clone_name,
-                "validationActions": ["Deny"],
-                "paramRef": {
-                    "name": name,
-                    "namespace": namespace,
-                    "parameterNotFoundAction": "Deny",
-                },
-                "matchResources": {
-                    "matchPolicy": "Equivalent",
-                    **namespace_match,
-                    "objectSelector": {"matchLabels": {target_key: name}},
-                },
-            },
-        }
-        for name in names
-    )
     return resources
 
 
-def verify_trigger_admission(
-    namespace: str, templates: Sequence[dict[str, Any]], *, require_params: bool
-) -> None:
+def trigger_admission_binding(namespace: str, cronjob_name: str) -> dict[str, Any]:
+    prefix = f"{namespace}-{SERVICE_ACCOUNT}"
+    return {
+        "apiVersion": "admissionregistration.k8s.io/v1",
+        "kind": "ValidatingAdmissionPolicyBinding",
+        "metadata": {"name": f"{prefix}-{cronjob_name}"},
+        "spec": {
+            "policyName": f"{prefix}-clone",
+            "validationActions": ["Deny"],
+            "paramRef": {
+                "name": cronjob_name,
+                "namespace": namespace,
+                "parameterNotFoundAction": "Deny",
+            },
+            "matchResources": {
+                "matchPolicy": "Equivalent",
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": namespace}
+                },
+                "objectSelector": {
+                    "matchLabels": {"dynamical.org/cronjob-name": cronjob_name}
+                },
+            },
+        },
+    }
+
+
+def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> bool:
+    created = False
+    for name in cronjob_names:
+        binding = trigger_admission_binding(namespace, name)
+        response = subprocess.run(
+            ["/usr/bin/kubectl", "create", "-f", "-", "-o", "json"],
+            input=json.dumps(binding),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        created |= response.returncode == 0
+        if response.returncode:
+            assert "(AlreadyExists)" in response.stderr, response.stderr
+            response = subprocess.run(  # noqa: S603
+                [
+                    "/usr/bin/kubectl",
+                    "get",
+                    "validatingadmissionpolicybinding",
+                    binding["metadata"]["name"],
+                    "-o",
+                    "json",
+                ],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+        assert json.loads(response.stdout)["spec"] == binding["spec"], (
+            f"Existing admission binding for {name} differs; requires administrator review"
+        )
+
+    return created
+
+
+def trigger_role_targets(namespace: str) -> set[str]:
+    response = subprocess.run(  # noqa: S603
+        [
+            "/usr/bin/kubectl",
+            "get",
+            "role",
+            SERVICE_ACCOUNT,
+            "--namespace",
+            namespace,
+            "--ignore-not-found",
+            "-o",
+            "json",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    if not response.stdout.strip():
+        return set()
+    rules = json.loads(response.stdout)["rules"]
+    targets = set()
+    for rule in rules:
+        if "cronjobs" in rule["resources"] and "trigger" in rule["verbs"]:
+            assert rule.get("resourceNames"), (
+                "Trigger CronJob permissions must name their targets"
+            )
+            targets.update(rule["resourceNames"])
+    return targets
+
+
+def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> set[str]:
+    """Verify admission and return the targets whose CronJobs still exist."""
     prefix = f"{namespace}-{SERVICE_ACCOUNT}"
 
     def probe(job: dict[str, Any], denied_by: str | None) -> None:
         deadline = time.monotonic() + 15
         while True:
             job["metadata"]["name"] = (
-                f"reformat-admission-canary-t{uuid.uuid4().hex[:12]}"
+                f"reformatters-admission-canary-t{uuid.uuid4().hex[:12]}"
             )
             response = subprocess.run(  # noqa: S603
                 [
@@ -330,9 +396,14 @@ def verify_trigger_admission(
                 check=False,
             )
             if (
-                denied_by is not None
-                or response.returncode == 0
-                or f"{prefix}-clone" not in response.stderr
+                (denied_by is not None and response.returncode != 0)
+                or (
+                    denied_by is None
+                    and (
+                        response.returncode == 0
+                        or f"{prefix}-clone" not in response.stderr
+                    )
+                )
                 or time.monotonic() >= deadline
             ):
                 break
@@ -345,13 +416,13 @@ def verify_trigger_admission(
                 f"Admission did not deny canary through {denied_by}: {response.stderr}"
             )
 
-    if not templates:
+    if not cronjob_names:
         probe(
             {
                 "apiVersion": "batch/v1",
                 "kind": "Job",
                 "metadata": {
-                    "labels": {"dynamical.org/cronjob-name": "unapproved"},
+                    "labels": {},
                     "annotations": {CANARY_ANNOTATION: "true"},
                 },
                 "spec": {
@@ -370,10 +441,10 @@ def verify_trigger_admission(
             },
             f"{prefix}-targets",
         )
-        return
+        return set()
 
-    for desired in templates:
-        name = desired["metadata"]["name"]
+    live_targets = set()
+    for name in cronjob_names:
         response = subprocess.run(  # noqa: S603
             [
                 "/usr/bin/kubectl",
@@ -391,8 +462,25 @@ def verify_trigger_admission(
             check=True,
         )
         source = json.loads(response.stdout) if response.stdout.strip() else None
-        assert source is not None or not require_params, f"Missing CronJob {name}"
-        template = (source or desired)["spec"]["jobTemplate"]
+        template = (
+            source["spec"]["jobTemplate"]
+            if source
+            else {
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "worker",
+                                    "image": "invalid.example/missing-template",
+                                }
+                            ],
+                        }
+                    }
+                }
+            }
+        )
         metadata = template.get("metadata", {})
         job: dict[str, Any] = {
             "apiVersion": "batch/v1",
@@ -421,13 +509,17 @@ def verify_trigger_admission(
             "invalid.example/admission-canary:never-run"
         )
         probe(altered, f"{prefix}-clone")
-        if source is not None and not source["spec"].get("suspend", False):
-            probe(job, None)
+        probe(job, None if source else f"{prefix}-clone")
+        if source:
+            live_targets.add(name)
+    return live_targets
 
 
 def trigger_deployment_resources(
-    reformat_jobs: Sequence[Job],
+    reformat_jobs: Sequence[CronJob],
+    authorized_targets: Sequence[str] = (),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    targets = sorted(set(authorized_targets) | {job.name for job in reformat_jobs})
     return (
         [
             {
@@ -443,11 +535,18 @@ def trigger_deployment_resources(
                 "kind": "Role",
                 "metadata": {"name": SERVICE_ACCOUNT},
                 "rules": [
-                    {
-                        "apiGroups": ["batch"],
-                        "resources": ["cronjobs"],
-                        "verbs": ["get"],
-                    },
+                    *(
+                        [
+                            {
+                                "apiGroups": ["batch"],
+                                "resources": ["cronjobs"],
+                                "resourceNames": targets,
+                                "verbs": ["get", "trigger"],
+                            }
+                        ]
+                        if targets
+                        else []
+                    ),
                     {
                         "apiGroups": ["batch"],
                         "resources": ["jobs"],
