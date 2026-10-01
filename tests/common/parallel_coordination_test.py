@@ -25,7 +25,6 @@ class FakeStoreFactory:
     """In-memory stand-in for StoreFactory's coordination-file + store APIs."""
 
     def __init__(self) -> None:
-        self.replica_handoff = False
         self.files: dict[str, dict[str, bytes]] = {}
         self._icechunk_repos_by_sort: dict[str, list[tuple[str, FakeRepo]]] = {
             "primary-first": [],

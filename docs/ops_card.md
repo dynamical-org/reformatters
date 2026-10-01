@@ -23,6 +23,4 @@ Accessible via manually triggered github actions. Follow link and click "run wor
 - **Update times out**: Use "Get jobs" and "Get pods" to check status. If update finishes successfully, but late, re-run validation. A run whose logs end with `Received SIGTERM, exiting` was stopped by kubernetes (eviction, pod active deadline, or a replacing fire); one whose logs stop with no such line was killed outright (e.g. out of memory) or stopped making progress on its own.
 - **Update fails**: Look at issues and logs. Failed jobs usually require a code change to fix (e.g. structural change to data at the source). If it appears a code change is needed, make a PR, merge it, wait for the deploy action to complete, then re-run the update and validation workflows. If it appears transient, re-run the update job followed by validation.
 
-- **ENS mirror behind or locked**: follow the [ENS replica mirror runbook](ens_replica_mirror.md). Retry the mirror after a successful primary commit; do not rerun source ingestion just to copy the replica. Never steal an active lock or cancel a published epoch.
-
 _This card gives only the first steps for responding to an operational error. Keep noncritical details elsewhere so on-call operators can find what they need quickly._
