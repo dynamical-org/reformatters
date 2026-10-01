@@ -382,8 +382,7 @@ def trigger_role_targets(namespace: str) -> set[str]:
     return targets & live_names
 
 
-def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> set[str]:
-    """Verify admission and return the targets whose CronJobs still exist."""
+def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> None:
     prefix = f"{namespace}-{SERVICE_ACCOUNT}"
 
     def probe(job: dict[str, Any], denied_by: str | None) -> None:
@@ -455,9 +454,8 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> se
             },
             f"{prefix}-targets",
         )
-        return set()
+        return
 
-    live_targets = set()
     for name in cronjob_names:
         response = subprocess.run(  # noqa: S603
             [
@@ -524,9 +522,6 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> se
         )
         probe(altered, f"{prefix}-clone")
         probe(job, None if source else f"{prefix}-clone")
-        if source:
-            live_targets.add(name)
-    return live_targets
 
 
 def trigger_deployment_resources(

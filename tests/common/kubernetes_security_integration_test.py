@@ -865,15 +865,13 @@ def kubectl_against_apiserver(
 def test_verify_trigger_admission_accepts_deployed_templates(
     cluster: Cluster, kubectl_against_apiserver: None
 ) -> None:
-    assert kubernetes_security.verify_trigger_admission(
-        NAMESPACE, [UPDATE, VALIDATE, MINIMAL]
-    ) == {UPDATE, VALIDATE, MINIMAL}
+    kubernetes_security.verify_trigger_admission(NAMESPACE, [UPDATE, VALIDATE, MINIMAL])
 
 
 def test_verify_trigger_admission_reports_missing_cronjob_by_clone_policy(
     cluster: Cluster, kubectl_against_apiserver: None
 ) -> None:
-    assert kubernetes_security.verify_trigger_admission(NAMESPACE, [ABSENT]) == set()
+    kubernetes_security.verify_trigger_admission(NAMESPACE, [ABSENT])
 
 
 def test_missing_parameter_denial_names_the_clone_policy(cluster: Cluster) -> None:
@@ -1144,7 +1142,7 @@ def test_read_only_cronjob_grant_cannot_bypass_guard(cluster: Cluster) -> None:
     cluster.assert_denied(_canary(job), "targets", dry_run=True)
 
 
-def test_binding_is_probed_before_target_is_authorized(
+def test_created_binding_admits_only_the_template(
     cluster: Cluster, kubectl_against_apiserver: None
 ) -> None:
     server = cluster.server

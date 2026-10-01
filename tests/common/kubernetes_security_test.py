@@ -144,7 +144,7 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
     )
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(kubernetes_security.time, "sleep", Mock())
-    assert verify_trigger_admission("default", ["example-update"]) == {"example-update"}
+    verify_trigger_admission("default", ["example-update"])
     names = [
         json.loads(call.kwargs["input"])["metadata"]["name"]
         for call in run.call_args_list[1:]
