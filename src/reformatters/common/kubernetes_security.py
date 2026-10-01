@@ -352,7 +352,7 @@ def trigger_role_targets(namespace: str) -> set[str]:
             "json",
         ],
         text=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
         check=True,
     )
     if not response.stdout.strip():

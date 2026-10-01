@@ -25,8 +25,8 @@ import yaml
 from kubernetes import client
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
+from reformatters.common import deploy, kubernetes_security
 from reformatters.common import kubernetes as reformatters_kubernetes
-from reformatters.common import kubernetes_security
 from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
     ReformatCronJob,
@@ -1269,6 +1269,149 @@ def test_binding_deployer_permissions_are_create_get_only(cluster: Cluster) -> N
             "/apis/admissionregistration.k8s.io/v1/validatingadmissionpolicies",
             DEPLOY_TOKEN,
             trigger_admission_resources(NAMESPACE)[0],
+        ).status_code
+        == 403
+    )
+
+
+def test_deploy_with_edit_permissions_and_bootstrap(
+    apiserver: ApiServer,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    server = apiserver
+    bootstrap = list(
+        yaml.safe_load_all(Path("deploy/trigger-binding-deployer.yaml").read_text())
+    )
+    complete_role = copy.deepcopy(bootstrap[1])
+    bootstrap[1]["rules"] = [
+        rule
+        for rule in bootstrap[1]["rules"]
+        if rule["apiGroups"] != ["rbac.authorization.k8s.io"]
+    ]
+    for resource in bootstrap:
+        kind = resource["kind"].lower() + "s"
+        prefix = "/apis/rbac.authorization.k8s.io/v1"
+        if resource["kind"] == "Role":
+            prefix += "/namespaces/default"
+        response = server.admin("POST", f"{prefix}/{kind}", resource)
+        assert response.status_code in (201, 409), response.text
+        binding_kind = (
+            "ClusterRoleBinding" if resource["kind"] == "ClusterRole" else "RoleBinding"
+        )
+        response = server.admin(
+            "POST",
+            f"{prefix}/{binding_kind.lower()}s",
+            {
+                "metadata": {"name": "deploy-regression-bootstrap"},
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": resource["kind"],
+                    "name": resource["metadata"]["name"],
+                },
+                "subjects": [{"kind": "User", "name": "binding-deployer"}],
+            },
+        )
+        assert response.status_code == 201, response.text
+    # Envtest has no controller to aggregate the built-in edit/view rules.
+    edit_rules = []
+    for name in ("system:aggregate-to-edit", "system:aggregate-to-view"):
+        response = server.admin(
+            "GET", f"/apis/rbac.authorization.k8s.io/v1/clusterroles/{name}"
+        )
+        assert response.status_code == 200, response.text
+        edit_rules.extend(response.json()["rules"])
+    server.create(
+        "/apis/rbac.authorization.k8s.io/v1/namespaces/default/roles",
+        {
+            "metadata": {"name": "deploy-regression-edit"},
+            "rules": edit_rules,
+        },
+    )
+    server.create(
+        "/apis/rbac.authorization.k8s.io/v1/namespaces/default/rolebindings",
+        {
+            "metadata": {"name": "deploy-regression-edit"},
+            "roleRef": {
+                "apiGroup": "rbac.authorization.k8s.io",
+                "kind": "Role",
+                "name": "deploy-regression-edit",
+            },
+            "subjects": [{"kind": "User", "name": "binding-deployer"}],
+        },
+    )
+    for resource in trigger_admission_resources("default"):
+        server.create(_resource_path(resource), resource)
+    real_run = subprocess.run
+    kubeconfig = tmp_path / "kubeconfig"
+    kubeconfig.write_text("apiVersion: v1\nkind: Config\n")
+
+    def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:  # noqa: ANN401
+        assert command[0] == "/usr/bin/kubectl"
+        return real_run(
+            [
+                str(server.kubectl),
+                f"--kubeconfig={kubeconfig}",
+                f"--server=https://127.0.0.1:{server.port}",
+                f"--certificate-authority={server.ca_cert}",
+                f"--token={DEPLOY_TOKEN}",
+                *command[1:],
+            ],
+            **kwargs,
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError):
+        deploy.deploy_operational_resources(
+            [DYNAMICAL_DATASETS[0]], docker_image="example:test"
+        )
+    error = capfd.readouterr().err
+    assert "Forbidden" in error
+    assert 'cannot get resource "roles"' in error
+    bootstrap_role_path = "/apis/rbac.authorization.k8s.io/v1/namespaces/default/roles/reformatters-trigger-binding-deployer"
+    complete_role["metadata"]["resourceVersion"] = server.admin(
+        "GET", bootstrap_role_path
+    ).json()["metadata"]["resourceVersion"]
+    response = server.admin("PUT", bootstrap_role_path, complete_role)
+    assert response.status_code == 200, response.text
+    for _ in range(2):
+        deploy.deploy_operational_resources(
+            [DYNAMICAL_DATASETS[0]], docker_image="example:test"
+        )
+    role_path = (
+        f"/apis/rbac.authorization.k8s.io/v1/namespaces/default/roles/{SERVICE_ACCOUNT}"
+    )
+    role = server.request("GET", role_path, DEPLOY_TOKEN)
+    assert role.status_code == 200, role.text
+    assert role.json()["rules"][0]["resourceNames"] == sorted(
+        cronjob.name
+        for cronjob in DYNAMICAL_DATASETS[0].operational_kubernetes_resources(
+            "example:test"
+        )
+    )
+    forbidden_role = {
+        "metadata": {"name": "escalation"},
+        "rules": [{"apiGroups": ["*"], "resources": ["*"], "verbs": ["*"]}],
+    }
+    assert (
+        server.request(
+            "POST", role_path.rsplit("/", 1)[0], DEPLOY_TOKEN, forbidden_role
+        ).status_code
+        == 403
+    )
+    assert server.request("DELETE", role_path, DEPLOY_TOKEN).status_code == 403
+    other_role = server.admin(
+        "GET", role_path.rsplit("/", 1)[0] + "/reformatters-trigger-binding-deployer"
+    ).json()
+    assert (
+        server.http.patch(
+            role_path.rsplit("/", 1)[0] + "/reformatters-trigger-binding-deployer",
+            headers={
+                "Authorization": f"Bearer {DEPLOY_TOKEN}",
+                "Content-Type": "application/merge-patch+json",
+            },
+            json={"rules": other_role["rules"]},
         ).status_code
         == 403
     )
