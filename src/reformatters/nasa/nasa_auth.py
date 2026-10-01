@@ -61,6 +61,21 @@ def _create_earthdata_session() -> requests.Session:
             f"Failed to get token from NASA Earthdata: {token_response.status_code}: {token_response.text}"
         ) from e
     session.headers["Authorization"] = f"Bearer {token_response.json()['access_token']}"
+
+    def clear_unauthorized_session(
+        response: requests.Response, **_kwargs: object
+    ) -> requests.Response:
+        if response.status_code == 401:
+            log.info(
+                "Earthdata session rejected (401); discarding session before retry"
+            )
+            if getattr(_thread_local, "earthdata_session", None) is session:
+                del _thread_local.earthdata_session
+            response.close()
+            session.close()
+        return response
+
+    session.hooks["response"].append(clear_unauthorized_session)
     return session
 
 
