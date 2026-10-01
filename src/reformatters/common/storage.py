@@ -559,6 +559,7 @@ def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
+    metadata: dict[str, str] | None = None,
 ) -> None:
     """Conveience function to handle committing to icechunk stores.
 
@@ -582,6 +583,7 @@ def commit_if_icechunk(
         icechunk_store.session.commit(
             message=message,
             rebase_with=icechunk.ConflictDetector(),
+            metadata=metadata,
         )
 
     for store in replica_stores:

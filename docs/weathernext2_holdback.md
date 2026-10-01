@@ -1,6 +1,6 @@
 # WeatherNext 2 publication holdback
 
-The operational virtual product admits a forecast step when `init_time + lead_time <= scheduled_fire_time - 1h`. Each backfill process captures one cutoff per `get_jobs()` invocation for the same rule. Workers starting later may admit additional eligible steps; their job partitions remain identical. Newly eligible omissions are filled by the operational sweep. The historical 2022–2024 product is independent of this clock. The boundary follows [Google's terms](https://storage.googleapis.com/weathernext-public/terms-of-use.pdf) and the valid-time interpretation recorded in [meta #201](https://github.com/dynamical-org/meta/issues/201).
+The operational virtual product admits a forecast step when `init_time + lead_time <= scheduled_fire_time - 1h`. Backfill launch captures one `--reference-time` for every worker and retry; the cutoff is that instant minus one hour. Newly eligible omissions are filled by the operational sweep. The boundary follows [Google's terms](https://storage.googleapis.com/weathernext-public/terms-of-use.pdf) and the valid-time interpretation recorded in [meta #201](https://github.com/dynamical-org/meta/issues/201).
 
 Operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. Recent initializations are intentionally partial. Coordinates retain all 60 leads; unpublished steps read as NaN. `expected_forecast_length` describes the source horizon, not the number of leads currently published. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill.
 
@@ -17,6 +17,14 @@ uv run src/scripts/weathernext2_holdback.py audit https://google-weathernext2.r2
 ```
 
 An aging forecast can disappear from the restricted set without any deletion. This only resolves exposure for a fixed set of refs: an old-rule writer continually adds later valid times. The last recorded valid time plus one hour is the age-out time only if nothing adds later refs. An audit of `main` does not certify other branches, tags, old snapshots, cached objects, or direct Worker routes.
+
+## Recorded-cutoff audits
+
+For snapshots with writer provenance, use `weathernext_virtual.holdback_audit.run_audit(repo, label, None, snapshot_id, None, output_dir)`. Passing `cutoff=None` requires the snapshot's `publication_cutoff` metadata and fails on forbidden target refs, even when they have aged out by audit time. Explicit-cutoff mode remains available for legacy remediation.
+
+`audit_source_locations(repo, snapshot_id, parse_wn2_source_location, output_dir)` independently enumerates all virtual locations and checks the proxy prefix, key grammar, source horizon, and source valid time against that same recorded cutoff. It never fetches chunk payloads. Other models supply their own parser returning `(init_time, lead_time)` and rejecting invalid locations. Its report includes process peak RSS after enumeration; the Icechunk API returns the entire location list, so size the audit host from a pilot measurement before a full archive scan.
+
+`audit_ancestry(repo, output_dir)` rejects decreases in hourly effective cutoffs along `main`. It requires provenance on every snapshot except the empty repository root. It reports whether each raw cutoff is at most `written_at - 1h`; this is a consistency observation because the writer clock can differ from storage time by ±10 minutes. Audit retained intermediate snapshots and branch tips individually as well as the finalized tip.
 
 ## Remediate an existing store
 

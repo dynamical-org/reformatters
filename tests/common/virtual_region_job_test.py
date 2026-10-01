@@ -2422,3 +2422,50 @@ def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
 
     assert result == dict.fromkeys(keys, True)
     assert peak <= batch_size
+
+
+@pytest.mark.parametrize("weathernext", [False, True])
+def test_backfill_provenance_on_setup_write_and_finalize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, weathernext: bool
+) -> None:
+
+    dataset = _make_dataset(tmp_path)
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda self, end: _create_template_ds(4)
+    )
+    metadata = {}
+    if weathernext:
+        metadata = {
+            "publication_cutoff": "2025-01-01T23:59:59+00:00",
+            "reformat_job_name": "local",
+        }
+        monkeypatch.setattr(
+            VirtualTestRegionJob, "commit_metadata", lambda self: metadata
+        )
+    dataset.backfill_local(
+        APPEND_DIM_START + 4 * APPEND_DIM_FREQ,
+        reference_time=pd.Timestamp("2025-01-02T00:59:59"),
+    )
+    refreshed = _create_template_ds(4)
+    refreshed.attrs["title"] = "Refreshed synthetic dataset"
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda self, end: refreshed
+    )
+    monkeypatch.setattr(VirtualTestDataset, "_can_run_in_kubernetes", lambda self: True)
+    dataset.backfill_kubernetes(
+        overwrite_metadata=True, reference_time=pd.Timestamp("2025-01-02T00:59:59")
+    )
+    snapshots = list(_primary_repo(dataset.store_factory).ancestry(branch="main"))
+    commits = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.message != "Repository initialized"
+    ]
+    assert len(commits) >= 4
+    assert commits[0].message == "Refresh metadata from template"
+    assert commits[-1].message == "Expand dataset"
+    assert all(
+        {key: value for key, value in snapshot.metadata.items() if key != "__icechunk"}
+        == metadata
+        for snapshot in commits
+    )

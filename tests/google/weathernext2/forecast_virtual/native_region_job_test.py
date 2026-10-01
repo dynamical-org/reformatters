@@ -3,12 +3,15 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import httpx
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.storage import commit_if_icechunk
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -671,3 +674,65 @@ def test_historical_backfill_is_unrestricted(monkeypatch: pytest.MonkeyPatch) ->
     assert all(job.publication_cutoff == pd.Timestamp.max for job in jobs)
     assert all(not job.held_back_source_file_coords() for job in jobs)
     assert not clock.called
+
+
+def test_launch_cutoff_survives_reversed_commits_and_hour_boundary_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    reference = pd.Timestamp("2025-01-02T00:59:59")
+    clock = Mock(side_effect=AssertionError("Worker must reuse launch time"))
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
+    template = OPERATIONAL.get_template(pd.Timestamp("2025-01-03"))
+    job_sets = [
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+            tmp_store=Path("unused.zarr"),
+            template_ds=template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="fixed-launch",
+            reference_time=reference,
+        )
+        for _ in range(3)
+    ]
+    assert not clock.called
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+    initial = repo.writable_session("main")
+    zarr.open_group(initial.store, mode="w")
+    initial.commit("setup", metadata=job_sets[0][0].commit_metadata())
+    workers = [repo.writable_session("main") for _ in range(2)]
+    for i, worker in enumerate(workers):
+        zarr.open_group(worker.store, mode="a").create_array(
+            f"worker-{i}", shape=(1,), dtype="float32"
+        )
+    for worker, job in reversed(
+        list(zip(workers, (job_sets[0][0], job_sets[1][0]), strict=True))
+    ):
+        commit_if_icechunk("worker", worker.store, [], metadata=job.commit_metadata())
+    retry = repo.writable_session("main")
+    zarr.open_group(retry.store, mode="a").attrs["retry-after-01:00"] = True
+    commit_if_icechunk(
+        "retry", retry.store, [], metadata=job_sets[2][0].commit_metadata()
+    )
+    snapshots = list(repo.ancestry(branch="main"))[:-1]
+    assert len(snapshots) == 4
+    assert all(
+        {
+            key: snapshot.metadata.get(key)
+            for key in ("publication_cutoff", "reformat_job_name")
+        }
+        == {
+            "publication_cutoff": "2025-01-01T23:59:59+00:00",
+            "reformat_job_name": "fixed-launch",
+        }
+        for snapshot in snapshots
+    )
+    coord_sets = [
+        {
+            (coord.init_time, coord.lead_time, coord.data_vars[0].path)
+            for job in jobs
+            for coord in job.source_file_coords()
+        }
+        for jobs in job_sets
+    ]
+    assert coord_sets[0] == coord_sets[1] == coord_sets[2]
