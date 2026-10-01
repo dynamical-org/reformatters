@@ -1273,6 +1273,12 @@ def test_binding_deployer_permissions_are_create_get_only(cluster: Cluster) -> N
         == 403
     )
 
+    _, permissions = kubernetes_security.trigger_deployment_resources([], [MINIMAL])
+    for resource in permissions:
+        path = f"/apis/rbac.authorization.k8s.io/v1/namespaces/{NAMESPACE}/{resource['kind'].lower()}s"
+        response = server.request("POST", path, DEPLOY_TOKEN, resource)
+        assert response.status_code == 201, response.text
+
 
 def test_deploy_with_edit_permissions_and_bootstrap(
     apiserver: ApiServer,

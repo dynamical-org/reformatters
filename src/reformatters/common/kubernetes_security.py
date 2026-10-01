@@ -328,7 +328,7 @@ def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> boo
                     "json",
                 ],
                 text=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
                 check=True,
             )
         assert json.loads(response.stdout)["spec"] == binding["spec"], (
@@ -458,7 +458,7 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> se
                 "json",
             ],
             text=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
             check=True,
         )
         source = json.loads(response.stdout) if response.stdout.strip() else None
