@@ -1156,8 +1156,8 @@ def test_binding_is_probed_before_target_is_authorized(
     ).json()
     job = clone_job(cronjob, "newly-deployed-job")
     cluster.assert_denied(job, "targets", dry_run=True)
-    assert kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
-    assert not kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
+    kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
+    kubernetes_security.create_trigger_bindings(NAMESPACE, [name])
     altered = _canary(copy.deepcopy(job))
     _container(altered)["image"] = "attacker/image"
     kubernetes_security.verify_trigger_admission(NAMESPACE, [name])

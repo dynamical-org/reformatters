@@ -4,9 +4,13 @@ import subprocess
 import time
 import uuid
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from reformatters.common.kubernetes import SERVICE_ACCOUNT, CronJob
+from reformatters.common.logging import get_logger
+
+log = get_logger(__name__)
 
 CANARY_ANNOTATION = "dynamical.org/admission-canary"
 
@@ -304,9 +308,8 @@ def trigger_admission_binding(namespace: str, cronjob_name: str) -> dict[str, An
     }
 
 
-def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> bool:
-    created = False
-    for name in cronjob_names:
+def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> None:
+    def create_binding(name: str) -> None:
         binding = trigger_admission_binding(namespace, name)
         response = subprocess.run(
             ["/usr/bin/kubectl", "create", "-f", "-", "-o", "json"],
@@ -315,7 +318,6 @@ def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> boo
             capture_output=True,
             check=False,
         )
-        created |= response.returncode == 0
         if response.returncode:
             assert "(AlreadyExists)" in response.stderr, response.stderr
             response = subprocess.run(  # noqa: S603
@@ -335,7 +337,10 @@ def create_trigger_bindings(namespace: str, cronjob_names: Sequence[str]) -> boo
             f"Existing admission binding for {name} differs; requires administrator review"
         )
 
-    return created
+        log.info("Checked trigger admission binding for %s", name)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(create_binding, cronjob_names))
 
 
 def trigger_role_targets(namespace: str) -> set[str]:
@@ -365,7 +370,16 @@ def trigger_role_targets(namespace: str) -> set[str]:
                 "Trigger CronJob permissions must name their targets"
             )
             targets.update(rule["resourceNames"])
-    return targets
+    response = subprocess.run(  # noqa: S603
+        ["/usr/bin/kubectl", "get", "cronjobs", "--namespace", namespace, "-o", "json"],
+        text=True,
+        stdout=subprocess.PIPE,
+        check=True,
+    )
+    live_names = {
+        item["metadata"]["name"] for item in json.loads(response.stdout)["items"]
+    }
+    return targets & live_names
 
 
 def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> set[str]:

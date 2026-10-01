@@ -202,7 +202,7 @@ def test_binding_creation_is_idempotent_without_updates(
     )
     run = Mock(side_effect=[*responses, stored])
     monkeypatch.setattr(subprocess, "run", run)
-    assert create_trigger_bindings("default", ["weather-update"]) is not already_exists
+    create_trigger_bindings("default", ["weather-update"])
     assert [call.args[0][1] for call in run.call_args_list] == (
         ["create", "get"] if already_exists else ["create"]
     )
@@ -260,3 +260,43 @@ def test_unrestricted_trigger_role_is_rejected(
     )
     with pytest.raises(AssertionError, match="must name their targets"):
         trigger_role_targets("default")
+
+
+def test_trigger_role_targets_omits_deleted_cronjobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = Mock(
+        side_effect=[
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps(
+                    {
+                        "rules": [
+                            {
+                                "apiGroups": ["batch"],
+                                "resources": ["cronjobs"],
+                                "verbs": ["get", "trigger"],
+                                "resourceNames": ["live", "retired"],
+                            }
+                        ]
+                    }
+                ),
+            ),
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps(
+                    {
+                        "items": [
+                            {"metadata": {"name": "live"}},
+                            {"metadata": {"name": "foreign"}},
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(subprocess, "run", run)
+    assert trigger_role_targets("default") == {"live"}
+    assert run.call_count == 2
