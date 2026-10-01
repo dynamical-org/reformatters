@@ -97,6 +97,9 @@ class VirtualRegionJob(
     # A dataset implements file_refs and generate_source_file_coords (from
     # RegionJob) and sets operational_update_window; the rest have working defaults.
 
+    def commit_metadata(self) -> dict[str, str]:
+        return {}
+
     @classmethod
     def operational_update_jobs(
         cls,
@@ -437,6 +440,7 @@ class VirtualRegionJob(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+                metadata=self.commit_metadata(),
             )
             log.info(
                 f"Committed {len(refs)} refs "

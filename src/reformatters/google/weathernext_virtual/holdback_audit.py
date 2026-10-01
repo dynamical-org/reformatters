@@ -1,4 +1,6 @@
-from collections.abc import Iterator, Sequence
+import re
+import resource
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from itertools import batched, product
 from math import ceil
@@ -17,6 +19,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.virtual_region_job import _exists_many
 
 from .holdback import PUBLICATION_HOLDBACK
+from .listing import PROXY_LOCATION_PREFIX
 
 _BATCH_SIZE = 20_000
 log = get_logger(__name__)
@@ -279,7 +282,7 @@ def write_report(
 def run_audit(
     repo: icechunk.Repository,
     store_label: str,
-    cutoff: pd.Timestamp,
+    cutoff: pd.Timestamp | None,
     snapshot_id: str | None,
     branch: str | None,
     output_dir: Path,
@@ -289,12 +292,16 @@ def run_audit(
     if snapshot_id is None:
         snapshot_id = repo.lookup_branch(branch or "main")
     snapshot = repo.lookup_snapshot(snapshot_id)
+    recorded = cutoff is None
+    if recorded:
+        cutoff = recorded_publication_cutoff(snapshot)
+    assert cutoff is not None
     log.info(f"Snapshot: {snapshot.id} ({snapshot.written_at.isoformat()})")
     log.info(f"Cutoff: {_utc_iso(cutoff)}")
     store = repo.readonly_session(snapshot_id=snapshot.id).store
     group = zarr.open_group(store, mode="r")
     total_keys, present_keys, counts = probe(store, group, cutoff)
-    return write_report(
+    result = write_report(
         store_label=store_label,
         snapshot=snapshot,
         cutoff=cutoff,
@@ -304,3 +311,191 @@ def run_audit(
         output_dir=output_dir,
         report_title=report_title,
     )
+
+    if recorded:
+        assert present_keys == 0, (
+            f"{present_keys} forbidden refs; see {result.report_path}"
+        )
+    return result
+
+
+def recorded_publication_cutoff(snapshot: icechunk.SnapshotInfo) -> pd.Timestamp:
+    value = snapshot.metadata.get("publication_cutoff")
+    assert isinstance(value, str), f"Snapshot {snapshot.id} has no publication_cutoff"
+    cutoff = pd.Timestamp(value)
+    assert cutoff.tz is not None, "Recorded publication_cutoff must include UTC offset"
+    return cutoff.tz_convert("UTC").tz_localize(None)
+
+
+def audit_ancestry(repo: icechunk.Repository, output_dir: Path) -> Path:
+    snapshots = list(repo.ancestry(branch="main"))
+    rows = []
+    decreases = []
+    previous = None
+    for snapshot in reversed(snapshots):
+        if (
+            snapshot.parent_id is None
+            and snapshot.metadata.get("__icechunk", {}).get("is_root") is True
+        ):
+            continue
+        cutoff = recorded_publication_cutoff(snapshot)
+        effective = cutoff.floor("h")
+        if previous is not None and effective < previous:
+            decreases.append(snapshot.id)
+        previous = effective
+        written_cutoff = (
+            pd.Timestamp(snapshot.written_at).tz_convert("UTC").tz_localize(None)
+            - PUBLICATION_HOLDBACK
+        )
+        rows.append(
+            f"| {snapshot.id} | {_utc_iso(cutoff)} | {_utc_iso(effective)} | {cutoff <= written_cutoff} |"
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "holdback_ancestry.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# WeatherNext cutoff ancestry",
+                "",
+                "written_at is the writer's clock (±10 minutes from storage time), not an authoritative publication time. Clock consistency failures are reported only.",
+                "",
+                "| Snapshot | Cutoff | Effective cutoff | Cutoff ≤ written_at - 1 h |",
+                "| --- | --- | --- | --- |",
+                *rows,
+                "",
+                f"Effective cutoff decreases: {decreases}",
+                "",
+            ]
+        )
+    )
+    assert not decreases, (
+        f"Effective publication cutoffs decreased: {decreases}; see {path}"
+    )
+    return path
+
+
+type SourceLocationParser = Callable[[str], tuple[pd.Timestamp, pd.Timedelta]]
+
+
+@dataclass(frozen=True)
+class SourceLocationAudit:
+    total_locations: int
+    invalid_locations: int
+    peak_rss_kib: int
+    report_path: Path
+
+
+def audit_source_locations(
+    repo: icechunk.Repository,
+    snapshot_id: str,
+    parser: SourceLocationParser,
+    output_dir: Path,
+) -> SourceLocationAudit:
+    snapshot = repo.lookup_snapshot(snapshot_id)
+    cutoff = recorded_publication_cutoff(snapshot)
+    locations = repo.readonly_session(
+        snapshot_id=snapshot_id
+    ).all_virtual_chunk_locations()
+    peak_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    invalid = 0
+    examples = []
+    for location in locations:
+        try:
+            init_time, lead_time = parser(location)
+            assert init_time.tz is None, "Parser must return naive UTC"
+            assert init_time + lead_time <= cutoff, "Source valid time exceeds cutoff"
+        except (ValueError, AssertionError) as error:
+            invalid += 1
+            if len(examples) < 20:
+                examples.append(f"- `{location}`: {error}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "holdback_source_locations.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# WeatherNext source location audit",
+                "",
+                f"- Snapshot: `{snapshot_id}`",
+                f"- Recorded cutoff: `{_utc_iso(cutoff)}`",
+                f"- Locations enumerated: {len(locations)}",
+                f"- Invalid locations: {invalid}",
+                f"- Process peak RSS after enumeration: {peak_rss} KiB",
+                "",
+                *examples,
+                "",
+            ]
+        )
+    )
+    log.info(
+        f"Enumerated {len(locations)} locations; peak RSS {peak_rss} KiB; invalid {invalid}; report {path}"
+    )
+    assert invalid == 0, f"{invalid} invalid source locations; see {path}"
+    return SourceLocationAudit(len(locations), invalid, peak_rss, path)
+
+
+def parse_wn2_source_location(location: str) -> tuple[pd.Timestamp, pd.Timedelta]:
+    prefix = f"{PROXY_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
+    assert location.startswith(prefix), "Unexpected WeatherNext 2 proxy prefix"
+    suffix = location.removeprefix(prefix)
+    operational = re.fullmatch(
+        r"2025_to_present/(\d{8})_(\d{2})hr_01_preds/predictions\.zarr/([a-z0-9_]+)/((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)",
+        suffix,
+    )
+    historical = re.fullmatch(
+        r"(\d{4})_to_(\d{4})/predictions\.zarr/([a-z0-9_]+)/((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)",
+        suffix,
+    )
+    match = operational or historical
+    assert match is not None, "Invalid WeatherNext 2 source key"
+    first, second, variable, indexes = match.groups()
+    pressure = variable in _WN2_PRESSURE_VARIABLES
+    assert pressure or variable in _WN2_SURFACE_VARIABLES, "Unknown source variable"
+    indices = [int(value) for value in indexes.split(".")]
+    assert len(indices) == 4 + int(pressure) + int(operational is None), (
+        "Invalid source dimensions"
+    )
+    assert indices[-2:] == [0, 0], "Invalid spatial chunk"
+    if operational:
+        init_time = pd.Timestamp(f"{first[:4]}-{first[4:6]}-{first[6:]}T{second}:00")
+        assert init_time >= pd.Timestamp("2025-01-01"), "Invalid source init"
+        assert init_time.hour % 6 == 0, "Invalid source init"
+        member, lead_index = indices[:2]
+        assert member < 64, "Invalid ensemble member"
+        if pressure:
+            assert indices[2] < 13, "Invalid pressure level"
+    else:
+        year = int(first)
+        assert 2022 <= year < 2025, "Invalid annual store"
+        assert int(second) == year + 1, "Invalid annual store"
+        init_time = pd.Timestamp(f"{year}-01-01") + pd.Timedelta(hours=6 * indices[0])
+        assert init_time.year == year, "Invalid annual init index"
+        member, lead_index = indices[1:3]
+        assert member < 16, "Invalid ensemble chunk"
+        if pressure:
+            assert indices[3] == 0, "Invalid pressure chunk"
+    assert lead_index < 60, "Lead exceeds source horizon"
+    return init_time, pd.Timedelta(hours=6 * (lead_index + 1))
+
+
+_WN2_SURFACE_VARIABLES = frozenset(
+    {
+        "2m_temperature",
+        "mean_sea_level_pressure",
+        "10m_u_component_of_wind",
+        "10m_v_component_of_wind",
+        "100m_u_component_of_wind",
+        "100m_v_component_of_wind",
+        "sea_surface_temperature",
+        "total_precipitation_6hr",
+    }
+)
+_WN2_PRESSURE_VARIABLES = frozenset(
+    {
+        "geopotential",
+        "temperature",
+        "u_component_of_wind",
+        "v_component_of_wind",
+        "vertical_velocity",
+        "specific_humidity",
+    }
+)

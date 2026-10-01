@@ -84,7 +84,12 @@ class FakeSession:
         self.store: object = MagicMock(name=f"ic_store-{self.id}")
         self.commit_calls: list[tuple[str, object]] = []
 
-    def commit(self, message: str, rebase_with: object = None) -> str:
+    def commit(
+        self,
+        message: str,
+        rebase_with: object = None,
+        metadata: dict[str, str] | None = None,  # noqa: ARG002
+    ) -> str:
         self.commit_calls.append((message, rebase_with))
         new_snapshot = f"snap-{self.id}-{len(self.commit_calls)}"
         self.repo._branches[self.branch] = new_snapshot
@@ -261,6 +266,7 @@ class TestParallelSetupFirstWorker:
             "Expand dataset",
             primary_session.store,
             [replica_session.store],
+            metadata=None,
         )
 
         # Worker 0 persists the virtual container config once after expanding.
@@ -338,6 +344,7 @@ class TestParallelSetupFirstWorker:
             "Expand dataset",
             primary_session.store,
             [],
+            metadata=None,
         )
         assert result["repo_snapshots"] == {"primary": "snap-primary-init"}
 

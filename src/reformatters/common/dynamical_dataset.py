@@ -254,6 +254,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         docker_image: str | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        reference_time: datetime | None = None,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -263,6 +264,16 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "backfill_kubernetes is only supported in prod environment"
         )
 
+        reference_time = (
+            pd.Timestamp(reference_time).as_unit("s")
+            if reference_time is not None
+            else pd.Timestamp.now(tz="UTC").floor("s")
+        )
+        reference_time = (
+            reference_time.tz_convert("UTC").tz_localize(None)
+            if reference_time.tz is not None
+            else reference_time
+        )
         overwrite = overwrite_chunks or overwrite_metadata
         existing_ds = self._open_existing_store()
         template_ds, resolved_end = self._resolve_backfill_template(
@@ -285,12 +296,24 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 "in place without launching workers; the filter and --docker-image "
                 "options would have no effect"
             )
+            metadata = None
+            if issubclass(self.region_job_class, VirtualRegionJob):
+                jobs = self.region_job_class.get_jobs(
+                    tmp_store=self._tmp_store(),
+                    template_ds=template_ds,
+                    append_dim=self.template_config.append_dim,
+                    all_data_vars=self.template_config.data_vars,
+                    reformat_job_name="metadata-refresh",
+                    reference_time=reference_time,
+                )
+                metadata = jobs[0].commit_metadata() if jobs else {}
             template_utils.refresh_store_metadata(
                 self.store_factory,
                 template_ds,
                 self.template_config.append_dim,
                 self._tmp_store(),
                 consolidated=self.region_job_class.consolidated_metadata,
+                metadata=metadata,
             )
             log.info("Metadata refresh complete, no chunk data written.")
             return
@@ -334,6 +357,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     else None
                 ),
                 filter_variable_names=filter_variable_names,
+                reference_time=reference_time,
             )
         )
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
@@ -342,6 +366,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         command = [
             "backfill",
             resolved_end.isoformat(),
+            f"--reference-time={reference_time.isoformat()}",
         ]
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
@@ -396,12 +421,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
+        reference_time: datetime | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
         assert Config.is_dev or Config.is_test, (
             "backfill_local is only supported in dev or test environments"
         )
 
+        reference_time = reference_time or pd.Timestamp.now(tz="UTC").floor("s")
         template_ds = self._get_template(append_dim_end)
         # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
         if not self.store_factory.all_stores_icechunk():
@@ -410,6 +437,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         self.backfill(
             append_dim_end,
             reformat_job_name="local",
+            reference_time=reference_time,
             worker_index=0,
             workers_total=1,
             filter_start=filter_start,
@@ -430,6 +458,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
+        reference_time: datetime | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
     ) -> None:
@@ -437,12 +466,17 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
+        run_time = pd.Timestamp(reference_time) if reference_time is not None else None
+        if run_time is not None and run_time.tz is not None:
+            run_time = run_time.tz_convert("UTC").tz_localize(None)
+
         all_jobs = self.region_job_class.get_jobs(
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
+            reference_time=run_time,
             filter_start=pd.Timestamp(filter_start) if filter_start else None,
             filter_end=pd.Timestamp(filter_end) if filter_end else None,
             filter_contains=(
@@ -552,6 +586,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
             pinned_setup=pinned_setup,
+            metadata=all_jobs[0].commit_metadata()
+            if all_jobs and isinstance(all_jobs[0], VirtualRegionJob)
+            else None,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session

@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
 import httpx
 import pandas as pd
 import xarray as xr
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
@@ -19,7 +19,7 @@ from reformatters.common.region_job import (
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
-from .holdback import is_publishable
+from .holdback import PUBLICATION_HOLDBACK, is_publishable
 from .listing import NativeObjectMetadata, ObjectListingQuery, list_objects
 
 log = get_logger(__name__)
@@ -46,6 +46,25 @@ class WeatherNextVirtualRegionJob(
 ):
     manifest_init_split: ClassVar[int]
     publication_cutoff: Timestamp
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_cutoff(cls, values: Any) -> Any:  # noqa: ANN401
+        if isinstance(values, dict) and values.get("reference_time") is not None:
+            values = dict(values)
+            values.setdefault(
+                "publication_cutoff",
+                pd.Timestamp(values["reference_time"]) - PUBLICATION_HOLDBACK,
+            )
+        return values
+
+    def commit_metadata(self) -> dict[str, str]:
+        return {
+            "publication_cutoff": self.publication_cutoff.tz_localize(
+                "UTC"
+            ).isoformat(),
+            "reformat_job_name": self.reformat_job_name,
+        }
 
     @abstractmethod
     def _available_lead_times(

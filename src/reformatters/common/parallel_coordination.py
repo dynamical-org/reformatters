@@ -19,6 +19,7 @@ from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
@@ -106,6 +107,7 @@ def parallel_setup(
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
     pinned_setup: SetupInfo | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> SetupInfo:
     if pinned_setup is not None and not is_first:
         ready = store_factory.read_coordination_file(
@@ -154,6 +156,7 @@ def parallel_setup(
                 template_ds,
                 tmp_store,
                 exclude_coord_value_chunks,
+                metadata,
             )
         # Zarr v3: do NOT expand (readers would see empty holes)
 
@@ -190,6 +193,7 @@ def _expand_job_branches(
     template_ds: xr.DataTree,
     tmp_store: Path,
     exclude_coord_value_chunks: Collection[str],
+    metadata: dict[str, str] | None = None,
 ) -> None:
     repo_snapshots = setup_info.setdefault("repo_snapshots", {})
     for role, repo in icechunk_repos:
@@ -225,6 +229,7 @@ def _expand_job_branches(
         "Expand dataset",
         ic_stores[0],
         ic_stores[1:],
+        metadata=metadata,
     )
     # Persist virtual chunk containers so repo stays in sync with in-code config
     store_factory.persist_virtual_config()
@@ -354,6 +359,9 @@ def finalize(
             setup_info.get("append_dim", "time"),
             commit_message,
             exclude_coord_value_chunks,
+            all_jobs[0].commit_metadata()
+            if all_jobs and isinstance(all_jobs[0], VirtualRegionJob)
+            else None,
         )
     if publish_zarr3_metadata:
         primary_store = store_factory.primary_store(writable=True)
@@ -424,6 +432,7 @@ def _publish_icechunk(
     append_dim: str,
     commit_message: str,
     exclude_coord_value_chunks: Collection[str],
+    metadata: dict[str, str] | None = None,
 ) -> str | None:
     published_snapshot = None
     # First pass: commit final metadata and reset main on each repo.
@@ -474,7 +483,7 @@ def _publish_icechunk(
             icechunk_only=True,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
-        new_snapshot = session.commit(commit_message)
+        new_snapshot = session.commit(commit_message, metadata=metadata)
         if "origin" in setup_info:
             store_factory.write_coordination_file(
                 reformat_job_name,

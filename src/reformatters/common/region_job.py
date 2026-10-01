@@ -133,6 +133,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     append_dim: AppendDim
     # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
+    reference_time: Timestamp | None = None
     reformat_job_name: str
 
     # Limit the number of variables processed in each job if set.
@@ -321,6 +322,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
+        reference_time: Timestamp | None = None,
     ) -> Sequence[Self]:
         """
         Return a sequence of RegionJob instances to process.
@@ -458,6 +460,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 append_dim=append_dim,
                 region=region,
                 reformat_job_name=reformat_job_name,
+                reference_time=reference_time,
             )
             for region in regions
             for data_var_group in data_var_groups

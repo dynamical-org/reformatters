@@ -25,6 +25,8 @@ On a large ensemble archive also set `--probe-workers` (see Options): the scan's
 
 Pass `--checkpoint-dir` on any whole-archive scan you cannot afford to repeat. The manifest and decode scans are the long pole of a virtual `run-all` — hours on a large ensemble archive, where one sampled decode job alone takes tens of minutes — and without it an interruption anywhere loses all of it. With it each unit is recorded as it finishes (a manifest slice, a decode region job) and a re-run picks up from there.
 
+WeatherNext manifest scans use the pinned snapshot's recorded `publication_cutoff`, count each `(init, lead, source coord)` admission unit separately, and probe every statistic chunk at every eligible lead. Missing provenance fails the scan instead of substituting the current clock. The Python `scan_manifest` entry point also accepts `snapshot_metadata`, `publication_cutoff`, or `reference_time`, and `probe_dims=("statistic",)` for exhaustive non-spatial labels. Checkpoints are scoped to snapshot, reference time, and probe options. See [recorded-cutoff audits](weathernext2_holdback.md#recorded-cutoff-audits) for the independent target, source-location, and ancestry checks.
+
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
 ### Options

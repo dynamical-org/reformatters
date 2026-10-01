@@ -25,6 +25,8 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 
+`backfill-kubernetes` captures one UTC reference time at launch, at whole-second precision, and places `--reference-time=<ISO>` in the shared worker command. Every worker and pod retry uses that instant. `backfill-local` defaults to its launch time; `backfill` also accepts the flag. To resume the same admission window, reuse the original reference time. WeatherNext derives its publication cutoff as reference time minus one hour and records it with the job name on setup, data, finalize, and metadata-only refresh snapshots. Operational updates use their scheduled fire time.
+
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.
