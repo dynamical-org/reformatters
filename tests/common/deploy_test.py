@@ -67,13 +67,16 @@ class ExampleDataset3(ExampleDataset1):
 
 
 @pytest.fixture(autouse=True)
-def admission_gate(monkeypatch: pytest.MonkeyPatch) -> Mock:
-    gate = Mock(side_effect=lambda ns, names: set(names))
-    monkeypatch.setattr(deploy, "verify_trigger_admission", gate)
+def binding_registration(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    bindings = Mock()
     monkeypatch.setattr(deploy, "trigger_role_targets", Mock(return_value=set()))
-    monkeypatch.setattr(deploy, "create_trigger_bindings", Mock(return_value=False))
-    monkeypatch.setattr(deploy.time, "sleep", Mock())
-    return gate
+    monkeypatch.setattr(deploy, "create_trigger_bindings", bindings)
+    monkeypatch.setattr(
+        deploy,
+        "verify_trigger_admission",
+        Mock(side_effect=AssertionError("Deploy must not probe admission")),
+    )
+    return bindings
 
 
 def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,7 +184,7 @@ def test_deploy_operational_resources_dataset_id_filter(
 
 @pytest.mark.parametrize("staging", [False, True])
 def test_partial_deploy_registers_selected_targets(
-    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock, staging: bool
+    monkeypatch: pytest.MonkeyPatch, binding_registration: Mock, staging: bool
 ) -> None:
     monkeypatch.setattr(subprocess, "run", Mock())
     deploy.deploy_operational_resources(
@@ -194,24 +197,18 @@ def test_partial_deploy_registers_selected_targets(
         if staging
         else None,
     )
-    assert admission_gate.call_count == 2
-    assert admission_gate.call_args_list[0].args == ("default", [])
+    assert binding_registration.call_count == 1
     prefix = "staging-" if staging else ""
-    assert admission_gate.call_args_list[1].args[1] == [
+    assert binding_registration.call_args.args[1] == [
         f"{prefix}example-dataset-3-update",
         f"{prefix}example-dataset-3-validate",
     ]
 
 
-def test_deploy_registers_all_cronjobs_before_probe_and_grant(
+def test_deploy_registers_all_cronjobs_before_grant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events = []
-    monkeypatch.setattr(
-        deploy,
-        "verify_trigger_admission",
-        lambda ns, ts: events.append(("probe", ts)) or set(ts),
-    )
     monkeypatch.setattr(
         deploy,
         "_apply_resources",
@@ -222,9 +219,6 @@ def test_deploy_registers_all_cronjobs_before_probe_and_grant(
         "create_trigger_bindings",
         lambda ns, names: events.append(("bindings", names)),
     )
-    monkeypatch.setattr(
-        deploy.time, "sleep", lambda seconds: events.append(("wait", seconds))
-    )
     monkeypatch.setattr(deploy, "trigger_role_targets", lambda ns: {"existing-update"})
     deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
     names = [
@@ -233,11 +227,8 @@ def test_deploy_registers_all_cronjobs_before_probe_and_grant(
         "existing-update",
     ]
     assert events == [
-        ("probe", []),
         ("apply", ["ServiceAccount", "CronJob", "CronJob"]),
         ("bindings", names),
-        ("probe", names),
-        ("wait", 10),
         ("apply", ["Role", "RoleBinding"]),
     ]
 
@@ -259,53 +250,18 @@ def test_partial_deploy_preserves_previous_targets(
     ]
 
 
-@pytest.mark.parametrize("failed_gate", [0, 1])
-def test_deploy_without_trigger_targets_stops_before_grant_on_guard_failure(
-    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock, failed_gate: int
+def test_deploy_stops_before_grant_when_binding_registration_fails(
+    monkeypatch: pytest.MonkeyPatch, binding_registration: Mock
 ) -> None:
-    mock_run = Mock()
-    monkeypatch.setattr(subprocess, "run", mock_run)
-    admission_gate.side_effect = (
-        [AssertionError("guard missing")]
-        if failed_gate == 0
-        else [None, AssertionError("guard missing")]
+    apply = Mock()
+    monkeypatch.setattr(deploy, "_apply_resources", apply)
+    binding_registration.side_effect = AssertionError("Binding differs")
+    with pytest.raises(AssertionError, match="Binding differs"):
+        deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
+    apply.assert_called_once()
+    assert all(
+        item["kind"] not in {"Role", "RoleBinding"} for item in apply.call_args.args[0]
     )
-    with pytest.raises(AssertionError, match="guard missing"):
-        deploy.deploy_operational_resources(
-            [ExampleDataset1()],  # ty: ignore[invalid-argument-type]
-            docker_image="test-image-tag",
-        )
-    assert mock_run.call_count == failed_gate
-    for call in mock_run.call_args_list:
-        assert all(
-            item["kind"] not in {"Role", "RoleBinding"}
-            for item in json.loads(call.kwargs["input"])["items"]
-        )
-
-
-@pytest.mark.parametrize("failed_gate", [0, 1])
-def test_deploy_stops_before_grant_when_admission_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    admission_gate: Mock,
-    failed_gate: int,
-) -> None:
-    mock_run = Mock()
-    monkeypatch.setattr(subprocess, "run", mock_run)
-    admission_gate.side_effect = (
-        [AssertionError("policy missing")]
-        if failed_gate == 0
-        else [None, AssertionError("clone denied")]
-    )
-    with pytest.raises(AssertionError):
-        deploy.deploy_operational_resources(
-            DYNAMICAL_DATASETS, docker_image="test-image-tag"
-        )
-    assert mock_run.call_count == failed_gate
-    for call in mock_run.call_args_list:
-        assert all(
-            item["kind"] not in {"Role", "RoleBinding"}
-            for item in json.loads(call.kwargs["input"])["items"]
-        )
 
 
 def test_deploy_stops_before_grant_when_cronjob_apply_fails(
@@ -400,18 +356,3 @@ class TestDeployCommandsRegistered:
         assert "deploy " in result.output or "deploy\n" in result.output
         assert "deploy-staging" in result.output
         assert "cleanup-staging" in result.output
-
-
-def test_deploy_drops_deleted_cronjob_grants(
-    monkeypatch: pytest.MonkeyPatch, admission_gate: Mock
-) -> None:
-    monkeypatch.setattr(deploy, "trigger_role_targets", lambda ns: {"retired-staging"})
-    admission_gate.side_effect = lambda ns, names: set(names) - {"retired-staging"}
-    apply = Mock()
-    monkeypatch.setattr(deploy, "_apply_resources", apply)
-    deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
-    role = apply.call_args.args[0][0]
-    assert role["rules"][0]["resourceNames"] == [
-        "example-dataset-1-update",
-        "example-dataset-1-validate",
-    ]
