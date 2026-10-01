@@ -776,7 +776,7 @@ def test_filtered_repair_records_launch_scope() -> None:
     assert all(isinstance(value, str) for value in metadata.values())
     scope = LaunchScope.model_validate_json(metadata["launch_scope"])
     assert scope.append_dim_end == end.tz_localize("UTC")
-    assert _scan_launch_scope(scope, None, None, None) == (
+    assert _scan_launch_scope(scope, OPERATIONAL.data_vars, None, None, None) == (
         start,
         filter_end,
         variables,

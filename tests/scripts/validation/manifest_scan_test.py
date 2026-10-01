@@ -793,7 +793,16 @@ def test_weathernext_scan_rejects_missing_provenance() -> None:
         manifest_scan.scan_manifest(dataset, None, start=None, end=None)  # ty: ignore[invalid-argument-type]
 
 
-def test_scan_reconstructs_filtered_repair(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("recorded", "requested"),
+    [
+        (["temperature"], ["pressure_level/temperature", "pressure_surface"]),
+        (["pressure_level/temperature"], ["temperature", "pressure_surface"]),
+    ],
+)
+def test_scan_reconstructs_filtered_repair(
+    monkeypatch: pytest.MonkeyPatch, recorded: list[str], requested: list[str]
+) -> None:
 
     scope = LaunchScope(
         append_dim_end=pd.Timestamp("2025-01-04"),
@@ -803,19 +812,27 @@ def test_scan_reconstructs_filtered_repair(monkeypatch: pytest.MonkeyPatch) -> N
             pd.Timestamp("2025-01-01T12:00"),
             pd.Timestamp("2025-01-02T12:00"),
         ],
-        filter_variable_names=["temperature"],
+        filter_variable_names=recorded,
     )
     scan = Mock(return_value=ManifestScanResult({}, {}))
     monkeypatch.setattr(manifest_scan, "_scan_window", scan)
     dataset = SimpleNamespace(
-        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        template_config=SimpleNamespace(
+            data_vars=[
+                SimpleNamespace(name="temperature", path="pressure_level/temperature"),
+                SimpleNamespace(name="temperature", path="model_level/temperature"),
+                SimpleNamespace(name="pressure_surface", path="pressure_surface"),
+            ]
+        ),
     )
     manifest_scan.scan_manifest(
         dataset,  # ty: ignore[invalid-argument-type]
         None,  # ty: ignore[invalid-argument-type]
         start=None,
         end=None,
-        variables=["pressure_level/temperature", "pressure_surface"],
+        variables=requested,
+        replay_launch_scope=True,
         snapshot_metadata={
             "publication_cutoff": "2025-01-05T00:00:00+00:00",
             "launch_scope": scope.model_dump_json(),
@@ -867,7 +884,9 @@ def test_filtered_repair_skips_unselected_checkpoint_windows(
     dataset = SimpleNamespace(
         region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
         dataset_id="repair",
-        template_config=SimpleNamespace(append_dim_start=pd.Timestamp("2025-01-01")),
+        template_config=SimpleNamespace(
+            append_dim_start=pd.Timestamp("2025-01-01"), data_vars=[]
+        ),
     )
     store = SimpleNamespace(session=SimpleNamespace(snapshot_id="repair"))
     manifest_scan.scan_manifest(
@@ -876,6 +895,7 @@ def test_filtered_repair_skips_unselected_checkpoint_windows(
         start=None,
         end=None,
         checkpoint_dir=tmp_path,
+        replay_launch_scope=True,
         window=pd.Timedelta("1D"),
         snapshot_metadata={
             "publication_cutoff": "2025-01-05T00:00:00+00:00",
@@ -886,3 +906,112 @@ def test_filtered_repair_skips_unselected_checkpoint_windows(
         pd.Timestamp("2025-01-01"),
         pd.Timestamp("2025-01-03"),
     ]
+
+
+@pytest.mark.parametrize("explicit_bounds", [False, True])
+@pytest.mark.parametrize("launch", ["operational", "filtered-repair"])
+def test_default_scan_reports_missing_refs_outside_last_launch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    explicit_bounds: bool,
+    launch: str,
+) -> None:
+    old, recent, end = map(pd.Timestamp, ["2025-01-01", "2025-01-02", "2025-01-03"])
+    scope = LaunchScope(
+        append_dim_end=end,
+        filter_start=recent if launch == "operational" else old,
+        filter_variable_names=["temperature"],
+    )
+    metadata = {
+        "publication_cutoff": "2025-01-03T00:00:00+00:00",
+        "launch_scope": scope.model_dump_json(),
+    }
+    dataset = SimpleNamespace(
+        dataset_id="weather",
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        template_config=SimpleNamespace(
+            append_dim="init_time",
+            append_dim_start=old,
+            append_dim_frequency=pd.Timedelta("1D"),
+            data_vars=[_var("temperature"), _var("pressure_surface")],
+        ),
+    )
+    monkeypatch.setattr(
+        manifest_scan.xr,
+        "open_zarr",
+        lambda *args, **kwargs: xr.Dataset(coords={"init_time": [old, recent]}),
+    )
+
+    def scan_window(
+        dataset: object,
+        store: object,
+        *,
+        start: pd.Timestamp,
+        end: pd.Timestamp,
+        variables: list[str] | None,
+        reference_time: pd.Timestamp,
+        **kwargs: object,
+    ) -> ManifestScanResult:
+        assert reference_time == pd.Timestamp("2025-01-03T01:00:00")
+        selected = variables or ["temperature", "pressure_surface"]
+        presence = {
+            var: {
+                position: not (
+                    position == old
+                    and var
+                    == (
+                        "temperature" if launch == "operational" else "pressure_surface"
+                    )
+                )
+                for position in (old, recent)
+                if start <= position < end
+            }
+            for var in selected
+        }
+        return ManifestScanResult(
+            {
+                position: (
+                    sum(presence[var][position] for var in selected),
+                    len(selected),
+                )
+                for position in (old, recent)
+                if start <= position < end
+            },
+            presence,
+        )
+
+    monkeypatch.setattr(manifest_scan, "_scan_window", scan_window)
+    store = SimpleNamespace(session=SimpleNamespace(snapshot_id="tip"))
+    for replay in (False, True):
+        result = manifest_scan.scan_manifest(
+            dataset,  # ty: ignore[invalid-argument-type]
+            store,  # ty: ignore[invalid-argument-type]
+            start=old if explicit_bounds else None,
+            end=end if explicit_bounds else None,
+            variables=["temperature", "pressure_surface"] if explicit_bounds else None,
+            snapshot_metadata=metadata,
+            replay_launch_scope=replay,
+            checkpoint_dir=tmp_path,
+        )
+        incomplete = {
+            p
+            for p, (present, expected) in result.file_availability.items()
+            if present < expected
+        }
+        assert incomplete == (set() if replay else {old})
+    assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_launch_scope_replay_requires_recorded_scope() -> None:
+    dataset = SimpleNamespace(
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+    )
+    with pytest.raises(AssertionError, match="requires recorded launch_scope"):
+        manifest_scan.scan_manifest(
+            dataset,  # ty: ignore[invalid-argument-type]
+            None,  # ty: ignore[invalid-argument-type]
+            start=None,
+            end=None,
+            publication_cutoff=pd.Timestamp("2025-01-01T00:00:00Z"),
+            replay_launch_scope=True,
+        )

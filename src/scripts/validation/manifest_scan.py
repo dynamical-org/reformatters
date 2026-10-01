@@ -411,6 +411,7 @@ def _scan_reference_time(
 
 def _scan_launch_scope(
     scope: LaunchScope,
+    data_vars: Sequence[DataVar[Any]],
     start: pd.Timestamp | None,
     end: pd.Timestamp | None,
     variables: list[str] | None,
@@ -439,16 +440,15 @@ def _scan_launch_scope(
         else None
     )
     if scope.filter_variable_names is not None:
-        variables = (
-            scope.filter_variable_names
-            if variables is None
-            else [
-                name
-                for name in variables
-                if name in scope.filter_variable_names
-                or name.rsplit("/", 1)[-1] in scope.filter_variable_names
-            ]
-        )
+        variables = [
+            var.path
+            for var in data_vars
+            if (
+                var.name in scope.filter_variable_names
+                or var.path in scope.filter_variable_names
+            )
+            and (variables is None or var.name in variables or var.path in variables)
+        ]
         assert variables, "No variables in the requested launch scope"
     return (
         max(starts) if starts else None,
@@ -506,6 +506,7 @@ def scan_manifest(
     snapshot_metadata: Mapping[str, Any] | None = None,
     probe_dims: tuple[str, ...] = (),
     admission_units: bool = False,
+    replay_launch_scope: bool = False,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
@@ -533,9 +534,13 @@ def scan_manifest(
     metadata = snapshot_metadata or {}
     if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
         _validate_scan_provenance(dataset.region_job_class, metadata, reference_time)
-        if "launch_scope" in metadata:
+        if replay_launch_scope:
+            assert "launch_scope" in metadata, (
+                "Launch-scope replay requires recorded launch_scope"
+            )
             start, end, variables, filter_contains = _scan_launch_scope(
                 LaunchScope.model_validate_json(metadata["launch_scope"]),
+                dataset.template_config.data_vars,
                 start,
                 end,
                 variables,
@@ -552,7 +557,8 @@ def scan_manifest(
                 str(reference_time),
                 *probe_dims,
                 str(admission_units),
-                str(metadata.get("launch_scope")),
+                str(replay_launch_scope),
+                str(metadata.get("launch_scope") if replay_launch_scope else None),
             ],
             length=12,
         )
