@@ -43,11 +43,12 @@ def archive_initialization(
     poll_seconds: float = 30,
     maximum_polls: int = 240,
     env_vars: dict[str, Any] | None = None,
-) -> None:
+) -> bool:
     """Transfer the selections of `init_time` that are not already archived.
 
     An initialization ECDS has not published yet is skipped, so a caller working
     backwards through recent initializations reaches the older, published ones.
+    Return whether every selection is archived, including those already present.
 
     Args:
         init_time: The initialization to archive. ECMWF S2S initializes at 00 UTC only.
@@ -82,13 +83,13 @@ def archive_initialization(
         init_time_str,
     )
     if not pending:
-        return
+        return True
 
     # Checked over every selection, not the pending subset: an initialization only
     # counts as unpublished when ECDS holds none of it.
     if not check_available(init_time, selections, api_url=api_url):
         log.warning("ECDS has not published %s, skipping it", init_time_str)
-        return
+        return False
 
     def archive_one(selection: EcdsSelection) -> None:
         retry(
@@ -110,6 +111,7 @@ def archive_initialization(
 
     with ThreadPoolExecutor(concurrent_requests) as pool:
         list(pool.map(archive_one, pending))
+    return True
 
 
 def check_available(
