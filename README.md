@@ -57,9 +57,9 @@ We use
 1. As a cluster administrator, install the static trigger policies and give the deploy identity permission to create/get bindings and delegate the namespaced `trigger` verb:
 
    ```sh
-   uv run main render-admission-bundle --namespace default > admission.json
+   uv run main render-kubernetes-admission-bundle --namespace default > admission.json
    kubectl apply -f admission.json -f deploy/trigger-binding-deployer.yaml
-   uv run main verify-admission admission.json --namespace default
+   uv run main verify-kubernetes-admission admission.json --namespace default
    kubectl create clusterrolebinding reformatters-trigger-binding-deployer \
      --clusterrole=reformatters-trigger-binding-deployer --user=DEPLOY_IDENTITY
    kubectl create rolebinding reformatters-trigger-binding-deployer --namespace default \

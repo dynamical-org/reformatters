@@ -909,7 +909,7 @@ def test_operator_verifies_installed_policy_identity(
     bundle.write_text(json.dumps({"items": resources}))
     runner = CliRunner()
     result = runner.invoke(
-        app, ["verify-admission", str(bundle), "--namespace", NAMESPACE]
+        app, ["verify-kubernetes-admission", str(bundle), "--namespace", NAMESPACE]
     )
     assert result.exit_code == 0, result.exception
     policy = resources[0]
@@ -936,7 +936,7 @@ def test_operator_verifies_installed_policy_identity(
     try:
         wait_for_guard(denied=True)
         result = runner.invoke(
-            app, ["verify-admission", str(bundle), "--namespace", NAMESPACE]
+            app, ["verify-kubernetes-admission", str(bundle), "--namespace", NAMESPACE]
         )
         assert result.exit_code != 0
         assert "differs from bundle" in str(result.exception)
@@ -1009,7 +1009,8 @@ def test_empty_target_bundle_denies_all_trigger_jobs_and_verifies(
     bundle = tmp_path / "empty-admission.json"
     bundle.write_text(json.dumps({"items": resources}))
     result = CliRunner().invoke(
-        app, ["verify-admission", str(bundle), "--namespace", EMPTY_NAMESPACE]
+        app,
+        ["verify-kubernetes-admission", str(bundle), "--namespace", EMPTY_NAMESPACE],
     )
     assert result.exit_code == 0, result.exception
 

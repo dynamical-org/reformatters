@@ -88,7 +88,7 @@ def register_commands(
     archivers: Sequence[OperationalResources] = (),
 ) -> None:
     @app.command()
-    def verify_admission(bundle: Path, namespace: str = "default") -> None:
+    def verify_kubernetes_admission(bundle: Path, namespace: str = "default") -> None:
         """Probe admission using server-side dry runs; creates no resources."""
         items = json.loads(bundle.read_text())["items"]
         assert items == trigger_admission_resources(namespace), (
@@ -114,7 +114,7 @@ def register_commands(
         verify_trigger_admission(namespace, [])
 
     @app.command()
-    def render_admission_bundle(
+    def render_kubernetes_admission_bundle(
         namespace: str = "default",
     ) -> None:
         """Render cluster-admin admission resources without contacting Kubernetes."""

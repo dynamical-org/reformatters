@@ -109,7 +109,7 @@ def test_canary_requires_named_policy_denial(
 
 
 def test_rendered_bundle_is_static() -> None:
-    result = CliRunner().invoke(app, ["render-admission-bundle"])
+    result = CliRunner().invoke(app, ["render-kubernetes-admission-bundle"])
     assert result.exit_code == 0, result.exception
     assert json.loads(result.stdout)["items"] == trigger_admission_resources("default")
 
@@ -176,13 +176,13 @@ def test_operator_verifies_empty_bundle(
     verify = Mock()
     monkeypatch.setattr(deploy, "verify_trigger_admission", verify)
     result = CliRunner().invoke(
-        app, ["verify-admission", str(bundle), "--namespace", namespace]
+        app, ["verify-kubernetes-admission", str(bundle), "--namespace", namespace]
     )
     assert result.exit_code == 0, result.exception
     assert run.call_count == len(items)
     verify.assert_called_once_with(namespace, [])
 
-    result = CliRunner().invoke(app, ["verify-admission", str(bundle)])
+    result = CliRunner().invoke(app, ["verify-kubernetes-admission", str(bundle)])
     assert result.exit_code != 0
     assert "complete generated policy" in str(result.exception)
     assert run.call_count == len(items)
