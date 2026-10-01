@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -6,6 +7,7 @@ import icechunk
 import pandas as pd
 import pytest
 from pydantic import ValidationError
+from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
 from reformatters.google.weathernext3.forecast_virtual import region_job as job_module
@@ -62,12 +64,17 @@ def test_reference_time_survives_clock_boundary_and_retry(
         "filter_variable_names": [config.data_vars[0].name],
         "reformat_job_name": "fixed-launch",
         "reference_time": reference,
+        "append_dim_end": pd.Timestamp("2026-01-02"),
     }
     jobs = dataset.region_job_class.get_jobs(**kwargs)
     retry = dataset.region_job_class.get_jobs(**kwargs)
     assert len(jobs) > 1
     assert clock.call_count == 2 * len(jobs)
     for job in [*jobs, *retry]:
+        assert job.launch_scope is not None
+        assert job.launch_scope == jobs[0].launch_scope
+        assert job.launch_scope.append_dim_end == pd.Timestamp("2026-01-02")
+        assert job.launch_scope.filter_variable_names == [config.data_vars[0].path]
         assert job.reference_time == reference.tz_localize(None)
         assert job.publication_cutoff == pd.Timestamp("2026-01-01T23:59:59")
         assert (
@@ -281,6 +288,7 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
 def test_wn3_scan_requires_provenance(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
+    assert dataset.region_job_class.requires_scan_provenance is True
     repo = icechunk.Repository.create(icechunk.in_memory_storage())
     with pytest.raises(AssertionError, match="require a recorded cutoff"):
         scan_manifest(
@@ -290,3 +298,49 @@ def test_wn3_scan_requires_provenance(
             end=pd.Timestamp("2026-01-02"),
             snapshot_metadata={},
         )
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+def test_update_metadata_records_reference_and_launch_scope(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+) -> None:
+    config = dataset.template_config
+    fire = pd.Timestamp("2026-02-01T05:10:00Z").tz_localize(None)
+    jobs, template = dataset.region_job_class.operational_update_jobs(
+        MemoryStore(),
+        Path("unused"),
+        config.get_template,
+        "init_time",
+        config.data_vars,
+        "scheduled-update",
+        fire,
+    )
+    (job,) = jobs
+    assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
+    cutoff = fire - pd.Timedelta("1h")
+    end = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
+        config.append_dim_frequency
+    ) + config.append_dim_frequency
+    start = end - job.operational_update_window
+    assert job.reference_time == fire
+    assert job.publication_cutoff == cutoff
+    assert job.launch_scope is not None
+    assert job.launch_scope.append_dim_end == end
+    assert job.launch_scope.filter_start == start
+    assert job.launch_scope.filter_end == end
+    assert job.launch_scope.filter_variable_names == [
+        var.path for var in config.data_vars
+    ]
+    assert template.to_dataset().get_index("init_time")[job.region.start] == start
+    assert (
+        template.to_dataset().get_index("init_time")[job.region.stop - 1]
+        == end - config.append_dim_frequency
+    )
+    metadata = job.commit_metadata()
+    assert metadata["publication_cutoff"] == cutoff.tz_localize("UTC").isoformat()
+    assert metadata["reference_time"] == fire.tz_localize("UTC").isoformat()
+    scope = json.loads(metadata["launch_scope"])
+    assert scope["append_dim_end"] == end.tz_localize("UTC").isoformat()
+    assert scope["filter_start"] == start.tz_localize("UTC").isoformat()
+    assert scope["filter_end"] == end.tz_localize("UTC").isoformat()
+    assert scope["filter_variable_names"] == [var.path for var in config.data_vars]

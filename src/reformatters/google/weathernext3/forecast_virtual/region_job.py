@@ -7,7 +7,7 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import DataVar
-from reformatters.common.region_job import CoordinateValue, RegionJob
+from reformatters.common.region_job import CoordinateValue, LaunchScope, RegionJob
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.google.weathernext_virtual.holdback import (
@@ -95,6 +95,12 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
             processing_mode="update",
             reference_time=reference_time,
             publication_cutoff=cutoff,
+            launch_scope=LaunchScope(
+                append_dim_end=append_dim_end,
+                filter_start=append_dim_end - cls.operational_update_window,
+                filter_end=append_dim_end,
+                filter_variable_names=[var.path for var in all_data_vars],
+            ),
         )
         return [job], template
 

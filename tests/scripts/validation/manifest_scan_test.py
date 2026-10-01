@@ -810,7 +810,8 @@ def test_scan_reconstructs_filtered_repair(monkeypatch: pytest.MonkeyPatch) -> N
     scan = Mock(return_value=ManifestScanResult({}, {}))
     monkeypatch.setattr(manifest_scan, "_scan_window", scan)
     dataset = SimpleNamespace(
-        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        template_config=SimpleNamespace(all_dims=()),
     )
     manifest_scan.scan_manifest(
         dataset,  # ty: ignore[invalid-argument-type]
@@ -869,7 +870,9 @@ def test_filtered_repair_skips_unselected_checkpoint_windows(
     dataset = SimpleNamespace(
         region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
         dataset_id="repair",
-        template_config=SimpleNamespace(append_dim_start=pd.Timestamp("2025-01-01")),
+        template_config=SimpleNamespace(
+            append_dim_start=pd.Timestamp("2025-01-01"), all_dims=()
+        ),
     )
     store = SimpleNamespace(session=SimpleNamespace(snapshot_id="repair"))
     manifest_scan.scan_manifest(
