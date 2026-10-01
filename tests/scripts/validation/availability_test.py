@@ -1,11 +1,20 @@
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_dataset import (
+    GoogleWeathernext2ForecastHistoricalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
+    GoogleWeathernext2ForecastOperationalVirtualDataset,
+)
+from scripts.validation import availability, manifest_scan
 from scripts.validation.availability import (
     HEATMAP_FILENAME,
     _heatmap_xticks,
@@ -332,3 +341,57 @@ def test_heatmap_xticks_short_archive_ticks_every_year() -> None:
     _, labels = _heatmap_xticks(positions, n_columns=500)
 
     assert labels == ["2020", "2021"]
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize("provenance", ["legacy", "recorded", "max-sentinel"])
+def test_manifest_scan_wn2_compatibility(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, historical: bool, provenance: str
+) -> None:
+
+    dataset = (
+        GoogleWeathernext2ForecastHistoricalVirtualDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            )
+        )
+        if historical
+        else GoogleWeathernext2ForecastOperationalVirtualDataset(
+            primary_storage_config=StorageConfig(
+                base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+            )
+        )
+    )
+    metadata = {
+        "legacy": {},
+        "recorded": {"publication_policy": "unrestricted"}
+        if historical
+        else {"publication_cutoff": "2025-01-01T23:00:00+00:00"},
+        "max-sentinel": {
+            "publication_cutoff": pd.Timestamp.max.tz_localize("UTC").isoformat()
+        },
+    }[provenance]
+    ctx = _ctx(_forecast_dataset(), tmp_path)
+    store = SimpleNamespace(session=SimpleNamespace(snapshot_id="pinned"))
+    monkeypatch.setattr(
+        availability,
+        "resolve_scan_window",
+        lambda ctx: (
+            dataset,
+            store,
+            pd.Timestamp("2022-01-01"),
+            pd.Timestamp("2022-01-02"),
+        ),
+    )
+    repo = Mock()
+    repo.lookup_snapshot.return_value.metadata = metadata
+    monkeypatch.setattr(availability, "open_icechunk_repository", lambda url: repo)
+    scan = Mock(return_value=manifest_scan.ManifestScanResult({}, {}))
+    monkeypatch.setattr(manifest_scan, "_scan_window", scan)
+    assert availability.run_manifest_scan(ctx) == {}
+    repo.lookup_snapshot.assert_called_once_with("pinned")
+    assert scan.call_args.kwargs["reference_time"] == (
+        pd.Timestamp("2025-01-02")
+        if provenance == "recorded" and not historical
+        else None
+    )

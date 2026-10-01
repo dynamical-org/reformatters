@@ -25,6 +25,7 @@ from reformatters.common.region_job import (
     DATA_VAR,
     SOURCE_FILE_COORD,
     CoordinateValue,
+    LaunchScope,
     RegionJob,
     SourceFileResult,
 )
@@ -134,6 +135,12 @@ class VirtualRegionJob(
             region=slice(window_start, len(append_dim_index)),
             reformat_job_name=reformat_job_name,
             processing_mode="update",
+            launch_scope=LaunchScope(
+                append_dim_end=append_dim_end,
+                filter_start=append_dim_end - cls.operational_update_window,
+                filter_end=append_dim_end,
+                filter_variable_names=[var.path for var in all_data_vars],
+            ),
         )
         return [job], template_ds
 
@@ -588,6 +595,7 @@ class VirtualRegionJob(
             self.append_dim,
             tmp_store,
             consolidated=self.consolidated_metadata,
+            metadata=self.commit_metadata(),
         )
 
     def sync_dims_to(

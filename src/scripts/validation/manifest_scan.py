@@ -36,7 +36,7 @@ from reformatters.common.config_models import DataVar, split_var_path
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.region_job import LaunchScope, SourceFileCoord
 from reformatters.common.retry import retry
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 from reformatters.google.weathernext_virtual.holdback import PUBLICATION_HOLDBACK
@@ -395,12 +395,100 @@ def _scan_reference_time(
         if publication_cutoff is None and "publication_cutoff" in metadata:
             publication_cutoff = pd.Timestamp(metadata["publication_cutoff"])
         if publication_cutoff is not None:
+            if publication_cutoff.tz is not None:
+                publication_cutoff = publication_cutoff.tz_convert("UTC").tz_localize(
+                    None
+                )
+            if publication_cutoff == pd.Timestamp.max:
+                return None
             reference_time = publication_cutoff + PUBLICATION_HOLDBACK
         elif "reference_time" in metadata:
             reference_time = pd.Timestamp(metadata["reference_time"])
     if reference_time is not None and reference_time.tz is not None:
         reference_time = reference_time.tz_convert("UTC").tz_localize(None)
     return reference_time
+
+
+def _scan_launch_scope(
+    scope: LaunchScope,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    variables: list[str] | None,
+) -> tuple[
+    pd.Timestamp | None,
+    pd.Timestamp | None,
+    list[str] | None,
+    list[pd.Timestamp] | None,
+]:
+    def naive(value: pd.Timestamp) -> pd.Timestamp:
+        return (
+            value.tz_convert("UTC").tz_localize(None) if value.tz is not None else value
+        )
+
+    starts = [
+        naive(value) for value in (start, scope.filter_start) if value is not None
+    ]
+    ends = [
+        naive(value)
+        for value in (end, scope.append_dim_end, scope.filter_end)
+        if value is not None
+    ]
+    contains = (
+        [naive(value) for value in scope.filter_contains]
+        if scope.filter_contains is not None
+        else None
+    )
+    if scope.filter_variable_names is not None:
+        variables = (
+            scope.filter_variable_names
+            if variables is None
+            else [
+                name
+                for name in variables
+                if name in scope.filter_variable_names
+                or name.rsplit("/", 1)[-1] in scope.filter_variable_names
+            ]
+        )
+        assert variables, "No variables in the requested launch scope"
+    return (
+        max(starts) if starts else None,
+        min(ends) if ends else None,
+        variables,
+        contains,
+    )
+
+
+def _validate_scan_provenance(
+    region_job_class: type[WeatherNextVirtualRegionJob[Any, Any]],
+    metadata: Mapping[str, Any],
+    reference_time: pd.Timestamp | None,
+) -> None:
+    recorded_cutoff = metadata.get("publication_cutoff")
+    unrestricted = metadata.get("publication_policy") == "unrestricted" or (
+        recorded_cutoff is not None
+        and pd.Timestamp(recorded_cutoff).tz_localize(None) == pd.Timestamp.max
+    )
+    strict = region_job_class.requires_scan_provenance
+    if strict or (
+        any(
+            key in metadata
+            for key in (
+                "publication_cutoff",
+                "reference_time",
+                "launch_scope",
+                "publication_policy",
+                "reformat_job_name",
+            )
+        )
+        and not unrestricted
+    ):
+        assert reference_time is not None, (
+            "WeatherNext scans require a recorded cutoff or explicit reference_time"
+        )
+    if unrestricted:
+        assert not strict, (
+            "Unrestricted publication is only supported for legacy WeatherNext"
+        )
 
 
 def scan_manifest(
@@ -441,10 +529,17 @@ def scan_manifest(
     reference_time = _scan_reference_time(
         reference_time, publication_cutoff, snapshot_metadata
     )
+    filter_contains = None
+    metadata = snapshot_metadata or {}
     if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
-        assert reference_time is not None, (
-            "WeatherNext scans require a recorded cutoff or explicit reference_time"
-        )
+        _validate_scan_provenance(dataset.region_job_class, metadata, reference_time)
+        if "launch_scope" in metadata:
+            start, end, variables, filter_contains = _scan_launch_scope(
+                LaunchScope.model_validate_json(metadata["launch_scope"]),
+                start,
+                end,
+                variables,
+            )
         admission_units = True
         if start is None or end is None:
             start, end = _resolve_bounds(dataset, store, start=start, end=end)
@@ -457,6 +552,7 @@ def scan_manifest(
                 str(reference_time),
                 *probe_dims,
                 str(admission_units),
+                str(metadata.get("launch_scope")),
             ],
             length=12,
         )
@@ -466,7 +562,14 @@ def scan_manifest(
     if window is not None:
         start, end = _resolve_bounds(dataset, store, start=start, end=end)
         assert start < end, f"Nothing to scan: [{start} .. {end}]"
-        windows = list(_scan_windows(start, end, window=window))
+        bounded_windows = list(_scan_windows(start, end, window=window))
+        if filter_contains is not None:
+            bounded_windows = [
+                (first, last)
+                for first, last in bounded_windows
+                if any(first <= value < last for value in filter_contains)
+            ]
+        windows = list(bounded_windows)
     merged = ManifestScanResult(file_availability={}, var_availability={})
     for index, (window_start, window_end) in enumerate(windows, start=1):
         if len(windows) > 1:
@@ -496,6 +599,7 @@ def scan_manifest(
                 reference_time=reference_time,
                 probe_dims=probe_dims,
                 admission_units=admission_units,
+                filter_contains=filter_contains,
             )
             if path is not None:
                 _write_checkpoint(path, result)
@@ -613,6 +717,7 @@ def _scan_window(
     reference_time: pd.Timestamp | None = None,
     probe_dims: tuple[str, ...] = (),
     admission_units: bool = False,
+    filter_contains: list[pd.Timestamp] | None = None,
 ) -> ManifestScanResult:
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
@@ -623,6 +728,7 @@ def _scan_window(
             start=start,
             variables=variables,
             reference_time=reference_time,
+            filter_contains=filter_contains,
         ),
     )
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
