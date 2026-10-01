@@ -25,7 +25,7 @@ On a large ensemble archive also set `--probe-workers` (see Options): the scan's
 
 Pass `--checkpoint-dir` on any whole-archive scan you cannot afford to repeat. The manifest and decode scans are the long pole of a virtual `run-all` — hours on a large ensemble archive, where one sampled decode job alone takes tens of minutes — and without it an interruption anywhere loses all of it. With it each unit is recorded as it finishes (a manifest slice, a decode region job) and a re-run picks up from there.
 
-WeatherNext manifest scans use the pinned snapshot's recorded `publication_cutoff`, count each `(init, lead, source coord)` admission unit separately, and probe every statistic chunk at every eligible lead. Missing provenance fails the scan instead of substituting the current clock. The Python `scan_manifest` entry point also accepts `snapshot_metadata`, `publication_cutoff`, or `reference_time`, and `probe_dims=("statistic",)` for exhaustive non-spatial labels. Checkpoints are scoped to snapshot, reference time, and probe options. See [recorded-cutoff audits](weathernext2_holdback.md#recorded-cutoff-audits) for the independent target, source-location, and ancestry checks.
+WeatherNext manifest scans use the pinned snapshot's recorded `publication_cutoff`, count each `(init, lead, source coord)` admission unit separately, and probe every statistic chunk at every eligible lead. Missing provenance fails the scan instead of substituting the current clock. The Python `scan_manifest` entry point also accepts `snapshot_metadata`, `publication_cutoff`, or `reference_time`, and `probe_dims` for exhaustive non-spatial labels. WN3 automatically enables `probe_dims=("statistic",)` and admission-unit counting in both direct Python scans and the availability workflow, so a missing non-mean statistic or a missing lead cannot be hidden by another lead in the same source store. Checkpoints are scoped to snapshot, reference time, and probe options. See [recorded-cutoff audits](weathernext2_holdback.md#recorded-cutoff-audits) for the independent target, source-location, and ancestry checks.
 
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
@@ -63,7 +63,7 @@ Runtime scales roughly linearly with variable count: budget **~0.4 minutes per v
 
 ### Whole-archive scans (manifest completeness, decode health)
 
-For WeatherNext 2 publication restrictions, use the separate [holdback audit and remediation runbook](weathernext2_holdback.md). Completeness checks missing expected refs; it cannot establish the absence of extra restricted refs.
+For WeatherNext 2 and WeatherNext 3 publication restrictions, use the separate [holdback audit and remediation runbook](weathernext2_holdback.md). Completeness checks missing expected refs; it cannot establish the absence of extra restricted refs.
 
 These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the cheap operational `-validate` checks. Both reach the dataset's own region job (for expected source files and manifest chunk-key logic) by resolving the registered dataset from the store's `dataset_id` attribute, so both take a store URL like every other command. `run-all` runs both automatically for a virtual store, so one command produces the complete report — the manifest scan runs alongside the decode + plot phases in the same process, but they contend for I/O, so its cost is not fully hidden; the standalone commands are the strict post-backfill gates (exit code).
 

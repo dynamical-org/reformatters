@@ -481,12 +481,9 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     """
     dataset, store, start, end = resolve_scan_window(ctx)
     snapshot_metadata = None
-    probe_dims: tuple[str, ...] = ()
     if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
         repo = open_icechunk_repository(ctx.validation_url)
         snapshot_metadata = repo.lookup_snapshot(store.session.snapshot_id).metadata
-        if "statistic" in ctx.validation_ds.dims:
-            probe_dims = ("statistic",)
     result = scan_manifest(
         dataset,
         store,
@@ -496,7 +493,6 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
         checkpoint_dir=ctx.checkpoint_dir,
         probe_workers=ctx.probe_workers,
         snapshot_metadata=snapshot_metadata,
-        probe_dims=probe_dims,
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}

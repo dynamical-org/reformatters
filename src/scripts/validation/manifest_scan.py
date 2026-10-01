@@ -446,6 +446,8 @@ def scan_manifest(
             "WeatherNext scans require a recorded cutoff or explicit reference_time"
         )
         admission_units = True
+        if "statistic" in dataset.template_config.all_dims:
+            probe_dims = tuple(dict.fromkeys((*probe_dims, "statistic")))
         if start is None or end is None:
             start, end = _resolve_bounds(dataset, store, start=start, end=end)
     if checkpoint_dir is not None and (

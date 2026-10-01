@@ -769,7 +769,8 @@ def test_scan_expectations_use_recorded_time(
     scan = Mock(return_value=ManifestScanResult({}, {}))
     monkeypatch.setattr(manifest_scan, "_scan_window", scan)
     dataset = SimpleNamespace(
-        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        template_config=SimpleNamespace(all_dims=()),
     )
     manifest_scan.scan_manifest(
         dataset,  # ty: ignore[invalid-argument-type]
@@ -786,7 +787,8 @@ def test_scan_expectations_use_recorded_time(
 
 def test_weathernext_scan_rejects_missing_provenance() -> None:
     dataset = SimpleNamespace(
-        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        template_config=SimpleNamespace(all_dims=()),
     )
     with pytest.raises(AssertionError, match="require a recorded cutoff"):
         manifest_scan.scan_manifest(dataset, None, start=None, end=None)  # ty: ignore[invalid-argument-type]

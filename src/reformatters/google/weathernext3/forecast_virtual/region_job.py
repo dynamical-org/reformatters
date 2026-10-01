@@ -4,7 +4,6 @@ from typing import Any, ClassVar
 
 import pandas as pd
 import xarray as xr
-from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import DataVar
@@ -26,18 +25,15 @@ from reformatters.google.weathernext_virtual.region_job import (
     WeatherNextVirtualRegionJob,
 )
 
+from .source import source_horizon, source_store_key, source_store_url
 from .template_config import STATISTICS, GoogleWeathernext3DataVar
-
-
-def source_horizon(init_time: Timestamp) -> Timedelta:
-    return pd.Timedelta(hours=360 if init_time.hour % 6 == 0 else 48)
 
 
 class GoogleWeathernext3ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoord):
     data_vars: Sequence[GoogleWeathernext3DataVar]
 
     def get_url(self) -> str:
-        return f"gs://weathernext/weathernext_3_0_0_statistics/zarr/2026_to_present/{self.init_time:%Y%m%d_%H}hr_01_preds/predictions.zarr"
+        return source_store_url(self.init_time)
 
     @property
     def lead_index(self) -> int:
@@ -47,7 +43,7 @@ class GoogleWeathernext3ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoor
 
     def chunk_location(self, var: GoogleWeathernext3DataVar, statistic: str) -> str:
         assert statistic in STATISTICS
-        return f"{PROXY_LOCATION_PREFIX}{self.get_url().removeprefix('gs://weathernext/')}/{var.internal_attrs.source_name}_{statistic}/c/{self.lead_index}/0/0"
+        return f"{PROXY_LOCATION_PREFIX}{source_store_key(self.init_time)}/{var.internal_attrs.source_name}_{statistic}/c/{self.lead_index}/0/0"
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"init_time": self.init_time, "lead_time": self.lead_time}
@@ -60,14 +56,11 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
 ):
     init_frequency: ClassVar[Timedelta]
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
-    publication_cutoff: Timestamp = Field(
-        default_factory=lambda: utc_now() - PUBLICATION_HOLDBACK
-    )
 
     @classmethod
     def operational_update_jobs(
         cls,
-        primary_store: Store,
+        primary_store: Store,  # noqa: ARG003
         tmp_store: Path,
         get_template_fn: Callable[[DatetimeLike], xr.DataTree],
         append_dim: AppendDim,
@@ -83,20 +76,27 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         ],
         xr.DataTree,
     ]:
-        cutoff = (job_fire_time or utc_now()) - PUBLICATION_HOLDBACK
+        reference_time = job_fire_time or utc_now()
+        cutoff = reference_time - PUBLICATION_HOLDBACK
         newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(cls.init_frequency)
-        jobs, template = super().operational_update_jobs(
-            primary_store=primary_store,
-            tmp_store=tmp_store,
-            get_template_fn=get_template_fn,
-            append_dim=append_dim,
-            all_data_vars=all_data_vars,
-            reformat_job_name=reformat_job_name,
-            job_fire_time=newest_init + cls.init_frequency,
+        append_dim_end = newest_init + cls.init_frequency
+        template = get_template_fn(append_dim_end)
+        inits = template.to_dataset().get_index(append_dim)
+        window_start = int(
+            inits.searchsorted(append_dim_end - cls.operational_update_window)
         )
-        return [
-            job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs
-        ], template
+        job = cls(
+            tmp_store=tmp_store,
+            template_ds=template,
+            append_dim=append_dim,
+            data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            region=slice(window_start, len(inits)),
+            processing_mode="update",
+            reference_time=reference_time,
+            publication_cutoff=cutoff,
+        )
+        return [job], template
 
     def _available_lead_times(
         self, init_time: Timestamp, processing_region_ds: xr.Dataset
@@ -143,7 +143,9 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
     ) -> Sequence[ObjectListingQuery]:
         queries = []
         for var in coord.data_vars:
-            prefix = f"{coord.get_url().removeprefix('gs://weathernext/')}/{var.internal_attrs.source_name}_"
+            prefix = (
+                f"{source_store_key(coord.init_time)}/{var.internal_attrs.source_name}_"
+            )
             whole_variable = is_publishable(
                 coord.init_time,
                 source_horizon(coord.init_time),
