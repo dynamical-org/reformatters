@@ -16,6 +16,7 @@ import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.common import validation
+from reformatters.common.region_job import LaunchScope
 from scripts.validation import manifest_scan
 from scripts.validation.decode_scan import _reference_presence
 from scripts.validation.manifest_scan import (
@@ -792,3 +793,98 @@ def test_weathernext_scan_rejects_missing_provenance() -> None:
     )
     with pytest.raises(AssertionError, match="require a recorded cutoff"):
         manifest_scan.scan_manifest(dataset, None, start=None, end=None)  # ty: ignore[invalid-argument-type]
+
+
+def test_scan_reconstructs_filtered_repair(monkeypatch: pytest.MonkeyPatch) -> None:
+
+    scope = LaunchScope(
+        append_dim_end=pd.Timestamp("2025-01-04"),
+        filter_start=pd.Timestamp("2025-01-01T06:00"),
+        filter_end=pd.Timestamp("2025-01-03"),
+        filter_contains=[
+            pd.Timestamp("2025-01-01T12:00"),
+            pd.Timestamp("2025-01-02T12:00"),
+        ],
+        filter_variable_names=["temperature"],
+    )
+    scan = Mock(return_value=ManifestScanResult({}, {}))
+    monkeypatch.setattr(manifest_scan, "_scan_window", scan)
+    dataset = SimpleNamespace(
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+    )
+    manifest_scan.scan_manifest(
+        dataset,  # ty: ignore[invalid-argument-type]
+        None,  # ty: ignore[invalid-argument-type]
+        start=None,
+        end=None,
+        variables=["pressure_level/temperature", "pressure_surface"],
+        snapshot_metadata={
+            "publication_cutoff": "2025-01-05T00:00:00+00:00",
+            "launch_scope": scope.model_dump_json(),
+        },
+    )
+    assert scan.call_args.kwargs["start"] == scope.filter_start
+    assert scan.call_args.kwargs["end"] == scope.filter_end
+    assert scan.call_args.kwargs["variables"] == ["pressure_level/temperature"]
+    assert scan.call_args.kwargs["filter_contains"] == scope.filter_contains
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"launch_scope": "{}"},
+        {"publication_policy": "unrestricted"},
+        {"publication_cutoff": pd.Timestamp.max.tz_localize("UTC").isoformat()},
+    ],
+)
+def test_strict_weathernext_scan_rejects_incomplete_provenance(
+    metadata: dict[str, str],
+) -> None:
+    dataset = SimpleNamespace(
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob
+    )
+    with pytest.raises(AssertionError, match="require a recorded cutoff"):
+        manifest_scan.scan_manifest(
+            dataset,  # ty: ignore[invalid-argument-type]
+            None,  # ty: ignore[invalid-argument-type]
+            start=None,
+            end=None,
+            snapshot_metadata=metadata,
+        )
+
+
+def test_filtered_repair_skips_unselected_checkpoint_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope = LaunchScope(
+        append_dim_end=pd.Timestamp("2025-01-04"),
+        filter_start=pd.Timestamp("2025-01-01"),
+        filter_contains=[
+            pd.Timestamp("2025-01-01T12:00"),
+            pd.Timestamp("2025-01-03T12:00"),
+        ],
+    )
+    scan = Mock(return_value=ManifestScanResult({}, {}))
+    monkeypatch.setattr(manifest_scan, "_scan_window", scan)
+    dataset = SimpleNamespace(
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        dataset_id="repair",
+        template_config=SimpleNamespace(append_dim_start=pd.Timestamp("2025-01-01")),
+    )
+    store = SimpleNamespace(session=SimpleNamespace(snapshot_id="repair"))
+    manifest_scan.scan_manifest(
+        dataset,  # ty: ignore[invalid-argument-type]
+        store,  # ty: ignore[invalid-argument-type]
+        start=None,
+        end=None,
+        checkpoint_dir=tmp_path,
+        window=pd.Timedelta("1D"),
+        snapshot_metadata={
+            "publication_cutoff": "2025-01-05T00:00:00+00:00",
+            "launch_scope": scope.model_dump_json(),
+        },
+    )
+    assert [call.kwargs["start"] for call in scan.call_args_list] == [
+        pd.Timestamp("2025-01-01"),
+        pd.Timestamp("2025-01-03"),
+    ]

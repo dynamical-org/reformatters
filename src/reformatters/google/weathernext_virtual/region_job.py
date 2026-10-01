@@ -44,6 +44,7 @@ SOURCE_COORD = TypeVar("SOURCE_COORD", bound=WeatherNextSourceFileCoord)
 class WeatherNextVirtualRegionJob(
     VirtualRegionJob[DATA_VAR, SOURCE_COORD], Generic[DATA_VAR, SOURCE_COORD]
 ):
+    requires_scan_provenance: ClassVar[bool] = True
     manifest_init_split: ClassVar[int]
     publication_cutoff: Timestamp
 
@@ -59,12 +60,22 @@ class WeatherNextVirtualRegionJob(
         return values
 
     def commit_metadata(self) -> dict[str, str]:
-        return {
-            "publication_cutoff": self.publication_cutoff.tz_localize(
+        metadata = {"reformat_job_name": self.reformat_job_name}
+        if self.publication_cutoff == pd.Timestamp.max:
+            assert not self.requires_scan_provenance
+            metadata["publication_policy"] = "unrestricted"
+        else:
+            metadata["publication_cutoff"] = self.publication_cutoff.tz_localize(
                 "UTC"
-            ).isoformat(),
-            "reformat_job_name": self.reformat_job_name,
-        }
+            ).isoformat()
+            metadata["reference_time"] = (
+                (self.reference_time or self.publication_cutoff + PUBLICATION_HOLDBACK)
+                .tz_localize("UTC")
+                .isoformat()
+            )
+        if self.launch_scope is not None:
+            metadata["launch_scope"] = self.launch_scope.model_dump_json()
+        return metadata
 
     @abstractmethod
     def _available_lead_times(

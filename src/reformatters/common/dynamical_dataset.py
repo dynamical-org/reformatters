@@ -305,6 +305,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     all_data_vars=self.template_config.data_vars,
                     reformat_job_name="metadata-refresh",
                     reference_time=reference_time,
+                    append_dim_end=resolved_end,
                 )
                 metadata = jobs[0].commit_metadata() if jobs else {}
             template_utils.refresh_store_metadata(
@@ -358,6 +359,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 ),
                 filter_variable_names=filter_variable_names,
                 reference_time=reference_time,
+                append_dim_end=resolved_end,
             )
         )
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
@@ -477,6 +479,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
             reference_time=run_time,
+            append_dim_end=pd.Timestamp(append_dim_end),
             filter_start=pd.Timestamp(filter_start) if filter_start else None,
             filter_end=pd.Timestamp(filter_end) if filter_end else None,
             filter_contains=(

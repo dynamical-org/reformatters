@@ -48,6 +48,40 @@ log = get_logger(__name__)
 type CoordinateValue = int | float | pd.Timestamp | pd.Timedelta | str
 
 
+class LaunchScope(FrozenBaseModel):
+    append_dim_end: Timestamp | None = None
+    filter_start: Timestamp | None = None
+    filter_end: Timestamp | None = None
+    filter_contains: list[Timestamp] | None = None
+    filter_variable_names: list[str] | None = None
+
+    @field_validator("append_dim_end", "filter_start", "filter_end", mode="before")
+    @classmethod
+    def _unwrap_coordinate(cls, value: Any) -> Any:  # noqa: ANN401
+        return value.values[()] if isinstance(value, xr.DataArray) else value
+
+    @field_serializer("append_dim_end", "filter_start", "filter_end")
+    def _serialize_time(self, value: Timestamp | None) -> str | None:
+        if value is None:
+            return None
+        return (
+            value.tz_localize("UTC") if value.tz is None else value.tz_convert("UTC")
+        ).isoformat()
+
+    @field_serializer("filter_contains")
+    def _serialize_times(self, values: list[Timestamp] | None) -> list[str] | None:
+        if values is None:
+            return None
+        return [
+            (
+                value.tz_localize("UTC")
+                if value.tz is None
+                else value.tz_convert("UTC")
+            ).isoformat()
+            for value in values
+        ]
+
+
 class SourceFileStatus(Enum):
     Processing = auto()
     DownloadFailed = auto()
@@ -134,6 +168,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     # integer slice along append_dim
     region: Annotated[slice, AfterValidator(region_slice)]
     reference_time: Timestamp | None = None
+    launch_scope: LaunchScope | None = None
     reformat_job_name: str
 
     # Limit the number of variables processed in each job if set.
@@ -323,6 +358,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
         reference_time: Timestamp | None = None,
+        append_dim_end: Timestamp | None = None,
     ) -> Sequence[Self]:
         """
         Return a sequence of RegionJob instances to process.
@@ -356,6 +392,9 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         filter_variable_names : list[str] | None, default None
             Keep only the specified variables, matched by bare name or by var.path
             (a bare name selects that var in every group). If None, all are included.
+
+        append_dim_end : Timestamp | None, default None
+            Resolved exclusive launch extent, retained with the filters for provenance.
 
         Returns
         -------
@@ -452,6 +491,13 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                     if i in shard_indices
                 ]
 
+        launch_scope = LaunchScope(
+            append_dim_end=append_dim_end,
+            filter_start=filter_start,
+            filter_end=filter_end,
+            filter_contains=filter_contains,
+            filter_variable_names=filter_variable_names,
+        )
         all_jobs = [
             cls(
                 tmp_store=tmp_store,
@@ -461,6 +507,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
                 region=region,
                 reformat_job_name=reformat_job_name,
                 reference_time=reference_time,
+                launch_scope=launch_scope,
             )
             for region in regions
             for data_var_group in data_var_groups

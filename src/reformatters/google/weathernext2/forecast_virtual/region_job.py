@@ -107,6 +107,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
+    requires_scan_provenance: ClassVar[bool] = False
     source_layout: ClassVar[SourceLayout]
     publication_cutoff: Timestamp = pd.Timestamp.max
 
@@ -123,6 +124,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
         reference_time: Timestamp | None = None,
+        append_dim_end: Timestamp | None = None,
     ) -> Sequence[Self]:
         jobs = super().get_jobs(
             tmp_store=tmp_store,
@@ -135,6 +137,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
             reference_time=reference_time,
+            append_dim_end=append_dim_end,
         )
         if cls.source_layout == "historical":
             return jobs
