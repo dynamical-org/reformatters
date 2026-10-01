@@ -23,14 +23,7 @@ from reformatters.common.template_config import (
     SPATIAL_REF_COORDS,
     TemplateConfig,
 )
-from reformatters.common.types import (
-    AppendDim,
-    DatetimeLike,
-    Dim,
-    Dims,
-    Timedelta,
-    Timestamp,
-)
+from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
@@ -57,19 +50,6 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
     # the correct number of longitude values (1440), and the majority of the variables we are interested in are available.
     append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
-
-    def append_dim_coordinate_chunk_size(self) -> int:
-        return 5840
-
-    def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
-        template = super().get_template(end_time)
-        template.attrs["time_domain"] = self.dataset_attributes.time_domain
-        for name in ("init_time", "valid_time"):
-            template[name].attrs["statistics_approximate"] = {
-                "min": self.append_dim_start.isoformat(),
-                "max": "Present",
-            }
-        return template
 
     @computed_field
     @property
