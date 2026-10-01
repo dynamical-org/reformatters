@@ -104,7 +104,7 @@ def register_commands(
                     "-o",
                     "json",
                 ],
-                capture_output=True,
+                stdout=subprocess.PIPE,
                 text=True,
                 check=True,
             )
