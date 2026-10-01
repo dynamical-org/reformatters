@@ -384,9 +384,14 @@ def test_update_template(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(xr, "open_datatree", Mock(return_value=xr.DataTree()))
     # template_ds and tmp_store are pydantic fields, which Mock(spec=...) misses
-    mock_job0 = Mock(spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock())
-    mock_job1 = Mock(spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock())
+    mock_job0 = Mock(
+        spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock(), append_dim="time"
+    )
+    mock_job1 = Mock(
+        spec=ExampleRegionJob, template_ds=Mock(), tmp_store=Mock(), append_dim="time"
+    )
     monkeypatch.setattr(
         ExampleRegionJob,
         "get_jobs",

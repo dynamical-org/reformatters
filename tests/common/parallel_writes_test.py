@@ -1043,7 +1043,7 @@ class TestLastWorkerRetryAfterPartialFinalize:
 
 
 class TestReplicaOrdering:
-    """Replicas are written before the primary in both parallel-setup and
+    """Icechunk replicas are written before the primary in parallel setup and
     finalize, so that if a failure occurs mid-way the primary (which drives
     future work) still reflects the pre-update state.
 
@@ -1052,9 +1052,9 @@ class TestReplicaOrdering:
     commit_if_icechunk. commit_if_icechunk is separately verified to commit
     replicas first in tests/common/storage_test.py.
 
-    Finalize ordering: _finalize publishes zarr v3 stores (only ever replicas)
-    before icechunk ones, and iterates icechunk_repos(sort="primary-last") for
-    the per-repo commit + reset. The tests below observe both end-to-end.
+    Finalize ordering: Icechunk repositories commit and reset in primary-last
+    order; plain-Zarr metadata follows successful primary publication.
+    The tests below observe both end-to-end.
     Ordering under a partial failure between replica and primary resets is
     additionally verified by TestLastWorkerRetryAfterPartialFinalize."""
 
@@ -1147,12 +1147,11 @@ class TestReplicaOrdering:
 
         assert reset_order == ["replica-0", "replica-1", "primary"]
 
-    def test_finalize_publishes_zarr3_replica_before_icechunk_primary(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize("advance_after_cas", [False, True])
+    def test_finalize_publishes_zarr3_replica_after_icechunk_primary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, advance_after_cas: bool
     ) -> None:
-        """Zarr v3 stores are published in a separate pass from icechunk stores,
-        and that pass runs first: a zarr v3 replica of an icechunk primary is
-        published before the primary's main branch advances."""
+        """Replica metadata is published only after the primary CAS succeeds."""
         monkeypatch.setattr(
             storage_module,
             "_get_store_path",
@@ -1194,6 +1193,21 @@ class TestReplicaOrdering:
 
         monkeypatch.setattr(pc_module, "copy_zarr_metadata", recording_copy)
 
+        original_publish = pc_module._publish_icechunk
+
+        def publish_then_advance(*args: object, **kwargs: object) -> str | None:
+            snapshot = original_publish(*args, **kwargs)  # ty: ignore[invalid-argument-type]
+            if advance_after_cas:
+                repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
+                session = repo.writable_session("main")
+                xr.Dataset(attrs={"concurrent_publication": True}).to_zarr(
+                    session.store, mode="a", consolidated=False
+                )
+                session.commit("concurrent publisher")
+            return snapshot
+
+        monkeypatch.setattr(pc_module, "_publish_icechunk", publish_then_advance)
+
         all_jobs = ParallelRegionJob.get_jobs(
             tmp_store=dataset._tmp_store(),
             template_ds=template_ds,
@@ -1201,6 +1215,17 @@ class TestReplicaOrdering:
             all_data_vars=ParallelTemplateConfig().data_vars,
             reformat_job_name="test",
         )
+        if advance_after_cas:
+            with pytest.raises(AssertionError, match="Primary advanced"):
+                _run_workers(
+                    dataset,
+                    all_jobs,
+                    template_ds,
+                    workers_total=1,
+                    update_template_with_results=True,
+                )
+            assert publish_order == ["icechunk-primary"]
+            return
         _run_workers(
             dataset,
             all_jobs,
@@ -1209,7 +1234,7 @@ class TestReplicaOrdering:
             update_template_with_results=True,
         )
 
-        assert publish_order == ["zarr3-replica", "icechunk-primary"]
+        assert publish_order == ["icechunk-primary", "zarr3-replica"]
 
 
 class TestConcurrentJobs:
