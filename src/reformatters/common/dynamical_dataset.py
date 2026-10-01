@@ -1,4 +1,3 @@
-import hashlib
 import inspect
 import json
 import subprocess
@@ -15,7 +14,6 @@ import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
-from zarr.abc.store import Store
 
 from reformatters.common import (
     parallel_coordination,
@@ -39,7 +37,6 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.replica_mirror import mirror_published, retry_mirror
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -66,7 +63,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
-    replica_handoff: bool = False
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -138,7 +134,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         return StoreFactory(
             primary_storage_config=self.primary_storage_config,
             replica_storage_configs=self.replica_storage_configs,
-            replica_handoff=self.replica_handoff,
             dataset_id=self.dataset_id,
             template_config_version=self.template_config.version,
             icechunk_virtual_config=self.icechunk_virtual_config,
@@ -165,58 +160,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             send_result=is_last,
         ):
             tmp_store = self._tmp_store()
-            if self.replica_handoff:
-                assert self.store_factory.replica_mode() != "pending", (
-                    "Replica handoff pending; writers must drain"
-                )
-            pinned_setup = None
-            pinned_store = None
-            pinned_config = None
-            if (
-                not issubclass(self.region_job_class, VirtualRegionJob)
-                and self.primary_storage_config.format == DatasetFormat.ICECHUNK
-            ):
-                identity = hashlib.sha256(
-                    self.template_config.model_dump_json(
-                        exclude_computed_fields=True
-                    ).encode()
-                )
-                for path in sorted(
-                    self.template_config.template_path().rglob("zarr.json")
-                ):
-                    identity.update(
-                        str(
-                            path.relative_to(self.template_config.template_path())
-                        ).encode()
-                    )
-                    identity.update(path.read_bytes())
-                pinned_setup = parallel_coordination.pin_operational_update(
-                    self.store_factory,
-                    is_first=is_first,
-                    reformat_job_name=reformat_job_name,
-                    append_dim=self.template_config.append_dim,
-                    template_identity=identity.hexdigest(),
-                )
-                primary = dict(self.store_factory.icechunk_repos(sort="primary-first"))[
-                    "primary"
-                ]
-                pinned_store = primary.readonly_session(
-                    snapshot_id=pinned_setup["repo_snapshots"]["primary"]
-                ).store
-                pinned_config = self._template_config_for_origin(
-                    pd.Timestamp(pinned_setup["origin"])
-                )
-                completed = self.store_factory.read_coordination_file(
-                    reformat_job_name, "publication/complete.json"
-                )
-                if completed is not None:
-                    self._mirror_published(json.loads(completed)["snapshot"])
-                    return
+
             all_jobs, template_ds = self._operational_update_jobs(
-                reformat_job_name,
-                tmp_store,
-                primary_store=pinned_store,
-                template_config=pinned_config,
+                reformat_job_name, tmp_store
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
@@ -235,7 +181,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     template_ds=template_ds,
                     tmp_store=tmp_store,
                     update_template_with_results=True,
-                    pinned_setup=pinned_setup,
                 )
 
         log.info(
@@ -475,7 +420,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         update_template_with_results: bool,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
-        pinned_setup: parallel_coordination.SetupInfo | None = None,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
@@ -508,21 +452,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # (structural drift, trimming, or unrequested new arrays / expansion).
         overwrite = overwrite_chunks or overwrite_metadata
         if is_first and update_template_with_results:
-            if pinned_setup is None:
-                self._assert_no_structural_drift(template_ds)
-            else:
-                primary = dict(icechunk_repos)["primary"]
-                with xr.open_datatree(
-                    primary.readonly_session(
-                        snapshot_id=pinned_setup["repo_snapshots"]["primary"]
-                    ).store,  # ty: ignore[invalid-argument-type]
-                    engine="zarr",
-                    chunks=None,
-                    decode_timedelta=True,
-                ) as existing:
-                    template_utils.assert_no_structural_drift_from_existing_store(
-                        template_ds, existing, self.template_config.append_dim
-                    )
+            self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
             template_utils.assert_safe_overwrite(
                 template_ds,
@@ -551,17 +481,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
-            pinned_setup=pinned_setup,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
         # lifecycle and commit cadence behind this one call.
-        already_published = (
-            pinned_setup is not None
-            and parallel_coordination.recover_primary_publication(
-                self.store_factory, reformat_job_name, pinned_setup
-            )
-        )
         worker_results: dict[str, list[SourceFileResult]] = (
             self.region_job_class.process_worker_jobs(
                 worker_jobs,
@@ -571,12 +494,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 overwrite_chunks=overwrite_chunks
                 or self.region_job_class.rewrites_whole_region,
             )
-            if worker_jobs and not already_published
+            if worker_jobs
             else {}
         )
 
         # 3. Write results and finalize
-        if (workers_total > 1 or pinned_setup is not None) and not already_published:
+        if workers_total > 1:
             self.store_factory.write_coordination_file(
                 reformat_job_name,
                 f"results/worker-{worker_index}.json",
@@ -585,7 +508,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
         if is_last:
             if update_template_with_results:
-                if workers_total > 1 or pinned_setup is not None:
+                if workers_total > 1:
                     merged_results = parallel_coordination.collect_results(
                         self.store_factory, reformat_job_name, workers_total
                     )
@@ -596,7 +519,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     self.store_factory, reformat_job_name, workers_total
                 )
                 merged_results = {}
-            published_snapshot = parallel_coordination.finalize(
+            parallel_coordination.finalize(
                 self.store_factory,
                 all_jobs=all_jobs,
                 merged_results=merged_results,
@@ -611,17 +534,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 publish_zarr3_metadata=update_template_with_results or overwrite,
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
-            if published_snapshot is not None:
-                self._mirror_published(published_snapshot)
-
-    def _mirror_published(self, snapshot: str) -> None:
-        if self.replica_handoff and self.store_factory.replica_mode() == "active":
-            mirror_published(self.store_factory, snapshot)
-
-    def mirror_replica(self) -> None:
-        """Finish a pending mirror and catch up to a pinned published snapshot."""
-        assert self.replica_handoff, "This dataset has no independent replica mirror"
-        retry_mirror(self.store_factory)
 
     def _run_virtual_operational_update(
         self,
@@ -694,10 +606,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
             replica_validators = [
                 *validators,
-                validation.CheckReplicaTimestampIntersection()
-                if self.replica_handoff
-                and self.store_factory.replica_mode() == "active"
-                else validation.CheckReplicaMatchesPrimary(),
+                validation.CheckReplicaMatchesPrimary(),
             ]
             primary_ds = validation.open_flattened_dataset(
                 primary_store,
@@ -717,12 +626,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 log.info(f"Done validating {replica_store}")
 
     def _operational_update_jobs(
-        self,
-        reformat_job_name: str,
-        tmp_store: Path,
-        *,
-        primary_store: Store | None = None,
-        template_config: TemplateConfig[DATA_VAR] | None = None,
+        self, reformat_job_name: str, tmp_store: Path
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """The jobs an operational update runs, and the template they write against."""
         operational_update_jobs = self.region_job_class.operational_update_jobs
@@ -733,26 +637,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             ).previous_fire_time(pd.Timestamp.now())
 
         return operational_update_jobs(
-            primary_store=primary_store
-            if primary_store is not None
-            else self.store_factory.primary_store(),
+            primary_store=self.store_factory.primary_store(),
             tmp_store=tmp_store,
-            get_template_fn=self._get_template
-            if template_config is None or template_config is self.template_config
-            else template_config.get_template,
+            get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
             **fire_time_kwarg,
         )
-
-    def _template_config_for_origin(
-        self, origin: pd.Timestamp
-    ) -> TemplateConfig[DATA_VAR]:
-        assert origin == self.template_config.append_dim_start, (
-            "Unapproved published origin"
-        )
-        return self.template_config
 
     def _virtual_validation_region_job(
         self,
@@ -812,8 +704,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         app.command()(self.backfill_local)
         app.command()(self.backfill)
         app.command()(self.dataset_urls)
-        if self.replica_handoff:
-            app.command()(self.mirror_replica)
         # Avoid method name conflict with pydantic's validate while keeping cli commands consistent
         app.command("validate")(self.validate_dataset)
         return app

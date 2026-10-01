@@ -62,7 +62,3 @@ Parallelism beyond what the cluster can schedule starves it: operational update 
 ## Concurrency with operational updates
 
 An operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
-
-## ENS published-origin safety
-
-ENS operational updates use the origin pinned from the published snapshot; only April 2024 is approved by default. An earlier origin requires an explicitly reviewed `approved_origins` change and verified replica handoff. This does not implement historical prepend or authorize changing the existing store origin. Ordinary deployment retains direct replica writes. The [ENS mirror runbook](ens_replica_mirror.md) describes the later operator gates, including default-zero verification budgets. Never use an ordinary backfill to shift existing positional keys.

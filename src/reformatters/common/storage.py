@@ -1,8 +1,5 @@
 import contextlib
 import functools
-import json
-import os
-import tempfile
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
@@ -17,7 +14,6 @@ import xarray as xr
 import zarr
 import zarr.abc.store
 import zarr.storage
-from fsspec.implementations.local import LocalFileSystem
 from icechunk.store import IcechunkStore
 from pydantic import Field, InstanceOf, computed_field
 from zarr.abc.store import Store
@@ -63,7 +59,6 @@ class StoreFactory(FrozenBaseModel):
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     dataset_id: str
     template_config_version: str
-    replica_handoff: bool = False
     icechunk_virtual_config: IcechunkVirtualConfig | None = (
         None  # None for materialized datasets
     )
@@ -99,10 +94,6 @@ class StoreFactory(FrozenBaseModel):
         ]
 
     def primary_store(self, writable: bool = False, branch: str = "main") -> Store:
-        if writable and self.replica_handoff:
-            assert self.replica_mode() != "pending", (
-                "Replica handoff pending; writers must drain"
-            )
         store_path = _get_store_path(
             self.dataset_id,
             self.version,
@@ -127,19 +118,11 @@ class StoreFactory(FrozenBaseModel):
         )
 
     def replica_stores(
-        self, writable: bool = False, branch: str = "main", *, mirror: bool = False
+        self, writable: bool = False, branch: str = "main"
     ) -> list[Store]:
         # Disable replica stores in dev environment
         if Config.is_dev:
             return []
-
-        if writable and self.replica_handoff:
-            mode = self.replica_mode()
-            assert mode != "pending", "Replica handoff pending; writers must drain"
-            if mirror:
-                assert mode == "active", "Mirror requires verified handoff"
-            elif mode == "active":
-                return []
 
         stores = []
         for config in self.replica_storage_configs:
@@ -150,26 +133,6 @@ class StoreFactory(FrozenBaseModel):
             stores.append(store)
 
         return stores
-
-    def replica_mode(self) -> str:
-        if not self.replica_handoff:
-            return "direct"
-        state = self.read_coordination_file("replica-mirror", "state.json")
-        if state is None:
-            return "direct"
-        record = json.loads(state)
-        assert record["mode"] in {"pending", "active"}, "Invalid replica handoff state"
-        if record["mode"] == "active":
-            assert all(record[key] for key in ("snapshot", "evidence", "handoff_id"))
-            assert record["replica_urls"] == self.replica_urls(), (
-                "Replica identity changed"
-            )
-        return record["mode"]
-
-    def assert_direct_replica_writes(self) -> None:
-        assert self.replica_mode() == "direct", (
-            "Direct replica writes blocked by handoff marker"
-        )
 
     def mode(self) -> Literal["w", "w-"]:
         return "w" if self.version == "dev" else "w-"
@@ -314,48 +277,12 @@ class StoreFactory(FrozenBaseModel):
         return fsspec.filesystem(protocol, **storage_options)
 
     def write_coordination_file(self, job_name: str, key: str, data: bytes) -> None:
-        self._write_coordination_file(job_name, key, data, exclusive=False)
-
-    def create_coordination_file(self, job_name: str, key: str, data: bytes) -> None:
-        self._write_coordination_file(job_name, key, data, exclusive=True)
-
-    def _write_coordination_file(
-        self, job_name: str, key: str, data: bytes, *, exclusive: bool
-    ) -> None:
         base = self._coordination_base_path()
         path = f"{base}/{job_name}/{key}"
         parent = path.rsplit("/", 1)[0]
         fs = self._coordination_fs()
         fs.mkdirs(parent, exist_ok=True)
-        if isinstance(fs, LocalFileSystem):
-            with tempfile.NamedTemporaryFile(dir=parent, delete=False) as file:
-                temporary = Path(file.name)
-                file.write(data)
-                file.flush()
-                os.fsync(file.fileno())
-            try:
-                if exclusive:
-                    os.link(temporary, path)
-                else:
-                    temporary.replace(path)
-            finally:
-                temporary.unlink(missing_ok=True)
-        elif fs.protocol in (("s3", "s3a"), "s3"):
-            with fs.open(path, "xb" if exclusive else "wb") as file:
-                file.write(data)
-        else:
-            assert not exclusive, "Atomic coordination requires local or S3 storage"
-            fs.pipe_file(path, data)
-
-    def read_coordination_file(self, job_name: str, key: str) -> bytes | None:
-        path = f"{self._coordination_base_path()}/{job_name}/{key}"
-        try:
-            return self._coordination_fs().cat_file(path)
-        except FileNotFoundError:
-            return None
-
-    def delete_coordination_file(self, job_name: str, key: str) -> None:
-        self._coordination_fs().rm(f"{self._coordination_base_path()}/{job_name}/{key}")
+        fs.pipe_file(path, data)
 
     def read_all_coordination_files(self, job_name: str, prefix: str) -> list[bytes]:
         base = f"{self._coordination_base_path()}/{job_name}/{prefix}"
