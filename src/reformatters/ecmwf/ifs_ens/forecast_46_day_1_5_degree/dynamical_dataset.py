@@ -29,7 +29,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
         workers = self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-daily-update",
-            schedule="0 9 * * *",
+            schedule="0 5,6,7,8,9 * * *",
             suspend=False,
             pod_active_deadline=timedelta(hours=3),
             image=image_tag,

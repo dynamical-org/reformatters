@@ -17,6 +17,7 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 import rasterio
+import requests
 import xarray as xr
 from rasterio.env import Env
 from zarr.abc.store import Store
@@ -32,6 +33,7 @@ from reformatters.common.region_job import (
     InitLeadSourceFileCoord,
     RegionJob,
 )
+from reformatters.common.retry import retry
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     AppendDim,
@@ -39,11 +41,13 @@ from reformatters.common.types import (
     DatetimeLike,
     Dim,
     Timedelta,
+    Timestamp,
 )
 from reformatters.ecmwf.archive_gribs.archive import format_init_time
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     ARCHIVE_BASE_URL,
     ECDS_VARIABLES,
+    INIT_FREQUENCY,
 )
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     INDEX_SUFFIX,
@@ -276,13 +280,25 @@ class EcmwfIfsEns46DayRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[EcmwfIfsEns46DayDataVar],
         reformat_job_name: str,
+        job_fire_time: Timestamp | None = None,
     ) -> tuple[
         Sequence[RegionJob[EcmwfIfsEns46DayDataVar, EcmwfIfsEns46DaySourceFileCoord]],
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
-        append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
+        # The archive fills an initialization blob by blob over an hour or more. A
+        # template that ran to `now` would let an update fired mid-transfer write the
+        # blobs present and NaN for the rest, and expose that until the next update
+        # rewrote the shard. The template extends only across initializations whose
+        # archive was complete before this fire, judged by each object's
+        # Last-Modified so every worker of the fire selects the same range, and no
+        # further than the first incomplete one, so a gap is never skipped over.
+        newest_complete = newest_complete_archived_initialization(
+            after=append_dim_start,
+            complete_before=pd.Timestamp(job_fire_time or pd.Timestamp.now()),
+        )
+        append_dim_end = (newest_complete or append_dim_start) + INIT_FREQUENCY
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -294,6 +310,85 @@ class EcmwfIfsEns46DayRegionJob(
             filter_start=append_dim_start,
         )
         return jobs, template_ds
+
+
+def archived_initialization_is_complete(
+    init_time: pd.Timestamp,
+    *,
+    complete_before: pd.Timestamp,
+    object_modified_at: Callable[[str], pd.Timestamp | None] | None = None,
+) -> bool:
+    """Whether every blob of `init_time`, and each blob's index, landed in the archive
+    before `complete_before`.
+
+    The archiver uploads a validated blob after its index, one selection at a time,
+    and never rewrites an object in place, so presence of all of them is the
+    completeness signal; there is no marker object. This is an object-presence
+    check (existence and a nonzero size), not a content check. Judging presence by
+    each object's Last-Modified against one cutoff lets every worker of one update
+    fire agree on the same initializations even while a later blob is landing.
+    """
+    object_modified_at = object_modified_at or _object_modified_at
+    for selection in initialization_selections(ECDS_VARIABLES):
+        url = f"{ARCHIVE_BASE_URL}/{format_init_time(init_time)}/{selection.file_name}"
+        for object_url in (url + INDEX_SUFFIX, url):
+            modified_at = object_modified_at(object_url)
+            # Last-Modified has second precision: an object written within the
+            # cutoff's second is treated as after it, so workers of the same fire
+            # probing on either side of that write still agree.
+            if modified_at is None or modified_at >= complete_before:
+                return False
+    return True
+
+
+def newest_complete_archived_initialization(
+    *,
+    after: pd.Timestamp,
+    complete_before: pd.Timestamp,
+    object_modified_at: Callable[[str], pd.Timestamp | None] | None = None,
+) -> pd.Timestamp | None:
+    """The last of the contiguous run of initializations after `after` whose archive
+    was complete before `complete_before`; None when the first one is not.
+
+    Walks forward and stops at the first incomplete initialization, so a template
+    never extends across a still-transferring or failed day to a later complete
+    one, which would write the earlier day partially. A normal day costs one or two
+    initializations' probes.
+    """
+    newest: pd.Timestamp | None = None
+    init_time = after + INIT_FREQUENCY
+    while init_time < complete_before:
+        if not archived_initialization_is_complete(
+            init_time,
+            complete_before=complete_before,
+            object_modified_at=object_modified_at,
+        ):
+            break
+        newest = init_time
+        init_time += INIT_FREQUENCY
+    return newest
+
+
+def _object_modified_at(url: str) -> pd.Timestamp | None:
+    """When the archived object at `url` was written, or None if it is absent or empty."""
+
+    def head() -> pd.Timestamp | None:
+        response = requests.head(url, timeout=30, allow_redirects=True)
+        if response.status_code == requests.codes.not_found:
+            return None
+        response.raise_for_status()
+        if int(response.headers.get("Content-Length", "0")) == 0:
+            return None
+        # Naive UTC, like the cron fire time it is compared against.
+        return (
+            pd.Timestamp(response.headers["Last-Modified"])
+            .tz_convert("UTC")
+            .tz_localize(None)
+        )
+
+    return retry(
+        head, max_attempts=3, retryable_exceptions=(requests.RequestException,)
+    )
 
 
 def _deaccumulate_signed_inplace(data_array: xr.DataArray) -> None:
