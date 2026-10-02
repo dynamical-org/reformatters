@@ -1,10 +1,13 @@
 import json
+from collections.abc import Iterator
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, call
 
 import pytest
 import requests
+from requests.adapters import BaseAdapter
 
 from reformatters.ecmwf.archive_gribs import ecds_client
 from reformatters.ecmwf.archive_gribs.ecds_client import (
@@ -32,14 +35,70 @@ def response(body: dict[str, Any], status_code: int = 200) -> Mock:
     result.json.return_value = body
     result.status_code = status_code
     result.headers = {}
+    result.url = None
     result.raise_for_status.return_value = None
     return result
 
 
 def session_mock() -> Mock:
     session = Mock()
-    session.headers = {"PRIVATE-TOKEN": "test-token"}
+    session.headers = {"PRIVATE-TOKEN": "marker-a"}
     return session
+
+
+class OfflineAdapter(BaseAdapter):
+    def __init__(self) -> None:
+        self.responses: list[requests.Response] = []
+        self.sent: list[requests.PreparedRequest] = []
+
+    def send(
+        self, request: requests.PreparedRequest, *_args: object, **_kwargs: object
+    ) -> requests.Response:
+        self.sent.append(request.copy())
+        assert self.responses, "Unexpected offline request"
+        result = self.responses.pop(0)
+        assert request.url is not None
+        result.url = request.url
+        result.request = request
+        return result
+
+    def close(self) -> None:
+        pass
+
+
+def wire_response(
+    body: dict[str, Any] | bytes = b"",
+    status_code: int = 200,
+    location: str | None = None,
+) -> requests.Response:
+    result = requests.Response()
+    result.status_code = status_code
+    result.raw = BytesIO(json.dumps(body).encode() if isinstance(body, dict) else body)
+    if location is not None:
+        result.headers["Location"] = location
+    return result
+
+
+@pytest.fixture
+def offline_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[EcdsRequest, OfflineAdapter, OfflineAdapter]:
+    monkeypatch.setenv("ECDS_API_KEY", "marker-a")
+    monkeypatch.setattr(
+        requests.sessions,
+        "get_netrc_auth",
+        Mock(return_value=None),
+    )
+    request = EcdsRequest(
+        StateStore(tmp_path / "state.json"), api_url="https://api.test/api"
+    )
+    request.session.trust_env = False
+    api_adapter = OfflineAdapter()
+    download_adapter = OfflineAdapter()
+    for scheme in ("https://", "http://"):
+        request.session.mount(scheme, api_adapter)
+        request.download_session.mount(scheme, download_adapter)
+    return request, api_adapter, download_adapter
 
 
 class FakeClock:
@@ -75,9 +134,7 @@ def test_endpoint_and_token_come_from_cdsapirc(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_path = tmp_path / ".cdsapirc"
-    config_path.write_text(
-        "url: https://example.test/api\nkey: personal-access-token\n"
-    )
+    config_path.write_text("url: https://example.test/api\nkey: marker-b\n")
     monkeypatch.setenv("CDSAPI_RC", str(config_path))
 
     request = EcdsRequest(StateStore(tmp_path / "state.json"))
@@ -85,7 +142,7 @@ def test_endpoint_and_token_come_from_cdsapirc(
     assert request.execution_url == (
         "https://example.test/api/retrieve/v1/processes/s2s-forecasts/execution"
     )
-    assert request.session.headers["PRIVATE-TOKEN"] == "personal-access-token"
+    assert request.session.headers["PRIVATE-TOKEN"] == "marker-b"
     assert "Authorization" not in request.session.headers
 
 
@@ -93,15 +150,15 @@ def test_environment_overrides_cdsapirc(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config_path = tmp_path / ".cdsapirc"
-    config_path.write_text("url: https://from-file.test/api\nkey: file-token\n")
+    config_path.write_text("url: https://from-file.test/api\nkey: marker-c\n")
     monkeypatch.setenv("CDSAPI_RC", str(config_path))
     monkeypatch.setenv("ECDS_API_ENDPOINT", "https://from-env.test/api/")
-    monkeypatch.setenv("ECDS_API_KEY", "env-token")
+    monkeypatch.setenv("ECDS_API_KEY", "marker-d")
 
     request = EcdsRequest(StateStore(tmp_path / "state.json"))
 
     assert request.execution_url.startswith("https://from-env.test/api/")
-    assert request.session.headers["PRIVATE-TOKEN"] == "env-token"
+    assert request.session.headers["PRIVATE-TOKEN"] == "marker-d"
 
 
 def test_submitting_without_credentials_raises(tmp_path: Path) -> None:
@@ -123,7 +180,7 @@ def test_state_is_written_atomically(tmp_path: Path) -> None:
 
 def test_a_submitted_request_can_be_polled_by_another_process(tmp_path: Path) -> None:
     submit_response = response({"jobID": "job-1"})
-    submit_response.headers = {"Location": "https://example.test/jobs/job-1"}
+    submit_response.headers = {"Location": "https://ecds.ecmwf.int/jobs/job-1"}
     submitting_session = session_mock()
     submitting_session.post.return_value = submit_response
     state_store = StateStore(tmp_path / "state.json")
@@ -143,9 +200,11 @@ def test_a_submitted_request_can_be_polled_by_another_process(tmp_path: Path) ->
     assert result_url == "https://example.test/blob"
     assert state_store.read().result_url == "https://example.test/blob"
     assert resumed_session.get.call_args_list[0].args == (
-        "https://example.test/jobs/job-1",
+        "https://ecds.ecmwf.int/jobs/job-1",
     )
-    assert resumed_session.get.call_args_list[1].args == ("results",)
+    assert resumed_session.get.call_args_list[1].args == (
+        "https://ecds.ecmwf.int/jobs/results",
+    )
 
 
 def test_a_failed_poll_records_the_results_error(tmp_path: Path) -> None:
@@ -259,7 +318,9 @@ def test_download_uses_the_result_url_saved_by_poll(tmp_path: Path) -> None:
     session = session_mock()
     session.get.return_value = download_response
 
-    state = EcdsRequest(state_store, session=session).download(tmp_path / "blob.grib2")
+    state = EcdsRequest(state_store, download_session=session).download(
+        tmp_path / "blob.grib2"
+    )
 
     assert (tmp_path / "blob.grib2").read_bytes() == message
     assert state.downloaded_bytes == len(message)
@@ -269,7 +330,9 @@ def test_download_uses_the_result_url_saved_by_poll(tmp_path: Path) -> None:
 
 def test_download_resumes_a_partial_file_after_http_206(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "state.json")
-    state_store.write(RequestState("id", {}, "now", "status", result_url="result"))
+    state_store.write(
+        RequestState("id", {}, "now", "status", result_url="https://example.test/blob")
+    )
     target = tmp_path / "blob.grib2"
     message = grib_message()
     target.with_suffix(".grib2.partial").write_bytes(message[:4])
@@ -278,7 +341,7 @@ def test_download_resumes_a_partial_file_after_http_206(tmp_path: Path) -> None:
     session = session_mock()
     session.get.return_value = download_response
 
-    EcdsRequest(state_store, session=session).download(target)
+    EcdsRequest(state_store, download_session=session).download(target)
 
     assert target.read_bytes() == message
     assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=4-"}
@@ -286,7 +349,9 @@ def test_download_resumes_a_partial_file_after_http_206(tmp_path: Path) -> None:
 
 def test_download_restarts_a_partial_file_after_http_200(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "state.json")
-    state_store.write(RequestState("id", {}, "now", "status", result_url="result"))
+    state_store.write(
+        RequestState("id", {}, "now", "status", result_url="https://example.test/blob")
+    )
     target = tmp_path / "blob.grib2"
     message = grib_message()
     target.with_suffix(".grib2.partial").write_bytes(b"stale bytes")
@@ -295,7 +360,7 @@ def test_download_restarts_a_partial_file_after_http_200(tmp_path: Path) -> None
     session = session_mock()
     session.get.return_value = download_response
 
-    EcdsRequest(state_store, session=session).download(target)
+    EcdsRequest(state_store, download_session=session).download(target)
 
     assert target.read_bytes() == message
     assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=11-"}
@@ -304,7 +369,9 @@ def test_download_restarts_a_partial_file_after_http_200(tmp_path: Path) -> None
 def test_download_refetches_the_whole_blob_after_http_416(tmp_path: Path) -> None:
     """A partial file longer than the result makes the ranged request unsatisfiable."""
     state_store = StateStore(tmp_path / "state.json")
-    state_store.write(RequestState("id", {}, "now", "status", result_url="result"))
+    state_store.write(
+        RequestState("id", {}, "now", "status", result_url="https://example.test/blob")
+    )
     target = tmp_path / "blob.grib2"
     message = grib_message()
     target.with_suffix(".grib2.partial").write_bytes(b"stale bytes")
@@ -319,7 +386,7 @@ def test_download_refetches_the_whole_blob_after_http_416(tmp_path: Path) -> Non
     session = session_mock()
     session.get.side_effect = [range_response, full_response]
 
-    EcdsRequest(state_store, session=session).download(target)
+    EcdsRequest(state_store, download_session=session).download(target)
 
     assert target.read_bytes() == message
     range_call, full_call = session.get.call_args_list
@@ -330,14 +397,18 @@ def test_download_refetches_the_whole_blob_after_http_416(tmp_path: Path) -> Non
 
 def test_download_rejects_a_truncated_blob(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "state.json")
-    state_store.write(RequestState("id", {}, "now", "status", result_url="result"))
+    state_store.write(
+        RequestState("id", {}, "now", "status", result_url="https://example.test/blob")
+    )
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()[:-4]]
     session = session_mock()
     session.get.return_value = download_response
 
     with pytest.raises(AssertionError, match="Truncated message"):
-        EcdsRequest(state_store, session=session).download(tmp_path / "blob.grib2")
+        EcdsRequest(state_store, download_session=session).download(
+            tmp_path / "blob.grib2"
+        )
 
     assert not (tmp_path / "blob.grib2").exists()
 
@@ -352,14 +423,16 @@ def test_retrieve_resumes_an_in_flight_request_without_resubmitting(
     download_response = response({})
     download_response.iter_content.return_value = [message]
     session = session_mock()
+    download_session = Mock(headers={})
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
-        payload, tmp_path / "blob.grib2", poll_seconds=0
-    )
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, tmp_path / "blob.grib2", poll_seconds=0)
 
     session.post.assert_not_called()
     assert (tmp_path / "blob.grib2").read_bytes() == message
@@ -414,12 +487,16 @@ def test_retrieve_downloads_again_when_the_archived_blob_does_not_match(
     download_response = response({})
     download_response.iter_content.return_value = [message, message]
     session = session_mock()
+    download_session = Mock(headers={})
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(payload, target, poll_seconds=0)
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, target, poll_seconds=0)
 
     session.post.assert_not_called()
     assert state_store.read().grib_messages == 2
@@ -431,17 +508,19 @@ def test_retrieve_resubmits_after_a_terminal_failure(tmp_path: Path) -> None:
     state_store.write(RequestState("job-1", payload, "now", "status", status="failed"))
     submit_response = response({"jobID": "job-2"})
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.return_value = submit_response
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()]
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
-        payload, tmp_path / "blob.grib2", poll_seconds=0
-    )
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, tmp_path / "blob.grib2", poll_seconds=0)
 
     session.post.assert_called_once()
     assert state_store.read().request_id == "job-2"
@@ -453,6 +532,7 @@ def test_retrieve_submits_a_failed_job_again_after_a_wait(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.side_effect = [
         response({"jobID": "job-1"}),
         response({"jobID": "job-2"}),
@@ -462,10 +542,13 @@ def test_retrieve_submits_a_failed_job_again_after_a_wait(
     session.get.side_effect = [
         response({"status": "failed"}),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(
         payload, tmp_path / "blob.grib2", poll_seconds=0, resubmit_wait_seconds=60
     )
 
@@ -548,6 +631,7 @@ def test_a_job_whose_results_are_gone_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, "now", "status"))
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()]
@@ -557,10 +641,13 @@ def test_a_job_whose_results_are_gone_is_submitted_again(
         ),
         response({"title": "Not Found"}, status_code=404),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(
         payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
     )
 
@@ -577,16 +664,20 @@ def test_a_job_ecds_no_longer_knows_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, "now", "status"))
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()]
     session.get.side_effect = [
         response({"title": "Not Found"}, status_code=404),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(
         payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
     )
 
@@ -614,6 +705,7 @@ def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.side_effect = [
         response({"jobID": "job-1"}),
         response({"jobID": "job-2"}),
@@ -623,12 +715,13 @@ def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
     running = response({"status": "running"})
     session.get.side_effect = [running] * 240 + [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(
-        payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=240
-    )
+    download_session.get.return_value = download_response
+
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=240)
 
     assert clock.now >= 30 * 240
     assert session.post.call_count == 2
@@ -676,17 +769,21 @@ def test_a_replacement_job_does_not_resume_the_abandoned_jobs_partial_download(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, "now", "status", status="failed"))
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()]
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
-        download_response,
     ]
 
-    EcdsRequest(state_store, session=session).retrieve(payload, target, poll_seconds=0)
+    download_session.get.return_value = download_response
 
-    assert session.get.call_args.kwargs["headers"] == {}
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, target, poll_seconds=0)
+
+    assert download_session.get.call_args.kwargs["headers"] == {}
     assert target.read_bytes() == grib_message()
 
 
@@ -697,6 +794,7 @@ def test_a_result_that_is_gone_at_download_time_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, "now", "status"))
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
     successful = response(
         {"status": "successful", "asset": {"value": {"href": "blob"}}}
@@ -704,9 +802,12 @@ def test_a_result_that_is_gone_at_download_time_is_submitted_again(
     gone = response({}, status_code=404)
     download_response = response({})
     download_response.iter_content.return_value = [grib_message()]
-    session.get.side_effect = [successful, gone, successful, download_response]
+    session.get.side_effect = [successful, successful]
+    download_session.get.side_effect = [gone, download_response]
 
-    EcdsRequest(state_store, session=session).retrieve(
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(
         payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
     )
 
@@ -722,14 +823,18 @@ def test_a_result_that_keeps_disappearing_exhausts_the_budget(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
+    download_session = Mock(headers={})
     session.post.side_effect = [response({"jobID": f"job-{n}"}) for n in range(1, 10)]
     successful = response(
         {"status": "successful", "asset": {"value": {"href": "blob"}}}
     )
-    session.get.side_effect = [successful, response({}, status_code=404)] * 9
+    session.get.return_value = successful
+    download_session.get.return_value = response({}, status_code=404)
 
     with pytest.raises(EcdsJobFailedError, match="job-4 ended with status expired"):
-        EcdsRequest(state_store, session=session).retrieve(
+        EcdsRequest(
+            state_store, session=session, download_session=download_session
+        ).retrieve(
             payload,
             tmp_path / "blob.grib2",
             poll_seconds=0,
@@ -740,3 +845,453 @@ def test_a_result_that_keeps_disappearing_exhausts_the_budget(
     assert clock.sleeps == [10, 20, 40]
     assert state_store.read().status == "expired"
     assert not any("blob" in error for error in state_store.read().errors)
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["/jobs/next", "next", "https://API.test:443/jobs/next"],
+)
+def test_api_redirects_keep_the_token_within_the_origin(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    location: str,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    api.responses = [
+        wire_response(status_code=307, location=location),
+        wire_response({"status": "running"}),
+    ]
+
+    request.poll_once()
+
+    assert len(api.sent) == 2
+    assert all(sent.headers["PRIVATE-TOKEN"] == "marker-a" for sent in api.sent)
+    assert not downloads.sent
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "https://foreign.test/jobs/id",
+        "//foreign.test/jobs/id",
+        "https://api.test:444/jobs/id",
+        "http://api.test/jobs/id",
+        "https://marker-b@api.test/jobs/id",
+    ],
+)
+def test_api_redirects_are_blocked_before_a_foreign_or_insecure_send(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    location: str,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    api.responses = [wire_response(status_code=307, location=location)]
+
+    with pytest.raises(ValueError, match="HTTPS"):
+        request.poll_until_complete(0, 2)
+
+    assert len(api.sent) == 1
+    assert api.sent[0].url == "https://api.test/jobs/id"
+    assert api.sent[0].headers["PRIVATE-TOKEN"] == "marker-a"
+    assert request.state_store.read().poll_failures == 0
+    assert not downloads.sent
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://foreign.test/jobs/id",
+        "//foreign.test/jobs/id",
+        "https://api.test:444/jobs/id",
+        "http://api.test/jobs/id",
+        "https://marker-b@api.test/jobs/id",
+        "https://api.test:invalid/jobs/id",
+    ],
+)
+def test_persisted_status_urls_are_validated_before_sending(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    url: str,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", url))
+
+    with pytest.raises(ValueError, match="HTTPS"):
+        request.poll_once()
+
+    assert not api.sent
+    assert not downloads.sent
+
+
+@pytest.mark.parametrize("status", ["successful", "failed"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://foreign.test/results",
+        "http://api.test/results",
+        "https://api.test:444/results",
+    ],
+)
+def test_api_results_links_are_validated_for_success_and_failure(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    status: str,
+    url: str,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    api.responses = [
+        wire_response({"status": status, "links": [{"rel": "results", "href": url}]})
+    ]
+
+    with pytest.raises(ValueError, match="HTTPS"):
+        request.poll_once()
+
+    assert len(api.sent) == 1
+    assert not downloads.sent
+
+
+@pytest.mark.parametrize("in_header", [True, False])
+@pytest.mark.parametrize(
+    "location", ["/jobs/id", "jobs/id", "https://foreign.test/jobs/id"]
+)
+def test_submitted_status_locations_are_resolved_and_validated(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    in_header: bool,
+    location: str,
+) -> None:
+    request, api, downloads = offline_request
+    body = {"jobID": "id"} if in_header else {"jobID": "id", "location": location}
+    api.responses = [wire_response(body, location=location if in_header else None)]
+
+    if "foreign.test" in location:
+        with pytest.raises(ValueError, match="configured HTTPS origin"):
+            request.submit({})
+        assert not request.state_store.path.exists()
+    else:
+        state = request.submit({})
+        assert state.status_url == (
+            "https://api.test/jobs/id"
+            if location.startswith("/")
+            else "https://api.test/api/retrieve/v1/processes/s2s-forecasts/jobs/id"
+        )
+    assert len(api.sent) == 1
+    assert not downloads.sent
+
+
+def test_relative_links_follow_the_final_api_response_url(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    api.responses = [
+        wire_response(status_code=307, location="/jobs/id/status"),
+        wire_response(
+            {"status": "successful", "links": [{"rel": "results", "href": "results"}]}
+        ),
+        wire_response(status_code=307, location="/results/id/metadata"),
+        wire_response({"asset": {"value": {"href": "blob?value=marker-b"}}}),
+    ]
+    downloads.responses = [wire_response(grib_message())]
+
+    _, result_url = request.poll_once()
+    request.download(tmp_path / "blob.grib2", result_url)
+
+    assert api.sent[2].url == "https://api.test/jobs/id/results"
+    assert all(sent.headers["PRIVATE-TOKEN"] == "marker-a" for sent in api.sent)
+    assert downloads.sent[0].url == "https://api.test/results/id/blob?value=marker-b"
+    assert "PRIVATE-TOKEN" not in downloads.sent[0].headers
+
+
+@pytest.mark.parametrize("port", [443, 8443])
+def test_configured_api_ports_define_the_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, port: int
+) -> None:
+    monkeypatch.setenv("ECDS_API_KEY", "marker-a")
+    request = EcdsRequest(
+        StateStore(tmp_path / "state.json"), api_url=f"https://api.test:{port}/api"
+    )
+    request.session.trust_env = False
+    api = OfflineAdapter()
+    request.session.mount("https://", api)
+    request.state_store.write(
+        RequestState("id", {}, "now", f"https://api.test:{port}/jobs/id")
+    )
+    api.responses = [wire_response({"status": "running"})]
+
+    request.poll_once()
+
+    assert api.sent[0].headers["PRIVATE-TOKEN"] == "marker-a"
+    if port != 443:
+        request.state_store.write(
+            RequestState("id", {}, "now", "https://api.test/jobs/id")
+        )
+        with pytest.raises(ValueError, match="configured HTTPS origin"):
+            request.poll_once()
+        assert len(api.sent) == 1
+
+
+@pytest.mark.parametrize(
+    "url", ["http://api.test/api", "https://marker-b@api.test/api"]
+)
+def test_insecure_api_configuration_is_rejected(tmp_path: Path, url: str) -> None:
+    with pytest.raises(ValueError, match="HTTPS"):
+        EcdsRequest(StateStore(tmp_path / "state.json"), api_url=url)
+
+
+@pytest.mark.parametrize(
+    "result_url", ["https://api.test/blob", "https://files.test/blob?value=marker-b"]
+)
+def test_download_redirects_use_an_unauthenticated_transport(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    result_url: str,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(
+        RequestState("id", {}, "now", "/jobs/id", result_url=result_url)
+    )
+    downloads.responses = [
+        wire_response(
+            status_code=307, location="https://other.test:8443/blob?value=marker-c"
+        ),
+        wire_response(grib_message()),
+    ]
+
+    state = request.download(tmp_path / "blob.grib2")
+
+    assert state.status == "downloaded"
+    assert len(downloads.sent) == 2
+    assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
+    assert request.download_session.trust_env
+    assert not api.sent
+
+
+@pytest.mark.parametrize("redirect", [True, False])
+def test_downloads_reject_http_before_sending(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    redirect: bool,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    url = "http://files.test/blob?value=marker-b"
+    if redirect:
+        downloads.responses = [wire_response(status_code=307, location=url)]
+        url = "https://files.test/blob?value=marker-c"
+
+    with pytest.raises(ValueError, match="HTTPS") as error:
+        request.download(tmp_path / "blob.grib2", url)
+
+    assert "marker-b" not in str(error.value)
+    assert "marker-c" not in str(error.value)
+    assert len(downloads.sent) == int(redirect)
+    assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
+    assert not api.sent
+
+
+@pytest.mark.parametrize("status_code", [206, 200, 416])
+def test_download_range_recovery_uses_the_unauthenticated_session(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    status_code: int,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(
+        RequestState(
+            "id",
+            {},
+            "now",
+            "/jobs/id",
+            result_url="https://files.test/blob?value=marker-b",
+        )
+    )
+    target = tmp_path / "blob.grib2"
+    message = grib_message()
+    target.with_suffix(".grib2.partial").write_bytes(message[:4])
+    downloads.responses = [
+        wire_response(message[4:] if status_code == 206 else message, status_code)
+    ]
+    if status_code == 416:
+        downloads.responses.append(wire_response(message))
+
+    request.download(target)
+
+    assert target.read_bytes() == message
+    assert downloads.sent[0].headers["Range"] == "bytes=4-"
+    if status_code == 416:
+        assert len(downloads.sent) == 2
+        assert "Range" not in downloads.sent[1].headers
+    assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
+    assert not api.sent
+
+
+class InterruptedBody(BytesIO):
+    def stream(self, chunk_size: int, decode_content: bool) -> Iterator[bytes]:
+        assert decode_content
+        yield self.read(chunk_size)
+        raise requests.ConnectionError("transient")
+
+
+def test_download_retry_resumes_without_api_authentication(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(
+        RequestState(
+            "id",
+            {},
+            "now",
+            "/jobs/id",
+            result_url="https://files.test/blob?value=marker-b",
+        )
+    )
+    target = tmp_path / "blob.grib2"
+    message = grib_message()
+    interrupted = wire_response()
+    interrupted.raw = InterruptedBody(message[:4])
+    downloads.responses = [interrupted, wire_response(message[4:], status_code=206)]
+
+    with pytest.raises(requests.ConnectionError, match="transient"):
+        request.download(target)
+    assert request.state_store.read().status == "submitted"
+    assert target.with_suffix(".grib2.partial").read_bytes() == message[:4]
+    request.download(target)
+
+    assert target.read_bytes() == message
+    assert downloads.sent[1].headers["Range"] == "bytes=4-"
+    assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
+    assert not api.sent
+
+
+def test_api_poll_retry_stays_authenticated_and_download_does_not(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    clock: FakeClock,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(RequestState("id", {}, "now", "/jobs/id"))
+    api.responses = [
+        wire_response(status_code=503),
+        wire_response(
+            {
+                "status": "successful",
+                "asset": {"value": {"href": "https://files.test/blob?value=marker-b"}},
+            }
+        ),
+    ]
+    downloads.responses = [wire_response(grib_message())]
+
+    _, result_url = request.poll_until_complete(30, 3)
+    request.download(tmp_path / "blob.grib2", result_url)
+
+    assert clock.sleeps == [30]
+    assert len(api.sent) == 2
+    assert all(sent.headers["PRIVATE-TOKEN"] == "marker-a" for sent in api.sent)
+    assert "PRIVATE-TOKEN" not in downloads.sent[0].headers
+    assert request.state_store.read().poll_failures == 0
+
+
+def test_download_http_errors_omit_signed_urls_and_keep_the_status(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(
+        RequestState(
+            "id",
+            {},
+            "now",
+            "/jobs/id",
+            result_url="https://files.test/blob?value=marker-b",
+        )
+    )
+    downloads.responses = [wire_response(status_code=503)]
+
+    with pytest.raises(requests.HTTPError, match="HTTP 503") as error:
+        request.download(tmp_path / "blob.grib2")
+
+    assert "marker-b" not in str(error.value)
+    assert "files.test" not in str(error.value)
+    assert error.value.__suppress_context__
+    assert "marker-a" not in caplog.text
+    assert "marker-b" not in caplog.text
+    assert request.state_store.read().status == "submitted"
+    assert not api.sent
+
+
+@pytest.mark.parametrize("netrc", [True, False])
+def test_download_prepared_requests_remove_default_and_netrc_authentication(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    netrc: bool,
+) -> None:
+    request, api, downloads = offline_request
+    request.state_store.write(
+        RequestState(
+            "id",
+            {},
+            "now",
+            "/jobs/id",
+            result_url="https://files.test/blob?value=marker-b",
+        )
+    )
+    request.download_session.headers["Authorization"] = "marker-c"
+    request.download_session.headers["PRIVATE-TOKEN"] = "marker-d"
+    if netrc:
+        monkeypatch.setattr(
+            requests.sessions,
+            "get_netrc_auth",
+            Mock(return_value=("marker-e", "marker-f")),
+        )
+    downloads.responses = [
+        wire_response(status_code=307, location="https://other.test/blob"),
+        wire_response(grib_message()),
+    ]
+
+    request.download(tmp_path / "blob.grib2")
+
+    assert len(downloads.sent) == 2
+    assert all("Authorization" not in sent.headers for sent in downloads.sent)
+    assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
+    assert request.download_session.trust_env
+    assert not api.sent
+
+
+@pytest.mark.parametrize("prepared", [True, False])
+def test_default_api_session_blocks_initial_foreign_requests(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+    prepared: bool,
+) -> None:
+    request, api, downloads = offline_request
+    url = "https://foreign.test/jobs/id"
+
+    if prepared:
+        with pytest.raises(ValueError, match="configured HTTPS origin"):
+            request.session.send(requests.Request("GET", url).prepare())
+    else:
+        with pytest.raises(ValueError, match="configured HTTPS origin"):
+            request.session.get(url)
+
+    assert not api.sent
+    assert not downloads.sent
+
+
+def test_submitted_relative_location_uses_the_final_response_url(
+    offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
+) -> None:
+    request, api, downloads = offline_request
+    api.responses = [
+        wire_response(status_code=307, location="/submission/start"),
+        wire_response({"jobID": "id"}, status_code=201, location="jobs/id"),
+    ]
+
+    state = request.submit({"variable": ["tp"]})
+
+    assert state.status_url == "https://api.test/submission/jobs/id"
+    assert len(api.sent) == 2
+    assert all(sent.method == "POST" for sent in api.sent)
+    assert all(sent.headers["PRIVATE-TOKEN"] == "marker-a" for sent in api.sent)
+    assert not downloads.sent

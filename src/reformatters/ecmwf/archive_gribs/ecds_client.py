@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
@@ -46,6 +47,54 @@ RESUBMIT_BUDGET_SECONDS: Final[float] = 3600
 
 class EcdsJobFailedError(Exception):
     """The job ended in a terminal status: ECDS failed it, or its result is gone."""
+
+
+def _https_origin(url: str) -> tuple[str, int]:
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+        hostname = parsed.hostname
+    except ValueError:
+        raise ValueError("ECDS requires a valid HTTPS URL") from None
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or any(character.isspace() for character in url)
+    ):
+        raise ValueError("ECDS requires an HTTPS URL without user information")
+    return hostname, port if port is not None else 443
+
+
+def _api_url(url: str, base_url: str) -> str:
+    resolved = urljoin(base_url, url)
+    if _https_origin(resolved) != _https_origin(base_url):
+        raise ValueError("ECDS API URL must stay within the configured HTTPS origin")
+    return resolved
+
+
+class _EcdsSession(requests.Session):
+    def __init__(self, api_url: str | None = None) -> None:
+        super().__init__()
+        self.api_origin = _https_origin(api_url) if api_url is not None else None
+
+    def send(
+        self,
+        request: requests.PreparedRequest,
+        **kwargs: Any,  # noqa: ANN401
+    ) -> requests.Response:
+        assert request.url is not None
+        origin = _https_origin(request.url)
+        if self.api_origin is not None:
+            if origin != self.api_origin:
+                raise ValueError(
+                    "ECDS API URL must stay within the configured HTTPS origin"
+                )
+        else:
+            request.headers.pop("PRIVATE-TOKEN", None)
+            request.headers.pop("Authorization", None)
+        return super().send(request, **kwargs)
 
 
 @dataclass
@@ -145,10 +194,16 @@ class EcdsRequest:
         state_store: StateStore,
         api_url: str | None = None,
         session: requests.Session | None = None,
+        download_session: requests.Session | None = None,
     ) -> None:
         self.state_store = state_store
         self.execution_url = f"{process_url(api_url=api_url)}/execution"
-        self.session = session or requests.Session()
+        _https_origin(self.execution_url)
+        self.session = session or _EcdsSession(self.execution_url)
+        self.download_session = download_session or _EcdsSession()
+        assert self.download_session is not self.session, (
+            "ECDS API and downloads require separate sessions"
+        )
         api_key = os.environ.get("ECDS_API_KEY") or read_cdsapi_config().get("key")
         if api_key:
             self.session.headers["PRIVATE-TOKEN"] = api_key
@@ -228,6 +283,8 @@ class EcdsRequest:
         status_url = response.headers.get("Location") or str(
             body.get("location") or f"{self.execution_url}/{request_id}"
         )
+        status_url = _api_url(status_url, response.url or self.execution_url)
+        status_url = _api_url(status_url, self.execution_url)
         state = RequestState(
             request_id=request_id,
             payload=dict(payload),
@@ -240,7 +297,8 @@ class EcdsRequest:
 
     def poll_once(self) -> tuple[RequestState, str | None]:
         state = self.state_store.read()
-        response = self.session.get(state.status_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        status_url = _api_url(state.status_url, self.execution_url)
+        response = self.session.get(status_url, timeout=REQUEST_TIMEOUT_SECONDS)
         if response.status_code == requests.codes.not_found:
             return self._expire(state, f"job {state.status_url}"), None
         response.raise_for_status()
@@ -253,6 +311,11 @@ class EcdsRequest:
         state.poll_failures = 0
         result_url = _result_url(body)
         results_url = _related_url(body, "results")
+        response_url = _api_url(response.url or status_url, self.execution_url)
+        if result_url is not None:
+            result_url = urljoin(response_url, result_url)
+        if results_url is not None:
+            results_url = _api_url(results_url, response_url)
         if state.status in TERMINAL_FAILURE_STATUSES:
             error_body = body
             if results_url is not None:
@@ -272,6 +335,8 @@ class EcdsRequest:
                 return self._expire(state, f"results {results_url}"), None
             results_response.raise_for_status()
             result_url = _result_url(results_response.json())
+            if result_url is not None:
+                result_url = urljoin(results_response.url or results_url, result_url)
         if result_url is not None:
             state.result_url = result_url
         self.state_store.write(state)
@@ -331,19 +396,20 @@ class EcdsRequest:
         assert result_url is not None, (
             "Poll the request to completion before downloading"
         )
+        _https_origin(result_url)
         target.parent.mkdir(parents=True, exist_ok=True)
         partial_path = _partial_path(target)
         existing_bytes = partial_path.stat().st_size if partial_path.exists() else 0
         headers = {"Range": f"bytes={existing_bytes}-"} if existing_bytes else {}
         started = time.monotonic()
-        response = self.session.get(
+        response = self.download_session.get(
             result_url, headers=headers, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
         )
         if response.status_code == requests.codes.requested_range_not_satisfiable:
             # The partial file is longer than the result or otherwise unresumable,
             # so ask for the whole body and overwrite it.
             response.close()
-            response = self.session.get(
+            response = self.download_session.get(
                 result_url, stream=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
             )
         if response.status_code == requests.codes.not_found:
@@ -354,13 +420,23 @@ class EcdsRequest:
                 f"ECDS job {state.request_id} ended with status {EXPIRED_STATUS}: "
                 "its result is no longer downloadable"
             )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            response.close()
+            raise requests.HTTPError(
+                f"ECDS result download failed: HTTP {response.status_code}",
+                response=response,
+            ) from None
         # A server that ignores the Range header replies 200 with the whole body,
         # which must overwrite rather than extend the partial file.
         append = existing_bytes > 0 and response.status_code == requests.codes.partial
-        with partial_path.open("ab" if append else "wb") as output:
-            for chunk in response.iter_content(1024 * 1024):
-                output.write(chunk)
+        try:
+            with partial_path.open("ab" if append else "wb") as output:
+                for chunk in response.iter_content(1024 * 1024):
+                    output.write(chunk)
+        finally:
+            response.close()
         state.grib_messages = count_grib_messages(partial_path)
         partial_path.replace(target)
         state.downloaded_bytes = target.stat().st_size
