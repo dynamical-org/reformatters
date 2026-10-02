@@ -46,7 +46,10 @@ def test_sentry_exception_events_omit_frame_locals(
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
     monkeypatch.setattr(sentry_sdk, "init", init)
     monkeypatch.setattr(sentry_sdk, "set_tag", Mock())
-    runpy.run_path("src/reformatters/__main__.py", run_name="sentry_configuration_test")
+    runpy.run_path(
+        str(Path(__file__).parents[2] / "src/reformatters/__main__.py"),
+        run_name="sentry_configuration_test",
+    )
     options: dict[str, Any] = dict(init.call_args.kwargs) | {
         "dsn": None,
         "default_integrations": False,
@@ -55,9 +58,12 @@ def test_sentry_exception_events_omit_frame_locals(
     client = sentry_sdk.Client(**options)
     marker = uuid4().hex
     try:
-        raise OSError("synthetic failure")
-    except OSError as error:
-        event, _ = event_from_exception(error, client_options=client.options)
+        with sentry_sdk.new_scope() as scope:
+            scope.set_client(client)
+            try:
+                raise OSError("synthetic failure")
+            except OSError as error:
+                event, _ = event_from_exception(error, client_options=client.options)
     finally:
         client.close()
 
