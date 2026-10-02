@@ -18,7 +18,7 @@ from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, NoReturn
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -48,7 +48,7 @@ DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
 MAXIMUM_POLL_BACKOFF_EXPONENT: Final[int] = 6
 RESUBMIT_WAIT_SECONDS: Final[float] = 60
 RESUBMIT_BUDGET_SECONDS: Final[float] = 3600
-DOWNLOAD_RANGES: Final[int] = 4
+PARALLEL_RANGE_DOWNLOADS: Final[int] = 4
 MINIMUM_RANGE_BYTES: Final[int] = 8 * 1024 * 1024
 DOWNLOAD_CHUNK_BYTES: Final[int] = 1024 * 1024
 
@@ -58,7 +58,7 @@ class EcdsJobFailedError(Exception):
 
 
 class EcdsRangeMismatchError(RuntimeError):
-    """A ranged download's responses did not all serve the probed result, so its parts were discarded."""
+    """The result was not served as verifiable byte ranges of one result, so any parts were discarded."""
 
 
 class _ResultGoneError(Exception):
@@ -80,7 +80,7 @@ class _Part:
 class _Transfer:
     connections: int
     transferred_bytes: int
-    assembly_seconds: float = 0.0
+    assembly_seconds: float
 
 
 def _https_origin(url: str) -> tuple[str, int]:
@@ -250,7 +250,7 @@ class EcdsRequest:
         maximum_polls: int = 240,
         resubmit_wait_seconds: float = RESUBMIT_WAIT_SECONDS,
         resubmit_budget_seconds: float = RESUBMIT_BUDGET_SECONDS,
-        download_ranges: int = DOWNLOAD_RANGES,
+        parallel_range_downloads: int = PARALLEL_RANGE_DOWNLOADS,
     ) -> Path:
         """Submit `payload` if it is not already in flight, then download to `target`.
 
@@ -279,7 +279,7 @@ class EcdsRequest:
         while True:
             try:
                 _, result_url = self.poll_until_complete(poll_seconds, maximum_polls)
-                self.download(target, result_url, download_ranges)
+                self.download(target, result_url, parallel_range_downloads)
                 return target
             except EcdsJobFailedError as e:
                 if time.monotonic() + wait_seconds >= deadline:
@@ -440,12 +440,12 @@ class EcdsRequest:
         self,
         target: Path,
         result_url: str | None = None,
-        download_ranges: int = DOWNLOAD_RANGES,
+        parallel_range_downloads: int = PARALLEL_RANGE_DOWNLOADS,
     ) -> RequestState:
-        """Download the result to `target`, over `download_ranges` parallel Range requests when the server supports them.
+        """Download the result to `target` over up to `parallel_range_downloads` concurrent Range requests.
 
-        A partial single-stream download is resumed; ranged parts are never resumed
-        across calls, because a fresh probe cannot vouch for bytes an earlier call left.
+        Parts are never resumed across calls, because a fresh probe cannot vouch for
+        bytes an earlier call left.
         """
         state = self.state_store.read()
         result_url = result_url or state.result_url
@@ -457,11 +457,9 @@ class EcdsRequest:
         partial_path = _partial_path(target)
         started = time.monotonic()
         try:
-            transfer = None
-            if not partial_path.exists():
-                transfer = self._download_ranges(result_url, target, download_ranges)
-            if transfer is None:
-                transfer = self._download_single_stream(result_url, partial_path)
+            transfer = self._download_ranges(
+                result_url, target, parallel_range_downloads
+            )
         except _ResultGoneError:
             # The signed URL is left out of the record: it is a credential.
             self._expire(state, "result download")
@@ -508,29 +506,6 @@ class EcdsRequest:
             response.close()
             raise _ResultGoneError
         return response
-
-    def _download_single_stream(self, result_url: str, partial_path: Path) -> _Transfer:
-        existing_bytes = partial_path.stat().st_size if partial_path.exists() else 0
-        headers = {"Range": f"bytes={existing_bytes}-"} if existing_bytes else {}
-        response = self._get_result(result_url, headers)
-        if response.status_code == requests.codes.requested_range_not_satisfiable:
-            # The partial file is longer than the result or otherwise unresumable,
-            # so ask for the whole body and overwrite it.
-            response.close()
-            response = self._get_result(result_url, {})
-        _raise_for_download_status(response)
-        # A server that ignores the Range header replies 200 with the whole body,
-        # which must overwrite rather than extend the partial file.
-        append = existing_bytes > 0 and response.status_code == requests.codes.partial
-        transferred_bytes = 0
-        try:
-            with partial_path.open("ab" if append else "wb") as output:
-                for chunk in _iter_body(response):
-                    output.write(chunk)
-                    transferred_bytes += len(chunk)
-        finally:
-            response.close()
-        return _Transfer(connections=1, transferred_bytes=transferred_bytes)
 
     def _download_part(
         self,
@@ -580,13 +555,9 @@ class EcdsRequest:
             response.close()
 
     def _download_ranges(
-        self, result_url: str, target: Path, download_ranges: int
-    ) -> _Transfer | None:
-        """Download the result as parallel byte ranges into `target`'s partial file.
-
-        Return None, having written nothing, when the server cannot serve one
-        verifiable result in ranges.
-        """
+        self, result_url: str, target: Path, parallel_range_downloads: int
+    ) -> _Transfer:
+        """Download the result as parallel byte ranges into `target`'s partial file."""
         _delete_part_files(target)
         probe = self._get_result(result_url, {"Range": "bytes=0-0"})
         probe.close()
@@ -594,16 +565,15 @@ class EcdsRequest:
             _raise_for_download_status(probe)
         size = _content_range_size(probe, 0, 0)
         etag = probe.headers.get("ETag")
-        if (
-            probe.status_code != requests.codes.partial
-            or size is None
-            or not _is_strong_etag(etag)
-            or not _is_identity_encoded(probe)
-        ):
-            log.info("ECDS result is not served in verifiable ranges; using one stream")
-            return None
-        assert etag is not None
-        count = max(1, min(download_ranges, size // MINIMUM_RANGE_BYTES))
+        if probe.status_code != requests.codes.partial:
+            _raise_unverifiable_probe(probe, "status is not 206")
+        if size is None:
+            _raise_unverifiable_probe(probe, "Content-Range is not exactly bytes 0-0")
+        if etag is None or not _is_strong_etag(etag):
+            _raise_unverifiable_probe(probe, "ETag is weak or missing")
+        if not _is_identity_encoded(probe):
+            _raise_unverifiable_probe(probe, "Content-Encoding is not identity")
+        count = max(1, min(parallel_range_downloads, size // MINIMUM_RANGE_BYTES))
         bounds = [size * index // count for index in range(count + 1)]
         parts = [
             _Part(start, end - 1, _part_path(target, index))
@@ -742,6 +712,13 @@ def _raise_for_download_status(response: requests.Response) -> None:
         ) from None
 
 
+def _raise_unverifiable_probe(probe: requests.Response, reason: str) -> NoReturn:
+    raise EcdsRangeMismatchError(
+        f"ECDS result probe answered HTTP {probe.status_code}, which cannot vouch "
+        f"for ranges: {reason}"
+    )
+
+
 def _content_range_size(
     response: requests.Response, start: int, end: int
 ) -> int | None:
@@ -752,8 +729,8 @@ def _content_range_size(
     return int(match.group(1)) if match else None
 
 
-def _is_strong_etag(etag: str | None) -> bool:
-    return etag is not None and re.fullmatch(r'"[^"]*"', etag) is not None
+def _is_strong_etag(etag: str) -> bool:
+    return re.fullmatch(r'"[^"]*"', etag) is not None
 
 
 def _is_identity_encoded(response: requests.Response) -> bool:

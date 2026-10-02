@@ -90,6 +90,72 @@ def wire_response(
     return result
 
 
+def ranged_reply(body: bytes, start: int, end: int) -> requests.Response:
+    result = wire_response(body[start : end + 1], status_code=206)
+    result.headers["Content-Range"] = f"bytes {start}-{end}/{len(body)}"
+    return result
+
+
+def single_range_replies(body: bytes) -> list[requests.Response]:
+    """The probe and the one part of a result smaller than two ranges."""
+    replies = [ranged_reply(body, 0, 0), ranged_reply(body, 0, len(body) - 1)]
+    for reply in replies:
+        reply.headers["ETag"] = '"etag-1"'
+    return replies
+
+
+SIGNED_RESULT_URL = "https://files.test/blob?value=marker-b"
+RANGED_BLOB = b"".join(grib_message(bytes([n]) * 50) for n in range(8))
+
+
+class RangeServer(BaseAdapter):
+    """Serves one object like the ECDS result store, answering Range requests with 206."""
+
+    def __init__(
+        self, body: bytes = RANGED_BLOB, etag: str | None = '"etag-1"'
+    ) -> None:
+        self.body = body
+        self.etag = etag
+        self.lock = threading.Lock()
+        self.ranges: list[str | None] = []
+        self.if_matches: list[str | None] = []
+        self.ignore_range = False
+        self.reply: Callable[[int, int, requests.Response], requests.Response] = (
+            lambda start, end, result: result
+        )
+
+    def send(
+        self, request: requests.PreparedRequest, *_args: object, **_kwargs: object
+    ) -> requests.Response:
+        assert "PRIVATE-TOKEN" not in request.headers
+        range_header = request.headers.get("Range")
+        with self.lock:
+            self.ranges.append(range_header)
+            self.if_matches.append(request.headers.get("If-Match"))
+        assert range_header is not None
+        if self.ignore_range:
+            result = wire_response(self.body)
+        else:
+            first, _, last = range_header.removeprefix("bytes=").partition("-")
+            start, end = int(first), min(int(last), len(self.body) - 1)
+            result = self.reply(start, end, ranged_reply(self.body, start, end))
+        if self.etag is not None:
+            result.headers.setdefault("ETag", self.etag)
+        assert request.url is not None
+        result.url = request.url
+        result.request = request
+        return result
+
+    def close(self) -> None:
+        pass
+
+
+def range_session(body: bytes) -> requests.Session:
+    session = requests.Session()
+    session.mount("https://", RangeServer(body))
+    return session
+
+
 @pytest.fixture
 def offline_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -326,12 +392,9 @@ def test_download_uses_the_result_url_saved_by_poll(tmp_path: Path) -> None:
         )
     )
     message = grib_message()
-    download_response = response({})
-    download_response.iter_content.return_value = [message]
-    session = session_mock()
-    session.get.return_value = download_response
+    download_session = range_session(message)
 
-    state = EcdsRequest(state_store, download_session=session).download(
+    state = EcdsRequest(state_store, download_session=download_session).download(
         tmp_path / "blob.grib2"
     )
 
@@ -341,79 +404,6 @@ def test_download_uses_the_result_url_saved_by_poll(tmp_path: Path) -> None:
     assert state.status == "downloaded"
 
 
-def test_download_resumes_a_partial_file_after_http_206(tmp_path: Path) -> None:
-    state_store = StateStore(tmp_path / "state.json")
-    state_store.write(
-        RequestState(
-            "id", {}, SUBMITTED_AT, "status", result_url="https://example.test/blob"
-        )
-    )
-    target = tmp_path / "blob.grib2"
-    message = grib_message()
-    target.with_suffix(".grib2.partial").write_bytes(message[:4])
-    download_response = response({}, status_code=requests.codes.partial)
-    download_response.iter_content.return_value = [message[4:]]
-    session = session_mock()
-    session.get.return_value = download_response
-
-    EcdsRequest(state_store, download_session=session).download(target)
-
-    assert target.read_bytes() == message
-    assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=4-"}
-
-
-def test_download_restarts_a_partial_file_after_http_200(tmp_path: Path) -> None:
-    state_store = StateStore(tmp_path / "state.json")
-    state_store.write(
-        RequestState(
-            "id", {}, SUBMITTED_AT, "status", result_url="https://example.test/blob"
-        )
-    )
-    target = tmp_path / "blob.grib2"
-    message = grib_message()
-    target.with_suffix(".grib2.partial").write_bytes(b"stale bytes")
-    download_response = response({})
-    download_response.iter_content.return_value = [message]
-    session = session_mock()
-    session.get.return_value = download_response
-
-    EcdsRequest(state_store, download_session=session).download(target)
-
-    assert target.read_bytes() == message
-    assert session.get.call_args.kwargs["headers"] == {"Range": "bytes=11-"}
-
-
-def test_download_refetches_the_whole_blob_after_http_416(tmp_path: Path) -> None:
-    """A partial file longer than the result makes the ranged request unsatisfiable."""
-    state_store = StateStore(tmp_path / "state.json")
-    state_store.write(
-        RequestState(
-            "id", {}, SUBMITTED_AT, "status", result_url="https://example.test/blob"
-        )
-    )
-    target = tmp_path / "blob.grib2"
-    message = grib_message()
-    target.with_suffix(".grib2.partial").write_bytes(b"stale bytes")
-    range_response = response(
-        {}, status_code=requests.codes.requested_range_not_satisfiable
-    )
-    range_response.raise_for_status.side_effect = requests.HTTPError(
-        "416 Client Error: Requested Range Not Satisfiable"
-    )
-    full_response = response({})
-    full_response.iter_content.return_value = [message]
-    session = session_mock()
-    session.get.side_effect = [range_response, full_response]
-
-    EcdsRequest(state_store, download_session=session).download(target)
-
-    assert target.read_bytes() == message
-    range_call, full_call = session.get.call_args_list
-    assert range_call.kwargs["headers"] == {"Range": "bytes=11-"}
-    assert full_call.kwargs["headers"] == {}
-    range_response.close.assert_called_once_with()
-
-
 def test_download_rejects_a_truncated_blob(tmp_path: Path) -> None:
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(
@@ -421,13 +411,10 @@ def test_download_rejects_a_truncated_blob(tmp_path: Path) -> None:
             "id", {}, SUBMITTED_AT, "status", result_url="https://example.test/blob"
         )
     )
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()[:-4]]
-    session = session_mock()
-    session.get.return_value = download_response
+    download_session = range_session(grib_message()[:-4])
 
     with pytest.raises(AssertionError, match="Truncated message"):
-        EcdsRequest(state_store, download_session=session).download(
+        EcdsRequest(state_store, download_session=download_session).download(
             tmp_path / "blob.grib2"
         )
 
@@ -441,15 +428,11 @@ def test_retrieve_resumes_an_in_flight_request_without_resubmitting(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, SUBMITTED_AT, "status"))
     message = grib_message()
-    download_response = response({})
-    download_response.iter_content.return_value = [message]
+    download_session = range_session(message)
     session = session_mock()
-    download_session = Mock(headers={})
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -478,11 +461,15 @@ def test_retrieve_keeps_a_blob_it_has_already_downloaded(tmp_path: Path) -> None
         )
     )
     session = session_mock()
+    download_session = Mock(headers={})
 
-    EcdsRequest(state_store, session=session).retrieve(payload, target, poll_seconds=0)
+    EcdsRequest(
+        state_store, session=session, download_session=download_session
+    ).retrieve(payload, target, poll_seconds=0)
 
     session.post.assert_not_called()
     session.get.assert_not_called()
+    download_session.get.assert_not_called()
     assert target.read_bytes() == message
 
 
@@ -505,15 +492,11 @@ def test_retrieve_downloads_again_when_the_archived_blob_does_not_match(
             grib_messages=2,
         )
     )
-    download_response = response({})
-    download_response.iter_content.return_value = [message, message]
+    download_session = range_session(message * 2)
     session = session_mock()
-    download_session = Mock(headers={})
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -531,15 +514,11 @@ def test_retrieve_resubmits_after_a_terminal_failure(tmp_path: Path) -> None:
     )
     submit_response = response({"jobID": "job-2"})
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.return_value = submit_response
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -555,19 +534,15 @@ def test_retrieve_submits_a_failed_job_again_after_a_wait(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.side_effect = [
         response({"jobID": "job-1"}),
         response({"jobID": "job-2"}),
     ]
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     session.get.side_effect = [
         response({"status": "failed"}),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -654,10 +629,8 @@ def test_a_job_whose_results_are_gone_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, SUBMITTED_AT, "status"))
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     session.get.side_effect = [
         response(
             {"status": "successful", "links": [{"rel": "results", "href": "results"}]}
@@ -665,8 +638,6 @@ def test_a_job_whose_results_are_gone_is_submitted_again(
         response({"title": "Not Found"}, status_code=404),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -687,16 +658,12 @@ def test_a_job_ecds_no_longer_knows_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, SUBMITTED_AT, "status"))
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     session.get.side_effect = [
         response({"title": "Not Found"}, status_code=404),
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -728,19 +695,15 @@ def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.side_effect = [
         response({"jobID": "job-1"}),
         response({"jobID": "job-2"}),
     ]
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     running = response({"status": "running"})
     session.get.side_effect = [running] * 240 + [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -794,21 +757,16 @@ def test_a_replacement_job_does_not_resume_the_abandoned_jobs_partial_download(
         RequestState("job-1", payload, SUBMITTED_AT, "status", status="failed")
     )
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    download_session = range_session(grib_message())
     session.get.side_effect = [
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
-
-    download_session.get.return_value = download_response
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
     ).retrieve(payload, target, poll_seconds=0)
 
-    assert download_session.get.call_args.kwargs["headers"] == {}
     assert target.read_bytes() == grib_message()
 
 
@@ -819,16 +777,17 @@ def test_a_result_that_is_gone_at_download_time_is_submitted_again(
     state_store = StateStore(tmp_path / "state.json")
     state_store.write(RequestState("job-1", payload, SUBMITTED_AT, "status"))
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.return_value = response({"jobID": "job-2"})
     successful = response(
         {"status": "successful", "asset": {"value": {"href": "blob"}}}
     )
-    gone = response({}, status_code=404)
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
+    gone = wire_response(status_code=404)
     session.get.side_effect = [successful, successful]
-    download_session.get.side_effect = [gone, response({}), download_response]
+    replies = iter([gone])
+    server = RangeServer(grib_message())
+    server.reply = lambda start, end, result: next(replies, result)
+    download_session = requests.Session()
+    download_session.mount("https://", server)
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -836,7 +795,7 @@ def test_a_result_that_is_gone_at_download_time_is_submitted_again(
         payload, tmp_path / "blob.grib2", poll_seconds=30, resubmit_wait_seconds=60
     )
 
-    gone.close.assert_called_once_with()
+    assert gone.raw.closed
     assert clock.sleeps == [60]
     assert state_store.read().request_id == "job-2"
     assert (tmp_path / "blob.grib2").read_bytes() == grib_message()
@@ -848,12 +807,12 @@ def test_a_result_that_keeps_disappearing_exhausts_the_budget(
     payload = {"variable": ["total_precipitation"]}
     state_store = StateStore(tmp_path / "state.json")
     session = session_mock()
-    download_session = Mock(headers={})
     session.post.side_effect = [response({"jobID": f"job-{n}"}) for n in range(1, 10)]
     successful = response(
         {"status": "successful", "asset": {"value": {"href": "blob"}}}
     )
     session.get.return_value = successful
+    download_session = Mock(headers={})
     download_session.get.return_value = response({}, status_code=404)
 
     with pytest.raises(EcdsJobFailedError, match="job-4 ended with status expired"):
@@ -1016,7 +975,7 @@ def test_relative_links_follow_the_final_api_response_url(
         wire_response(status_code=307, location="/results/id/metadata"),
         wire_response({"asset": {"value": {"href": "blob?value=marker-b"}}}),
     ]
-    downloads.responses = [wire_response(grib_message()), wire_response(grib_message())]
+    downloads.responses = single_range_replies(grib_message())
 
     _, result_url = request.poll_once()
     request.download(tmp_path / "blob.grib2", result_url)
@@ -1082,8 +1041,7 @@ def test_download_redirects_use_an_unauthenticated_transport(
         wire_response(
             status_code=307, location="https://other.test:8443/blob?value=marker-c"
         ),
-        wire_response(grib_message()),
-        wire_response(grib_message()),
+        *single_range_replies(grib_message()),
     ]
 
     state = request.download(tmp_path / "blob.grib2")
@@ -1119,7 +1077,7 @@ def test_downloads_reject_http_before_sending(
 
 
 @pytest.mark.parametrize("status_code", [206, 200, 416])
-def test_download_range_recovery_uses_the_unauthenticated_session(
+def test_result_probes_use_the_unauthenticated_session(
     offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
     tmp_path: Path,
     status_code: int,
@@ -1136,20 +1094,22 @@ def test_download_range_recovery_uses_the_unauthenticated_session(
     )
     target = tmp_path / "blob.grib2"
     message = grib_message()
-    target.with_suffix(".grib2.partial").write_bytes(message[:4])
-    downloads.responses = [
-        wire_response(message[4:] if status_code == 206 else message, status_code)
-    ]
-    if status_code == 416:
-        downloads.responses.append(wire_response(message))
+    if status_code == 206:
+        downloads.responses = single_range_replies(message)
+        request.download(target)
+        assert target.read_bytes() == message
+    else:
+        downloads.responses = [wire_response(message, status_code)]
+        expected = (
+            pytest.raises(EcdsRangeMismatchError, match=r"HTTP 200.*status is not 206")
+            if status_code == 200
+            else pytest.raises(requests.HTTPError, match="HTTP 416")
+        )
+        with expected as error:
+            request.download(target)
+        assert "marker-b" not in str(error.value)
 
-    request.download(target)
-
-    assert target.read_bytes() == message
-    assert downloads.sent[0].headers["Range"] == "bytes=4-"
-    if status_code == 416:
-        assert len(downloads.sent) == 2
-        assert "Range" not in downloads.sent[1].headers
+    assert downloads.sent[0].headers["Range"] == "bytes=0-0"
     assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
     assert not api.sent
 
@@ -1163,7 +1123,7 @@ class InterruptedBody(BytesIO):
         )
 
 
-def test_download_retry_resumes_without_api_authentication(
+def test_download_retry_after_an_interrupted_part_stays_unauthenticated(
     offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
@@ -1180,13 +1140,9 @@ def test_download_retry_resumes_without_api_authentication(
     )
     target = tmp_path / "blob.grib2"
     message = grib_message()
-    interrupted = wire_response()
-    interrupted.raw = InterruptedBody(message[:4])
-    downloads.responses = [
-        wire_response(message),
-        interrupted,
-        wire_response(message[4:], status_code=206),
-    ]
+    probe, interrupted = single_range_replies(message)
+    interrupted.raw = InterruptedBody(message)
+    downloads.responses = [probe, interrupted, *single_range_replies(message)]
 
     with pytest.raises(requests.ConnectionError) as error:
         request.download(target)
@@ -1195,11 +1151,14 @@ def test_download_retry_resumes_without_api_authentication(
     assert error.value.__suppress_context__
     assert "marker-b" not in caplog.text
     assert request.state_store.read().status == "submitted"
-    assert target.with_suffix(".grib2.partial").read_bytes() == message[:4]
+    assert part_paths(target) == []
     request.download(target)
 
     assert target.read_bytes() == message
-    assert downloads.sent[2].headers["Range"] == "bytes=4-"
+    assert [sent.headers["Range"] for sent in downloads.sent] == [
+        "bytes=0-0",
+        f"bytes=0-{len(message) - 1}",
+    ] * 2
     assert all("PRIVATE-TOKEN" not in sent.headers for sent in downloads.sent)
     assert not api.sent
 
@@ -1220,7 +1179,7 @@ def test_api_poll_retry_stays_authenticated_and_download_does_not(
             }
         ),
     ]
-    downloads.responses = [wire_response(grib_message()), wire_response(grib_message())]
+    downloads.responses = single_range_replies(grib_message())
 
     _, result_url = request.poll_until_complete(30, 3)
     request.download(tmp_path / "blob.grib2", result_url)
@@ -1288,8 +1247,7 @@ def test_download_prepared_requests_remove_default_and_netrc_authentication(
         )
     downloads.responses = [
         wire_response(status_code=307, location="https://other.test/blob"),
-        wire_response(grib_message()),
-        wire_response(grib_message()),
+        *single_range_replies(grib_message()),
     ]
 
     request.download(tmp_path / "blob.grib2")
@@ -1338,53 +1296,6 @@ def test_submitted_relative_location_uses_the_final_response_url(
     assert not downloads.sent
 
 
-SIGNED_RESULT_URL = "https://files.test/blob?value=marker-b"
-RANGED_BLOB = b"".join(grib_message(bytes([n]) * 50) for n in range(8))
-
-
-class RangeServer(BaseAdapter):
-    """Serves one object like the ECDS result store, answering Range requests with 206."""
-
-    def __init__(
-        self, body: bytes = RANGED_BLOB, etag: str | None = '"etag-1"'
-    ) -> None:
-        self.body = body
-        self.etag = etag
-        self.lock = threading.Lock()
-        self.ranges: list[str | None] = []
-        self.if_matches: list[str | None] = []
-        self.ignore_range = False
-        self.reply: Callable[[int, int, requests.Response], requests.Response] = (
-            lambda start, end, result: result
-        )
-
-    def send(
-        self, request: requests.PreparedRequest, *_args: object, **_kwargs: object
-    ) -> requests.Response:
-        assert "PRIVATE-TOKEN" not in request.headers
-        range_header = request.headers.get("Range")
-        with self.lock:
-            self.ranges.append(range_header)
-            self.if_matches.append(request.headers.get("If-Match"))
-        if range_header is None or self.ignore_range:
-            result = wire_response(self.body)
-        else:
-            first, _, last = range_header.removeprefix("bytes=").partition("-")
-            start, end = int(first), min(int(last), len(self.body) - 1)
-            result = wire_response(self.body[start : end + 1], status_code=206)
-            result.headers["Content-Range"] = f"bytes {start}-{end}/{len(self.body)}"
-            result = self.reply(start, end, result)
-        if self.etag is not None:
-            result.headers.setdefault("ETag", self.etag)
-        assert request.url is not None
-        result.url = request.url
-        result.request = request
-        return result
-
-    def close(self) -> None:
-        pass
-
-
 @pytest.fixture
 def range_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1411,7 +1322,7 @@ def test_a_ranged_download_assembles_the_parts_in_order(
     request, server = range_request
     target = tmp_path / "blob.grib2"
 
-    state = request.download(target, download_ranges=4)
+    state = request.download(target, parallel_range_downloads=4)
 
     assert target.read_bytes() == RANGED_BLOB
     assert state.downloaded_bytes == len(RANGED_BLOB)
@@ -1436,7 +1347,9 @@ def test_retrieve_passes_the_range_count_to_the_download(
         {"status": "successful", "asset": {"value": {"href": SIGNED_RESULT_URL}}}
     )
 
-    request.retrieve({}, tmp_path / "blob.grib2", poll_seconds=0, download_ranges=1)
+    request.retrieve(
+        {}, tmp_path / "blob.grib2", poll_seconds=0, parallel_range_downloads=1
+    )
 
     assert server.ranges == ["bytes=0-0", f"bytes=0-{len(RANGED_BLOB) - 1}"]
 
@@ -1449,7 +1362,7 @@ def test_a_result_below_the_minimum_range_size_uses_one_range(
     request, server = range_request
     monkeypatch.setattr(ecds_client, "MINIMUM_RANGE_BYTES", len(RANGED_BLOB) + 1)
 
-    request.download(tmp_path / "blob.grib2", download_ranges=4)
+    request.download(tmp_path / "blob.grib2", parallel_range_downloads=4)
 
     assert (tmp_path / "blob.grib2").read_bytes() == RANGED_BLOB
     assert server.ranges == ["bytes=0-0", f"bytes=0-{len(RANGED_BLOB) - 1}"]
@@ -1475,19 +1388,55 @@ def gzip_encoded(server: RangeServer) -> None:
     server.reply = reply
 
 
-@pytest.mark.parametrize("configure", [ignored_range, no_etag, weak_etag, gzip_encoded])
-def test_a_result_not_served_in_verifiable_ranges_is_read_as_one_stream(
+def wrong_probe_range(server: RangeServer) -> None:
+    def reply(start: int, end: int, result: requests.Response) -> requests.Response:
+        result.headers["Content-Range"] = f"bytes 0-1/{len(RANGED_BLOB)}"
+        return result
+
+    server.reply = reply
+
+
+@pytest.mark.parametrize(
+    ("configure", "reason"),
+    [
+        (ignored_range, r"HTTP 200.*status is not 206"),
+        (wrong_probe_range, r"HTTP 206.*Content-Range is not exactly bytes 0-0"),
+        (no_etag, r"HTTP 206.*ETag is weak or missing"),
+        (weak_etag, r"HTTP 206.*ETag is weak or missing"),
+        (gzip_encoded, r"HTTP 206.*Content-Encoding is not identity"),
+    ],
+)
+def test_a_result_not_served_in_verifiable_ranges_is_retried_without_resubmitting(
     range_request: tuple[EcdsRequest, RangeServer],
     tmp_path: Path,
     configure: Callable[[RangeServer], None],
+    reason: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     request, server = range_request
+    request.session = session_mock()
+    request.session.get.return_value = response(
+        {"status": "successful", "asset": {"value": {"href": SIGNED_RESULT_URL}}}
+    )
+    target = tmp_path / "blob.grib2"
     configure(server)
 
-    request.download(tmp_path / "blob.grib2", download_ranges=4)
+    with pytest.raises(EcdsRangeMismatchError, match=reason) as error:
+        request.retrieve({}, target, poll_seconds=0, parallel_range_downloads=4)
 
-    assert (tmp_path / "blob.grib2").read_bytes() == RANGED_BLOB
-    assert server.ranges == ["bytes=0-0", None]
+    assert server.ranges == ["bytes=0-0"]
+    assert "marker-b" not in str(error.value)
+    assert "marker-b" not in caplog.text
+    assert part_paths(target) == []
+    assert not target.with_suffix(".grib2.partial").exists()
+
+    healthy = RangeServer()
+    request.download_session.mount("https://", healthy)
+    request.retrieve({}, target, poll_seconds=0, parallel_range_downloads=4)
+
+    assert target.read_bytes() == RANGED_BLOB
+    assert request.state_store.read().request_id == "id"
+    request.session.post.assert_not_called()
 
 
 def wrong_content_range(start: int, end: int, result: requests.Response) -> None:
@@ -1535,7 +1484,7 @@ def test_a_part_that_does_not_match_the_result_discards_every_part(
     server.reply = reply
 
     with pytest.raises(EcdsRangeMismatchError) as error:
-        request.download(target, download_ranges=4)
+        request.download(target, parallel_range_downloads=4)
 
     assert isinstance(error.value, RuntimeError)
     assert "marker-b" not in str(error.value)
@@ -1551,9 +1500,10 @@ def test_a_part_that_does_not_match_the_result_discards_every_part(
     [
         {"blob.grib2.partial.0": RANGED_BLOB[:7], "blob.grib2.partial.1": b"stale"},
         {"blob.grib2.partial.assembly": RANGED_BLOB * 2},
+        {"blob.grib2.partial": RANGED_BLOB * 2},
     ],
 )
-def test_files_left_by_an_earlier_ranged_attempt_are_discarded(
+def test_files_left_by_an_earlier_attempt_are_discarded_not_resumed(
     range_request: tuple[EcdsRequest, RangeServer],
     tmp_path: Path,
     leftover: dict[str, bytes],
@@ -1563,10 +1513,11 @@ def test_files_left_by_an_earlier_ranged_attempt_are_discarded(
     for name, contents in leftover.items():
         (tmp_path / name).write_bytes(contents)
 
-    request.download(target, download_ranges=2)
+    request.download(target, parallel_range_downloads=2)
 
     assert target.read_bytes() == RANGED_BLOB
     size = len(RANGED_BLOB)
+    assert server.ranges[0] == "bytes=0-0"
     assert sorted(map(str, server.ranges[1:])) == [
         f"bytes=0-{size // 2 - 1}",
         f"bytes={size // 2}-{size - 1}",
@@ -1585,7 +1536,7 @@ def test_a_result_gone_during_a_part_is_expired(
     server.reply = reply
 
     with pytest.raises(EcdsJobFailedError, match="ended with status expired"):
-        request.download(tmp_path / "blob.grib2", download_ranges=4)
+        request.download(tmp_path / "blob.grib2", parallel_range_downloads=4)
 
     state = request.state_store.read()
     assert state.status == "expired"
@@ -1610,7 +1561,7 @@ def test_a_part_connection_error_discards_parts_and_omits_the_signed_url(
     server.reply = reply
 
     with pytest.raises(requests.ConnectionError) as error:
-        request.download(target, download_ranges=2)
+        request.download(target, parallel_range_downloads=2)
 
     assert "marker-b" not in str(error.value)
     assert "files.test" not in str(error.value)
@@ -1635,10 +1586,7 @@ def test_resubmitting_discards_the_part_files_of_the_old_result(
     session.get.return_value = response(
         {"status": "successful", "asset": {"value": {"href": "blob"}}}
     )
-    download_session = Mock(headers={})
-    download_response = response({})
-    download_response.iter_content.return_value = [grib_message()]
-    download_session.get.return_value = download_response
+    download_session = range_session(grib_message())
 
     EcdsRequest(
         state_store, session=session, download_session=download_session
@@ -1679,7 +1627,7 @@ def test_a_ranged_download_logs_transfer_assembly_and_scan_times_apart(
     monkeypatch.setattr(ecds_client, "shutil", SimpleNamespace(copyfileobj=copyfileobj))
     monkeypatch.setattr(ecds_client, "count_grib_messages", count_grib_messages)
 
-    request.download(tmp_path / "blob.grib2", download_ranges=2)
+    request.download(tmp_path / "blob.grib2", parallel_range_downloads=2)
 
     [record] = [r for r in caplog.records if r.getMessage().startswith("Downloaded")]
     size = len(RANGED_BLOB)
@@ -1739,9 +1687,9 @@ def test_a_mismatched_part_is_downloaded_again_without_resubmitting(
     server.reply = reply
 
     with pytest.raises(EcdsRangeMismatchError):
-        request.retrieve({}, target, poll_seconds=0, download_ranges=2)
+        request.retrieve({}, target, poll_seconds=0, parallel_range_downloads=2)
     server.reply = lambda start, end, result: result
-    request.retrieve({}, target, poll_seconds=0, download_ranges=2)
+    request.retrieve({}, target, poll_seconds=0, parallel_range_downloads=2)
 
     request.session.post.assert_not_called()
     assert target.read_bytes() == RANGED_BLOB
@@ -1785,7 +1733,7 @@ def test_a_part_failure_stops_and_joins_every_part_before_cleanup(
     server.reply = reply
 
     with pytest.raises(EcdsRangeMismatchError):
-        request.download(target, download_ranges=2)
+        request.download(target, parallel_range_downloads=2)
     time.sleep(0.1)
 
     assert part_paths(target) == []
@@ -1809,7 +1757,7 @@ def test_a_part_error_mid_body_omits_the_signed_url_and_discards_parts(
     server.reply = reply
 
     with pytest.raises(requests.ConnectionError) as error:
-        request.download(target, download_ranges=2)
+        request.download(target, parallel_range_downloads=2)
 
     assert "marker-b" not in str(error.value)
     assert "files.test" not in str(error.value)
@@ -1889,7 +1837,9 @@ def test_a_mismatch_after_an_earlier_404_is_not_expired(
     fail_first_part_then_second(server, abort_began, gone, second)
 
     with pytest.raises(EcdsRangeMismatchError):
-        request.retrieve({}, tmp_path / "blob.grib2", poll_seconds=0, download_ranges=2)
+        request.retrieve(
+            {}, tmp_path / "blob.grib2", poll_seconds=0, parallel_range_downloads=2
+        )
 
     request.session.post.assert_not_called()
     assert request.state_store.read().status == "successful"
@@ -1905,7 +1855,7 @@ def test_a_404_after_an_earlier_transport_error_expires_the_job(
     fail_first_part_then_second(server, abort_began, connection_error, gone)
 
     with pytest.raises(EcdsJobFailedError, match="ended with status expired"):
-        request.download(tmp_path / "blob.grib2", download_ranges=2)
+        request.download(tmp_path / "blob.grib2", parallel_range_downloads=2)
 
     assert request.state_store.read().status == "expired"
     assert part_paths(tmp_path / "blob.grib2") == []
