@@ -22,7 +22,7 @@ jobs:
 
     # Keep code-quality.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -64,7 +64,7 @@ jobs:
 
     # Keep deploy-operational-updates.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Fetch main so deploy-staging can compare versions via git show
           fetch-depth: 0
