@@ -1,3 +1,4 @@
+import math
 from collections.abc import Sequence
 from datetime import timedelta
 
@@ -26,7 +27,8 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        workers = self.num_variable_groups()
+        # Budget four jobs per worker for the latest-init redo plus one new init.
+        workers = math.ceil(self.num_variable_groups() / 2)
         operational_update_cron_job = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-daily-update",
             schedule="0 9 * * *",
@@ -36,7 +38,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
             dataset_id=self.dataset_id,
             cpu="7",
             memory="24G",
-            shared_memory="8G",
+            shared_memory="6G",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,

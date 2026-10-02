@@ -36,7 +36,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
             dataset_id=self.dataset_id,
             cpu="7",
             memory="12G",
-            shared_memory="4G",
+            shared_memory="2.5G",
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,

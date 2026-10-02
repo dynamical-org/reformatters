@@ -112,6 +112,12 @@ ECDS_VARIABLES: Final[tuple[str, ...]] = tuple(
 )
 
 
+def latest_expected_init_time(now: pd.Timestamp) -> pd.Timestamp:
+    """Newest expected published initialization as a timezone-naive UTC timestamp."""
+    now = now.tz_localize("UTC") if now.tz is None else now.tz_convert("UTC")
+    return (now - PUBLICATION_DELAY).normalize().tz_localize(None)
+
+
 class EcmwfIfsEns46DayGribArchiver(OperationalResources):
     """Retrieves ECMWF IFS ENS 46-day initializations from ECDS into dynamical's GRIB archive."""
 
@@ -196,7 +202,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
     ) -> Sequence[pd.Timestamp]:
         """The initializations one run checks, newest first."""
         now = now if now is not None else pd.Timestamp.now("UTC")
-        newest_init_time = (now - PUBLICATION_DELAY).normalize().tz_localize(None)
+        newest_init_time = latest_expected_init_time(now)
         init_times = pd.date_range(
             end=newest_init_time, periods=init_times_back, freq=INIT_FREQUENCY
         )

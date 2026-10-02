@@ -44,6 +44,8 @@ from reformatters.ecmwf.archive_gribs.archive import format_init_time
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     ARCHIVE_BASE_URL,
     ECDS_VARIABLES,
+    INIT_FREQUENCY,
+    latest_expected_init_time,
 )
 from reformatters.ecmwf.archive_gribs.grib_inventory import (
     INDEX_SUFFIX,
@@ -281,8 +283,11 @@ class EcmwfIfsEns46DayRegionJob(
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store, chunks=None)
-        append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
+        newest_init_time = max(
+            append_dim_start, latest_expected_init_time(pd.Timestamp.now("UTC"))
+        )
+        append_dim_end = newest_init_time + INIT_FREQUENCY
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
