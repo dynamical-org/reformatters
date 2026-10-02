@@ -39,8 +39,28 @@ _CRON_JOB = CronJob(
 )
 
 
-def test_sentry_exception_events_omit_frame_locals(
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "secret_access_key",
+        "ACCESS_KEY",
+        "Access_Key_Id",
+        "SESSION_TOKEN",
+        "token",
+        "Password",
+        "API_KEY",
+        "Authorization",
+        "aws_secret_access_key",
+        "private-token",
+        "RCLONE_SAMPLE_SECRET_VALUE",
+        "rclone_example_secret_key",
+        "Rclone_Example_Access_Key_Id",
+        "RCLONE_SAMPLE_TOKEN",
+    ],
+)
+def test_sentry_exception_events_scrub_nested_fields(
     monkeypatch: pytest.MonkeyPatch,
+    field_name: str,
 ) -> None:
     init = Mock()
     monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
@@ -56,21 +76,32 @@ def test_sentry_exception_events_omit_frame_locals(
         "integrations": [],
     }
     client = sentry_sdk.Client(**options)
-    marker = uuid4().hex
+    env = {"settings": [{field_name: uuid4().hex, "region": "example"}]}
+    ordinary = 17
     try:
         with sentry_sdk.new_scope() as scope:
             scope.set_client(client)
             try:
                 raise OSError("synthetic failure")
             except OSError as error:
-                event, _ = event_from_exception(error, client_options=client.options)
+                event, hint = event_from_exception(error, client_options=client.options)
+            event = client._prepare_event(event, hint, scope)
     finally:
         client.close()
 
+    assert event is not None
     frames = event["exception"]["values"][0]["stacktrace"]["frames"]
     assert frames
-    assert all("vars" not in frame for frame in frames)
-    assert marker not in json.dumps(event)
+    frame = next(
+        frame
+        for frame in frames
+        if frame["function"] == "test_sentry_exception_events_scrub_nested_fields"
+    )
+    assert frame["vars"]["ordinary"] == repr(ordinary)
+    settings = frame["vars"]["env"]["settings"][0]
+    assert settings[field_name] == "[Filtered]"
+    assert settings["region"] == "'example'"
+    assert env["settings"][0][field_name] not in json.dumps(event, default=str)
     assert event["exception"]["values"][0]["value"] == "synthetic failure"
 
 
