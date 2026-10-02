@@ -7,6 +7,7 @@ the presence of an archived object means it is complete.
 """
 
 import shutil
+import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -186,12 +187,14 @@ def _archive_one_selection(
     request = EcdsRequest(
         StateStore(selection_work_dir / "request_state.json"), api_url=api_url
     )
+    started = time.monotonic()
     request.retrieve(
         selection.inputs(init_time),
         target,
         poll_seconds=poll_seconds,
         maximum_polls=maximum_polls,
     )
+    retrieved = time.monotonic()
     index_path = check_and_index_archived_blob(
         target,
         variables=set(selection.variables),
@@ -199,10 +202,21 @@ def _archive_one_selection(
         ensemble_members=set(selection.ensemble_members),
         lead_time_labels=set(selection.lead_time_labels),
     )
+    indexed = time.monotonic()
     # The index lands first so a blob is never visible without the index that reads it.
     copy_local_file(index_path, f"{dst_init_path}/{index_path.name}", env_vars=env_vars)
     copy_local_file(target, f"{dst_init_path}/{selection.file_name}", env_vars=env_vars)
-    log.info("Archived %s/%s", dst_init_path, selection.file_name)
+    log.info(
+        "Archived %s/%s from ECDS job %s (%d bytes): retrieve %.1f s, "
+        "inventory %.1f s, upload %.1f s",
+        dst_init_path,
+        selection.file_name,
+        request.state_store.read().request_id,
+        target.stat().st_size,
+        retrieved - started,
+        indexed - retrieved,
+        time.monotonic() - indexed,
+    )
     # Kept until here so a retry resumes the in-flight job and partial download.
     shutil.rmtree(selection_work_dir)
 
