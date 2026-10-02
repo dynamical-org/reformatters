@@ -283,13 +283,8 @@ def validate_dataset(
 class CheckCurrentData(Validator):
     """Fail when an append-dim position that is due has not been ingested.
 
-    A position is due `max_delay` after its own timestamp: the source's publication
-    delay plus our update duration plus slack — typically the validation cron's
-    offset after the cycle it validates. Deadlines attach to grid positions (the
-    template's append_dim_frequency, anchored to the dataset's own positions), not
-    to the moment the check runs, so a tight deadline holds at any wall-clock time
-    and an off-schedule run never alerts on a gap that is merely the normal wait
-    for the next cycle.
+    A position is due `max_delay` after its own timestamp, on the template's
+    append_dim_frequency grid anchored to the dataset's own positions.
     """
 
     max_delay: timedelta

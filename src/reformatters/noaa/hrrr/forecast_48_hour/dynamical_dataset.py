@@ -7,7 +7,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
@@ -29,7 +28,7 @@ class NoaaHrrrForecast48HourDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Define Kubernetes cron jobs for operational updates and validation."""
+        """Define Kubernetes cron jobs for operational updates."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
         # HRRR f048 (last lead time) NOMADS last-modified ~init+1h50m (we try S3
         # first to spare NOMADS, but NOMADS publishes first). +3 min buffer.
@@ -49,18 +48,7 @@ class NoaaHrrrForecast48HourDataset(
             parallelism=workers,
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="3 2,8,14,20 * * *",  # 10m (pod_active_deadline) after reformat at :53
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.7",
-            memory="3.5G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         # Source-fill-value vars are NaN wherever the source's missing state applies
@@ -70,9 +58,8 @@ class NoaaHrrrForecast48HourDataset(
             self.template_config.data_vars
         )
         return (
-            # The update ingests each init at init+1h53m (f048 publishes ~init+1h50m);
-            # validation fires at init+2h03m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=3)),
+            # The update ingests each init at init+1h53m (f048 publishes ~init+1h50m).
+            validation.CheckCurrentData(max_delay=timedelta(hours=1, minutes=53)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(

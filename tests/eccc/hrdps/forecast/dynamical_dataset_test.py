@@ -182,8 +182,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
 def test_operational_kubernetes_resources(
     dataset: EcccHrdpsForecastDataset,
 ) -> None:
-    archive_grib_files_job, update_cron_job, validation_cron_job = (
-        dataset.operational_kubernetes_resources("test-image-tag")
+    archive_grib_files_job, update_cron_job = dataset.operational_kubernetes_resources(
+        "test-image-tag"
     )
 
     assert archive_grib_files_job.name == f"{dataset.dataset_id}-archive-grib-files"
@@ -200,19 +200,16 @@ def test_operational_kubernetes_resources(
     # reprocesses. Each is a whole shard, so neither splits further.
     assert update_cron_job.workers_total == 2
     assert update_cron_job.parallelism == 2
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "0 5,11,17,23 * * *"
     assert update_cron_job.suspend is False
-    assert validation_cron_job.suspend is False
 
-    for cron_job in (archive_grib_files_job, update_cron_job, validation_cron_job):
+    for cron_job in (archive_grib_files_job, update_cron_job):
         assert cron_job.schedule.endswith(" * * *")
 
 
 def test_validators(dataset: EcccHrdpsForecastDataset) -> None:
     validators = tuple(dataset.validators())
     assert validators == (
-        validation.CheckCurrentData(max_delay=timedelta(hours=5)),
+        validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
         validation.CheckRecentNans(append_dim_window=4),
     )
 

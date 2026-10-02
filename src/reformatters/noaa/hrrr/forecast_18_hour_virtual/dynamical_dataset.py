@@ -6,7 +6,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -61,26 +61,13 @@ class NoaaHrrrForecast18HourVirtualDataset(
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="49 * * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="3.7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The hourly update polls each init from init+50m (f00 publishes ~init+51m);
-            # validation fires at init+1h49m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=1, minutes=49)),
+            # The hourly update polls each init from init+50m (f00 publishes ~init+51m).
+            validation.CheckCurrentData(max_delay=timedelta(minutes=50)),
             # Newest ingested init: the run that just ended may have deferred late files
             # to the next fire, but f00 lands an hour before its poll deadline, so 5%
             # (3 of 57 files, one lead's worth) separates a deferral from a cycle that

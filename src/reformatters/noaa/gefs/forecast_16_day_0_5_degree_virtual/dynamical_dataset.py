@@ -5,7 +5,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -48,7 +48,6 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
         # A run publishes ~init+3h46m through ~init+7h11m.
         # Fire just before the first files become available and stop 30m after expected completion.
@@ -64,23 +63,12 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
             workers_total=1,
             parallelism=1,
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline
-            schedule="55 7,13,19,1 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=50)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
             validation.CheckVirtualManifestCompleteness(),
             # Four levels so the sample reaches 600 hPa, an icing level; three would
             # miss every level icing is published at.

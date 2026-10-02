@@ -89,6 +89,7 @@ def monitor_cron(
     send_in_progress: bool = True,
     send_result: bool = True,
     monitor_name: str | None = None,
+    checkin_margin: int = 10,
 ) -> Iterator[None]:
     """Send Sentry cron check-ins for `cron_job` around the wrapped block, so a
     missed or overrunning run alerts, not just a raised exception."""
@@ -108,7 +109,7 @@ def monitor_cron(
             monitor_config={
                 "schedule": {"type": "crontab", "value": cron_job.schedule},
                 "timezone": "UTC",
-                "checkin_margin": 10,
+                "checkin_margin": checkin_margin,
                 "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
                 "failure_issue_threshold": 1,
                 "recovery_threshold": 1,

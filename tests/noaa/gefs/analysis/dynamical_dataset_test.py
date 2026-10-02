@@ -25,8 +25,8 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
     """Test the Kubernetes resource configuration for GEFS analysis dataset."""
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
 
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
@@ -36,13 +36,6 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
     assert update_cron_job.memory == "30G"
     assert update_cron_job.shared_memory == "12G"
     assert update_cron_job.ephemeral_storage == "35G"
-
-    # Check validation job
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "21 4,10,16,22 * * *"
-    assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
-    assert validation_cron_job.cpu == "1.3"
-    assert validation_cron_job.memory == "7G"
 
 
 def test_validators(dataset: GefsAnalysisDataset) -> None:

@@ -325,13 +325,6 @@ class ReformatCronJob(CronJob):
     service_account_name: str | None = SERVICE_ACCOUNT
 
 
-class ValidationCronJob(CronJob):
-    name: Annotated[CronJobName, pydantic.Field(pattern=r".+-validate$")]
-    command: Sequence[str] = ["validate"]
-    workers_total: int = 1
-    parallelism: int = 1
-
-
 def load_secret(secret_name: str) -> dict[str, Any]:
     """
     Load a secret from kubernetes, either from mounted file or directly from kubernetes API.
