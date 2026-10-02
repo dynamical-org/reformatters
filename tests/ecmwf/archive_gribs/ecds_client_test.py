@@ -1,10 +1,12 @@
 import itertools
 import json
+import shutil
 import threading
 import time
 from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock, call
 
@@ -22,6 +24,9 @@ from reformatters.ecmwf.archive_gribs.ecds_client import (
     constraints,
     costing,
     process_url,
+)
+from reformatters.ecmwf.archive_gribs.grib_inventory import (
+    count_grib_messages as ecds_client_count_grib_messages,
 )
 
 from .grib_inventory_test import grib_message
@@ -1153,12 +1158,15 @@ class InterruptedBody(BytesIO):
     def stream(self, chunk_size: int, decode_content: bool) -> Iterator[bytes]:
         assert decode_content
         yield self.read(chunk_size)
-        raise requests.ConnectionError("transient")
+        raise requests.ConnectionError(
+            "Connection broken for https://files.test/blob?value=marker-b"
+        )
 
 
 def test_download_retry_resumes_without_api_authentication(
     offline_request: tuple[EcdsRequest, OfflineAdapter, OfflineAdapter],
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     request, api, downloads = offline_request
     request.state_store.write(
@@ -1180,8 +1188,12 @@ def test_download_retry_resumes_without_api_authentication(
         wire_response(message[4:], status_code=206),
     ]
 
-    with pytest.raises(requests.ConnectionError, match="transient"):
+    with pytest.raises(requests.ConnectionError) as error:
         request.download(target)
+    assert "marker-b" not in str(error.value)
+    assert "files.test" not in str(error.value)
+    assert error.value.__suppress_context__
+    assert "marker-b" not in caplog.text
     assert request.state_store.read().status == "submitted"
     assert target.with_suffix(".grib2.partial").read_bytes() == message[:4]
     request.download(target)
@@ -1636,20 +1648,46 @@ def test_resubmitting_discards_the_part_files_of_the_old_result(
     assert target.read_bytes() == grib_message()
 
 
-def test_a_ranged_download_logs_network_time_apart_from_the_grib_scan(
+def test_a_ranged_download_logs_transfer_assembly_and_scan_times_apart(
     range_request: tuple[EcdsRequest, RangeServer],
     tmp_path: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    request, _ = range_request
+    request, server = range_request
     caplog.set_level("INFO")
+    clock_lock = threading.Lock()
 
-    request.download(tmp_path / "blob.grib2", download_ranges=4)
+    def advance(seconds: float) -> None:
+        with clock_lock:
+            clock.now += seconds
+
+    def reply(start: int, end: int, result: requests.Response) -> requests.Response:
+        advance(1)
+        return result
+
+    def copyfileobj(*args: Any) -> None:  # noqa: ANN401
+        advance(4)
+        shutil.copyfileobj(*args)
+
+    def count_grib_messages(path: Path) -> int:
+        advance(16)
+        return ecds_client_count_grib_messages(path)
+
+    server.reply = reply
+    monkeypatch.setattr(ecds_client, "shutil", SimpleNamespace(copyfileobj=copyfileobj))
+    monkeypatch.setattr(ecds_client, "count_grib_messages", count_grib_messages)
+
+    request.download(tmp_path / "blob.grib2", download_ranges=2)
 
     [record] = [r for r in caplog.records if r.getMessage().startswith("Downloaded")]
-    assert "4 ranges" in record.getMessage()
-    assert "MB/s" in record.getMessage()
-    assert "counted 8 GRIB messages" in record.getMessage()
+    size = len(RANGED_BLOB)
+    assert record.getMessage().endswith(
+        f"({size} bytes, {size} transferred) over 2 ranges: transfer 3.0 s "
+        f"({size / 3 / 1e6:.1f} MB/s), assembly 8.0 s, "
+        "counted 8 GRIB messages in 16.0 s"
+    )
     assert "marker-b" not in caplog.text
 
 
@@ -1753,3 +1791,121 @@ def test_a_part_failure_stops_and_joins_every_part_before_cleanup(
     assert part_paths(target) == []
     [slow_body] = slow_bodies
     assert 0 < slow_body.bytes_streamed < size // 2
+
+
+def test_a_part_error_mid_body_omits_the_signed_url_and_discards_parts(
+    range_request: tuple[EcdsRequest, RangeServer],
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request, server = range_request
+    target = tmp_path / "blob.grib2"
+
+    def reply(start: int, end: int, result: requests.Response) -> requests.Response:
+        if start > 0:
+            result.raw = InterruptedBody(RANGED_BLOB[start : end + 1])
+        return result
+
+    server.reply = reply
+
+    with pytest.raises(requests.ConnectionError) as error:
+        request.download(target, download_ranges=2)
+
+    assert "marker-b" not in str(error.value)
+    assert "files.test" not in str(error.value)
+    assert error.value.__suppress_context__
+    assert "marker-b" not in caplog.text
+    assert part_paths(target) == []
+    assert request.state_store.read().status == "submitted"
+
+
+@pytest.fixture
+def abort_began(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
+    began = threading.Event()
+    abort = ecds_client._ActiveResponses.abort
+
+    def signalling_abort(self: ecds_client._ActiveResponses) -> None:
+        abort(self)
+        began.set()
+
+    monkeypatch.setattr(ecds_client._ActiveResponses, "abort", signalling_abort)
+    return began
+
+
+def fail_first_part_then_second(
+    server: RangeServer,
+    abort_began: threading.Event,
+    first: Callable[[requests.Response], requests.Response],
+    second: Callable[[requests.Response], requests.Response],
+) -> None:
+    """Part 0 fails once part 1 is in flight; part 1 answers only after the abort began."""
+    second_started = threading.Event()
+
+    def reply(start: int, end: int, result: requests.Response) -> requests.Response:
+        if start == 0 and end > 0:
+            assert second_started.wait(5)
+            return first(result)
+        if start > 0:
+            second_started.set()
+            assert abort_began.wait(5)
+            return second(result)
+        return result
+
+    server.reply = reply
+
+
+def gone(result: requests.Response) -> requests.Response:
+    return wire_response(status_code=404)
+
+
+def precondition_failed_reply(result: requests.Response) -> requests.Response:
+    precondition_failed(0, 0, result)
+    return result
+
+
+def etag_changed_reply(result: requests.Response) -> requests.Response:
+    changed_etag(0, 0, result)
+    return result
+
+
+def connection_error(result: requests.Response) -> requests.Response:
+    raise requests.ConnectionError(
+        f"Max retries exceeded with url: {SIGNED_RESULT_URL}"
+    )
+
+
+@pytest.mark.parametrize("second", [etag_changed_reply, precondition_failed_reply])
+def test_a_mismatch_after_an_earlier_404_is_not_expired(
+    range_request: tuple[EcdsRequest, RangeServer],
+    tmp_path: Path,
+    abort_began: threading.Event,
+    second: Callable[[requests.Response], requests.Response],
+) -> None:
+    request, server = range_request
+    request.session = session_mock()
+    request.session.get.return_value = response(
+        {"status": "successful", "asset": {"value": {"href": SIGNED_RESULT_URL}}}
+    )
+    fail_first_part_then_second(server, abort_began, gone, second)
+
+    with pytest.raises(EcdsRangeMismatchError):
+        request.retrieve({}, tmp_path / "blob.grib2", poll_seconds=0, download_ranges=2)
+
+    request.session.post.assert_not_called()
+    assert request.state_store.read().status == "successful"
+    assert part_paths(tmp_path / "blob.grib2") == []
+
+
+def test_a_404_after_an_earlier_transport_error_expires_the_job(
+    range_request: tuple[EcdsRequest, RangeServer],
+    tmp_path: Path,
+    abort_began: threading.Event,
+) -> None:
+    request, server = range_request
+    fail_first_part_then_second(server, abort_began, connection_error, gone)
+
+    with pytest.raises(EcdsJobFailedError, match="ended with status expired"):
+        request.download(tmp_path / "blob.grib2", download_ranges=2)
+
+    assert request.state_store.read().status == "expired"
+    assert part_paths(tmp_path / "blob.grib2") == []

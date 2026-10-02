@@ -13,7 +13,7 @@ import re
 import shutil
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -503,8 +503,7 @@ class EcdsRequest:
                 timeout=DOWNLOAD_TIMEOUT_SECONDS,
             )
         except requests.RequestException as e:
-            # Connection errors quote the request URL, which is a credential.
-            raise type(e)(f"ECDS result request failed: {type(e).__name__}") from None
+            raise _without_url(e) from None
         if response.status_code == requests.codes.not_found:
             response.close()
             raise _ResultGoneError
@@ -526,7 +525,7 @@ class EcdsRequest:
         transferred_bytes = 0
         try:
             with partial_path.open("ab" if append else "wb") as output:
-                for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                for chunk in _iter_body(response):
                     output.write(chunk)
                     transferred_bytes += len(chunk)
         finally:
@@ -564,14 +563,14 @@ class EcdsRequest:
                 )
             written = 0
             with part.path.open("wb") as output:
-                for chunk in response.iter_content(DOWNLOAD_CHUNK_BYTES):
+                for chunk in _iter_body(response):
                     if active.aborted.is_set():
                         return
                     written += len(chunk)
                     if written > part.length:
                         break
                     output.write(chunk)
-            if written != part.length:
+            if written != part.length and not active.aborted.is_set():
                 raise EcdsRangeMismatchError(
                     f"ECDS result range {part.start}-{part.end} returned "
                     f"{written} bytes, not {part.length}"
@@ -617,14 +616,17 @@ class EcdsRequest:
                 for part in parts
             ]
             done, _ = wait(futures, return_when=FIRST_EXCEPTION)
-            failures = [
-                error for future in done if (error := future.exception()) is not None
-            ]
-            if failures:
+            if any(future.exception() is not None for future in done):
                 for future in futures:
                     future.cancel()
                 active.abort()
         # Leaving the pool joined every worker, so no part file is written after this.
+        # Failures that surface during the abort can outrank the one that began it.
+        failures = [
+            error
+            for future in sorted(futures, key=lambda future: future not in done)
+            if not future.cancelled() and (error := future.exception()) is not None
+        ]
         if failures:
             _delete_part_files(target)
             raise min(failures, key=_failure_priority)
@@ -715,6 +717,18 @@ def _delete_part_files(target: Path) -> None:
         for path in target.parent.iterdir():
             if path.name.startswith(prefix):
                 path.unlink()
+
+
+def _without_url(error: requests.RequestException) -> requests.RequestException:
+    """The same kind of error without its message, which can quote the signed result URL."""
+    return type(error)(f"ECDS result download failed: {type(error).__name__}")
+
+
+def _iter_body(response: requests.Response) -> Iterator[bytes]:
+    try:
+        yield from response.iter_content(DOWNLOAD_CHUNK_BYTES)
+    except requests.RequestException as e:
+        raise _without_url(e) from None
 
 
 def _raise_for_download_status(response: requests.Response) -> None:
