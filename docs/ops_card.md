@@ -11,7 +11,6 @@ _Requires sentry organization invitation._
 - [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by `cron_job_name` / `job_name` / `pod_name` attributes.
 
 Alerts route to Slack `#ops-reformatters` via each project's alert rule.
-Exception events retain frame-local variables; credential fields in nested dictionaries are redacted in the process before events are sent. Server-side scrubbing provides a second layer.
 
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._
@@ -25,4 +24,4 @@ Accessible via manually triggered github actions. Follow link and click "run wor
 - **Update fails**: Look at issues and logs. Failed jobs usually require a code change to fix (e.g. structural change to data at the source). If it appears a code change is needed, make a PR, merge it, wait for the deploy action to complete, then re-run the update and validation workflows. If it appears transient, re-run the update job followed by validation.
 - **Earthdata unauthorized (401)** (IMERG, SMAP): `Earthdata session rejected (401)` logs at info while the download retries with a fresh session. `Download failed <url>` with `401 Client Error` or `Failed to get token from NASA Earthdata` means retries were exhausted; check Earthdata Login availability, the `nasa-earthdata` credentials, and data-access approvals.
 
-_This card gives only the first steps for responding to an operational error. Keep noncritical details elsewhere so on-call operators can find what they need quickly._
+_This card gives only the first steps for responding to an operational error. Keep noncritical details elsewhere so on-call operators can find what they need quickly. Agents: ask before adding to this file._
