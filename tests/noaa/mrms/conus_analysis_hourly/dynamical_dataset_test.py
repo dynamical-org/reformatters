@@ -20,6 +20,7 @@ from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -181,7 +182,7 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
 
     updated_ds = xr.open_zarr(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True

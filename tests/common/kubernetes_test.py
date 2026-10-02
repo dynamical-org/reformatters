@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, Mock, patch
@@ -15,6 +15,7 @@ from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
+    VALIDATION_FAILURE_EXIT_CODE,
     CronJob,
     Job,
     ReformatCronJob,
@@ -22,6 +23,7 @@ from reformatters.common.kubernetes import (
     _load_secret_from_kubernetes_api,
     create_job_from_cronjob,
     load_secret,
+    retry_job_name,
 )
 
 
@@ -64,6 +66,14 @@ def test_as_kubernetes_object_comprehensive() -> None:
                 {
                     "action": "FailJob",
                     "onPodConditions": [{"type": "ConfigIssue", "status": "True"}],
+                },
+                {
+                    "action": "FailJob",
+                    "onExitCodes": {
+                        "containerName": "worker",
+                        "operator": "In",
+                        "values": [VALIDATION_FAILURE_EXIT_CODE],
+                    },
                 },
             ]
         },
@@ -595,22 +605,66 @@ def test_job_service_account_is_optional() -> None:
     pod_spec = opted_in.as_kubernetes_object()["spec"]["template"]["spec"]
     assert pod_spec["serviceAccountName"] == SERVICE_ACCOUNT
 
-    cron = _cron_job("0 * * * *")
+    cron = _cron_job("0 * * * *").model_copy(update={"service_account_name": None})
     cron_spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
     assert "serviceAccountName" not in cron_spec["template"]["spec"]
-    assert len(cron_spec["podFailurePolicy"]["rules"]) == 2
+    assert len(cron_spec["podFailurePolicy"]["rules"]) == 3
+
+
+@pytest.mark.parametrize(
+    ("schedule", "now", "expected"),
+    [
+        ("0 * * * *", "2026-08-02T12:00", "2026-08-02T13:00"),
+        ("53 1,7,13,19 * * *", "2026-08-02T19:53", "2026-08-03T01:53"),
+        ("0 23 */3 * *", "2026-09-28T23:00", "2026-10-01T23:00"),
+    ],
+)
+def test_next_fire_time(schedule: str, now: str, expected: str) -> None:
+    assert _cron_job(schedule).next_fire_time(pd.Timestamp(now)) == pd.Timestamp(
+        expected
+    )
+
+
+def test_update_cronjob_has_service_account_and_validation_failure_policy() -> None:
+    cron = _cron_job("0 * * * *")
+    spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
+    assert spec["template"]["spec"]["serviceAccountName"] == SERVICE_ACCOUNT
+    assert {
+        "action": "FailJob",
+        "onExitCodes": {
+            "containerName": "worker",
+            "operator": "In",
+            "values": [VALIDATION_FAILURE_EXIT_CODE],
+        },
+    } in spec["podFailurePolicy"]["rules"]
+    assert (
+        "serviceAccountName"
+        not in Job(
+            command=["backfill-kubernetes"],
+            image="img",
+            dataset_id="weather-data",
+            cpu="1",
+            memory="1G",
+            workers_total=1,
+            parallelism=1,
+        ).as_kubernetes_object()["spec"]["template"]["spec"]
+    )
 
 
 def _deployed_cronjob(*, suspend: bool = False) -> Mock:
     cronjob = Mock()
     cronjob.metadata.uid = "12345678-1234-1234-1234-123456789abc"
     cronjob.spec.suspend = suspend
+    cronjob.spec.schedule = "0 * * * *"
     cronjob.spec.job_template.metadata = client.V1ObjectMeta(
         labels={"template-label": "value"}, annotations={"template-note": "value"}
     )
     cronjob.spec.job_template.spec = client.V1JobSpec(
         template=client.V1PodTemplateSpec(
-            spec=client.V1PodSpec(containers=[client.V1Container(name="worker")])
+            spec=client.V1PodSpec(
+                containers=[client.V1Container(name="worker")],
+                active_deadline_seconds=600,
+            )
         )
     )
     return cronjob
@@ -650,6 +704,41 @@ def test_create_job_clones_live_template_without_owner_reference(
     }
     assert job.spec == cronjob.spec.job_template.spec
     assert job.spec is not cronjob.spec.job_template.spec
+
+
+@pytest.mark.parametrize(
+    ("minutes_until_fire", "created"), [(11, True), (9, False), (10, False)]
+)
+def test_create_job_skips_only_within_live_deadline(
+    monkeypatch: pytest.MonkeyPatch, minutes_until_fire: int, created: bool
+) -> None:
+    cronjob = _deployed_cronjob()
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = cronjob
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.datetime",
+        Mock(
+            now=lambda tz: (
+                datetime(2026, 8, 2, 13, 0, tzinfo=UTC)
+                - timedelta(minutes=minutes_until_fire)
+            )
+        ),
+    )
+
+    assert (
+        create_job_from_cronjob(
+            "weather-update", "weather-retry-r1", skip_if_next_run_within_deadline=True
+        )
+        is created
+    )
+    assert batch.create_namespaced_job.called is created
 
 
 def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -729,3 +818,30 @@ def test_create_job_propagates_non_conflict_api_error(
         create_job_from_cronjob("weather-update", "weather-retry-r1")
     assert error.value.status == 403
     batch.read_namespaced_job.assert_not_called()
+
+
+def test_retry_job_name_is_anchored_and_length_safe() -> None:
+    assert retry_job_name("forecast-update") == (True, "forecast-update-r1")
+    assert retry_job_name("forecast-update-r1") == (False, "forecast-update-r2")
+    assert retry_job_name("forecast-update", max_retries=0) == (
+        False,
+        "forecast-update-r1",
+    )
+    assert retry_job_name("forecast-r1-update", max_retries=2) == (
+        True,
+        "forecast-r1-update-r1",
+    )
+    assert retry_job_name("forecast-update-r1", max_retries=2) == (
+        True,
+        "forecast-update-r2",
+    )
+    should_retry, first = retry_job_name("a" * 62 + "b")
+    assert should_retry
+    should_retry, second = retry_job_name("a" * 62 + "c")
+    assert should_retry
+    assert len(first) <= 52
+    assert len(second) <= 52
+    assert len(first.rsplit("-", 2)[1]) == 4
+    assert len(f"{first}-2147483646") <= 63
+    assert first != second
+    assert (True, first) == retry_job_name("a" * 62 + "b")

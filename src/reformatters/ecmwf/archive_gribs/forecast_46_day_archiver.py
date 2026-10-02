@@ -183,12 +183,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 if init_time == max(init_times):
                     newest_ready = ready
 
-            if (
-                newest_ready
-                and Config.is_prod
-                and os.getenv("KUBERNETES_SERVICE_HOST")
-                and dst_root_path == ARCHIVE_RCLONE_ROOT
-            ):
+            if newest_ready and Config.is_prod and dst_root_path == ARCHIVE_RCLONE_ROOT:
                 for frequency in MATERIALIZED_PRODUCT_ECDS_VARIABLES:
                     cron_name = f"ecmwf-ifs-ens-46-day-{frequency}-update"
                     kubernetes.create_job_from_cronjob(

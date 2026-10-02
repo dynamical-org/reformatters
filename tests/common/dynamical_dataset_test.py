@@ -11,11 +11,16 @@ import icechunk.store
 import numpy as np
 import pandas as pd
 import pytest
+import sentry_sdk
+import sentry_sdk.crons
+import typer
 import xarray as xr
 from pydantic import Field, ValidationError, computed_field
+from typer.testing import CliRunner
 
 from reformatters.common import (
     dynamical_dataset,
+    kubernetes,
     operational,
     storage,
     template_utils,
@@ -31,7 +36,9 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.monitoring import monitor_cron
 from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     _NO_SECRET_NAME,
     DatasetFormat,
@@ -84,6 +91,18 @@ def stalled_cycles_before_alerting(
         if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
             return stalled
     raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
+
+
+def assert_update_fails_validation(
+    dataset: DynamicalDataset, job_name: str, expected_check: str
+) -> None:
+    with pytest.raises(typer.Exit) as exc_info:
+        dataset.update(job_name)
+
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, validation.OperationalValidationError)
+    assert expected_check in str(cause)
 
 
 def assert_configured_validators(dataset: DynamicalDataset) -> None:
@@ -255,6 +274,224 @@ def test_dynamical_dataset_init() -> None:
         template_config=ExampleConfig(),
         region_job_class=ExampleRegionJob,
     )
+
+
+@pytest.mark.parametrize("worker_index", [0, 1, 2])
+def test_update_validates_only_after_final_worker_finishes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, worker_index: int
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", lambda self: tmp_path)
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        Mock(return_value=([], xr.DataTree())),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_process_region_jobs",
+        Mock(side_effect=lambda **kwargs: events.append("processed")),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_validate_dataset",
+        Mock(side_effect=lambda name: events.append("validated")),
+    )
+
+    ExampleDataset().update("update-123", worker_index=worker_index, workers_total=3)
+
+    assert events == (
+        ["processed", "validated"] if worker_index == 2 else ["processed"]
+    )
+
+
+def test_failed_update_does_not_validate_or_submit_retry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", lambda self: tmp_path)
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        Mock(return_value=([], xr.DataTree())),
+    )
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_process_region_jobs",
+        Mock(side_effect=RuntimeError("write failed")),
+    )
+    validate = Mock()
+    submit = Mock()
+    monkeypatch.setattr(ExampleDataset, "_validate_dataset", validate)
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        ExampleDataset().update("update-123")
+
+    validate.assert_not_called()
+    submit.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("job_name", "prod", "expected_retry"),
+    [
+        ("update-123", True, "update-123-r1"),
+        ("update-123-r1", True, None),
+        ("update-123", False, None),
+    ],
+)
+def test_failed_validation_reports_failure_and_retries_only_initial_production_run(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    job_name: str,
+    prod: bool,
+    expected_retry: str | None,
+) -> None:
+    failure = validation.OperationalValidationError("missing data")
+    monkeypatch.setattr(ExampleDataset, "_validate_dataset", Mock(side_effect=failure))
+    monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    monkeypatch.setenv("CRON_JOB_NAME", "stage-example-v2-update")
+    submit = Mock()
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    events: list[tuple[str, str]] = []
+    operational.register_run_monitor(_recording_monitor(events))
+    dataset = ExampleDataset()
+
+    with (
+        pytest.raises(typer.Exit) as exc_info,
+    ):
+        dataset._validate_after_update(job_name)
+
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    assert exc_info.value.__cause__ is failure
+    record = next(record for record in caplog.records if record.exc_info)
+    assert record.getMessage() == f"Operational validation failed for {job_name}"
+    assert record.exc_info is not None
+    assert record.exc_info[1] is failure
+    assert events[-1] == ("error", "example-dataset-validate")
+    if expected_retry is None:
+        submit.assert_not_called()
+    else:
+        submit.assert_called_once_with(
+            "stage-example-v2-update",
+            expected_retry,
+            skip_if_next_run_within_deadline=True,
+        )
+
+
+@pytest.mark.parametrize("validation_crashes", [False, True])
+def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    validation_crashes: bool,
+) -> None:
+    failure = (
+        RuntimeError("store read failed")
+        if validation_crashes
+        else validation.OperationalValidationError("missing data")
+    )
+    submission_error = RuntimeError("Kubernetes unavailable")
+    submit = Mock(side_effect=submission_error)
+    monkeypatch.setattr(ExampleDataset, "_validate_dataset", Mock(side_effect=failure))
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("CRON_JOB_NAME", "example-update")
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        ExampleDataset()._validate_after_update("update-123")
+
+    assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
+    assert exc_info.value.__cause__ is failure
+    errors = [record.exc_info[1] for record in caplog.records if record.exc_info]
+    if validation_crashes:
+        submit.assert_not_called()
+        assert errors == [failure]
+    else:
+        submit.assert_called_once()
+        assert errors == [failure, submission_error]
+        assert caplog.records[-1].getMessage() == "Could not submit update-123-r1"
+
+
+@pytest.mark.parametrize("command", ["update", "validate"])
+@pytest.mark.parametrize("passes", [False, True])
+@pytest.mark.parametrize("staging", [False, True])
+def test_validation_has_its_own_monitor_after_update(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    command: str,
+    passes: bool,
+    staging: bool,
+) -> None:
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", lambda self: tmp_path)
+    monkeypatch.setattr(
+        ExampleDataset,
+        "_operational_update_jobs",
+        Mock(return_value=([], xr.DataTree())),
+    )
+    monkeypatch.setattr(ExampleDataset, "_process_region_jobs", Mock())
+    failure = validation.OperationalValidationError("missing data")
+    checks = Mock(side_effect=None if passes else failure)
+    monkeypatch.setattr(ExampleDataset, "validators", Mock(return_value=[]))
+    monkeypatch.setattr(validation, "validate_dataset", checks)
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    monkeypatch.setattr(Config, "env", Env.test)
+    prefix = (
+        staging_cronjob_name(
+            "example-dataset", ExampleConfig().version, command
+        ).removesuffix(f"-{command}")
+        if staging
+        else "example-dataset"
+    )
+    monkeypatch.setenv("CRON_JOB_NAME", f"{prefix}-{command}")
+    capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", capture)
+    monkeypatch.setattr(sentry_sdk, "capture_exception", Mock())
+    monkeypatch.setattr(sentry_sdk, "flush", Mock())
+    operational.register_run_monitor(monitor_cron)
+    dataset = ExampleDataset()
+
+    result = CliRunner().invoke(dataset.get_cli(), [command, "test-job"])
+
+    assert result.exit_code == (
+        0
+        if passes
+        else kubernetes.VALIDATION_FAILURE_EXIT_CODE
+        if command == "update"
+        else 1
+    )
+    checks.assert_called_once()
+    assert validation.CheckExpectedShards() in checks.call_args.args[0]
+    calls = capture.call_args_list
+    expected = []
+    if command == "update":
+        expected.extend(
+            [(f"{prefix}-update", "in_progress"), (f"{prefix}-update", "ok")]
+        )
+    expected.extend(
+        [
+            (f"{prefix}-validate", "in_progress"),
+            (f"{prefix}-validate", "ok" if passes else "error"),
+        ]
+    )
+    assert [
+        (call.kwargs["monitor_slug"], call.kwargs["status"]) for call in calls
+    ] == expected
+    if command == "update":
+        assert calls[0].kwargs["check_in_id"] != calls[2].kwargs["check_in_id"]
+    for call in calls:
+        cron = dataset._operational_cron_job(
+            ValidationCronJob
+            if call.kwargs["monitor_slug"].endswith("-validate")
+            else ReformatCronJob
+        )
+        assert call.kwargs["monitor_config"] == {
+            "schedule": {"type": "crontab", "value": cron.schedule},
+            "timezone": "UTC",
+            "checkin_margin": 10,
+            "max_runtime": 30,
+            "failure_issue_threshold": 1,
+            "recovery_threshold": 1,
+        }
 
 
 def _example_icechunk_virtual_config() -> IcechunkVirtualConfig:
@@ -792,15 +1029,16 @@ def _recording_monitor(
         *,
         send_in_progress: bool,
         send_result: bool,
+        monitor_name: str | None,
     ) -> Iterator[None]:
-        events.append(("enter", cron_job.name))
+        events.append(("enter", monitor_name or cron_job.name))
         try:
             yield
         except Exception:
-            events.append(("error", cron_job.name))
+            events.append(("error", monitor_name or cron_job.name))
             raise
         else:
-            events.append(("ok", cron_job.name))
+            events.append(("ok", monitor_name or cron_job.name))
 
     return monitor
 

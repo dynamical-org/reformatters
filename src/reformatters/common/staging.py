@@ -2,13 +2,15 @@ import json
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import item
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
+
+if TYPE_CHECKING:
+    from reformatters.common.dynamical_dataset import DynamicalDataset
 
 log = get_logger(__name__)
 

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -29,6 +30,8 @@ class NoaaHrrrForecast18HourVirtualDataset(
     region_job_class: type[NoaaHrrrForecast18HourVirtualRegionJob] = (
         NoaaHrrrForecast18HourVirtualRegionJob
     )
+
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(

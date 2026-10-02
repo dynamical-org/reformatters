@@ -45,6 +45,7 @@ def monitor_cron(
     *,
     send_in_progress: bool = True,
     send_result: bool = True,
+    monitor_name: str | None = None,
 ) -> Iterator[None]:
     """Send Sentry cron check-ins for `cron_job` around the wrapped block, so a
     missed or overrunning run alerts, not just a raised exception."""
@@ -54,12 +55,12 @@ def monitor_cron(
 
     # Use the actual cronjob name from k8s env when available. This ensures
     # staging cronjobs report to their own Sentry monitor, not production's.
-    monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
+    monitor_slug = monitor_name or os.getenv("CRON_JOB_NAME") or cron_job.name
 
     def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
         sentry_sdk.crons.capture_checkin(
             monitor_slug=monitor_slug,
-            check_in_id=digest([reformat_job_name], length=32),
+            check_in_id=digest([monitor_slug, reformat_job_name], length=32),
             status=status,
             monitor_config={
                 "schedule": {"type": "crontab", "value": cron_job.schedule},

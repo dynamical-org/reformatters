@@ -31,6 +31,7 @@ from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 # A land point in the western Amazon and an open ocean point in the Pacific.
@@ -261,7 +262,7 @@ def test_update_advances_past_an_unread_day_and_fills_it_in_later(
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
 
     gap_ds = _open_store(dataset)
     assert_array_equal(gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
@@ -294,7 +295,7 @@ def test_failed_reread_before_a_later_success_writes_nan_then_refills(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
 
-    dataset.update("test-failed-reread")
+    assert_update_fails_validation(dataset, "test-failed-reread", "CheckRecentNans")
     failed_reread_ds = _open_store(dataset)
     assert_array_equal(
         failed_reread_ds["time"], pd.date_range("2025-01-01", "2025-01-03")

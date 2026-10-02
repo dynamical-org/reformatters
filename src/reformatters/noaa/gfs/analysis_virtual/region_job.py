@@ -31,10 +31,7 @@ class NoaaGfsAnalysisVirtualSourceFileCoord(NoaaGfsVirtualSourceFileCoord):
 class NoaaGfsAnalysisVirtualRegionJob(
     NoaaGfsVirtualRegionJob[NoaaGfsAnalysisVirtualSourceFileCoord]
 ):
-    # A position is labelled by its valid time, and the cycle a fire targets publishes
-    # hours valid up to one cycle after the fire while the run polls, so candidates run
-    # from 12 h before the fire to 6 h after it. Positions of the next cycle stay held
-    # by discover_available until that cycle's own files land.
+    # Cover the target cycle's six valid hours and two preceding cycles for recovery.
     operational_update_window: ClassVar[Timedelta] = (
         pd.Timedelta("12h") + NOAA_GFS_INIT_FREQUENCY
     )
@@ -60,7 +57,9 @@ class NoaaGfsAnalysisVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=(job_fire_time or pd.Timestamp.now())
+            job_fire_time=(job_fire_time or pd.Timestamp.now()).floor(
+                f"{whole_hours(NOAA_GFS_INIT_FREQUENCY)}h"
+            )
             + NOAA_GFS_INIT_FREQUENCY,
         )
 
