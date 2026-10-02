@@ -67,6 +67,14 @@ def test_as_kubernetes_object_comprehensive() -> None:
                     "action": "FailJob",
                     "onPodConditions": [{"type": "ConfigIssue", "status": "True"}],
                 },
+                {
+                    "action": "FailJob",
+                    "onExitCodes": {
+                        "containerName": "worker",
+                        "operator": "In",
+                        "values": [VALIDATION_FAILURE_EXIT_CODE],
+                    },
+                },
             ]
         },
         "template": {

@@ -98,6 +98,14 @@ class Job(pydantic.BaseModel):
                                 {"type": "ConfigIssue", "status": "True"}
                             ],
                         },
+                        {
+                            "action": "FailJob",
+                            "onExitCodes": {
+                                "containerName": "worker",
+                                "operator": "In",
+                                "values": [VALIDATION_FAILURE_EXIT_CODE],
+                            },
+                        },
                     ]
                 },
                 "template": {
@@ -315,20 +323,6 @@ class ReformatCronJob(CronJob):
     workers_total: int = 1
     parallelism: int = 1
     service_account_name: str | None = SERVICE_ACCOUNT
-
-    def as_kubernetes_object(self) -> dict[str, Any]:
-        cronjob = super().as_kubernetes_object()
-        cronjob["spec"]["jobTemplate"]["spec"]["podFailurePolicy"]["rules"].append(
-            {
-                "action": "FailJob",
-                "onExitCodes": {
-                    "containerName": "worker",
-                    "operator": "In",
-                    "values": [VALIDATION_FAILURE_EXIT_CODE],
-                },
-            }
-        )
-        return cronjob
 
 
 class ValidationCronJob(CronJob):
