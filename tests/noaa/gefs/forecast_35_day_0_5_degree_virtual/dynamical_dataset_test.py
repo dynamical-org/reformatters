@@ -3,14 +3,19 @@ from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import icechunk
 import numpy as np
 import pandas as pd
 import pytest
+import sentry_sdk
+import sentry_sdk.crons
 import xarray as xr
 
 from reformatters.common import validation
+from reformatters.common.config import Config
+from reformatters.common.monitoring import monitor_cron
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.gefs.forecast_35_day_0_5_degree_virtual.dynamical_dataset import (
@@ -25,11 +30,38 @@ from reformatters.noaa.gefs.virtual_region_job import (
 )
 from reformatters.noaa.gefs.virtual_template_config import PRESSURE_LEVELS
 from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
     assert_configured_validators,
     stalled_cycles_before_alerting,
 )
 
 _INIT_TIME_FREQUENCY = pd.Timedelta("24h")
+
+
+def test_polling_leaves_validation_time_inside_single_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = NoaaGefsForecast35Day05DegreeVirtualDataset(
+        primary_storage_config=NOOP_STORAGE_CONFIG.model_copy(
+            update={"format": DatasetFormat.ICECHUNK}
+        )
+    )
+    cron_job, _ = dataset.operational_kubernetes_resources("test")
+    fire = pd.Timestamp("2026-09-27T03:45")
+    assert cron_job.pod_active_deadline == timedelta(hours=6)
+    assert dataset._virtual_poll_deadline(fire) == pd.Timestamp("2026-09-27T09:38")
+    assert dataset._virtual_poll_deadline(fire + pd.Timedelta("2h")) == (
+        fire + cron_job.pod_active_deadline - timedelta(minutes=7)
+    )
+
+    capture = Mock()
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", capture)
+    monkeypatch.setattr(sentry_sdk, "flush", Mock())
+    with monitor_cron(cron_job, "test"):
+        pass
+    assert capture.call_args_list[0].kwargs["monitor_config"]["max_runtime"] == 360
+
 
 # 40N 100W, a land cell so the soil and snow bitmaps carry values there.
 _LATITUDE, _LONGITUDE = 100, 160

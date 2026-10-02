@@ -893,6 +893,12 @@ def test_trigger_cannot_take_a_scheduled_job_name(cluster: Cluster) -> None:
     cluster.assert_denied(job, "clone")
 
 
+def test_long_retry_name_is_admitted_for_indexed_jobs(cluster: Cluster) -> None:
+    job = cluster.job_for(UPDATE)
+    job["metadata"]["name"] = reformatters_kubernetes.retry_job_name("x" * 63)
+    cluster.assert_allowed(job)
+
+
 def test_operator_verifies_installed_policy_identity(
     cluster: Cluster,
     kubectl_against_apiserver: None,

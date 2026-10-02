@@ -17,7 +17,10 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     EcmwfIfsEns46DayRegionJob,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
-from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
+from tests.common.dynamical_dataset_test import (
+    NOOP_STORAGE_CONFIG,
+    assert_update_fails_validation,
+)
 
 
 @pytest.fixture
@@ -157,5 +160,5 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         pd.Timestamp, "now", Mock(return_value=pd.Timestamp("2026-08-12T00:00"))
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
     assert_point_values(xr.open_zarr(store, chunks=None), [first_init, second_init])

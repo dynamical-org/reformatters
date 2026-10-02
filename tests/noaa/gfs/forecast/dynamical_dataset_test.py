@@ -13,6 +13,7 @@ from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 
@@ -171,7 +172,9 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
-    dataset.update("test-update-job-name")
+    assert_update_fails_validation(
+        dataset, "test-update-job-name", "CheckExpectedShards"
+    )
 
     def _check_updated_store(store: Store) -> None:
         updated_ds = xr.open_zarr(

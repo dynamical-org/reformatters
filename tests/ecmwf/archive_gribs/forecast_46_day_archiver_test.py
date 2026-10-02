@@ -242,7 +242,7 @@ def test_trigger_targets_keep_their_cron_backstops() -> None:
         assert cron.name == name
         assert cron.schedule == schedule
         assert not cron.suspend
-        assert cron.service_account_name is None
+        assert cron.service_account_name == SERVICE_ACCOUNT
 
 
 def test_archive_failure_does_not_submit_updates(
