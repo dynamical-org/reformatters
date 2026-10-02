@@ -392,7 +392,12 @@ def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
     )
     submission_error = RuntimeError("Kubernetes unavailable")
     submit = Mock(side_effect=submission_error)
-    capture = Mock()
+    fingerprints = []
+    capture = Mock(
+        side_effect=lambda error: fingerprints.append(
+            sentry_sdk.get_current_scope()._fingerprint
+        )
+    )
     monkeypatch.setattr(ExampleDataset, "_validate_dataset", Mock(side_effect=failure))
     monkeypatch.setattr(Config, "env", Env.prod)
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test-cluster")
@@ -400,8 +405,10 @@ def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
     monkeypatch.setattr(dynamical_dataset.sentry_sdk, "capture_exception", capture)
 
-    with pytest.raises(typer.Exit) as exc_info:
-        ExampleDataset()._validate_after_update("update-123")
+    with sentry_sdk.isolation_scope() as scope:
+        scope.fingerprint = ["example-dataset", "CheckCurrentData"]
+        with pytest.raises(typer.Exit) as exc_info:
+            ExampleDataset()._validate_after_update("update-123")
 
     assert exc_info.value.exit_code == kubernetes.VALIDATION_FAILURE_EXIT_CODE
     assert exc_info.value.__cause__ is failure
@@ -412,6 +419,8 @@ def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
     else:
         submit.assert_called_once()
         assert capture.call_args_list[1].args == (submission_error,)
+
+        assert fingerprints[1] == ["{{ default }}"]
 
 
 @pytest.mark.parametrize("command", ["update", "validate"])

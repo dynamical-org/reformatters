@@ -214,7 +214,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                             skip_if_next_run_within_deadline=True,
                         )
                     except Exception as submission_error:  # noqa: BLE001 - retain the failed Job without retrying finalized work
-                        sentry_sdk.capture_exception(submission_error)
+                        with sentry_sdk.new_scope() as scope:
+                            scope.fingerprint = ["{{ default }}"]
+                            sentry_sdk.capture_exception(submission_error)
                         log.warning(
                             "Could not submit %s: %s", retry_name, submission_error
                         )
@@ -834,7 +836,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         Anchored to the scheduled fire rather than to `now`, so a pod replacing an
         evicted one stops when the pod it replaced would have, instead of polling into
         the next fire and being killed mid-poll. Lands a grace period before the pod's
-        own active deadline, leaving room to exit and check in.
+        own active deadline, leaving room to validate, exit and check in.
         """
         cron_job = self._operational_cron_job(ReformatCronJob)
         assert (
