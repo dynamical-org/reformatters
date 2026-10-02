@@ -287,3 +287,29 @@ def test_check_available_queries_constraints_without_the_keys_it_checks() -> Non
     assert "level_value" not in queried
     assert queried["variable"] == list(selection.variables)
     assert queried["day"] == ["10"]
+
+
+def test_each_archived_selection_logs_one_timed_summary(
+    tmp_path: Path,
+    archive_bucket: dict[str, MagicMock],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("INFO")
+    archive_bucket[
+        "request"
+    ].return_value.state_store.read.return_value.request_id = "job-1"
+
+    archive(tmp_path)
+
+    summaries = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("Archived ")
+    ]
+    assert len(summaries) == len(SELECTIONS)
+    for selection in SELECTIONS:
+        [summary] = [m for m in summaries if f"/{selection.file_name} " in m]
+        assert "from ECDS job job-1 (4 bytes)" in summary
+        assert "retrieve" in summary
+        assert "inventory" in summary
+        assert "upload" in summary
