@@ -78,7 +78,7 @@ def archive_initialization(
         maximum_polls: Give up on a job after this many polls.
         env_vars: Environment variables to add to this process's environment for `rclone`.
         publication_deadline: Keep probing ECDS for publication until this UTC time;
-            no probe starts after it. None probes once.
+            after the first probe, none starts after it. None probes once.
         publication_poll_interval: Time between the starts of successive probes.
     """
     assert len(selections) > 0
@@ -261,7 +261,7 @@ def _wait_for_publication(
     deadline: pd.Timestamp | None,
     poll_interval: pd.Timedelta,
 ) -> tuple[Availability, bool]:
-    """Probe until published, with the last probe starting exactly at `deadline`.
+    """Probe until published, with every probe after the first starting by `deadline`.
 
     Return the final observation and whether any probe saw a partial publication.
     """
@@ -283,6 +283,8 @@ def _wait_for_publication(
         next_probe = min(probe_started + poll_interval, deadline)
         time.sleep(max(0.0, (next_probe - _utc_now()).total_seconds()))
         probe_started = _utc_now()
+        if probe_started > deadline:
+            break
         availability = check_available(init_time, selections, api_url=api_url)
         seen_partial |= availability.publication == "partial"
 

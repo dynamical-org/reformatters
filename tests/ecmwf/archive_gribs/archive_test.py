@@ -393,6 +393,7 @@ class FakeClock:
     def __init__(self, now: pd.Timestamp) -> None:
         self.now = now
         self.sleeps: list[float] = []
+        self.oversleep = pd.Timedelta(0)
 
     def utc_now(self) -> pd.Timestamp:
         return self.now
@@ -400,7 +401,7 @@ class FakeClock:
     def sleep(self, seconds: float) -> None:
         assert seconds >= 0
         self.sleeps.append(seconds)
-        self.now += pd.Timedelta(seconds=seconds)
+        self.now += pd.Timedelta(seconds=seconds) + self.oversleep
 
 
 POLL_INTERVAL = pd.Timedelta(minutes=2)
@@ -516,6 +517,36 @@ def test_never_published_ends_with_a_probe_exactly_at_the_deadline(
     assert minutes_after_start(probe_starts) == [0, 2, 4, 6, 8, 9]
     archive_bucket["costing"].assert_not_called()
     archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+
+def test_a_probe_overrunning_the_deadline_is_not_followed_by_another(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock], clock: FakeClock
+) -> None:
+    probe_starts = ecds_publishes(
+        archive_bucket,
+        clock,
+        ["unpublished", "unpublished", "published"],
+        probe_duration=pd.Timedelta(minutes=3),
+    )
+
+    assert not archive_with_deadline(tmp_path, WAIT_START + pd.Timedelta(minutes=5))
+
+    assert minutes_after_start(probe_starts) == [0, 3]
+    archive_bucket["request"].return_value.retrieve.assert_not_called()
+
+
+def test_a_sleep_overshooting_the_deadline_is_not_followed_by_a_probe(
+    tmp_path: Path, archive_bucket: dict[str, MagicMock], clock: FakeClock
+) -> None:
+    clock.oversleep = pd.Timedelta(seconds=10)
+    probe_starts = ecds_publishes(archive_bucket, clock, ["unpublished"])
+
+    assert not archive_with_deadline(tmp_path, WAIT_START + pd.Timedelta(minutes=5))
+
+    assert probe_starts == [
+        WAIT_START + pd.Timedelta(seconds=seconds) for seconds in (0, 130, 260)
+    ]
+    assert clock.now > WAIT_START + pd.Timedelta(minutes=5)
 
 
 def test_a_publication_seen_by_the_deadline_probe_is_retrieved_after_the_deadline(
