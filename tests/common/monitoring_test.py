@@ -1,13 +1,18 @@
+import json
 import logging
+import runpy
 import signal
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 import sentry_sdk
 import sentry_sdk.crons
 import typer
+from sentry_sdk.utils import event_from_exception
 from typer.testing import CliRunner
 
 from reformatters.__main__ import startup
@@ -32,6 +37,72 @@ _CRON_JOB = CronJob(
     cpu="1",
     memory="1G",
 )
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "secret_access_key",
+        "ACCESS_KEY",
+        "Access_Key_Id",
+        "SESSION_TOKEN",
+        "token",
+        "Password",
+        "API_KEY",
+        "Authorization",
+        "aws_secret_access_key",
+        "private-token",
+        "RCLONE_SAMPLE_SECRET_VALUE",
+        "rclone_example_secret_key",
+        "Rclone_Example_Access_Key_Id",
+        "RCLONE_SAMPLE_TOKEN",
+    ],
+)
+def test_sentry_exception_events_scrub_nested_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    field_name: str,
+) -> None:
+    init = Mock()
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    monkeypatch.setattr(sentry_sdk, "init", init)
+    monkeypatch.setattr(sentry_sdk, "set_tag", Mock())
+    runpy.run_path(
+        str(Path(__file__).parents[2] / "src/reformatters/__main__.py"),
+        run_name="sentry_configuration_test",
+    )
+    options: dict[str, Any] = dict(init.call_args.kwargs) | {
+        "dsn": None,
+        "default_integrations": False,
+        "integrations": [],
+    }
+    client = sentry_sdk.Client(**options)
+    env = {"settings": [{field_name: uuid4().hex, "region": "example"}]}
+    ordinary = 17
+    try:
+        with sentry_sdk.new_scope() as scope:
+            scope.set_client(client)
+            try:
+                raise OSError("synthetic failure")
+            except OSError as error:
+                event, hint = event_from_exception(error, client_options=client.options)
+            event = client._prepare_event(event, hint, scope)
+    finally:
+        client.close()
+
+    assert event is not None
+    frames = event["exception"]["values"][0]["stacktrace"]["frames"]
+    assert frames
+    frame = next(
+        frame
+        for frame in frames
+        if frame["function"] == "test_sentry_exception_events_scrub_nested_fields"
+    )
+    assert frame["vars"]["ordinary"] == repr(ordinary)
+    settings = frame["vars"]["env"]["settings"][0]
+    assert settings[field_name] == "[Filtered]"
+    assert settings["region"] == "'example'"
+    assert env["settings"][0][field_name] not in json.dumps(event, default=str)
+    assert event["exception"]["values"][0]["value"] == "synthetic failure"
 
 
 def test_log_cgroup_peak_memory(
