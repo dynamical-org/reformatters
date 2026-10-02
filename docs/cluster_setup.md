@@ -6,6 +6,8 @@ We use
 * `docker` to package the code and dependencies
 * `kubernetes` indexed jobs to run work in parallel
 
+Container image inputs in `deploy/Dockerfile` are pinned to multi-platform digests. Dependabot proposes Docker image updates weekly; verify both AMD64 and ARM64 builds when updating pins.
+
 ### Setup
 
 1. Install `docker` and `kubectl`. Make sure `docker` can be found at `/usr/bin/docker` and `kubectl` at `/usr/bin/kubectl`.
