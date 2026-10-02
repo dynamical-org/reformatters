@@ -332,19 +332,17 @@ def test_failed_update_does_not_validate_or_submit_retry(
 
 
 @pytest.mark.parametrize(
-    ("job_name", "in_cluster", "prod", "expected_retry"),
+    ("job_name", "prod", "expected_retry"),
     [
-        ("update-123", True, True, "update-123-r1"),
-        ("update-123-r1", True, True, None),
-        ("update-123", False, True, "update-123-r1"),
-        ("update-123", True, False, None),
+        ("update-123", True, "update-123-r1"),
+        ("update-123-r1", True, None),
+        ("update-123", False, None),
     ],
 )
-def test_failed_validation_reports_failure_and_retries_only_initial_cluster_run(
+def test_failed_validation_reports_failure_and_retries_only_initial_production_run(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     job_name: str,
-    in_cluster: bool,
     prod: bool,
     expected_retry: str | None,
 ) -> None:
@@ -352,8 +350,6 @@ def test_failed_validation_reports_failure_and_retries_only_initial_cluster_run(
     monkeypatch.setattr(ExampleDataset, "_validate_dataset", Mock(side_effect=failure))
     monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
-    if in_cluster:
-        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test-cluster")
     monkeypatch.setenv("CRON_JOB_NAME", "stage-example-v2-update")
     submit = Mock()
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
@@ -398,7 +394,6 @@ def test_post_publication_errors_fail_job_without_restarting_finalized_worker(
     submit = Mock(side_effect=submission_error)
     monkeypatch.setattr(ExampleDataset, "_validate_dataset", Mock(side_effect=failure))
     monkeypatch.setattr(Config, "env", Env.prod)
-    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test-cluster")
     monkeypatch.setenv("CRON_JOB_NAME", "example-update")
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
 

@@ -149,32 +149,27 @@ def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
 
 
 @pytest.mark.parametrize(
-    ("prod", "in_cluster", "destination", "readiness", "expected_triggers"),
+    ("prod", "destination", "readiness", "expected_triggers"),
     [
-        (True, True, ARCHIVE_RCLONE_ROOT, [True, True], 2),
-        (True, True, ARCHIVE_RCLONE_ROOT, [True, False], 2),
-        (True, True, ARCHIVE_RCLONE_ROOT, [False, True], 0),
-        (True, True, ARCHIVE_RCLONE_ROOT, [], 0),
-        (False, True, ARCHIVE_RCLONE_ROOT, [True], 0),
-        (True, False, ARCHIVE_RCLONE_ROOT, [True], 2),
-        (True, True, ":s3:another-bucket/", [True], 0),
+        (True, ARCHIVE_RCLONE_ROOT, [True, True], 2),
+        (True, ARCHIVE_RCLONE_ROOT, [True, False], 2),
+        (True, ARCHIVE_RCLONE_ROOT, [False, True], 0),
+        (True, ARCHIVE_RCLONE_ROOT, [], 0),
+        (False, ARCHIVE_RCLONE_ROOT, [True], 0),
+        (True, ":s3:another-bucket/", [True], 0),
     ],
 )
 @pytest.mark.parametrize("newest_first", [True, False])
 def test_archive_triggers_after_completion(
     monkeypatch: pytest.MonkeyPatch,
     prod: bool,
-    in_cluster: bool,
     destination: str,
     readiness: list[bool],
     expected_triggers: int,
     newest_first: bool,
 ) -> None:
     monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
-    if in_cluster:
-        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test")
-    else:
-        monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+    monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
     init_times = list(pd.date_range("2026-08-10", periods=len(readiness)))[::-1]
     if not newest_first:
         init_times.reverse()
@@ -249,7 +244,6 @@ def test_archive_failure_does_not_submit_updates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(Config, "env", Env.prod)
-    monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "test")
     with (
         patch.object(
             EcmwfIfsEns46DayGribArchiver, "_monitor", return_value=nullcontext()
