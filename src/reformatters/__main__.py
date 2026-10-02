@@ -59,6 +59,18 @@ from reformatters.google.weathernext2.forecast_historical_virtual import (
 from reformatters.google.weathernext2.forecast_operational_virtual import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
+from reformatters.google.weathernext3.forecast_15_day_0_05_degree_virtual import (
+    GoogleWeathernext3Forecast15Day005DegreeVirtualDataset,
+)
+from reformatters.google.weathernext3.forecast_15_day_0_1_degree_virtual import (
+    GoogleWeathernext3Forecast15Day01DegreeVirtualDataset,
+)
+from reformatters.google.weathernext3.forecast_48_hour_0_05_degree_virtual import (
+    GoogleWeathernext3Forecast48Hour005DegreeVirtualDataset,
+)
+from reformatters.google.weathernext3.forecast_48_hour_0_1_degree_virtual import (
+    GoogleWeathernext3Forecast48Hour01DegreeVirtualDataset,
+)
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
@@ -229,8 +241,26 @@ class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
+class Weathernext3IcechunkDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-google-weathernext3"
+    k8s_secret_name: str = "weathernext3-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 # Registry of all DynamicalDatasets.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
+    GoogleWeathernext3Forecast48Hour01DegreeVirtualDataset(
+        primary_storage_config=Weathernext3IcechunkDatasetStorageConfig()
+    ),
+    GoogleWeathernext3Forecast15Day01DegreeVirtualDataset(
+        primary_storage_config=Weathernext3IcechunkDatasetStorageConfig()
+    ),
+    GoogleWeathernext3Forecast15Day005DegreeVirtualDataset(
+        primary_storage_config=Weathernext3IcechunkDatasetStorageConfig()
+    ),
+    GoogleWeathernext3Forecast48Hour005DegreeVirtualDataset(
+        primary_storage_config=Weathernext3IcechunkDatasetStorageConfig()
+    ),
     # NOAA
     NoaaGfsForecastDataset(
         primary_storage_config=NoaaGfsIcechunkAwsOpenDataDatasetStorageConfig(),

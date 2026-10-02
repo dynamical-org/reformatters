@@ -32,6 +32,14 @@ name: 'Manual: Create Job from CronJob'
         - google-wn2-forecast-historical-virtual-validate
         - google-wn2-forecast-operational-virtual-update
         - google-wn2-forecast-operational-virtual-validate
+        - google-wn3-15d-0-05-degree-virtual-update
+        - google-wn3-15d-0-05-degree-virtual-validate
+        - google-wn3-15d-0-1-degree-virtual-update
+        - google-wn3-15d-0-1-degree-virtual-validate
+        - google-wn3-48h-0-05-degree-virtual-update
+        - google-wn3-48h-0-05-degree-virtual-validate
+        - google-wn3-48h-0-1-degree-virtual-update
+        - google-wn3-48h-0-1-degree-virtual-validate
         - nasa-imerg-analysis-early-update
         - nasa-imerg-analysis-early-validate
         - nasa-imerg-analysis-late-update

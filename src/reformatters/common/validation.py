@@ -34,11 +34,11 @@ from reformatters.common.config_models import split_var_path
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
+from reformatters.common.types import Dim
 
 if TYPE_CHECKING:
     from reformatters.common.config_models import DataVar
     from reformatters.common.region_job import CoordinateValue, SourceFileCoord
-    from reformatters.common.types import Dim
     from reformatters.common.virtual_region_job import VirtualRegionJob
 
 log = get_logger(__name__)
@@ -1051,8 +1051,8 @@ class CheckVirtualDecodeHealth(Validator):
     variable), while "all" covers the whole window, optionally capped to `max_positions`
     evenly spaced positions for a whole-archive offline sweep. Within a position it
     samples `sampled_leads` lead times (first + last + evenly spaced interior) across
-    every member, and `sampled_levels` levels of any vertical dim (e.g. pressure_level)
-    so a group var is decode-checked at a bounded set of levels rather than every one.
+    every member, and `sampled_levels` labels of any remaining non-spatial dim
+    (e.g. pressure_level). Dims in `sample_all_dims` sample every label.
     A variable fails if any sampled chunk errors or all of its sampled chunks decode
     entirely NaN. Fails — never silently passes — when no references are present.
 
@@ -1064,6 +1064,7 @@ class CheckVirtualDecodeHealth(Validator):
     positions: int | Literal["all"] = 1
     sampled_leads: int = 5
     sampled_levels: int = 3
+    sample_all_dims: Sequence[Dim] = ()
     max_positions: int | None = None
     max_workers: int = 32
     allow_all_nan_vars: Sequence[str] = ()
@@ -1310,7 +1311,8 @@ class CheckVirtualDecodeHealth(Validator):
     ) -> xr.DataArray:
         """Down-sample any vertical (non-spatial) dim to `sampled_levels` evenly spaced
         levels, so a group var is decode-checked at a bounded set of levels rather than
-        all of them. With `reference_presence`, sample only referenced levels.
+        all of them, except dims in `sample_all_dims`. With `reference_presence`,
+        sample only referenced levels.
         Presence labels must match the selected group dimension (None at root).
         Single-level vars (only spatial dims left) are returned unchanged."""
         spatial = ("y", "x", "latitude", "longitude")
@@ -1352,7 +1354,7 @@ class CheckVirtualDecodeHealth(Validator):
                 ]
                 da = da.sel({dim: labels})
             size = da.sizes[dim]
-            if size > self.sampled_levels:
+            if dim not in self.sample_all_dims and size > self.sampled_levels:
                 isel[dim] = np.unique(
                     np.linspace(0, size - 1, self.sampled_levels).round().astype(int)
                 )
