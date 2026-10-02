@@ -4,35 +4,51 @@
 import asyncio
 import time
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
-from itertools import batched, groupby, product
-from math import ceil
+from functools import partial
+from itertools import groupby
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import icechunk
-import numpy as np
 import pandas as pd
 import typer
 import zarr
 from icechunk.store import IcechunkStore
-from numpy.typing import NDArray
-from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.logging import get_logger
-from reformatters.common.virtual_region_job import _exists_many
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
     OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
+)
+from reformatters.google.weathernext_virtual.holdback import (
     PUBLICATION_HOLDBACK,
+    utc_now,
+)
+from reformatters.google.weathernext_virtual.holdback_audit import (
+    ForbiddenChunk,
+    HoldbackAudit,
+    StepCounts,
+    _coordinate_values,
+    _utc_iso,
+    forbidden_chunk_keys,
+    probe_chunk_batches,
+    run_audit,
+    summarize_probes,
+    write_report,
+)
+from reformatters.google.weathernext_virtual.holdback_audit import (
+    probe as _probe,
 )
 from scripts.validation.scan_common import resolve_virtual_dataset
 from scripts.validation.utils import _icechunk_storage
 
-_BATCH_SIZE = 20_000
 _OPERATIONAL_DATASET_ID = "google-weathernext2-forecast-operational-virtual"
 _PURGE_BRANCH = "holdback-purge"
+_write_report = partial(
+    write_report, report_title="WeatherNext 2 publication holdback audit"
+)
+_run_audit = partial(run_audit, report_title="WeatherNext 2 publication holdback audit")
 
 log = get_logger(__name__)
 app = typer.Typer(
@@ -41,190 +57,22 @@ app = typer.Typer(
 )
 
 
-@dataclass(frozen=True)
-class ForbiddenChunk:
-    var_path: str
-    init_time: pd.Timestamp
-    lead_time: pd.Timedelta
-    key: str
-
-
-@dataclass
-class StepCounts:
-    present: int = 0
-    total: int = 0
-
-
-@dataclass(frozen=True)
-class HoldbackAudit:
-    total_keys: int
-    present_keys: int
-    counts: dict[tuple[str, pd.Timestamp, pd.Timedelta], StepCounts]
-    report_path: Path
-
-    @property
-    def present_steps(self) -> set[tuple[pd.Timestamp, pd.Timedelta]]:
-        return {
-            (init_time, lead_time)
-            for (_var_path, init_time, lead_time), counts in self.counts.items()
-            if counts.present
-        }
-
-    @property
-    def present_inits(self) -> set[pd.Timestamp]:
-        return {init_time for init_time, _lead_time in self.present_steps}
-
-    @property
-    def max_present_valid_time(self) -> pd.Timestamp | None:
-        if not self.present_steps:
-            return None
-        return max(init_time + lead_time for init_time, lead_time in self.present_steps)
-
-    @property
-    def last_age_out(self) -> pd.Timestamp | None:
-        if self.max_present_valid_time is None:
-            return None
-        return self.max_present_valid_time + PUBLICATION_HOLDBACK
-
-
-def _arrays(group: zarr.Group) -> Iterator[zarr.Array]:
-    for _name, array in group.arrays():
-        yield array
-    for _name, subgroup in group.groups():
-        yield from _arrays(subgroup)
-
-
-def _coordinate_values(
-    root: zarr.Group, group_path: str
-) -> tuple[pd.DatetimeIndex, pd.TimedeltaIndex]:
-    group = root if not group_path else root[group_path]
-    assert isinstance(group, zarr.Group)
-    init_array = group["init_time"]
-    lead_array = group["lead_time"]
-    assert isinstance(init_array, zarr.Array)
-    assert isinstance(lead_array, zarr.Array)
-    assert init_array.ndim == lead_array.ndim == 1
-    assert init_array.dtype == np.dtype("int64")
-    assert lead_array.dtype == np.dtype("float64")
-    assert str(init_array.attrs["units"]).startswith("seconds since 1970-01-01")
-    assert lead_array.attrs["units"] == "seconds", lead_array.path
-    init_values = cast("NDArray[np.int64]", init_array[:])
-    lead_values = cast("NDArray[np.float64]", lead_array[:])
-    init_seconds = [int(value) for value in init_values]
-    lead_seconds = [float(value) for value in lead_values]
-    return (
-        pd.DatetimeIndex(pd.to_datetime(init_seconds, unit="s")),
-        pd.TimedeltaIndex(pd.to_timedelta(lead_seconds, unit="s")),
-    )
-
-
-def _chunk_grid_indexes(
-    array: zarr.Array,
-    dims: tuple[str | None, ...],
-    init_index: int,
-    lead_index: int,
-) -> Iterator[tuple[int, ...]]:
-    chunk_ranges: list[Sequence[int]] = []
-    for dim, size, chunk_size in zip(dims, array.shape, array.chunks, strict=True):
-        if dim == "init_time":
-            chunk_ranges.append((init_index,))
-        elif dim == "lead_time":
-            chunk_ranges.append((lead_index,))
-        else:
-            chunk_ranges.append(range(ceil(size / chunk_size)))
-    yield from product(*chunk_ranges)
-
-
-def forbidden_chunk_keys(
-    group: zarr.Group, cutoff: pd.Timestamp
-) -> Iterator[ForbiddenChunk]:
-    assert cutoff.tz is None, "cutoff must be normalized to naive UTC"
-    coordinates: dict[str, tuple[pd.DatetimeIndex, pd.TimedeltaIndex]] = {}
-    found_data_array = False
-    for array in _arrays(group):
-        metadata = array.metadata
-        assert isinstance(metadata, ArrayV3Metadata)
-        dimension_names = metadata.dimension_names
-        if dimension_names is None:
-            assert array.shape == (), array.path
-            continue
-        dims = tuple(dimension_names)
-        if not {"init_time", "lead_time", "y", "x"} <= set(dims):
-            continue
-        found_data_array = True
-        if metadata.shards is not None:
-            raise NotImplementedError(f"sharded arrays are unsupported: {array.path}")
-        assert "ensemble_member" in dims, array.path
-        init_dim = dims.index("init_time")
-        lead_dim = dims.index("lead_time")
-        chunks = tuple(array.chunks)
-        assert chunks[init_dim] == chunks[lead_dim] == 1, array.path
-
-        group_path = array.path.rpartition("/")[0]
-        if group_path not in coordinates:
-            coordinates[group_path] = _coordinate_values(group, group_path)
-        init_times, lead_times = coordinates[group_path]
-        assert len(init_times) == array.shape[init_dim]
-        assert len(lead_times) == array.shape[lead_dim]
-        assert len(lead_times) > 0
-        max_lead = lead_times.max()
-
-        for init_index, init_time in enumerate(init_times):
-            if init_time + max_lead <= cutoff:
-                continue
-            for lead_index, lead_time in enumerate(lead_times):
-                if init_time + lead_time <= cutoff:
-                    continue
-                for chunk_index in _chunk_grid_indexes(
-                    array, dims, init_index, lead_index
-                ):
-                    encoded = metadata.chunk_key_encoding.encode_chunk_key(chunk_index)
-                    yield ForbiddenChunk(
-                        var_path=array.path,
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        key=f"{array.path}/{encoded}",
-                    )
-    assert found_data_array, "no WeatherNext 2 data arrays found"
-
-
 async def _delete_many(store: IcechunkStore, keys: Sequence[str]) -> None:
     await asyncio.gather(*(store.delete(key) for key in keys))
 
 
-def _probe_chunks(
+def _delete_chunks(
     store: IcechunkStore,
     chunks: Iterator[ForbiddenChunk],
-    *,
-    delete_present: bool = False,
 ) -> tuple[int, int, dict[tuple[str, pd.Timestamp, pd.Timedelta], StepCounts]]:
-    total_keys = 0
-    present_keys = 0
-    counts: dict[tuple[str, pd.Timestamp, pd.Timedelta], StepCounts] = {}
-    for chunk_batch in batched(chunks, _BATCH_SIZE, strict=False):
-        keys = [chunk.key for chunk in chunk_batch]
-        presence = _exists_many(store, keys)
-        present_batch = [chunk.key for chunk in chunk_batch if presence[chunk.key]]
-        if delete_present and present_batch:
-            asyncio.run(_delete_many(store, present_batch))
-        for chunk in chunk_batch:
-            step = counts.setdefault(
-                (chunk.var_path, chunk.init_time, chunk.lead_time), StepCounts()
-            )
-            step.total += 1
-            step.present += int(presence[chunk.key])
-        total_keys += len(chunk_batch)
-        present_keys += len(present_batch)
-        log.info(f"Probed {total_keys:,} forbidden keys; {present_keys:,} present")
-    return total_keys, present_keys, counts
+    def batches() -> Iterator[tuple[Sequence[ForbiddenChunk], dict[str, bool]]]:
+        for chunk_batch, presence in probe_chunk_batches(store, chunks):
+            present = [chunk.key for chunk in chunk_batch if presence[chunk.key]]
+            if present:
+                asyncio.run(_delete_many(store, present))
+            yield chunk_batch, presence
 
-
-def _probe(
-    store: IcechunkStore,
-    group: zarr.Group,
-    cutoff: pd.Timestamp,
-) -> tuple[int, int, dict[tuple[str, pd.Timestamp, pd.Timedelta], StepCounts]]:
-    return _probe_chunks(store, forbidden_chunk_keys(group, cutoff))
+    return summarize_probes(batches())
 
 
 def _merge_counts(
@@ -266,7 +114,7 @@ def _operational_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
 
 
 def _default_cutoff() -> pd.Timestamp:
-    return pd.Timestamp.now(tz="UTC").tz_localize(None) - PUBLICATION_HOLDBACK
+    return utc_now() - PUBLICATION_HOLDBACK
 
 
 def _parse_cutoff(value: str | None) -> pd.Timestamp:
@@ -278,105 +126,9 @@ def _parse_cutoff(value: str | None) -> pd.Timestamp:
     return cutoff.tz_convert("UTC").tz_localize(None)
 
 
-def _utc_iso(value: pd.Timestamp | None) -> str:
-    if value is None:
-        return "none"
-    assert value.tz is None
-    return value.tz_localize("UTC").isoformat()
-
-
 def _default_output_dir() -> Path:
     timestamp = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H-%M")
     return Path("data/output") / f"holdback_audit_{timestamp}"
-
-
-def _write_report(
-    *,
-    store_label: str,
-    snapshot: icechunk.SnapshotInfo,
-    cutoff: pd.Timestamp,
-    total_keys: int,
-    present_keys: int,
-    counts: dict[tuple[str, pd.Timestamp, pd.Timedelta], StepCounts],
-    output_dir: Path,
-) -> HoldbackAudit:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    audit = HoldbackAudit(
-        total_keys=total_keys,
-        present_keys=present_keys,
-        counts=counts,
-        report_path=output_dir / "holdback_audit.md",
-    )
-    header = [
-        "# WeatherNext 2 publication holdback audit",
-        "",
-        f"- Store: `{store_label}`",
-        f"- Snapshot: `{snapshot.id}` ({snapshot.written_at.isoformat()})",
-        f"- Cutoff: `{_utc_iso(cutoff)}`",
-        f"- Total keys probed: {total_keys:,}",
-        f"- Keys present: {present_keys:,}",
-        f"- Steps with any present ref: {len(audit.present_steps):,}",
-        f"- Inits with any present ref: {len(audit.present_inits):,}",
-        f"- Maximum present valid time: `{_utc_iso(audit.max_present_valid_time)}`",
-        f"- Last age-out: `{_utc_iso(audit.last_age_out)}`",
-    ]
-    for line in header[2:]:
-        log.info(line.removeprefix("- "))
-
-    rows = []
-    for (var_path, init_time, lead_time), step in sorted(
-        counts.items(), key=lambda item: (item[0][1], item[0][2], item[0][0])
-    ):
-        if not step.present:
-            continue
-        rows.append(
-            "| "
-            f"{_utc_iso(init_time)} | {lead_time} | "
-            f"{_utc_iso(init_time + lead_time)} | `{var_path}` | "
-            f"{step.present:,}/{step.total:,} |"
-        )
-    if rows:
-        detail = [
-            "",
-            "## Present forbidden refs",
-            "",
-            "| Init time | Lead time | Valid time | Variable | Present/total |",
-            "| --- | --- | --- | --- | ---: |",
-            *rows,
-        ]
-    else:
-        detail = ["", "No forbidden refs are present."]
-    audit.report_path.write_text("\n".join([*header, *detail, ""]), encoding="utf-8")
-    log.info(f"Report: {audit.report_path}")
-    return audit
-
-
-def _run_audit(
-    repo: icechunk.Repository,
-    store_label: str,
-    cutoff: pd.Timestamp,
-    snapshot_id: str | None,
-    branch: str | None,
-    output_dir: Path,
-) -> HoldbackAudit:
-    assert snapshot_id is None or branch is None
-    if snapshot_id is None:
-        snapshot_id = repo.lookup_branch(branch or "main")
-    snapshot = repo.lookup_snapshot(snapshot_id)
-    log.info(f"Snapshot: {snapshot.id} ({snapshot.written_at.isoformat()})")
-    log.info(f"Cutoff: {_utc_iso(cutoff)}")
-    store = repo.readonly_session(snapshot_id=snapshot.id).store
-    group = zarr.open_group(store, mode="r")
-    total_keys, present_keys, counts = _probe(store, group, cutoff)
-    return _write_report(
-        store_label=store_label,
-        snapshot=snapshot,
-        cutoff=cutoff,
-        total_keys=total_keys,
-        present_keys=present_keys,
-        counts=counts,
-        output_dir=output_dir,
-    )
 
 
 def _purge_windows(
@@ -410,8 +162,8 @@ def _purge_windows(
     for (var_path, _window), window_chunks in windowed_chunks:
         started = time.monotonic()
         session = repo.writable_session(_PURGE_BRANCH)
-        window_total, window_present, window_counts = _probe_chunks(
-            session.store, window_chunks, delete_present=True
+        window_total, window_present, window_counts = _delete_chunks(
+            session.store, window_chunks
         )
         total_keys += window_total
         present_keys += window_present

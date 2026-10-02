@@ -13,7 +13,7 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
-from reformatters.google.weathernext2.forecast_virtual.validation import (
+from reformatters.google.weathernext_virtual.validation import (
     CheckNoRefsInsideHoldback,
 )
 
