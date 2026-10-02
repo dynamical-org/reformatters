@@ -3,12 +3,16 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import httpx
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.region_job import LaunchScope
+from reformatters.common.storage import commit_if_icechunk
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -19,9 +23,6 @@ from reformatters.google.weathernext2.forecast_virtual import (
     region_job as region_job_module,
 )
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
-    OBJECTS_LOCATION,
-    PROXY_LOCATION_PREFIX,
-    PUBLICATION_HOLDBACK,
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
@@ -30,6 +31,13 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
 )
+from reformatters.google.weathernext_virtual import listing as listing_module
+from reformatters.google.weathernext_virtual.holdback import PUBLICATION_HOLDBACK
+from reformatters.google.weathernext_virtual.listing import (
+    OBJECTS_LOCATION,
+    PROXY_LOCATION_PREFIX,
+)
+from scripts.validation.manifest_scan import _scan_launch_scope
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
@@ -125,7 +133,7 @@ def _mock_native_listing(
         return response
 
     client.get.side_effect = get
-    monkeypatch.setattr(region_job_module.httpx, "Client", lambda **kwargs: client)
+    monkeypatch.setattr(listing_module.httpx, "Client", lambda **kwargs: client)
     return client
 
 
@@ -484,13 +492,13 @@ def test_object_listing_retries_transient_response() -> None:
     client = Mock()
     client.get.side_effect = [transient, success]
 
-    objects = region_job_module._list_objects(
+    objects = listing_module.list_objects(
         client,
-        region_job_module.ObjectListingQuery(prefix),
+        listing_module.ObjectListingQuery(prefix),
     )
 
     assert objects == {
-        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": region_job_module.NativeObjectMetadata(
+        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": listing_module.NativeObjectMetadata(
             size=100,
             etag_checksum='"00000000000000000000000000000000"',
         )
@@ -547,3 +555,243 @@ def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(
         before - PUBLICATION_HOLDBACK < init + lead <= after - PUBLICATION_HOLDBACK
         for init, lead, _ in coord_sets[1] - coord_sets[0]
     )
+
+
+@pytest.mark.parametrize("historical", [True, False])
+@pytest.mark.parametrize("pressure", [True, False])
+def test_native_refs_and_paginated_queries_golden(
+    monkeypatch: pytest.MonkeyPatch, historical: bool, pressure: bool
+) -> None:
+    config = HISTORICAL if historical else OPERATIONAL
+    cls = (
+        GoogleWeathernext2ForecastHistoricalVirtualRegionJob
+        if historical
+        else GoogleWeathernext2ForecastOperationalVirtualRegionJob
+    )
+    init = pd.Timestamp("2022-01-02T12:00" if historical else "2025-03-01T06:00")
+    var = _var(config, "pressure_level/temperature" if pressure else "temperature_2m")
+    job = _job(cls, config, config.get_template(init + pd.Timedelta("6h")), [var])
+    coord = _coord(config, [var], init)
+    client = _mock_native_listing(monkeypatch, job, coord)
+    [(available, size)] = job.discover_available([coord])
+    refs = job.file_refs(available, size)
+
+    store = (
+        "2022_to_2023/predictions.zarr"
+        if historical
+        else "2025_to_present/20250301_06hr_01_preds/predictions.zarr"
+    )
+    source_name = "temperature" if pressure else "2m_temperature"
+    prefix = f"weathernext_2_0_0/zarr/{store}/{source_name}/"
+    levels = [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000]
+    expected = []
+    for member in range(0, 64, 4 if historical else 1):
+        for level_index in range(1 if historical or not pressure else 13):
+            key = f"6.{member // 4}.1" if historical else f"{member}.1"
+            if pressure:
+                key += f".{level_index}"
+            location = f"https://wn.dynamical.org/chunks/{prefix}{key}.0.0"
+            out_loc = {
+                "init_time": init,
+                "ensemble_member": member,
+                "lead_time": pd.Timedelta("12h"),
+            }
+            if pressure:
+                out_loc["pressure_level"] = levels[level_index]
+            expected.append(
+                (
+                    var,
+                    location,
+                    0,
+                    len(location) + 1000,
+                    '"00000000000000000000000000000000"',
+                    out_loc,
+                )
+            )
+    assert [
+        (
+            ref.data_var,
+            ref.location,
+            ref.offset,
+            ref.length,
+            ref.etag_checksum,
+            ref.out_loc,
+        )
+        for ref in refs
+    ] == expected
+    params = {"prefix": prefix + "6." if historical else prefix, "maxResults": "1000"}
+    if not historical:
+        params |= {
+            "matchGlob": prefix + "{" + ",".join(map(str, range(64))) + "}.1.*",
+            "delimiter": "/",
+        }
+    assert [(call.args, call.kwargs) for call in client.get.call_args_list] == [
+        (("https://wn.dynamical.org/objects",), {"params": params}),
+        (
+            ("https://wn.dynamical.org/objects",),
+            {"params": params | {"pageToken": "next"}},
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("fire", "start", "end"),
+    [
+        ("2025-03-20T12:59:59", "2025-03-03T06:00", "2025-03-20T06:00"),
+        ("2025-03-20T13:00", "2025-03-03T12:00", "2025-03-20T12:00"),
+        ("2025-03-20T19:05", "2025-03-03T18:00", "2025-03-20T18:00"),
+    ],
+)
+def test_operational_window_golden(fire: str, start: str, end: str) -> None:
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="test",
+            job_fire_time=pd.Timestamp(fire),
+        )
+    )
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    inits = template.to_dataset().get_index("init_time")[job.region]
+    assert inits[0] == pd.Timestamp(start)
+    assert inits[-1] + pd.Timedelta("6h") == pd.Timestamp(end)
+    assert job.publication_cutoff == pd.Timestamp(fire) - pd.Timedelta("1h")
+    metadata = job.commit_metadata()
+    scope = LaunchScope.model_validate_json(metadata["launch_scope"])
+    assert scope.filter_start == pd.Timestamp(start).tz_localize("UTC")
+    assert (
+        scope.filter_end == scope.append_dim_end == pd.Timestamp(end).tz_localize("UTC")
+    )
+    assert scope.filter_variable_names == [var.path for var in OPERATIONAL.data_vars]
+    assert (
+        metadata["reference_time"] == pd.Timestamp(fire).tz_localize("UTC").isoformat()
+    )
+
+
+def test_historical_backfill_is_unrestricted(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Mock(side_effect=AssertionError("historical jobs must not read the clock"))
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
+    jobs = GoogleWeathernext2ForecastHistoricalVirtualRegionJob.get_jobs(
+        tmp_store=Path("unused.zarr"),
+        template_ds=HISTORICAL.get_template(pd.Timestamp("2022-01-01T06:00")),
+        append_dim="init_time",
+        all_data_vars=HISTORICAL.data_vars,
+        reformat_job_name="test",
+    )
+    assert jobs
+    assert all(job.publication_cutoff == pd.Timestamp.max for job in jobs)
+    assert all(not job.held_back_source_file_coords() for job in jobs)
+    assert not clock.called
+
+
+def test_launch_cutoff_survives_reversed_commits_and_hour_boundary_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    reference = pd.Timestamp("2025-01-02T00:59:59")
+    clock = Mock(side_effect=AssertionError("Worker must reuse launch time"))
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
+    template = OPERATIONAL.get_template(pd.Timestamp("2025-01-03"))
+    job_sets = [
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+            tmp_store=Path("unused.zarr"),
+            template_ds=template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars,
+            reformat_job_name="fixed-launch",
+            reference_time=reference,
+        )
+        for _ in range(3)
+    ]
+    assert not clock.called
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+    initial = repo.writable_session("main")
+    zarr.open_group(initial.store, mode="w")
+    initial.commit("setup", metadata=job_sets[0][0].commit_metadata())
+    workers = [repo.writable_session("main") for _ in range(2)]
+    for i, worker in enumerate(workers):
+        zarr.open_group(worker.store, mode="a").create_array(
+            f"worker-{i}", shape=(1,), dtype="float32"
+        )
+    for worker, job in reversed(
+        list(zip(workers, (job_sets[0][0], job_sets[1][0]), strict=True))
+    ):
+        commit_if_icechunk("worker", worker.store, [], metadata=job.commit_metadata())
+    retry = repo.writable_session("main")
+    zarr.open_group(retry.store, mode="a").attrs["retry-after-01:00"] = True
+    commit_if_icechunk(
+        "retry", retry.store, [], metadata=job_sets[2][0].commit_metadata()
+    )
+    snapshots = list(repo.ancestry(branch="main"))[:-1]
+    assert len(snapshots) == 4
+    assert all(
+        {
+            key: snapshot.metadata.get(key)
+            for key in ("publication_cutoff", "reformat_job_name")
+        }
+        == {
+            "publication_cutoff": "2025-01-01T23:59:59+00:00",
+            "reformat_job_name": "fixed-launch",
+        }
+        for snapshot in snapshots
+    )
+    coord_sets = [
+        {
+            (coord.init_time, coord.lead_time, coord.data_vars[0].path)
+            for job in jobs
+            for coord in job.source_file_coords()
+        }
+        for jobs in job_sets
+    ]
+    assert coord_sets[0] == coord_sets[1] == coord_sets[2]
+
+
+def test_filtered_repair_records_launch_scope() -> None:
+
+    end = pd.Timestamp("2025-01-03")
+    start = pd.Timestamp("2025-01-01T06:00")
+    filter_end = pd.Timestamp("2025-01-02T18:00")
+    contains = [start, pd.Timestamp("2025-01-02T12:00")]
+    variables = [OPERATIONAL.data_vars[0].path]
+    jobs = GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+        tmp_store=Path("unused.zarr"),
+        template_ds=OPERATIONAL.get_template(end),
+        append_dim="init_time",
+        all_data_vars=OPERATIONAL.data_vars,
+        reformat_job_name="repair",
+        reference_time=pd.Timestamp("2025-01-05"),
+        append_dim_end=end,
+        filter_start=start,
+        filter_end=filter_end,
+        filter_contains=contains,
+        filter_variable_names=variables,
+    )
+    assert jobs
+    metadata = jobs[0].commit_metadata()
+    assert all(job.commit_metadata() == metadata for job in jobs)
+    assert all(isinstance(value, str) for value in metadata.values())
+    scope = LaunchScope.model_validate_json(metadata["launch_scope"])
+    assert scope.append_dim_end == end.tz_localize("UTC")
+    assert _scan_launch_scope(scope, OPERATIONAL.data_vars, None, None, None) == (
+        start,
+        filter_end,
+        variables,
+        contains,
+    )
+
+
+def test_historical_metadata_does_not_record_max_cutoff() -> None:
+    job = _job(
+        GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
+        HISTORICAL,
+        HISTORICAL.get_template(pd.Timestamp("2022-01-01T06:00")),
+        HISTORICAL.data_vars,
+    )
+    metadata = job.commit_metadata()
+    assert metadata["publication_policy"] == "unrestricted"
+    assert "publication_cutoff" not in metadata
+    assert "reference_time" not in metadata

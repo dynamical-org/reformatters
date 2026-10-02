@@ -383,6 +383,7 @@ def refresh_store_metadata(
     tmp_store: Path,
     *,
     consolidated: bool,
+    metadata: dict[str, str] | None = None,
 ) -> None:
     """Rewrite attrs, encodings, and template-derived coordinate values on every
     existing store from the current template, trimmed to the store's committed extent
@@ -433,6 +434,7 @@ def refresh_store_metadata(
             store.session.commit(
                 "Refresh metadata from template",
                 rebase_with=icechunk.ConflictDetector(),
+                metadata=metadata,
             )
             log.info(f"Refreshed metadata from template on {store}")
 
