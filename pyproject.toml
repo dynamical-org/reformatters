@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 # icechunk 2.2.2 (2026-09-17) reviewed and approved for immediate use;

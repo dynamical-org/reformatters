@@ -106,12 +106,13 @@ jobs:
     - name: Update kubeconfig
       run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
     - name: Submit job (SEE LOGS)
+      env:
+        CRONJOB_NAME: ${{ github.event.inputs.cronjob_name }}
+        USERNAME: ${{ github.actor }}
       run: |
         #!/bin/bash
         set -euo pipefail
 
-        CRONJOB_NAME="${{ github.event.inputs.cronjob_name }}"
-        USERNAME="${{ github.actor }}"
         RANDOM_CHARS=$(openssl rand -hex 1)
 
         # Generate job name with length limits
@@ -130,7 +131,7 @@ jobs:
         JOB_NAME="${CRONJOB_TRUNCATED}-${USERNAME_TRUNCATED}-${RANDOM_CHARS}"
 
         echo "Creating job: ${JOB_NAME} from cronjob: ${CRONJOB_NAME}"
-        kubectl create job --from=cronjob/${CRONJOB_NAME} ${JOB_NAME}
+        kubectl create job "--from=cronjob/${CRONJOB_NAME}" "${JOB_NAME}"
 
         echo ""
         echo "## Job Created Successfully"

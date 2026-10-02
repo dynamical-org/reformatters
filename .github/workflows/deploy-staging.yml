@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -23,7 +22,7 @@ jobs:
 
     # Keep code-quality.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
@@ -59,28 +58,30 @@ jobs:
     needs: quality
     runs-on: ubuntu-24.04
     environment: prod
+    permissions:
+      id-token: write
+      contents: read
 
     # Keep deploy-operational-updates.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Fetch main so deploy-staging can compare versions via git show
           fetch-depth: 0
 
       - name: Parse branch name
         id: parse
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
-          BRANCH="${{ github.ref_name }}"
           # Branch format: stage/{dataset_id}/v{version}
-          # Strip "stage/" prefix, then split on "/v"
-          WITHOUT_PREFIX="${BRANCH#stage/}"
-          DATASET_ID="${WITHOUT_PREFIX%/v*}"
-          VERSION="${WITHOUT_PREFIX##*/v}"
-
-          if [[ "$DATASET_ID" == "$VERSION" || -z "$DATASET_ID" || -z "$VERSION" ]]; then
+          # Match the dataset and version components before exporting them.
+          if [[ ! "$BRANCH" =~ ^stage/([a-z0-9][a-z0-9-]*)/v([a-z0-9][a-z0-9.-]*)$ ]]; then
             echo "::error::Could not parse dataset_id and version from branch '${BRANCH}'. Expected format: stage/{dataset_id}/v{version}"
             exit 1
           fi
+          DATASET_ID="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
 
           echo "dataset_id=${DATASET_ID}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -132,8 +133,11 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy staging
+        env:
+          DATASET_ID: ${{ steps.parse.outputs.dataset_id }}
+          VERSION: ${{ steps.parse.outputs.version }}
         run: >
           uv run main deploy-staging
-          ${{ steps.parse.outputs.dataset_id }}
-          ${{ steps.parse.outputs.version }}
-          ${{ env.IMAGE_TAG }}
+          "$DATASET_ID"
+          "$VERSION"
+          "$IMAGE_TAG"

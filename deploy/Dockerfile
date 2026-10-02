@@ -1,9 +1,12 @@
-# syntax=docker/dockerfile:1.9
+# syntax=docker/dockerfile:1.9@sha256:fe40cf4e92cd0c467be2cfc30657a680ae2398318afd50b0c80585784c604f28
 
 # This file is lightly modified from the original at https://hynek.me/articles/docker-uv/
 
+FROM ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424 AS uv
+FROM rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5 AS rclone
+
 ### Use a separate build container for better reuse.
-FROM ubuntu:noble AS build
+FROM ubuntu:noble@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3 AS build
 
 SHELL ["sh", "-exc"]
 
@@ -26,7 +29,7 @@ apt-get install -qyy \
     gcc \
 EOT
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 
 # - Silence uv complaining about not being able to use hard links,
 # - tell uv to byte-compile packages for faster application startups,
@@ -79,7 +82,7 @@ RUN --mount=type=cache,target=/root/.cache \
 
 ##########################################################################
 
-FROM ubuntu:noble
+FROM ubuntu:noble@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
 SHELL ["sh", "-exc"]
 
 # Optional: add the application virtualenv to search path.
@@ -108,7 +111,7 @@ EOT
 COPY --from=build /etc/apt/sources.list.d/deadsnakes-ubuntu-ppa-noble.sources /etc/apt/sources.list.d/
 
 # Copy rclone from official image (Noble's version is too old for `rclone copyurl --urls` flag)
-COPY --from=rclone/rclone:latest /usr/local/bin/rclone /usr/bin/rclone
+COPY --from=rclone /usr/local/bin/rclone /usr/bin/rclone
 
 # Note how the runtime dependencies differ from build-time ones.
 # Notably, there is no uv either!

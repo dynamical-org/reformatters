@@ -1,5 +1,11 @@
 version: 2
 updates:
+  - package-ecosystem: "docker"
+    directory: "/deploy"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 5
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
