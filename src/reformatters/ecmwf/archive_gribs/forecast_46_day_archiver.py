@@ -37,6 +37,7 @@ ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendat
 # 2026-06-26 to 2026-08-11). With the archive cron at 06 UTC, the initialization this
 # selects is one published a couple of hours earlier.
 PUBLICATION_DELAY: Final = pd.Timedelta("53h")
+LICENCE_DELAY: Final = pd.Timedelta("48h")
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
 EARLIEST_INIT_TIME: Final = pd.Timestamp("2023-06-28")
@@ -112,10 +113,10 @@ ECDS_VARIABLES: Final[tuple[str, ...]] = tuple(
 )
 
 
-def latest_expected_init_time(now: pd.Timestamp) -> pd.Timestamp:
-    """Newest expected published initialization as a timezone-naive UTC timestamp."""
+def latest_init_time(now: pd.Timestamp, delay: pd.Timedelta) -> pd.Timestamp:
+    """Newest daily initialization at least delay old, as timezone-naive UTC."""
     now = now.tz_localize("UTC") if now.tz is None else now.tz_convert("UTC")
-    return (now - PUBLICATION_DELAY).normalize().tz_localize(None)
+    return (now - delay).normalize().tz_localize(None)
 
 
 class EcmwfIfsEns46DayGribArchiver(OperationalResources):
@@ -207,7 +208,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
     ) -> Sequence[pd.Timestamp]:
         """The initializations one run checks, newest first."""
         now = now if now is not None else pd.Timestamp.now("UTC")
-        newest_init_time = latest_expected_init_time(now)
+        newest_init_time = latest_init_time(now, PUBLICATION_DELAY)
         init_times = pd.date_range(
             end=newest_init_time, periods=init_times_back, freq=INIT_FREQUENCY
         )
