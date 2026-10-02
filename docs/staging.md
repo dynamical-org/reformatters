@@ -97,6 +97,7 @@ The dataset store and Sentry cron monitors are **not** deleted. Clean them up ma
 ## Constraints
 
 - **One dataset per staging branch.** The branch name encodes a single dataset. To stage common code changes across multiple datasets, create separate staging branches from the same feature branch.
+- **Branch components.** Dataset IDs use lowercase letters, digits, and hyphens. Versions start with a digit and use lowercase letters, digits, dots, and hyphens.
 - **Kubernetes name length.** Staging cronjob names must fit in 63 characters. Long dataset IDs are automatically trimmed to fit.
 - **Manual workflows.** The auto-generated manual GitHub Create Job from CronJob workflows only list production cronjobs. Use `kubectl` directly for staging cronjobs.
 
