@@ -1,16 +1,25 @@
+from collections import Counter
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from kubernetes.utils import parse_quantity
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
+from reformatters.common.iterating import get_worker_jobs, item, walk_data_arrays
+from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.types import DatetimeLike
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     MATERIALIZED_PRODUCT_ECDS_VARIABLES,
 )
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_dataset import (
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
 )
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import NOOP_STORAGE_CONFIG
@@ -90,6 +99,64 @@ def test_archive_contains_every_dataset_source_variable(
         data_var.internal_attrs.ecds_variable
         for data_var in dataset.template_config.data_vars
     } == set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["daily"])
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        EcmwfIfsEnsForecast46Day15DegreeDataset(
+            primary_storage_config=NOOP_STORAGE_CONFIG
+        ),
+        EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
+            primary_storage_config=NOOP_STORAGE_CONFIG
+        ),
+    ],
+    ids=["daily", "6-hourly"],
+)
+@pytest.mark.parametrize("init_count", [1, 2, 5])
+def test_operational_workers_cover_jobs_and_fit_shared_memory(
+    dataset: EcmwfIfsEnsForecast46Day15DegreeDataset
+    | EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
+    init_count: int,
+    tmp_path: Path,
+) -> None:
+    update = item(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test-image")
+        if isinstance(resource, ReformatCronJob)
+    )
+    config = dataset.template_config
+    template = config.get_template(
+        config.append_dim_start + init_count * config.append_dim_frequency
+    )
+    jobs = dataset.region_job_class.get_jobs(
+        tmp_store=tmp_path / "tmp.zarr",
+        template_ds=template,
+        append_dim=config.append_dim,
+        all_data_vars=config.data_vars,
+        reformat_job_name="test-update",
+    )
+    assignments = [
+        get_worker_jobs(
+            jobs,
+            worker,
+            update.workers_total,
+            worker_assignment=dataset.region_job_class.worker_assignment,
+        )
+        for worker in range(update.workers_total)
+    ]
+    assert Counter(repr(job) for jobs in assignments for job in jobs) == Counter(
+        repr(job) for job in jobs
+    )
+    assert all(assignments)
+    if init_count <= 2:
+        assert max(map(len, assignments)) <= 4
+
+    assert update.shared_memory is not None
+    for job in jobs:
+        region = template.isel({config.append_dim: job.get_processing_region()})
+        largest_buffer = max(array.nbytes for _, array in walk_data_arrays(region))
+        assert largest_buffer < parse_quantity(update.shared_memory)
 
 
 LEVELS = (1000, 925, 850, 700, 500, 300, 200, 100, 50, 10)
