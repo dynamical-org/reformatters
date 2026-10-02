@@ -54,6 +54,19 @@ def dataset(tmp_path: Path) -> NoaaHrrrForecast48HourVirtualDataset:
     return make_dataset(tmp_path)
 
 
+def test_polling_leaves_validation_time_inside_single_deadline(
+    dataset: NoaaHrrrForecast48HourVirtualDataset,
+) -> None:
+    cron = dataset.operational_kubernetes_resources("test")[0]
+    fire = pd.Timestamp("2026-10-02T00:50")
+    deadline = pd.Timestamp("2026-10-02T02:28")
+
+    assert cron.pod_active_deadline == timedelta(minutes=100)
+    assert dataset._virtual_poll_deadline(fire) == deadline
+    assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
+    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)
+
+
 @pytest.mark.slow
 def test_backfill_local_and_operational_update(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
