@@ -6,7 +6,7 @@ We use
 * `docker` to package the code and dependencies
 * `kubernetes` indexed jobs to run work in parallel
 
-Container image inputs in `deploy/Dockerfile` are pinned to multi-platform digests. Dependabot proposes base and tool image updates weekly, with a five-day cooldown. Update the Dockerfile frontend pin manually. Verify both AMD64 and ARM64 builds when updating pins; Code Quality does not build runtime images.
+Container image inputs in `deploy/Dockerfile` are pinned to multi-platform digests. Dependabot proposes base and tool image updates weekly, with a five-day cooldown. Update the Dockerfile frontend and Hatchling build-backend pins manually. Verify both AMD64 and ARM64 builds when updating pins; Code Quality does not build runtime images.
 
 ### Setup
 

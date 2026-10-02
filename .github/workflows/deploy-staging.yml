@@ -76,7 +76,7 @@ jobs:
         run: |
           # Branch format: stage/{dataset_id}/v{version}
           # Match the dataset and version components before exporting them.
-          if [[ ! "$BRANCH" =~ ^stage/([a-z0-9][a-z0-9-]*)/v([0-9][a-z0-9.-]*)$ ]]; then
+          if [[ ! "$BRANCH" =~ ^stage/([a-z0-9][a-z0-9-]*)/v([a-z0-9][a-z0-9.-]*)$ ]]; then
             echo "::error::Could not parse dataset_id and version from branch '${BRANCH}'. Expected format: stage/{dataset_id}/v{version}"
             exit 1
           fi
