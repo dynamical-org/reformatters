@@ -6,7 +6,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -32,7 +32,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     region_job_class: type[NoaaGefsForecast35Day05DegreeVirtualRegionJob] = (
         NoaaGefsForecast35Day05DegreeVirtualRegionJob
     )
-
+    # The newest extension remains partial throughout the polling window.
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=7)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
@@ -51,11 +51,10 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # The dataset id plus "-validate" exceeds the 52 character cron job name limit.
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
         # f000-f384 publishes ~init+3h46m through ~init+6h43m; f390-f840 publishes in
         # bursts until ~init+28h05m. Fire just before the first burst; the 6h deadline
-        # covers it, and the extension is ingested as soon as the next day's fire finds it.
+        # covers it and early extension members; later members roll to the next fire.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="45 3 * * *",
@@ -70,24 +69,13 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
             workers_total=1,
             parallelism=1,
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{cron_job_name_prefix}-validate",
-            # The update's fire plus its pod_active_deadline
-            schedule="55 9 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=50)),
-            # 00z has published only its leads through 384h, 105 of 181, when validation fires.
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
+            # The newest init can be partial while its long-lead extension publishes.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.57, 1.0)
             ),

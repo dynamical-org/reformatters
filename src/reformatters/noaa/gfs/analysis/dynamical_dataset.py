@@ -6,7 +6,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
@@ -22,7 +21,7 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
     region_job_class: type[NoaaGfsAnalysisRegionJob] = NoaaGfsAnalysisRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Define Kubernetes cron jobs for operational updates and validation."""
+        """Define Kubernetes cron jobs for operational updates."""
         # GFS f006 (last lead time used) NOMADS last-modified ~init+3h36m. +3 min buffer.
         workers = self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
@@ -40,18 +39,7 @@ class NoaaGfsAnalysisDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
             parallelism=workers,
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="50 3,9,15,21 * * *",  # 10m (pod_active_deadline) after reformat at :40
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (

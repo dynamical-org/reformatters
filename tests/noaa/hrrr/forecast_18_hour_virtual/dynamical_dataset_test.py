@@ -188,9 +188,7 @@ def test_missing_source_file_remains_fill(
 def test_operational_kubernetes_resources(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
@@ -199,9 +197,6 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "49 * * * *"
-    assert not validation_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -213,7 +208,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=1, minutes=49)
+    assert current_data.max_delay == timedelta(minutes=50)
     completeness = next(
         validator
         for validator in validators

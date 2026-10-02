@@ -192,7 +192,7 @@ def test_operational_update_jobs_single_polling_job(cycle_end_hour: int) -> None
             update={"format": DatasetFormat.ICECHUNK}
         )
     )
-    cron_job, _ = dataset.operational_kubernetes_resources("test")
+    (cron_job,) = dataset.operational_kubernetes_resources("test")
     fire_time = cron_job.previous_fire_time(
         pd.Timestamp("2021-05-03") + pd.Timedelta(hours=cycle_end_hour)
     )

@@ -4,7 +4,7 @@ The operational virtual product admits a forecast step when `init_time + lead_ti
 
 Operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. Recent initializations are intentionally partial. Coordinates retain all 60 leads; unpublished steps read as NaN. `expected_forecast_length` describes the source horizon, not the number of leads currently published. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill.
 
-The update schedule is `5 1,7,13,19 * * *`; validation follows at `5 2,8,14,20 * * *`. Decode health samples both ends of the update window so a partial newest initialization does not eliminate long-lead coverage. `CheckNoRefsInsideHoldback` checks representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
+The update schedule is `5 1,7,13,19 * * *`; its final pod validates the result. Decode health samples both ends of the update window so a partial newest initialization does not eliminate long-lead coverage. `CheckNoRefsInsideHoldback` checks representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
 
 ## Audit
 
@@ -20,14 +20,13 @@ An aging forecast can disappear from the restricted set without any deletion. Th
 
 ## Remediate an existing store
 
-These are operator actions, not part of running tests or merging a draft. Keep both operational crons suspended in code until remediation is complete. Every deployment applies all cron definitions, so a cluster-only suspension can be undone by an unrelated merge. One operator must exclusively own `holdback-purge` from creation through publication and branch cleanup; the main-pointer CAS does not lock that temporary branch. Suspension prevents new jobs; also wait for already-running update and backfill jobs to finish before recording the starting snapshot.
+These are operator actions, not part of running tests or merging a draft. Keep the operational update cron suspended in code until remediation is complete. Every deployment applies all cron definitions, so a cluster-only suspension can be undone by an unrelated merge. One operator must exclusively own `holdback-purge` from creation through publication and branch cleanup; the main-pointer CAS does not lock that temporary branch. Suspension prevents new jobs; also wait for already-running update and backfill jobs to finish before recording the starting snapshot.
 
-1. Set `suspend=True` on both operational crons and deploy the holdback implementation. Verify their images, schedules, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
+1. Set `suspend=True` on the operational update cron and deploy the holdback implementation. Verify its image, schedule, and suspension in the cluster. An emergency suspension before deploy can use the following commands, but must be followed by the durable code change:
 
 ```sh
 kubectl patch cronjob google-wn2-forecast-operational-virtual-update --type=merge -p '{"spec":{"suspend":true}}'
-kubectl patch cronjob google-wn2-forecast-operational-virtual-validate --type=merge -p '{"spec":{"suspend":true}}'
-kubectl get cronjob google-wn2-forecast-operational-virtual-update google-wn2-forecast-operational-virtual-validate -o yaml
+kubectl get cronjob google-wn2-forecast-operational-virtual-update -o yaml
 ```
 
 2. Record the `main` snapshot, cutoff, ancestry, and any other branches/tags. The following read-only inventory reports each branch/tag tip and the full main ancestry; repeat it before expiry and after GC.
@@ -62,7 +61,7 @@ DYNAMICAL_ENV=prod uv run src/scripts/icechunk_utils.py --repo s3://dynamical-go
 
 5. Confirm `main` still names the clean tip before expiry and after GC, and record the GC deletion summary. Repeat the public audit on the clean snapshot with the same cutoff. Verify an expired snapshot no longer opens over the public endpoint; check any CDN caches separately. The clean snapshot must remain readable.
 
-6. Run one controlled update and validation while schedules remain suspended. The update refreshes stored description metadata from the merged template. Start it just after an update schedule slot so its polling deadline has time remaining. Manual jobs use the most recent scheduled fire, not their start time, to choose the publication cutoff. If missing eligible steps have aged outside the 17-day window, run the [targeted backfill](backfill.md) first, starting at the oldest affected initialization. For scheduled fire `F`, compare the window start `floor_6h(F - 1h) - 17 days` against the oldest purged init; a later window start needs backfill. An add-only backfill cannot remove restricted refs and is not a substitute for the purge. Select the old gap with an exclusive `--filter-end` at the window start. Filters select whole regions, so a boundary region may also rewrite eligible refs just inside the window. Omit `--append-dim-end` when repairing the existing extent; extending it beyond the operational template would make the holdback guard fail until updates catch up.
+6. Run one controlled update, including its final validation, while the schedule remains suspended. The update refreshes stored description metadata from the merged template. Start it just after an update schedule slot so its polling deadline has time remaining. Manual jobs use the most recent scheduled fire, not their start time, to choose the publication cutoff. If missing eligible steps have aged outside the 17-day window, run the [targeted backfill](backfill.md) first, starting at the oldest affected initialization. For scheduled fire `F`, compare the window start `floor_6h(F - 1h) - 17 days` against the oldest purged init; a later window start needs backfill. An add-only backfill cannot remove restricted refs and is not a substitute for the purge. Select the old gap with an exclusive `--filter-end` at the window start. Filters select whole regions, so a boundary region may also rewrite eligible refs just inside the window. Omit `--append-dim-end` when repairing the existing extent; extending it beyond the operational template would make the holdback guard fail until updates catch up.
 
 If backfill is needed, the sizing below matches the operational backfill recorded in [meta #188](https://github.com/dynamical-org/meta/issues/188); measure memory for the repair scope.
 
@@ -75,13 +74,11 @@ Controlled update and validation:
 ```sh
 kubectl create job --from=cronjob/google-wn2-forecast-operational-virtual-update wn2-holdback-first-update
 kubectl logs -f job/wn2-holdback-first-update
-kubectl create job --from=cronjob/google-wn2-forecast-operational-virtual-validate wn2-holdback-first-validate
-kubectl logs -f job/wn2-holdback-first-validate
 ```
 
-Run validation promptly after the update completes, before the next update schedule slot changes its expected set. Record presence-probe count, manifests rewritten, commit time, peak RSS, and validation duration against the 30-minute deadline. Completeness and decode health each probe the 17-day window; the no-extra-refs guard adds its own representative probes. Use measurements before changing manifest splits or sharing presence results. If log streaming is unavailable, inspect job completion and the monitoring paths in [ops_card.md](ops_card.md). A whole-archive completeness scan uses its own wall-clock cutoff and can report newly eligible steps missing until the next update; it does not share an earlier worker cutoff.
+Inspect validation in the final update pod before the next update schedule slot changes its expected set. Record presence-probe count, manifests rewritten, commit time, peak RSS, and validation duration against the update pod deadline. Completeness and decode health each probe the 17-day window; the no-extra-refs guard adds its own representative probes. Use measurements before changing manifest splits or sharing presence results. If log streaming is unavailable, inspect job completion and the monitoring paths in [ops_card.md](ops_card.md). A whole-archive completeness scan uses its own wall-clock cutoff and can report newly eligible steps missing until the next update; it does not share an earlier worker cutoff.
 
-7. Restore both schedules with a follow-up code change setting `suspend=False`, then verify deployment and subsequent scheduled fires. Unsuspension can immediately trigger both missed schedules together. Complete the deployment before the next update fire after the controlled update; if that window is missed, repeat the controlled update and validation for the new window before resuming, so catch-up validation sees the expected data. Update staging STAC wording and examples at the same time: use an eligible lead (such as 6h after a successful update), explain partial initializations, and remove claims of a 48-hour valid-time boundary. A latest-init lead-240h example is intentionally unfilled under this rule.
+7. Restore the schedule with a follow-up code change setting `suspend=False`, then verify deployment and subsequent scheduled fires. Unsuspension can immediately trigger a missed update schedule. Complete the deployment before the next update fire after the controlled update; if that window is missed, repeat the controlled update for the new window before resuming, so catch-up validation sees the expected data. Update staging STAC wording and examples at the same time: use an eligible lead (such as 6h after a successful update), explain partial initializations, and remove claims of a 48-hour valid-time boundary. A latest-init lead-240h example is intentionally unfilled under this rule.
 
 ## Release boundary
 

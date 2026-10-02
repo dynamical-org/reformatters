@@ -18,7 +18,6 @@ from reformatters.common.kubernetes import (
     SERVICE_ACCOUNT,
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 
 
@@ -45,17 +44,7 @@ class ExampleDataset1:
             shared_memory="12G",
             ephemeral_storage="30G",
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="0 0 * * *",
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
 
 class ExampleDataset2(ExampleDataset1):
@@ -111,7 +100,6 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dataset 1
     assert resources["items"][0]["kind"] == "CronJob"
     assert resources["items"][0]["metadata"]["name"] == "example-dataset-1-update"
-    assert resources["items"][1]["metadata"]["name"] == "example-dataset-1-validate"
     container_spec = resources["items"][0]["spec"]["jobTemplate"]["spec"]["template"][
         "spec"
     ]["containers"][0]
@@ -119,9 +107,8 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     assert container_spec["image"] == "test-image-tag"
 
     # Dataset 2
-    assert resources["items"][2]["kind"] == "CronJob"
-    assert resources["items"][2]["metadata"]["name"] == "example-dataset-2-update"
-    assert resources["items"][3]["metadata"]["name"] == "example-dataset-2-validate"
+    assert resources["items"][1]["kind"] == "CronJob"
+    assert resources["items"][1]["metadata"]["name"] == "example-dataset-2-update"
 
     rbac_resources = json.loads(rbac_apply.kwargs["input"])["items"]
     rbac = {item["kind"]: item for item in rbac_resources}
@@ -175,7 +162,7 @@ def test_deploy_operational_resources_dataset_id_filter(
         for item in resources["items"]
         if item["kind"] == "CronJob"
     ]
-    assert names == ["example-dataset-2-update", "example-dataset-2-validate"]
+    assert names == ["example-dataset-2-update"]
     rbac_resources = json.loads(mock_run.call_args_list[1].kwargs["input"])["items"]
     role = next(item for item in rbac_resources if item["kind"] == "Role")
     assert role["rules"][0]["resources"] == ["cronjobs"]
@@ -201,7 +188,6 @@ def test_partial_deploy_registers_selected_targets(
     prefix = "staging-" if staging else ""
     assert binding_registration.call_args.args[1] == [
         f"{prefix}example-dataset-3-update",
-        f"{prefix}example-dataset-3-validate",
     ]
 
 
@@ -223,11 +209,10 @@ def test_deploy_registers_all_cronjobs_before_grant(
     deploy.deploy_operational_resources([ExampleDataset1()], docker_image="test")  # ty: ignore[invalid-argument-type]
     names = [
         "example-dataset-1-update",
-        "example-dataset-1-validate",
         "existing-update",
     ]
     assert events == [
-        ("apply", ["ServiceAccount", "CronJob", "CronJob"]),
+        ("apply", ["ServiceAccount", "CronJob"]),
         ("bindings", names),
         ("apply", ["Role", "RoleBinding"]),
     ]
@@ -245,7 +230,6 @@ def test_partial_deploy_preserves_previous_targets(
     role = apply.call_args.args[0][0]
     assert role["rules"][0]["resourceNames"] == [
         "example-dataset-1-update",
-        "example-dataset-1-validate",
         "previous-staging-update",
     ]
 

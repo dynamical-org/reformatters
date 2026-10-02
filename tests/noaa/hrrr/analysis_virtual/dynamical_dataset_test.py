@@ -192,9 +192,7 @@ def test_backfill_earliest_hrrr_v1_era(tmp_path: Path) -> None:
 def test_operational_kubernetes_resources(
     dataset: NoaaHrrrAnalysisVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
@@ -203,9 +201,6 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.pod_active_deadline == timedelta(minutes=30)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "20 * * * *"
-    assert not validation_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -217,7 +212,7 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=2)
+    assert current_data.max_delay == timedelta(hours=1, minutes=30)
 
     # discover_available extends time only to an hour holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no

@@ -34,7 +34,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.monitoring import monitor_cron
 from reformatters.common.region_job import SourceFileCoord
@@ -64,35 +64,7 @@ NOOP_STORAGE_CONFIG = StorageConfig(
 )
 
 
-def stalled_cycles_before_alerting(
-    max_delay: timedelta,
-    fire: pd.Timestamp,
-    newest_normal: pd.Timestamp,
-    frequency: pd.Timedelta,
-    monkeypatch: pytest.MonkeyPatch,
-) -> int:
-    """The number of consecutive un-ingested cycles at which CheckCurrentData first
-    fails, running the real check rather than re-deriving its due-position arithmetic.
-    One more than the number it tolerates."""
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: fire))
-
-    for stalled in range(1, 6):
-        init_times = pd.date_range(
-            newest_normal - 40 * frequency,
-            newest_normal - stalled * frequency,
-            freq=frequency,
-        )
-        context = validation.ValidationContext(
-            store=Mock(),
-            ds=xr.Dataset(coords={"init_time": init_times}),
-            append_dim="init_time",
-            append_dim_frequency=frequency,
-        )
-        if not validation.CheckCurrentData(max_delay=max_delay).check(context).passed:
-            return stalled
-    raise AssertionError(f"{max_delay} never alerts within 5 stalled cycles")
-
-
+# Partial and historical e2e fixtures commit their data before validation rejects them.
 def assert_update_fails_validation(
     dataset: DynamicalDataset, job_name: str, expected_check: str
 ) -> None:
@@ -110,7 +82,7 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
     validate_dataset adds) against the store its e2e test built.
 
     Every validator must return a ValidationResult rather than raising — this catches
-    validator config bugs that would silently crash the validation cronjob (a variable
+    validator config bugs that would crash operational validation (a variable
     name not in the template, or a check that errors on the dataset's real dimension
     structure). CheckCurrentData must additionally pass: we patch pd.Timestamp.now()
     to the store's latest append-dim coordinate so "now" lines up with the freshest
@@ -230,18 +202,6 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                schedule="0 0 * * *",
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
                 schedule="0 0 * * *",
                 pod_active_deadline=timedelta(minutes=30),
                 image=image_tag,
@@ -479,15 +439,13 @@ def test_validation_has_its_own_monitor_after_update(
     if command == "update":
         assert calls[0].kwargs["check_in_id"] != calls[2].kwargs["check_in_id"]
     for call in calls:
-        cron = dataset._operational_cron_job(
-            ValidationCronJob
-            if call.kwargs["monitor_slug"].endswith("-validate")
-            else ReformatCronJob
-        )
+        cron = dataset._operational_cron_job(ReformatCronJob)
         assert call.kwargs["monitor_config"] == {
             "schedule": {"type": "crontab", "value": cron.schedule},
             "timezone": "UTC",
-            "checkin_margin": 10,
+            "checkin_margin": 40
+            if call.kwargs["monitor_slug"].endswith("-validate")
+            else 10,
             "max_runtime": 30,
             "failure_issue_threshold": 1,
             "recovery_threshold": 1,
@@ -967,7 +925,7 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
     assert repo.lookup_branch("main") == main_before
 
 
-class ExampleDatasetWithThreeCronJobs(
+class ExampleDatasetWithTwoCronJobs(
     DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]
 ):
     """A dataset with an extra base CronJob, like DWD ICON-EU's archive-grib-files."""
@@ -1004,18 +962,6 @@ class ExampleDatasetWithThreeCronJobs(
                 ephemeral_storage="1G",
                 secret_names=self.store_factory.k8s_secret_names(),
             ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule="0 1 * * *",
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
         ]
 
 
@@ -1030,6 +976,7 @@ def _recording_monitor(
         send_in_progress: bool,
         send_result: bool,
         monitor_name: str | None,
+        checkin_margin: int,
     ) -> Iterator[None]:
         events.append(("enter", monitor_name or cron_job.name))
         try:
@@ -1065,8 +1012,8 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
     operational.register_run_monitor(_recording_monitor(events))
     operational.register_run_monitor(_recording_monitor(events))
 
-    dataset = ExampleDatasetWithThreeCronJobs()
-    # cron_job_name disambiguates among the three crons; the resolved cron reaches monitors.
+    dataset = ExampleDatasetWithTwoCronJobs()
+    # cron_job_name disambiguates among the two crons; the resolved cron reaches monitors.
     with dataset._monitor(
         CronJob, "job-name", cron_job_name=f"{dataset.dataset_id}-archive"
     ):
@@ -1078,8 +1025,8 @@ def test_monitor_resolves_cron_job_and_enters_all_monitors() -> None:
 
 def test_monitor_requires_exactly_one_matching_cron() -> None:
     operational.register_run_monitor(_recording_monitor([]))
-    dataset = ExampleDatasetWithThreeCronJobs()
-    # Base CronJob with no name matches all three -> ambiguous.
+    dataset = ExampleDatasetWithTwoCronJobs()
+    # Base CronJob with no name matches both -> ambiguous.
     with (
         pytest.raises(ValueError, match="Expected exactly one item, got multiple"),
         dataset._monitor(CronJob, "job-name"),
