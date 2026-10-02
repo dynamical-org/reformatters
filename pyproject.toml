@@ -55,7 +55,7 @@ dev = [
     "pytest~=9.1",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
-    "ruff==0.16.8",
+    "ruff==0.16.9",
     "ty~=0.0.65",
     "types-boto3>=1.43.5",
     "types-requests~=2.33",
