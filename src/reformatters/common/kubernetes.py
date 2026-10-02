@@ -455,22 +455,21 @@ def create_job_from_cronjob(
     return True
 
 
-def retry_job_name(job_name: str, max_retries: int = 1) -> str | None:
+def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
     match = re.search(r"-r([1-9]\d*)$", job_name)
     retry = int(match[1]) if match else 0
-    if retry >= max_retries:
-        return None
+    should_retry = retry < max_retries
     parent = job_name[: match.start()] if match else job_name
     suffix = f"-r{retry + 1}"
     # Indexed pod hostnames append a hyphen and an int32 completion index.
     max_name_length = 52
     if len(parent) + len(suffix) <= max_name_length:
-        return parent + suffix
+        return should_retry, parent + suffix
     parent_digest = digest([parent], length=4)
     prefix = parent[: max_name_length - len(suffix) - len(parent_digest) - 1].rstrip(
         "-"
     )
-    return f"{prefix}-{parent_digest}{suffix}"
+    return should_retry, f"{prefix}-{parent_digest}{suffix}"
 
 
 # Operational schedules use fixed minutes, selected hours, and either every day or

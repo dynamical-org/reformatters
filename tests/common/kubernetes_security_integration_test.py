@@ -895,7 +895,9 @@ def test_trigger_cannot_take_a_scheduled_job_name(cluster: Cluster) -> None:
 
 def test_long_retry_name_is_admitted_for_indexed_jobs(cluster: Cluster) -> None:
     job = cluster.job_for(UPDATE)
-    job["metadata"]["name"] = reformatters_kubernetes.retry_job_name("x" * 63)
+    should_retry, retry_job_name = reformatters_kubernetes.retry_job_name("x" * 63)
+    assert should_retry
+    job["metadata"]["name"] = retry_job_name
     cluster.assert_allowed(job)
 
 

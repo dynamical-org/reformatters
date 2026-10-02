@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from typing import Protocol
 
@@ -52,6 +52,7 @@ class OperationalResources(FrozenBaseModel):
         *,
         send_in_progress: bool = True,
         send_result: bool = True,
+        monitor_name: str | Callable[[], str] | None = None,
     ) -> Iterator[None]:
         # No registered monitors -> nothing to report to, and no need to require
         # operational_kubernetes_resources to be defined.
@@ -60,6 +61,11 @@ class OperationalResources(FrozenBaseModel):
             return
 
         cron_job = self._operational_cron_job(cron_type, cron_job_name)
+        resolved_monitor_name = (
+            monitor_name
+            if monitor_name is None or isinstance(monitor_name, str)
+            else monitor_name()
+        )
 
         with ExitStack() as stack:
             for monitor in _RUN_MONITORS:
@@ -69,6 +75,7 @@ class OperationalResources(FrozenBaseModel):
                         reformat_job_name,
                         send_in_progress=send_in_progress,
                         send_result=send_result,
+                        monitor_name=resolved_monitor_name,
                     )
                 )
             yield
@@ -90,6 +97,7 @@ class RunMonitor(Protocol):
         *,
         send_in_progress: bool,
         send_result: bool,
+        monitor_name: str | None,
     ) -> AbstractContextManager[None]: ...
 
 

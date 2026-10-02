@@ -10,7 +10,6 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
 import icechunk
 import numpy as np
 import pandas as pd
-import sentry_sdk
 import typer
 import xarray as xr
 import zarr.errors
@@ -40,6 +39,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
+from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -187,8 +187,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     update_template_with_results=True,
                 )
 
-            if is_last:
-                self._validate_after_update(reformat_job_name)
+        if is_last:
+            self._validate_after_update(reformat_job_name)
 
         log.info(
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
@@ -196,30 +196,26 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
     def _validate_after_update(self, reformat_job_name: str) -> None:
         try:
-            self._validate_dataset(reformat_job_name)
+            self.validate_dataset(reformat_job_name)
         except Exception as error:
-            sentry_sdk.capture_exception(error)
-            log.warning("Operational validation failed for %s", reformat_job_name)
+            log.exception("Operational validation failed for %s", reformat_job_name)
             if (
                 isinstance(error, validation.OperationalValidationError)
                 and Config.is_prod
-                and os.getenv("KUBERNETES_SERVICE_HOST")
             ):
-                retry_name = kubernetes.retry_job_name(reformat_job_name)
-                if retry_name is not None:
+                should_retry, retry_job_name = kubernetes.retry_job_name(
+                    reformat_job_name
+                )
+                if should_retry:
                     try:
                         kubernetes.create_job_from_cronjob(
                             os.environ["CRON_JOB_NAME"],
-                            retry_name,
+                            retry_job_name,
                             skip_if_next_run_within_deadline=True,
                         )
-                    except Exception as submission_error:  # noqa: BLE001 - retain the failed Job without retrying finalized work
-                        with sentry_sdk.new_scope() as scope:
-                            scope.fingerprint = ["{{ default }}"]
-                            sentry_sdk.capture_exception(submission_error)
-                        log.warning(
-                            "Could not submit %s: %s", retry_name, submission_error
-                        )
+                    except Exception:
+                        log.exception("Could not submit %s", retry_job_name)
+            # Stop with exit code that fails the job rather than having this pod retry
             raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
 
     def backfill_kubernetes(
@@ -614,8 +610,22 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         references rather than shards), and CheckReplicaMatchesPrimary on every
         replica.
         """
-        with self._monitor(ValidationCronJob, reformat_job_name):
+        with self._monitor(
+            ValidationCronJob,
+            reformat_job_name,
+            monitor_name=self._validation_monitor_name,
+        ):
             self._validate_dataset(reformat_job_name)
+
+    def _validation_monitor_name(self) -> str:
+        if os.getenv("CRON_JOB_NAME") in {
+            staging_cronjob_name(self.dataset_id, self.template_config.version, command)
+            for command in ("update", "validate")
+        }:
+            return staging_cronjob_name(
+                self.dataset_id, self.template_config.version, "validate"
+            )
+        return self._operational_cron_job(ValidationCronJob).name
 
     def _validate_dataset(self, reformat_job_name: str) -> None:
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)

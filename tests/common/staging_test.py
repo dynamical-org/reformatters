@@ -131,3 +131,23 @@ class TestStagingBranchName:
             staging_branch_name("noaa-gfs-forecast", "0.3.0")
             == "stage/noaa-gfs-forecast/v0.3.0"
         )
+
+
+@pytest.mark.parametrize("dataset", DYNAMICAL_DATASETS, ids=lambda d: d.dataset_id)
+@pytest.mark.parametrize("command", ["update", "validate"])
+def test_inline_validation_uses_deployed_staging_monitor_name(
+    monkeypatch: pytest.MonkeyPatch, dataset: DynamicalDataset[Any, Any], command: str
+) -> None:
+    monkeypatch.setenv(
+        "CRON_JOB_NAME",
+        staging_cronjob_name(
+            dataset.dataset_id, dataset.template_config.version, command
+        ),
+    )
+    validation_cron = dataset._operational_cron_job(ValidationCronJob)
+    assert (
+        dataset._validation_monitor_name()
+        == rename_cronjob_for_staging(
+            validation_cron, dataset.dataset_id, dataset.template_config.version
+        ).name
+    )

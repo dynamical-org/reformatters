@@ -813,19 +813,27 @@ def test_create_job_propagates_non_conflict_api_error(
 
 
 def test_retry_job_name_is_anchored_and_length_safe() -> None:
-    assert retry_job_name("forecast-update") == "forecast-update-r1"
-    assert retry_job_name("forecast-update-r1") is None
-    assert (
-        retry_job_name("forecast-r1-update", max_retries=2) == "forecast-r1-update-r1"
+    assert retry_job_name("forecast-update") == (True, "forecast-update-r1")
+    assert retry_job_name("forecast-update-r1") == (False, "forecast-update-r2")
+    assert retry_job_name("forecast-update", max_retries=0) == (
+        False,
+        "forecast-update-r1",
     )
-    assert retry_job_name("forecast-update-r1", max_retries=2) == "forecast-update-r2"
-    first = retry_job_name("a" * 62 + "b")
-    second = retry_job_name("a" * 62 + "c")
-    assert first is not None
-    assert second is not None
+    assert retry_job_name("forecast-r1-update", max_retries=2) == (
+        True,
+        "forecast-r1-update-r1",
+    )
+    assert retry_job_name("forecast-update-r1", max_retries=2) == (
+        True,
+        "forecast-update-r2",
+    )
+    should_retry, first = retry_job_name("a" * 62 + "b")
+    assert should_retry
+    should_retry, second = retry_job_name("a" * 62 + "c")
+    assert should_retry
     assert len(first) <= 52
     assert len(second) <= 52
     assert len(first.rsplit("-", 2)[1]) == 4
     assert len(f"{first}-2147483646") <= 63
     assert first != second
-    assert first == retry_job_name("a" * 62 + "b")
+    assert (True, first) == retry_job_name("a" * 62 + "b")

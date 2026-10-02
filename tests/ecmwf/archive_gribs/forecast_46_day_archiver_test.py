@@ -156,7 +156,7 @@ def test_archiver_is_not_a_dataset_and_defines_no_reformat_crons() -> None:
         (True, True, ARCHIVE_RCLONE_ROOT, [False, True], 0),
         (True, True, ARCHIVE_RCLONE_ROOT, [], 0),
         (False, True, ARCHIVE_RCLONE_ROOT, [True], 0),
-        (True, False, ARCHIVE_RCLONE_ROOT, [True], 0),
+        (True, False, ARCHIVE_RCLONE_ROOT, [True], 2),
         (True, True, ":s3:another-bucket/", [True], 0),
     ],
 )
