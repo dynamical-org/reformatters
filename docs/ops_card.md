@@ -11,6 +11,7 @@ _Requires sentry organization invitation._
 - [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by `cron_job_name` / `job_name` / `pod_name` attributes.
 
 Alerts route to Slack `#ops-reformatters` via each project's alert rule.
+Exception events include stack traces without frame-local variables.
 
 ## Kubernetes cluster operations
 Accessible via manually triggered github actions. Follow link and click "run workflow". _Requires repo write permisisons._

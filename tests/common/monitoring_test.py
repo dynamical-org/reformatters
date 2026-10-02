@@ -1,13 +1,18 @@
+import json
 import logging
+import runpy
 import signal
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 import sentry_sdk
 import sentry_sdk.crons
 import typer
+from sentry_sdk.utils import event_from_exception
 from typer.testing import CliRunner
 
 from reformatters.__main__ import startup
@@ -32,6 +37,35 @@ _CRON_JOB = CronJob(
     cpu="1",
     memory="1G",
 )
+
+
+def test_sentry_exception_events_omit_frame_locals(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init = Mock()
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    monkeypatch.setattr(sentry_sdk, "init", init)
+    monkeypatch.setattr(sentry_sdk, "set_tag", Mock())
+    runpy.run_path("src/reformatters/__main__.py", run_name="sentry_configuration_test")
+    options: dict[str, Any] = dict(init.call_args.kwargs) | {
+        "dsn": None,
+        "default_integrations": False,
+        "integrations": [],
+    }
+    client = sentry_sdk.Client(**options)
+    env_vars = {"RCLONE_CONFIG_ARCHIVE_SECRET_ACCESS_KEY": uuid4().hex}
+    try:
+        raise OSError("synthetic failure")
+    except OSError as error:
+        event, _ = event_from_exception(error, client_options=client.options)
+    finally:
+        client.close()
+
+    frames = event["exception"]["values"][0]["stacktrace"]["frames"]
+    assert frames
+    assert all("vars" not in frame for frame in frames)
+    assert env_vars["RCLONE_CONFIG_ARCHIVE_SECRET_ACCESS_KEY"] not in json.dumps(event)
+    assert event["exception"]["values"][0]["value"] == "synthetic failure"
 
 
 def test_log_cgroup_peak_memory(
