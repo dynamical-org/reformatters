@@ -155,7 +155,7 @@ def test_backfill_local_and_operational_update(
 
     # The update reprocesses the latest existing initialization and appends the next.
     monkeypatch.setattr(
-        pd.Timestamp, "now", Mock(return_value=pd.Timestamp("2026-08-12T00:00"))
+        pd.Timestamp, "now", Mock(return_value=pd.Timestamp("2026-08-13T05:00Z"))
     )
     dataset.update("test-update")
     assert_point_values(xr.open_zarr(store, chunks=None), [first_init, second_init])
