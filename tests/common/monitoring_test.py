@@ -53,7 +53,7 @@ def test_sentry_exception_events_omit_frame_locals(
         "integrations": [],
     }
     client = sentry_sdk.Client(**options)
-    env_vars = {"RCLONE_CONFIG_ARCHIVE_SECRET_ACCESS_KEY": uuid4().hex}
+    marker = uuid4().hex
     try:
         raise OSError("synthetic failure")
     except OSError as error:
@@ -64,7 +64,7 @@ def test_sentry_exception_events_omit_frame_locals(
     frames = event["exception"]["values"][0]["stacktrace"]["frames"]
     assert frames
     assert all("vars" not in frame for frame in frames)
-    assert env_vars["RCLONE_CONFIG_ARCHIVE_SECRET_ACCESS_KEY"] not in json.dumps(event)
+    assert marker not in json.dumps(event)
     assert event["exception"]["values"][0]["value"] == "synthetic failure"
 
 
