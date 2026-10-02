@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfDataVar,
 )
@@ -24,7 +24,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        """Return the kubernetes cron job definitions to operationally update this dataset."""
 
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
@@ -45,23 +45,12 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             workers_total=workers,
             parallelism=min(workers, 20),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="40 8 * * *",  # 35m (pod_active_deadline) after reformat at 08:05
-            suspend=False,
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.5",
-            memory="30G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+8h05m; validation fires at init+8h40m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=40)),
+            # The update ingests each init at init+8h05m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=5)),
             validation.CheckRecentNans(append_dim_window=3),
         )

@@ -8,7 +8,7 @@ import typer
 
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
 from reformatters.dwd.archive_gribs.copy_files_from_dwd import copy_files_from_dwd_https
 from reformatters.dwd.archive_gribs.copy_icosahedral_files_from_dwd import (
@@ -53,7 +53,7 @@ class DwdIconEuForecast5DayDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        """Return the kubernetes cron job definitions to operationally update this dataset."""
         archive_grib_files_job = CronJob(
             command=["archive-grib-files"],
             workers_total=1,
@@ -98,27 +98,15 @@ class DwdIconEuForecast5DayDataset(
             parallelism=workers,
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="2 4,10,16,22 * * *",  # 10m (pod_active_deadline) after reformat at :52
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.7",
-            memory="3.5G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
         return [
             archive_grib_files_job,
             operational_update_cron_job,
-            validation_cron_job,
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+3h52m; validation fires at init+4h02m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=2)),
+            # The update ingests each init at init+3h52m.
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=52)),
             validation.CheckRecentNans(),
         )
 

@@ -24,5 +24,4 @@ class NasaImergAnalysisLateDataset(NasaImergAnalysisMaterializedDataset):
     # hourly at :44 (~3 min after the :41 landing) to ingest new granules promptly.
     # Re-measure latency with src/scripts/imerg_latency_probe.py if it drifts.
     update_schedule: ClassVar[str] = "44 * * * *"
-    validate_schedule: ClassVar[str] = "59 * * * *"
     max_expected_delay: ClassVar[timedelta] = timedelta(hours=18)

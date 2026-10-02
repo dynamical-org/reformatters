@@ -48,14 +48,11 @@ def test_dataset_variables_are_archived_at_native_resolution(
 def test_operational_cron_jobs_are_enabled_and_do_not_collide_with_daily(
     dataset: EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
 ) -> None:
-    update, validate = dataset.operational_kubernetes_resources("test-image-tag")
+    (update,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update.name == "ecmwf-ifs-ens-46-day-6-hourly-update"
-    assert validate.name == "ecmwf-ifs-ens-46-day-6-hourly-validate"
     assert update.schedule == "0 10 * * *"
-    assert validate.schedule == "20 10 * * *"
     assert update.suspend is False
-    assert validate.suspend is False
 
 
 def test_validators_cover_current_data_and_recent_nans(

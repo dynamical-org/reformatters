@@ -384,40 +384,12 @@ def test_update_spanning_two_time_shards_extends_through_the_second(
 
 def test_operational_kubernetes_resources() -> None:
     for dataset in (_final_dataset(), _preliminary_dataset()):
-        update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-            "test-image-tag"
-        )
+        (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
         assert update_cron_job.name == f"{dataset.dataset_id}-update"
-        assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
         assert not update_cron_job.suspend
-        assert not validation_cron_job.suspend
         assert update_cron_job.secret_names == [
             dataset.primary_storage_config.k8s_secret_name
         ]
-
-
-@pytest.mark.parametrize(
-    "make_dataset", [_final_dataset, _preliminary_dataset], ids=["final", "preliminary"]
-)
-@pytest.mark.parametrize(
-    "now",
-    [
-        pd.Timestamp("2026-01-31T23:30"),
-        pd.Timestamp("2026-02-28T23:30"),
-        pd.Timestamp("2024-02-29T23:30"),
-        pd.Timestamp("2026-04-30T23:30"),
-    ],
-)
-def test_validation_follows_update_after_active_deadline(
-    make_dataset: Callable[[], UcsbChcChirpsAnalysisMaterializedDataset],
-    now: pd.Timestamp,
-) -> None:
-    update, validate = make_dataset().operational_kubernetes_resources("test-image-tag")
-    deadline = update.pod_active_deadline
-
-    assert validate.previous_fire_time(now + deadline) == (
-        update.previous_fire_time(now) + deadline
-    )
 
 
 @pytest.mark.parametrize(

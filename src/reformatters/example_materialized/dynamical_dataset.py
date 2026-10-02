@@ -6,7 +6,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (  # noqa: F401
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 
 from .region_job import ExampleRegionJob, ExampleSourceFileCoord
@@ -18,8 +17,8 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
     region_job_class: type[ExampleRegionJob] = ExampleRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
-        # suspend = True  # Defaults to False, remove after backfilling to run operational updates and validation
+        """Return the kubernetes cron job definitions to operationally update this dataset."""
+        # suspend = True  # Defaults to False, remove after backfilling to run operational updates
         # workers = self.num_variable_groups()  # set if max_vars_per_job is set on RegionJob
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
@@ -36,19 +35,8 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         #     parallelism=workers,
         #     suspend=suspend,
         # )
-        # validation_cron_job = ValidationCronJob(
-        #     name=f"{self.dataset_id}-validate",
-        #     schedule="30 0 * * *",
-        #     pod_active_deadline=timedelta(minutes=10),
-        #     image=image_tag,
-        #     dataset_id=self.dataset_id,
-        #     cpu="1.3",
-        #     memory="7G",
-        #     secret_names=self.store_factory.k8s_secret_names(),
-        #     suspend=suspend,
-        # )
 
-        # return [operational_update_cron_job, validation_cron_job]
+        # return [operational_update_cron_job]
         raise NotImplementedError(
             f"Implement `operational_kubernetes_resources` on {self.__class__.__name__}"
         )

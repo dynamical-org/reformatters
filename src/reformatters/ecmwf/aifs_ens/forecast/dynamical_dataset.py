@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .region_job import (
@@ -43,24 +43,13 @@ class EcmwfAifsEnsForecastDataset(
             workers_total=workers,
             parallelism=min(workers, 20),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # Validation runs 30 minutes after each update run: 01:30, 07:30, 13:30, and 19:30.
-            schedule="30 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.5",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
             # The update's append_dim_end is now-5.5h, so each init is ingested by the
-            # first update fired after init+5.5h, at init+7h; validation fires at init+7h30m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=30)),
+            # first update fired after init+5.5h, at init+7h.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7)),
             validation.CheckRecentNans(append_dim_window=3),
         )

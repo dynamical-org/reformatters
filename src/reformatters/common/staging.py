@@ -98,10 +98,7 @@ def validate_version_differs_from_main(
 
 
 def staging_cronjob_names(dataset_id: str, version: str) -> list[str]:
-    return [
-        staging_cronjob_name(dataset_id, version, "update"),
-        staging_cronjob_name(dataset_id, version, "validate"),
-    ]
+    return [staging_cronjob_name(dataset_id, version, "update")]
 
 
 def staging_branch_name(dataset_id: str, version: str) -> str:
@@ -137,5 +134,5 @@ def cleanup_staging_resources(
 
     log.info(
         "Cleanup complete. Dataset store and Sentry cron monitors were NOT deleted. "
-        f"Manually delete Sentry monitors: {cronjob_names}"
+        f"Manually delete Sentry monitors: {[staging_cronjob_name(dataset_id, version, command) for command in ('update', 'validate')]}"
     )

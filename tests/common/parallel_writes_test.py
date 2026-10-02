@@ -34,7 +34,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -144,18 +144,6 @@ class ParallelDataset(DynamicalDataset[ParallelDataVar, ParallelSourceFileCoord]
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule="0 0 * * *",
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule="0 1 * * *",
                 pod_active_deadline=timedelta(minutes=30),
                 image=image_tag,
                 dataset_id=self.dataset_id,

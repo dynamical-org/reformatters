@@ -218,12 +218,10 @@ def test_operational_kubernetes_resources() -> None:
     dataset = NoaaGfsForecastDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     cron_jobs = dataset.operational_kubernetes_resources("test-image-tag")
 
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
-    assert validation_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
 
 
 def test_validators() -> None:
