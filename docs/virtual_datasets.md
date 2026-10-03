@@ -60,10 +60,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 NOAA index parsing retains every nonempty trailing field as an ordered selector tuple. `grib_index_selectors=None` preserves wildcard matching for existing datasets; an explicit tuple matches exactly, including `()` for an exact absence of selectors. New products specify exact tuples so two messages with the same element, level and window cannot collide when their aerosol species, size, probability or process tags differ. A source-coordinate selector adapter may remove its exact ensemble-member tag while preserving the other fields.
 
-`window_reset_frequency` describes repeating reset buckets or since-initialization totals (`Timedelta.max`). `window_length` instead describes a rolling interval ending at the forecast lead and takes precedence over reset frequency; its first valid lead must be at least the window length. Labels use integral days, hours or minutes to match the source index. A packed source file overrides `message_lead_times()` to enumerate all its forecast positions, so a subhourly file can contribute four separate 15-minute chunks. Its representative probe must name a position the file actually contains.
-
-[RRFS/REFS source contracts](noaa_rrfs.md) describe the CONUS catalogs, point-depth group, missing-value gate and suspended schedules.
-
+`window_reset_frequency` describes repeating reset buckets or since-initialization totals (`Timedelta.max`). Labels use integral days, hours or minutes to match the source index. A packed source file overrides `message_lead_times()` to enumerate all its forecast positions, so a subhourly file can contribute four separate 15-minute chunks. Its representative probe must name a position the file actually contains.
 
 ## Reader safety: whole files, atomic commits
 

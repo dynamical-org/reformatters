@@ -435,19 +435,6 @@ def test_fractional_lead_time_labels(lead_hours: float, expected: str) -> None:
     assert grib_index_window_str(var, lead_hours) == expected
 
 
-def test_rolling_window_has_explicit_first_valid_lead() -> None:
-    cfg = NoaaHrrrForecast48HourTemplateConfig()
-    var = next(v for v in cfg.data_vars if v.name == "precipitation_surface")
-    var = replace(
-        var,
-        internal_attrs=replace(var.internal_attrs, window_length=pd.Timedelta("6h")),
-    )
-    assert grib_index_window_str(var, 6) == "0-6 hour acc fcst"
-    assert grib_index_window_str(var, 7) == "1-7 hour acc fcst"
-    with pytest.raises(AssertionError, match="window starts before initialization"):
-        grib_index_window_str(var, 5)
-
-
 def test_trailing_selectors_preserve_aerosol_and_process_identity(
     tmp_path: Path,
 ) -> None:

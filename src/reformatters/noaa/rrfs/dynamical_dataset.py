@@ -18,25 +18,25 @@ from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfi
 
 class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]):
     template_config: NoaaRrfsForecastTemplateConfig
+    _operational_timing: ClassVar[tuple[int, int]]
+    _allow_all_nan_vars: ClassVar[frozenset[str]]
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=rrfs_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
-                split_size={r"^/pressure_level/": 90, None: 300}, dim="init_time"
+                # At ~16 B/ref, pressure manifests are ~5.3 MiB deterministic / ~7.0 MiB ensemble;
+                # 300-init AMSL/depth manifests are ~3.9/3.5 MiB, with fewer root manifests.
+                split_size={
+                    r"^/pressure_level/": 90,
+                    r"^/height_above_mean_sea_level/": 300,
+                    r"^/depth_below_ground/": 300,
+                    None: 300,
+                },
+                dim="init_time",
             ),
         )
     )
-
-    @property
-    def _operational_timing(self) -> tuple[int, int]:
-        if self.template_config.sub_hourly:
-            return 75, 55
-        if self.template_config.members:
-            return 75, 160
-        if self.template_config.forecast_length.total_seconds() == 18 * 3600:
-            return 100, 60
-        return 100, 135
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cadence = int(self.template_config.append_dim_frequency.total_seconds() / 3600)
@@ -77,15 +77,6 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
         )
 
     def validators(self) -> Sequence[validation.Validator]:
-        known_missing = (
-            {"aerosol_optical_thickness_atmosphere", "wildfire_potential_surface"}
-            if self.template_config.members
-            else {
-                "specific_humidity_surface",
-                "potential_evaporation_rate_surface",
-                "potential_evaporation_surface",
-            }
-        )
         offset_minutes, deadline_minutes = self._operational_timing
         return (
             validation.CheckCurrentData(
@@ -102,7 +93,7 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
                 allow_all_nan_vars=tuple(
                     v.path
                     for v in self.template_config.data_vars
-                    if v.path in known_missing
+                    if v.path in self._allow_all_nan_vars
                 ),
             ),
         )

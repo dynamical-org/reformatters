@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
 from .region_job import NoaaRefsForecastVirtualRegionJob
@@ -5,6 +7,11 @@ from .template_config import NoaaRefsForecastVirtualTemplateConfig
 
 
 class NoaaRefsForecastVirtualDataset(NoaaRrfsDataset):
+    # Files publish near init +81-212 min; polling starts before the first lead.
+    _operational_timing: ClassVar[tuple[int, int]] = (75, 160)
+    _allow_all_nan_vars: ClassVar[frozenset[str]] = frozenset(
+        {"aerosol_optical_thickness_atmosphere", "wildfire_potential_surface"}
+    )
     template_config: NoaaRefsForecastVirtualTemplateConfig = (
         NoaaRefsForecastVirtualTemplateConfig()
     )

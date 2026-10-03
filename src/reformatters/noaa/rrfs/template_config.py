@@ -13,7 +13,7 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
-from reformatters.common.types import Dims, Timedelta, Timestamp
+from reformatters.common.types import Dims, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.projected_forecast_template_config import (
     NoaaProjectedForecastTemplateConfig,
@@ -50,8 +50,6 @@ class NoaaRrfsForecastTemplateConfig(
     dataset_id: ClassVar[str]
     dataset_name: ClassVar[str]
     append_dim_start: Timestamp = pd.Timestamp("2026-08-13T00:00")
-    lead_frequency: Timedelta = pd.Timedelta("1h")
-    first_lead: Timedelta = pd.Timedelta(0)
     members: bool = False
     sub_hourly: bool = False
 
@@ -133,13 +131,6 @@ class NoaaRrfsForecastTemplateConfig(
             )
             for name, values in self._vertical_dimension_coordinates().items()
         ]
-
-    def dimension_coordinates(self) -> dict[str, Any]:
-        values = super().dimension_coordinates()
-        values["lead_time"] = pd.timedelta_range(
-            self.first_lead, self.forecast_length, freq=self.lead_frequency
-        )
-        return values
 
     @computed_field
     @property
