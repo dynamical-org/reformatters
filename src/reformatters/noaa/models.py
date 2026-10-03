@@ -12,6 +12,7 @@ class NoaaInternalAttrs(BaseInternalAttrs):
     include_lead_time_suffix: bool = False
     # for step_type != "instant"
     window_reset_frequency: Timedelta | None = None
+    grib_index_selectors: tuple[str, ...] | None = None
 
 
 class NoaaDataVar(DataVar[NoaaInternalAttrs]):

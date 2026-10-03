@@ -39,6 +39,10 @@ name: 'Manual: Backfill'
         - noaa-hrrr-forecast-48-hour-virtual
         - noaa-mrms-conus-analysis-hourly
         - noaa-ndvi-cdr-analysis
+        - noaa-refs-forecast-virtual
+        - noaa-rrfs-forecast-18-hour-virtual
+        - noaa-rrfs-forecast-84-hour-virtual
+        - noaa-rrfs-forecast-sub-hourly-virtual
         - u-arizona-swann-analysis
         - ucsb-chc-chirps-analysis-final
         - ucsb-chc-chirps-analysis-preliminary

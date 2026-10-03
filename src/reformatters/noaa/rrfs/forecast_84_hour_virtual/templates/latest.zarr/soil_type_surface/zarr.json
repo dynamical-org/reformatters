@@ -1,0 +1,79 @@
+{
+  "shape": [
+    1,
+    85,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "SOTYP",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Soil type",
+    "short_name": "slt",
+    "standard_name": "soil_type",
+    "units": "1",
+    "comment": "STATSGO soil classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+    "step_type": "instant",
+    "flag_values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "flag_meanings": "undefined sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

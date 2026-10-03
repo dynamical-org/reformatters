@@ -14,16 +14,17 @@ from reformatters.noaa.models import NoaaInternalAttrs
 GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
 
 
-def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> str:
-    if (reset_freq := var.internal_attrs.window_reset_frequency) is not None:
+def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) -> str:
+    lead = pd.Timedelta(hours=lead_hours)
+    reset_freq = var.internal_attrs.window_reset_frequency
+    if reset_freq is not None:
         # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
         # windowed vars compute the start of the current accumulation window.
         if reset_freq == pd.Timedelta.max or lead_hours == 0:
-            reset_hour = 0
+            start = pd.Timedelta(0)
         else:
-            reset_hours = whole_hours(reset_freq)
-            diff = lead_hours % reset_hours
-            reset_hour = lead_hours - diff if diff != 0 else lead_hours - reset_hours
+            diff = lead % reset_freq
+            start = lead - (diff if diff != pd.Timedelta(0) else reset_freq)
 
         if var.internal_attrs.deaccumulate_to_rate or var.attrs.step_type == "accum":
             step_type = "acc"
@@ -32,24 +33,28 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: int) -> s
         else:
             step_type = var.attrs.step_type
 
-        # GRIB indexes label accumulation windows using days when the span
-        # is expressible in whole days (e.g. "0-1 day acc fcst" for a 24h
-        # running total like ASNOW), and hours otherwise ("0-8 hour acc fcst").
-        if reset_hour == 0 and lead_hours % 24 == 0:
-            return f"0-{lead_hours // 24} day {step_type} fcst"
-        return f"{reset_hour}-{lead_hours} hour {step_type} fcst"
+        # GRIB window labels use the largest unit in which both endpoints are whole.
+        unit = next(
+            unit
+            for unit in ("day", "hour", "min")
+            if start % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
+            and lead % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
+        )
+        duration = pd.Timedelta(1, unit=unit)
+        return f"{int(start / duration)}-{int(lead / duration)} {unit} {step_type} fcst"
 
     if lead_hours == 0:
         return "anl"
     if var.attrs.step_type == "instant":
-        return f"{lead_hours} hour fcst"
+        unit = "hour" if lead % pd.Timedelta("1h") == pd.Timedelta(0) else "min"
+        return f"{int(lead / pd.Timedelta(1, unit=unit))} {unit} fcst"
     raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")
 
 
 def parse_grib_index_lines(
     index_path: PathLike[str],
-) -> list[tuple[int, str, str, str]]:
-    """Parse a NOAA .idx into (start_byte, element, level, window) per message.
+) -> list[tuple[int, str, str, str, tuple[str, ...]]]:
+    """Parse a NOAA .idx into (start_byte, element, level, window, selectors).
 
     Line format: `<msg#>:<start>:d=<YYYYMMDDHH>:<ELEMENT>:<LEVEL>:<WINDOW>:`. The
     element field never contains a colon (even the unnamed `var discipline=...`
@@ -62,7 +67,15 @@ def parse_grib_index_lines(
             if not line:
                 continue
             fields = line.split(":")
-            lines.append((int(fields[1]), fields[3], fields[4], fields[5]))
+            lines.append(
+                (
+                    int(fields[1]),
+                    fields[3],
+                    fields[4],
+                    fields[5],
+                    tuple(field for field in fields[6:] if field),
+                )
+            )
     return lines
 
 
