@@ -38,7 +38,7 @@
     "long_name": "Wildfire potential",
     "short_name": "wfirepot",
     "units": "1",
-    "comment": "At forecast lead zero the source encodes a zero-length averaging window. Averaged over the preceding hour.",
+    "comment": "The forecast lead-zero value is an initial-time field with a zero-length averaging window. Averaged over the preceding hour.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

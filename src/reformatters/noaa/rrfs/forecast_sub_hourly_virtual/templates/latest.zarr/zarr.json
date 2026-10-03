@@ -10,7 +10,7 @@
     "spatial_resolution": "3 km",
     "time_domain": "Forecasts initialized 2026-08-13 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized hourly with 15-minute forecast steps",
-    "forecast_domain": "Forecast lead time 15 minutes to 18 hours 15 minutes ahead",
+    "forecast_domain": "Forecast lead time 15 minutes to 18 hours ahead",
     "forecast_resolution": "15 minute"
   },
   "zarr_format": 3,

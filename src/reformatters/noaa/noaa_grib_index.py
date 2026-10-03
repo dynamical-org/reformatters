@@ -16,20 +16,13 @@ GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
 
 def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) -> str:
     lead = pd.Timedelta(hours=lead_hours)
-    window_length = var.internal_attrs.window_length
     reset_freq = var.internal_attrs.window_reset_frequency
-    if window_length is not None or reset_freq is not None:
+    if reset_freq is not None:
         # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
         # windowed vars compute the start of the current accumulation window.
-        if window_length is not None:
-            start = lead - window_length
-            assert start >= pd.Timedelta(0), (
-                f"{var.path}: window starts before initialization"
-            )
-        elif reset_freq == pd.Timedelta.max or lead_hours == 0:
+        if reset_freq == pd.Timedelta.max or lead_hours == 0:
             start = pd.Timedelta(0)
         else:
-            assert reset_freq is not None
             diff = lead % reset_freq
             start = lead - (diff if diff != pd.Timedelta(0) else reset_freq)
 
@@ -45,7 +38,7 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) ->
         # running total like ASNOW), and hours otherwise ("0-8 hour acc fcst").
         unit = next(
             unit
-            for unit in ("day", "hour", "min", "second")
+            for unit in ("day", "hour", "min")
             if start % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
             and lead % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
         )

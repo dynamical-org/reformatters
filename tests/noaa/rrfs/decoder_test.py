@@ -12,7 +12,6 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.mark.parametrize("name", ["spfh", "pevpr", "pevap", "aotk", "wildfire"])
-@pytest.mark.slow
 @pytest.mark.xfail(
     strict=True,
     reason="gribberish 1.8.0 ignores GRIB DRT 5.2 missing management.",

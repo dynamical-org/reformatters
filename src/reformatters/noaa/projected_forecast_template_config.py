@@ -27,6 +27,8 @@ class NoaaProjectedForecastTemplateConfig(
     NoaaConusTemplateConfig[DATA_VAR], Generic[DATA_VAR]
 ):
     forecast_length: Timedelta
+    first_lead: Timedelta = pd.Timedelta("0h")
+    lead_frequency: Timedelta = pd.Timedelta("1h")
     dims: Dims = {ROOT: ("init_time", "lead_time", "y", "x")}
     append_dim: AppendDim = "init_time"
     append_dim_start: Timestamp
@@ -53,7 +55,7 @@ class NoaaProjectedForecastTemplateConfig(
                 self.append_dim_start + self.append_dim_frequency
             ),
             "lead_time": pd.timedelta_range(
-                "0h", self.forecast_length, freq=pd.Timedelta("1h")
+                self.first_lead, self.forecast_length, freq=self.lead_frequency
             ),
             "y": y_coords,
             "x": x_coords,
