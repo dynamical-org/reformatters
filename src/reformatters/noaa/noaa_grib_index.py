@@ -33,9 +33,7 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) ->
         else:
             step_type = var.attrs.step_type
 
-        # GRIB indexes label accumulation windows using days when the span
-        # is expressible in whole days (e.g. "0-1 day acc fcst" for a 24h
-        # running total like ASNOW), and hours otherwise ("0-8 hour acc fcst").
+        # GRIB window labels use the largest unit in which both endpoints are whole.
         unit = next(
             unit
             for unit in ("day", "hour", "min")
