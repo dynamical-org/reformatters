@@ -73,6 +73,8 @@ name: 'Manual: Create Job from CronJob'
         - noaa-mrms-conus-analysis-hourly-validate
         - noaa-ndvi-cdr-analysis-update
         - noaa-ndvi-cdr-analysis-validate
+        - noaa-refs-forecast-products-virtual-update
+        - noaa-refs-forecast-products-virtual-validate
         - noaa-refs-forecast-virtual-update
         - noaa-refs-forecast-virtual-validate
         - noaa-rrfs-forecast-18-hour-virtual-update

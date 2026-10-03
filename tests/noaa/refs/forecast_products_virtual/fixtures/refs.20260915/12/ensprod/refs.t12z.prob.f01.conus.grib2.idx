@@ -1,0 +1,144 @@
+1:0:d=2026091512:REFC:entire atmosphere (considered as a single layer):1 hour fcst:prob >10:prob fcst 0/14:Neighborhood Probability
+2:440437:d=2026091512:REFC:entire atmosphere (considered as a single layer):1 hour fcst:prob >20:prob fcst 0/14:Neighborhood Probability
+3:828389:d=2026091512:REFC:entire atmosphere (considered as a single layer):1 hour fcst:prob >30:prob fcst 0/14:Neighborhood Probability
+4:1105331:d=2026091512:REFC:entire atmosphere (considered as a single layer):1 hour fcst:prob >40:prob fcst 0/14:Neighborhood Probability
+5:1288326:d=2026091512:REFC:entire atmosphere (considered as a single layer):1 hour fcst:prob >50:prob fcst 0/14:Neighborhood Probability
+6:1405658:d=2026091512:RETOP:entire atmosphere (considered as a single layer):1 hour fcst:prob >6096:prob fcst 0/14:Neighborhood Probability
+7:1660081:d=2026091512:RETOP:entire atmosphere (considered as a single layer):1 hour fcst:prob >9144:prob fcst 0/14:Neighborhood Probability
+8:1851479:d=2026091512:RETOP:entire atmosphere (considered as a single layer):1 hour fcst:prob >10668:prob fcst 0/14:Neighborhood Probability
+9:2017965:d=2026091512:RETOP:entire atmosphere (considered as a single layer):1 hour fcst:prob >12192:prob fcst 0/14:Neighborhood Probability
+10:2156582:d=2026091512:RETOP:entire atmosphere (considered as a single layer):1 hour fcst:prob >15240:prob fcst 0/14:Neighborhood Probability
+11:2209246:d=2026091512:MXUPHL:5000-2000 m above ground:1 hour fcst:prob >25:prob fcst 0/14:Neighborhood Probability
+12:2292281:d=2026091512:MXUPHL:5000-2000 m above ground:1 hour fcst:prob >75:prob fcst 0/14:Neighborhood Probability
+13:2331002:d=2026091512:MXUPHL:5000-2000 m above ground:1 hour fcst:prob >150:prob fcst 0/14:Neighborhood Probability
+14:2346217:d=2026091512:MAXUVV:100-1000 mb:1 hour fcst:prob >1:prob fcst 0/14
+15:2652628:d=2026091512:MAXUVV:100-1000 mb:1 hour fcst:prob >10:prob fcst 0/14
+16:2694090:d=2026091512:MAXUVV:100-1000 mb:1 hour fcst:prob >20:prob fcst 0/14
+17:2713791:d=2026091512:CAPE:90-0 mb above ground:1 hour fcst:prob >500:prob fcst 0/14
+18:3145829:d=2026091512:CAPE:90-0 mb above ground:1 hour fcst:prob >1000:prob fcst 0/14
+19:3543619:d=2026091512:CAPE:90-0 mb above ground:1 hour fcst:prob >1500:prob fcst 0/14
+20:3885726:d=2026091512:CAPE:90-0 mb above ground:1 hour fcst:prob >2000:prob fcst 0/14
+21:4147904:d=2026091512:CAPE:90-0 mb above ground:1 hour fcst:prob >3000:prob fcst 0/14
+22:4204057:d=2026091512:CIN:90-0 mb above ground:1 hour fcst:prob <0:prob fcst 0/14
+23:4204286:d=2026091512:CIN:90-0 mb above ground:1 hour fcst:prob <-50:prob fcst 0/14
+24:4780605:d=2026091512:CIN:90-0 mb above ground:1 hour fcst:prob <-100:prob fcst 0/14
+25:5275367:d=2026091512:CIN:90-0 mb above ground:1 hour fcst:prob <-400:prob fcst 0/14
+26:5313422:d=2026091512:HLCY:3000-0 m above ground:1 hour fcst:prob >100:prob fcst 0/14
+27:5946076:d=2026091512:HLCY:3000-0 m above ground:1 hour fcst:prob >200:prob fcst 0/14
+28:6241951:d=2026091512:HLCY:3000-0 m above ground:1 hour fcst:prob >400:prob fcst 0/14
+29:6310325:d=2026091512:LTNG:entire atmosphere:1 hour fcst:prob >0.08:prob fcst 0/14
+30:6378708:d=2026091512:TMP:2 m above ground:1 hour fcst:prob <273.15:prob fcst 0/14
+31:6405428:d=2026091512:DPT:2 m above ground:1 hour fcst:prob >283.15:prob fcst 0/14
+32:6643854:d=2026091512:DPT:2 m above ground:1 hour fcst:prob >285.93:prob fcst 0/14
+33:6946666:d=2026091512:DPT:2 m above ground:1 hour fcst:prob >288.71:prob fcst 0/14
+34:7217133:d=2026091512:DPT:2 m above ground:1 hour fcst:prob >291.48:prob fcst 0/14
+35:7431170:d=2026091512:DPT:2 m above ground:1 hour fcst:prob >294.26:prob fcst 0/14
+36:7662221:d=2026091512:PWAT:entire atmosphere (considered as a single layer):1 hour fcst:prob >25:prob fcst 0/14
+37:7895686:d=2026091512:PWAT:entire atmosphere (considered as a single layer):1 hour fcst:prob >37.5:prob fcst 0/14
+38:8185413:d=2026091512:PWAT:entire atmosphere (considered as a single layer):1 hour fcst:prob >50:prob fcst 0/14
+39:8463921:d=2026091512:VIS:surface:1 hour fcst:prob <400:prob fcst 0/14
+40:8647089:d=2026091512:VIS:surface:1 hour fcst:prob <800:prob fcst 0/14
+41:8869233:d=2026091512:VIS:surface:1 hour fcst:prob <1600:prob fcst 0/14
+42:9134178:d=2026091512:VIS:surface:1 hour fcst:prob <3200:prob fcst 0/14
+43:9439519:d=2026091512:VIS:surface:1 hour fcst:prob <4829:prob fcst 0/14
+44:9777079:d=2026091512:VIS:surface:1 hour fcst:prob <6400:prob fcst 0/14
+45:10139233:d=2026091512:VIS:surface:1 hour fcst:prob <8049:prob fcst 0/14
+46:10521810:d=2026091512:APCP:surface:0-1 hour acc fcst:prob >12.7:prob fcst 0/14:Neighborhood Probability
+47:10623701:d=2026091512:APCP:surface:0-1 hour acc fcst:prob >25.4:prob fcst 0/14:Neighborhood Probability
+48:10690126:d=2026091512:APCP:surface:0-1 hour acc fcst:prob >50.8:prob fcst 0/14:Neighborhood Probability
+49:10715234:d=2026091512:APCP:surface:0-1 hour acc fcst:prob >76.2:prob fcst 0/14:Neighborhood Probability
+50:10727235:d=2026091512:ASNOW:surface:0-1 hour acc fcst:prob >0.025:prob fcst 0/14:Neighborhood Probability
+51:10727894:d=2026091512:ASNOW:surface:0-1 hour acc fcst:prob >0.076:prob fcst 0/14:Neighborhood Probability
+52:10728147:d=2026091512:FRZR:surface:0-1 hour acc fcst:prob >0.254:prob fcst 0/14:Neighborhood Probability
+53:10728624:d=2026091512:FRZR:surface:0-1 hour acc fcst:prob >2.54:prob fcst 0/14:Neighborhood Probability
+54:10728877:d=2026091512:FRZR:surface:0-1 hour acc fcst:prob >6.35:prob fcst 0/14:Neighborhood Probability
+55:10729130:d=2026091512:REFD:1000 m above ground:1 hour fcst:prob >30:prob fcst 0/14:Neighborhood Probability
+56:10967127:d=2026091512:REFD:1000 m above ground:1 hour fcst:prob >40:prob fcst 0/14:Neighborhood Probability
+57:11118986:d=2026091512:REFD:1000 m above ground:1 hour fcst:prob >50:prob fcst 0/14:Neighborhood Probability
+58:11213688:d=2026091512:MAXREF:1000 m above ground:1 hour fcst:prob >40:prob fcst 0/14:Neighborhood Probability
+59:11427458:d=2026091512:MAXREF:1000 m above ground:1 hour fcst:prob >50:prob fcst 0/14:Neighborhood Probability
+60:11558553:d=2026091512:ICI:1000 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+61:11558782:d=2026091512:ICI:900 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+62:11559011:d=2026091512:ICI:800 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+63:11582433:d=2026091512:ICI:725 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+64:11733463:d=2026091512:ICI:650 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+65:11897264:d=2026091512:ICI:575 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+66:12455463:d=2026091512:ICI:500 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+67:13040973:d=2026091512:ICI:400 mb:1 hour fcst:prob >=1 <0:prob fcst 0/14
+68:13418167:d=2026091512:CAT:525 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+69:14374159:d=2026091512:CAT:525 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+70:14784301:d=2026091512:CAT:525 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+71:15035464:d=2026091512:CAT:450 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+72:16223512:d=2026091512:CAT:450 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+73:16781178:d=2026091512:CAT:450 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+74:17130460:d=2026091512:CAT:425 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+75:18133687:d=2026091512:CAT:425 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+76:18564767:d=2026091512:CAT:425 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+77:18806566:d=2026091512:CAT:350 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+78:20072958:d=2026091512:CAT:350 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+79:20695180:d=2026091512:CAT:350 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+80:21052650:d=2026091512:CAT:300 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+81:22473930:d=2026091512:CAT:300 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+82:23227659:d=2026091512:CAT:300 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+83:23686000:d=2026091512:CAT:275 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+84:24872512:d=2026091512:CAT:275 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+85:25415093:d=2026091512:CAT:275 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+86:25718325:d=2026091512:CAT:225 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+87:27013565:d=2026091512:CAT:225 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+88:27623784:d=2026091512:CAT:225 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+89:27960090:d=2026091512:CAT:200 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+90:29062738:d=2026091512:CAT:200 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+91:29570212:d=2026091512:CAT:200 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+92:29853916:d=2026091512:CAT:175 mb:1 hour fcst:prob >=1 <2:prob fcst 0/14
+93:30980569:d=2026091512:CAT:175 mb:1 hour fcst:prob >=2 <3:prob fcst 0/14
+94:31605649:d=2026091512:CAT:175 mb:1 hour fcst:prob >=3 <0:prob fcst 0/14
+95:32017205:d=2026091512:var discipline=0 center=7 local_table=1 parmcat=6 parm=202:0 m above ground:1 hour fcst:prob >0.016:prob fcst 0/14
+96:32205463:d=2026091512:var discipline=0 center=7 local_table=1 parmcat=6 parm=202:0 m above ground:1 hour fcst:prob >0.036:prob fcst 0/14
+97:32375878:d=2026091512:var discipline=0 center=7 local_table=1 parmcat=6 parm=202:0 m above ground:1 hour fcst:prob >0.103:prob fcst 0/14
+98:32479722:d=2026091512:CRAIN:surface:1 hour fcst:prob >=1 <0:prob fcst 0/14
+99:33451161:d=2026091512:CFRZR:surface:1 hour fcst:prob >=1 <0:prob fcst 0/14
+100:33452560:d=2026091512:CICEP:surface:1 hour fcst:prob >=1 <0:prob fcst 0/14
+101:33454714:d=2026091512:CSNOW:surface:1 hour fcst:prob >=1 <0:prob fcst 0/14
+102:33460273:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >10.3:prob fcst 0/14:Neighborhood Probability
+103:33725906:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >15.4:prob fcst 0/14:Neighborhood Probability
+104:33755787:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >18.01:prob fcst 0/14:Neighborhood Probability
+105:33765227:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >20.6:prob fcst 0/14:Neighborhood Probability
+106:33768674:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >25.72:prob fcst 0/14:Neighborhood Probability
+107:33769272:d=2026091512:WIND:10 m above ground:1 hour fcst:prob >30.9:prob fcst 0/14:Neighborhood Probability
+108:33769501:d=2026091512:WIND:80 m above ground:1 hour fcst:prob >10.3:prob fcst 0/14
+109:34321790:d=2026091512:WIND:80 m above ground:1 hour fcst:prob >15.4:prob fcst 0/14
+110:34413405:d=2026091512:WIND:80 m above ground:1 hour fcst:prob >20.6:prob fcst 0/14
+111:34417800:d=2026091512:WIND:850 mb:1 hour fcst:prob >10.3:prob fcst 0/14
+112:34770998:d=2026091512:WIND:850 mb:1 hour fcst:prob >20.6:prob fcst 0/14
+113:34922904:d=2026091512:WIND:850 mb:1 hour fcst:prob >30.9:prob fcst 0/14
+114:34924701:d=2026091512:WIND:850 mb:1 hour fcst:prob >41.2:prob fcst 0/14
+115:34924930:d=2026091512:WIND:850 mb:1 hour fcst:prob >51.5:prob fcst 0/14
+116:34925159:d=2026091512:WIND:550 mb:1 hour fcst:prob >10.3:prob fcst 0/14
+117:35377478:d=2026091512:WIND:550 mb:1 hour fcst:prob >20.6:prob fcst 0/14
+118:35541651:d=2026091512:WIND:550 mb:1 hour fcst:prob >30.9:prob fcst 0/14
+119:35598922:d=2026091512:WIND:550 mb:1 hour fcst:prob >41.2:prob fcst 0/14
+120:35613697:d=2026091512:WIND:550 mb:1 hour fcst:prob >51.5:prob fcst 0/14
+121:35613926:d=2026091512:WIND:250 mb:1 hour fcst:prob >10.3:prob fcst 0/14
+122:35990862:d=2026091512:WIND:250 mb:1 hour fcst:prob >20.6:prob fcst 0/14
+123:36222951:d=2026091512:WIND:250 mb:1 hour fcst:prob >30.9:prob fcst 0/14
+124:36478604:d=2026091512:WIND:250 mb:1 hour fcst:prob >41.2:prob fcst 0/14
+125:36605826:d=2026091512:WIND:250 mb:1 hour fcst:prob >51.5:prob fcst 0/14
+126:36652153:d=2026091512:WIND:850-300 mb:1 hour fcst:prob <5:prob fcst 0/14
+127:37019185:d=2026091512:FLGHT:surface:1 hour fcst:prob >=1 <2:prob fcst 0/14
+128:37827155:d=2026091512:FLGHT:surface:1 hour fcst:prob >=2 <3:prob fcst 0/14
+129:38505910:d=2026091512:FLGHT:surface:1 hour fcst:prob >=3 <4:prob fcst 0/14
+130:39453640:d=2026091512:FLGHT:surface:1 hour fcst:prob >=4 <0:prob fcst 0/14
+131:40556924:d=2026091512:VWSH:0-609 m above ground:1 hour fcst:prob >10.3:prob fcst 0/14
+132:40910333:d=2026091512:VWSH:0-609 m above ground:1 hour fcst:prob >20:prob fcst 0/14
+133:40941170:d=2026091512:JFWPRB:10 m above ground:1 hour fcst:prob >=9 <20:prob fcst 0/14
+134:40942144:d=2026091512:VWSH:0-6000 m above ground:1 hour fcst:prob >10.3:prob fcst 0/14
+135:41483569:d=2026091512:VWSH:0-6000 m above ground:1 hour fcst:prob >15.4:prob fcst 0/14
+136:42007041:d=2026091512:VWSH:0-6000 m above ground:1 hour fcst:prob >20.6:prob fcst 0/14
+137:42357776:d=2026091512:VWSH:0-6000 m above ground:1 hour fcst:prob >25.7:prob fcst 0/14
+138:42557449:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <152.4:prob fcst 0/14
+139:43326067:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <305:prob fcst 0/14
+140:44205264:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <610:prob fcst 0/14
+141:45230737:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <915:prob fcst 0/14
+142:46298699:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <1372:prob fcst 0/14
+143:47383911:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <1830:prob fcst 0/14
+144:48485217:d=2026091512:HGT:cloud ceiling:1 hour fcst:prob <3050:prob fcst 0/14

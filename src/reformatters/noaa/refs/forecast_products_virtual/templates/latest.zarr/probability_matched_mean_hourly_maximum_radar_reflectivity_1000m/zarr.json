@@ -1,0 +1,56 @@
+{
+  "shape": [
+    1,
+    60,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "MAXREF",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Probability-matched mean of hourly maximum of simulated reflectivity",
+    "short_name": "probability_matched_mean_hourly_maximum_radar_reflectivity_1000m",
+    "standard_name": "equivalent_reflectivity_factor",
+    "units": "dBZ",
+    "comment": "Maximum over the hour ending at the valid time. A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
+    "step_type": "max",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

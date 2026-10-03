@@ -17,12 +17,19 @@ GRIB_INDEX_UNKNOWN_END_PAD = 10 * (2**30)
 def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) -> str:
     lead = pd.Timedelta(hours=lead_hours)
     reset_freq = var.internal_attrs.window_reset_frequency
-    if reset_freq is not None:
+    duration = var.internal_attrs.window_duration
+    source_step_type = var.internal_attrs.grib_index_step_type or var.attrs.step_type
+    assert reset_freq is None or duration is None
+    if reset_freq is not None or duration is not None:
         # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
         # windowed vars compute the start of the current accumulation window.
-        if reset_freq == pd.Timedelta.max or lead_hours == 0:
+        if duration is not None:
+            assert pd.Timedelta(0) < duration <= lead
+            start = lead - duration
+        elif reset_freq == pd.Timedelta.max or lead_hours == 0:
             start = pd.Timedelta(0)
         else:
+            assert reset_freq is not None
             diff = lead % reset_freq
             start = lead - (diff if diff != pd.Timedelta(0) else reset_freq)
 
@@ -40,12 +47,12 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) ->
             if start % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
             and lead % pd.Timedelta(1, unit=unit) == pd.Timedelta(0)
         )
-        duration = pd.Timedelta(1, unit=unit)
-        return f"{int(start / duration)}-{int(lead / duration)} {unit} {step_type} fcst"
+        label_unit = pd.Timedelta(1, unit=unit)
+        return f"{int(start / label_unit)}-{int(lead / label_unit)} {unit} {step_type} fcst"
 
     if lead_hours == 0:
         return "anl"
-    if var.attrs.step_type == "instant":
+    if source_step_type == "instant":
         unit = "hour" if lead % pd.Timedelta("1h") == pd.Timedelta(0) else "min"
         return f"{int(lead / pd.Timedelta(1, unit=unit))} {unit} fcst"
     raise ValueError(f"Unhandled grib lead/accumulation hours: {var.name}")

@@ -1,0 +1,64 @@
+{
+  "shape": [
+    1,
+    2,
+    60,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "scale": 1000.0
+      }
+    },
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "var discipline=0 center=7 local_table=1 parmcat=6 parm=202",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Fog liquid water content",
+    "short_name": "fog_lwc",
+    "units": "kg kg-1",
+    "comment": "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Spread divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "statistic",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

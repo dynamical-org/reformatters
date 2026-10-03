@@ -1,0 +1,76 @@
+1:0:d=2026100200:REFC:entire atmosphere (considered as a single layer):46 hour fcst:ens spread:process=193
+2:1010114:d=2026100200:RETOP:entire atmosphere (considered as a single layer):46 hour fcst:ens spread:process=193
+3:2232392:d=2026100200:MXUPHL:5000-2000 m above ground:46 hour fcst:ens spread:process=193
+4:2427468:d=2026100200:CAPE:90-0 mb above ground:46 hour fcst:ens spread
+5:2885662:d=2026100200:CAPE:180-0 mb above ground:46 hour fcst:ens spread
+6:3424244:d=2026100200:CAPE:surface:46 hour fcst:ens spread
+7:4041056:d=2026100200:CIN:90-0 mb above ground:46 hour fcst:ens spread
+8:4850465:d=2026100200:CIN:180-0 mb above ground:46 hour fcst:ens spread
+9:5718160:d=2026100200:CIN:surface:46 hour fcst:ens spread
+10:6108461:d=2026100200:HLCY:3000-0 m above ground:46 hour fcst:ens spread
+11:7061464:d=2026100200:MSLET:mean sea level:46 hour fcst:ens spread
+12:7900590:d=2026100200:HGT:250 mb:46 hour fcst:ens spread
+13:8904060:d=2026100200:HGT:500 mb:46 hour fcst:ens spread
+14:9890429:d=2026100200:HGT:700 mb:46 hour fcst:ens spread
+15:10899652:d=2026100200:HGT:850 mb:46 hour fcst:ens spread
+16:11931918:d=2026100200:HGT:925 mb:46 hour fcst:ens spread
+17:13038049:d=2026100200:HGT:surface:46 hour fcst:ens spread
+18:14772248:d=2026100200:HGT:surface:46 hour fcst:ens spread:process=193
+19:16506447:d=2026100200:SOILW:0-0 m below ground:46 hour fcst:ens spread
+20:17533848:d=2026100200:TSOIL:0-0 m below ground:46 hour fcst:ens spread
+21:19170820:d=2026100200:UGRD:10 m above ground:46 hour fcst:ens spread
+22:21314294:d=2026100200:VGRD:10 m above ground:46 hour fcst:ens spread
+23:23695911:d=2026100200:UGRD:250 mb:46 hour fcst:ens spread
+24:24429546:d=2026100200:UGRD:500 mb:46 hour fcst:ens spread
+25:25174753:d=2026100200:UGRD:550 mb:46 hour fcst:ens spread
+26:25929112:d=2026100200:UGRD:700 mb:46 hour fcst:ens spread
+27:26727854:d=2026100200:UGRD:850 mb:46 hour fcst:ens spread
+28:27608228:d=2026100200:UGRD:925 mb:46 hour fcst:ens spread
+29:28471662:d=2026100200:VGRD:250 mb:46 hour fcst:ens spread
+30:29221677:d=2026100200:VGRD:500 mb:46 hour fcst:ens spread
+31:29944694:d=2026100200:VGRD:550 mb:46 hour fcst:ens spread
+32:30680676:d=2026100200:VGRD:700 mb:46 hour fcst:ens spread
+33:31452632:d=2026100200:VGRD:850 mb:46 hour fcst:ens spread
+34:32285032:d=2026100200:VGRD:925 mb:46 hour fcst:ens spread
+35:33127898:d=2026100200:DZDT:700 mb:46 hour fcst:ens spread
+36:33848544:d=2026100200:TMP:250 mb:46 hour fcst:ens spread
+37:34402493:d=2026100200:TMP:500 mb:46 hour fcst:ens spread
+38:34993140:d=2026100200:TMP:700 mb:46 hour fcst:ens spread
+39:35644760:d=2026100200:TMP:850 mb:46 hour fcst:ens spread
+40:36332631:d=2026100200:TMP:925 mb:46 hour fcst:ens spread
+41:37031732:d=2026100200:TMP:2 m above ground:46 hour fcst:ens spread
+42:37841368:d=2026100200:TMP:surface:46 hour fcst:ens spread
+43:38785518:d=2026100200:DPT:500 mb:46 hour fcst:ens spread
+44:39710180:d=2026100200:DPT:700 mb:46 hour fcst:ens spread
+45:40695243:d=2026100200:DPT:850 mb:46 hour fcst:ens spread
+46:41698429:d=2026100200:DPT:925 mb:46 hour fcst:ens spread
+47:42619899:d=2026100200:DPT:2 m above ground:46 hour fcst:ens spread
+48:43484348:d=2026100200:RH:700 mb:46 hour fcst:ens spread
+49:44642077:d=2026100200:PWAT:entire atmosphere (considered as a single layer):46 hour fcst:ens spread
+50:45387309:d=2026100200:VIS:surface:46 hour fcst:ens spread
+51:46304475:d=2026100200:HGT:0C isotherm:46 hour fcst:ens spread
+52:48449114:d=2026100200:HGT:cloud base:46 hour fcst:ens spread
+53:52497729:d=2026100200:LCDC:low cloud layer:46 hour fcst:ens spread
+54:53201454:d=2026100200:MCDC:middle cloud layer:46 hour fcst:ens spread
+55:53824017:d=2026100200:HCDC:high cloud layer:46 hour fcst:ens spread
+56:54441342:d=2026100200:TCDC:entire atmosphere (considered as a single layer):46 hour fcst:ens spread
+57:55142726:d=2026100200:APCP:surface:45-46 hour acc fcst:ens spread
+58:56820946:d=2026100200:WEASD:surface:45-46 hour acc fcst:ens spread
+59:56821255:d=2026100200:ASNOW:surface:45-46 hour acc fcst:ens spread
+60:56822710:d=2026100200:REFD:1000 m above ground:46 hour fcst:ens spread:process=193
+61:57578717:d=2026100200:MAXREF:1000 m above ground:46 hour fcst:ens spread:process=193
+62:58578314:d=2026100200:var discipline=0 center=7 local_table=1 parmcat=6 parm=202:0 m above ground:46 hour fcst:ens spread
+63:58604973:d=2026100200:CRAIN:surface:46 hour fcst:ens spread
+64:58605191:d=2026100200:CFRZR:surface:46 hour fcst:ens spread
+65:58605409:d=2026100200:CICEP:surface:46 hour fcst:ens spread
+66:58605627:d=2026100200:CSNOW:surface:46 hour fcst:ens spread
+67:58605845:d=2026100200:WIND:10 m above ground:46 hour fcst:ens spread
+68:59111339:d=2026100200:WIND:850 mb:46 hour fcst:ens spread
+69:59563336:d=2026100200:WIND:80 m above ground:46 hour fcst:ens spread
+70:60041465:d=2026100200:DZDT:700-500 mb above ground:46 hour fcst:ens spread
+71:60648912:d=2026100200:VWSH:0-609 m above ground:46 hour fcst:ens spread
+72:61106577:d=2026100200:VWSH:0-6000 m above ground:46 hour fcst:ens spread
+73:61608916:d=2026100200:HGT:cloud ceiling:46 hour fcst:ens spread
+74:64019074:d=2026100200:WIND:550 mb:46 hour fcst:ens spread
+75:64372065:d=2026100200:WIND:925 mb:46 hour fcst:ens spread
+76:64830083:d=2026100200:WIND:250 mb:46 hour fcst:ens spread

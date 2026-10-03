@@ -1,0 +1,6 @@
+1:0:d=2026100200:APCP:surface:40-41 hour acc fcst:prob >0.254:prob fcst 0/14:process=197
+2:372337:d=2026100200:APCP:surface:40-41 hour acc fcst:prob >6.35:prob fcst 0/14:process=197
+3:570313:d=2026100200:APCP:surface:40-41 hour acc fcst:prob >12.7:prob fcst 0/14:process=197
+4:759441:d=2026100200:APCP:surface:40-41 hour acc fcst:prob >25.4:prob fcst 0/14:process=197
+5:948902:d=2026100200:ASNOW:surface:40-41 hour acc fcst:prob >0.025:prob fcst 0/14:process=197
+6:949158:d=2026100200:ASNOW:surface:40-41 hour acc fcst:prob >0.076:prob fcst 0/14:process=197

@@ -42,11 +42,12 @@ def data_vars(
         else _MEMBER_NAMES
         if members
         else {
-            v.name if v.group is ROOT else f"{v.group}/{v.name}" for v in _DEFINITIONS
+            v.name if v.group is ROOT else f"{v.group}/{v.name}"
+            for v in VARIABLE_DEFINITIONS
         }
     )
     result = []
-    for definition in _DEFINITIONS:
+    for definition in VARIABLE_DEFINITIONS:
         path = (
             definition.name
             if definition.group is ROOT
@@ -237,7 +238,7 @@ _SUB_HOURLY_NAMES = frozenset(
     ]
 )
 
-_DEFINITIONS = (
+VARIABLE_DEFINITIONS = (
     # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
     # VariableDefinition(
     #     name="minimum_vegetation_surface",
