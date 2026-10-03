@@ -1,0 +1,17 @@
+1:0:d=2026100200:PPFFG:surface:29-30 hour acc fcst:prob >1:prob fcst 0/14:Neighborhood Probability
+2:54570:d=2026100200:PPFFG:surface:27-30 hour acc fcst:prob >3:prob fcst 0/14:Neighborhood Probability
+3:113779:d=2026100200:PPFFG:surface:24-30 hour acc fcst:prob >6:prob fcst 0/14:Neighborhood Probability
+4:179155:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >1:prob fcst 0/14:Neighborhood Probability
+5:256386:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >2:prob fcst 0/14:Neighborhood Probability
+6:325815:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >5:prob fcst 0/14:Neighborhood Probability
+7:387092:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >10:prob fcst 0/14:Neighborhood Probability
+8:442483:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >25:prob fcst 0/14:Neighborhood Probability
+9:495191:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >50:prob fcst 0/14:Neighborhood Probability
+10:544662:d=2026100200:APCP:surface:24-30 hour acc fcst:prob >100:prob fcst 0/14:Neighborhood Probability
+11:592946:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >1:prob fcst 0/14:Neighborhood Probability
+12:692867:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >2:prob fcst 0/14:Neighborhood Probability
+13:783213:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >5:prob fcst 0/14:Neighborhood Probability
+14:859406:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >10:prob fcst 0/14:Neighborhood Probability
+15:922371:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >25:prob fcst 0/14:Neighborhood Probability
+16:976417:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >50:prob fcst 0/14:Neighborhood Probability
+17:1027367:d=2026100200:APCP:surface:6-30 hour acc fcst:prob >100:prob fcst 0/14:Neighborhood Probability

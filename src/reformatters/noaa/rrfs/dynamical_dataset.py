@@ -1,24 +1,32 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import ClassVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from pydantic import Field
 
 from reformatters.common import validation
+from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
-from reformatters.noaa.rrfs.models import NoaaRrfsDataVar
+from reformatters.noaa.noaa_virtual_region_job import NoaaVirtualSourceFileCoord
+from reformatters.noaa.projected_forecast_template_config import (
+    NoaaProjectedForecastTemplateConfig,
+)
 from reformatters.noaa.rrfs.region_job import (
-    NoaaRrfsSourceFileCoord,
     rrfs_virtual_chunk_containers,
 )
-from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
+
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
+SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=NoaaVirtualSourceFileCoord[Any])
 
 
-class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]):
-    template_config: NoaaRrfsForecastTemplateConfig
+class NoaaRrfsDataset(
+    DynamicalDataset[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
+):
+    template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     _operational_timing: ClassVar[tuple[int, int]]
+    _manifest_completeness_thresholds: ClassVar[tuple[float, ...]] = (1.0,)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -83,9 +91,7 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
             ),
             # Hourly windows include an unpublished next init; the newest ingested init is normally the previous one.
             validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.05, 1.0)
-                if self.template_config.sub_hourly
-                else (1.0,),
+                min_present_fraction=self._manifest_completeness_thresholds,
             ),
             validation.CheckVirtualDecodeHealth(max_workers=2),
         )
