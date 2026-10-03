@@ -32,11 +32,12 @@ ARCHIVE_PREFIX: Final = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens-forecast-46-day"
 ARCHIVE_RCLONE_ROOT: Final = f":s3:us-west-2.opendata.source.coop/{ARCHIVE_PREFIX}/"
 ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/{ARCHIVE_PREFIX}"
 
-# ECMWF's licence sets a 48 hour minimum delay, but ECDS publishes an initialization
-# about 51.6 hours after its 00 UTC reference time (measured 51.4-52.1 h daily,
-# 2026-06-26 to 2026-08-11). With the archive cron at 06 UTC, the initialization this
-# selects is one published a couple of hours earlier.
-PUBLICATION_DELAY: Final = pd.Timedelta("53h")
+# The earliest an initialization is looked for after its 00 UTC reference time. ECDS
+# published 51.4-52.1 h after it (measured daily, 2026-06-26 to 2026-08-11; 52.1 h for
+# 2026-10-01, with some selections visible about 2 minutes before the rest).
+PUBLICATION_DELAY: Final = pd.Timedelta("51h")
+# How long after its 00 UTC reference time a run keeps polling for the newest initialization.
+PUBLICATION_DEADLINE: Final = pd.Timedelta("54h30m")
 LICENCE_DELAY: Final = pd.Timedelta("48h")
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
@@ -133,7 +134,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 workers_total=1,
                 parallelism=1,
                 name=f"{self.dataset_id}-archive-grib-files",
-                schedule="0 6 * * *",
+                schedule="0 3 * * *",
                 pod_active_deadline=timedelta(hours=6),
                 image=image_tag,
                 dataset_id=self.dataset_id,
@@ -179,6 +180,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
             init_times = self.init_times_to_archive(init_times_back)
             for init_time in init_times:
                 log.info("Archiving %s", init_time)
+                is_newest = init_time == max(init_times)
                 ready = archive_initialization(
                     init_time,
                     selections,
@@ -186,8 +188,13 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                     checkers=checkers,
                     concurrent_requests=concurrent_requests,
                     env_vars=_source_coop_rclone_env_vars(),
+                    publication_deadline=(
+                        (init_time + PUBLICATION_DEADLINE).tz_localize("UTC")
+                        if is_newest
+                        else None
+                    ),
                 )
-                if init_time == max(init_times):
+                if is_newest:
                     newest_ready = ready
 
             if (
