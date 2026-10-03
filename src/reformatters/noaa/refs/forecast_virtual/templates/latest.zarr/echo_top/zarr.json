@@ -25,7 +25,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": -5000.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -43,7 +43,7 @@
     "comment": "NaN where no radar echo was detected.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAACIs8A="
   },
   "dimension_names": [
     "init_time",

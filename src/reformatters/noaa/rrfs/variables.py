@@ -28,6 +28,7 @@ class VariableDefinition(FrozenBaseModel):
     selectors: tuple[str, ...] = ()
     alternatives: tuple[str, ...] = ()
     filters: tuple[CodecConfig, ...] = ()
+    fill_value: float = np.nan
     hour_0: bool = True
     supported_leads: tuple[int, ...] | None = None
 
@@ -79,7 +80,7 @@ def data_vars(
                 attrs=attrs,
                 encoding=Encoding(
                     dtype="float64",
-                    fill_value=np.nan,
+                    fill_value=definition.fill_value,
                     chunks=chunks,
                     shards=None,
                     compressors=(),
@@ -276,7 +277,7 @@ _DEFINITIONS = (
             short_name="refc",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="No echo is stored as -20 dBZ in the deterministic run and some ensemble members, and as 0 dBZ in other members. A value of 0 dBZ can also be valid reflectivity.",
             step_type="instant",
         ),
     ),
@@ -336,7 +337,7 @@ _DEFINITIONS = (
             short_name="refd",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="-20 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
             step_type="instant",
         ),
     ),
@@ -393,6 +394,7 @@ _DEFINITIONS = (
         name="echo_top",
         element="RETOP",
         level="entire atmosphere (considered as a single layer)",
+        fill_value=-5000.0,
         attrs=DataVarAttrs(
             long_name="Echo top",
             short_name="retop",
@@ -462,7 +464,7 @@ _DEFINITIONS = (
             short_name="refd",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="-20 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
             step_type="instant",
         ),
     ),
@@ -475,7 +477,7 @@ _DEFINITIONS = (
             short_name="refd",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="-10 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="-20 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
             step_type="instant",
         ),
     ),
@@ -490,7 +492,7 @@ _DEFINITIONS = (
             short_name="maxref",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="0 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="-35 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
             step_type="max",
         ),
     ),
@@ -505,7 +507,7 @@ _DEFINITIONS = (
             short_name="refd",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="0 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
+            comment="-35 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value.",
             step_type="max",
         ),
     ),
@@ -1998,7 +2000,7 @@ _DEFINITIONS = (
             short_name="gh",
             standard_name="geopotential_height",
             units="m",
-            comment="NaN where no cloud was detected. Due to bit-packing in the source, heights above 8191.875 m wrap to that much below their true value, affecting about 8% of cells with cloud; use pressure_cloud_base instead.",
+            comment="NaN where no cloud was detected. In some source messages, heights beyond the packing range are reduced by multiples of 8192 m and cannot be distinguished from true heights; use pressure_cloud_base instead.",
             step_type="instant",
         ),
     ),

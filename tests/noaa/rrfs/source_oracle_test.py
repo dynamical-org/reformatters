@@ -6,14 +6,48 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio
+import xarray as xr
 
 from reformatters.common.logging import get_logger
+from reformatters.noaa.rrfs.forecast_84_hour_virtual.template_config import (
+    NoaaRrfsForecast84HourVirtualTemplateConfig,
+)
 from reformatters.noaa.rrfs.region_job import NoaaRrfsSourceFileCoord
 
 log = get_logger(__name__)
 SNAPSHOTS = json.loads(
     (Path(__file__).parent / "fixtures/value_snapshots.json").read_text()
 )
+
+
+def test_echo_top_no_echo_is_masked_by_cf_reader(tmp_path: Path) -> None:
+    source_path = Path(__file__).parent / "fixtures/echo-top-no-echo.grib2"
+    with rasterio.open(source_path) as source:
+        expected = source.read(1)
+    missing = expected == -5000.0
+    assert missing.any()
+    assert (~missing).any()
+    assert np.all(expected[~missing] > 0)
+
+    template = NoaaRrfsForecast84HourVirtualTemplateConfig().template_path()
+    metadata = json.loads((template / "echo_top/zarr.json").read_text())
+    metadata["shape"] = [1, 1, 1059, 1799]
+    store = tmp_path / "echo-top.zarr"
+    array_path = store / "echo_top"
+    chunk_path = array_path / "c/0/0/0/0"
+    chunk_path.parent.mkdir(parents=True)
+    (store / "zarr.json").write_text(
+        json.dumps({"zarr_format": 3, "node_type": "group", "attributes": {}})
+    )
+    (array_path / "zarr.json").write_text(json.dumps(metadata))
+    chunk_path.write_bytes(source_path.read_bytes())
+
+    with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
+        actual = dataset.echo_top.values.squeeze()
+    np.testing.assert_array_equal(np.isnan(actual), missing)
+    np.testing.assert_allclose(
+        actual[~missing], expected[~missing], rtol=float(np.finfo(np.float32).eps)
+    )
 
 
 @pytest.mark.slow
