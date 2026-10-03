@@ -6,8 +6,7 @@ from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_
 from reformatters.common.grib import GRIB_SECTION_0_BYTES, grib2_message_length
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue, InitLeadSourceFileCoord
-from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Dim
+from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
@@ -34,6 +33,12 @@ class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]
 
     def get_index_url(self) -> str:
         return self.get_url() + ".idx"
+
+    def message_lead_times(self) -> Sequence[Timedelta]:
+        return (self.lead_time,)
+
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+        return selectors
 
 
 NOAA_VIRTUAL_COORD = TypeVar(
@@ -95,7 +100,22 @@ class NoaaVirtualRegionJob(
             log.warning(f"Skipping {coord.get_url()}: empty or unparseable grib index")
             return []
 
-        lookup = self._message_lookup(coord.data_vars, whole_hours(coord.lead_time))
+        lookup = {}
+        lead_times = coord.message_lead_times()
+        for lead_time in lead_times:
+            for key, matches in self._message_lookup(
+                coord.data_vars, lead_time.total_seconds() / 3600
+            ).items():
+                lookup.setdefault(key, []).extend(
+                    (
+                        var,
+                        {
+                            **labels,
+                            **({"lead_time": lead_time} if len(lead_times) > 1 else {}),
+                        },
+                    )
+                    for var, labels in matches
+                )
         # Each message's end byte is the next message's start; the last is the file end.
         starts = [start for start, *_ in index_lines]
         ends = [*starts[1:], file_size]
@@ -116,7 +136,9 @@ class NoaaVirtualRegionJob(
         out_loc_base = dict(coord.out_loc())
         refs = []
         filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
-        for (start, element, level, window), end in zip(index_lines, ends, strict=True):
+        for (start, element, level, window, selectors), end in zip(
+            index_lines, ends, strict=True
+        ):
             # Byte ranges past the data file mean a stale/mismatched index; skip it.
             # Checked for every message, matched or not: the whole file is discarded,
             # so a corrupt range anywhere in the index condemns all of it.
@@ -128,7 +150,11 @@ class NoaaVirtualRegionJob(
                 return []
             if not self.owns_index_message(coord, element, level):
                 continue
-            matches = lookup.get((element, level, window))
+            exact_selectors = coord.index_selectors(selectors)
+            matches = [
+                *lookup.get((element, level, window, exact_selectors), []),
+                *lookup.get((element, level, window, None), []),
+            ]
             if not matches:
                 continue
             for var, level_label in matches:
@@ -178,9 +204,10 @@ class NoaaVirtualRegionJob(
         return grib2_message_length(header)
 
     def _message_lookup(
-        self, data_vars: Sequence[NOAA_DATA_VAR], lead_hours: int
+        self, data_vars: Sequence[NOAA_DATA_VAR], lead_hours: float
     ) -> dict[
-        tuple[str, str, str], list[tuple[NOAA_DATA_VAR, dict[Dim, CoordinateValue]]]
+        tuple[str, str, str, tuple[str, ...] | None],
+        list[tuple[NOAA_DATA_VAR, dict[Dim, CoordinateValue]]],
     ]:
         """Map each (element, idx level string, idx window string) to the variables it
         fills and the vertical label each ref carries. A root var contributes one entry;
@@ -190,7 +217,7 @@ class NoaaVirtualRegionJob(
         must be filled from the single matching message.
         """
         lookup: dict[
-            tuple[str, str, str],
+            tuple[str, str, str, tuple[str, ...] | None],
             list[tuple[NOAA_DATA_VAR, dict[Dim, CoordinateValue]]],
         ] = {}
         for var in data_vars:
@@ -204,12 +231,22 @@ class NoaaVirtualRegionJob(
             )
             for element in elements:
                 if var.group is ROOT:
-                    key = (element, var.internal_attrs.grib_index_level, window)
+                    key = (
+                        element,
+                        var.internal_attrs.grib_index_level,
+                        window,
+                        var.internal_attrs.grib_index_selectors,
+                    )
                     lookup.setdefault(key, []).append((var, {}))
                 else:
                     dim = var.group  # group name equals its dimension name
                     level_format = var.internal_attrs.grib_index_level
                     for level in self.template_ds[var.path].get_index(dim):
-                        key = (element, level_format.format(level=level), window)
+                        key = (
+                            element,
+                            level_format.format(level=level),
+                            window,
+                            var.internal_attrs.grib_index_selectors,
+                        )
                         lookup.setdefault(key, []).append((var, {dim: level}))
         return lookup

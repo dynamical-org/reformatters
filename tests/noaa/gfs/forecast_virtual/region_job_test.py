@@ -75,7 +75,7 @@ def index_url(era: str, file_type: NoaaGfsFileType, lead_hours: int) -> str:
 
 def index_lines(
     era: str, file_type: NoaaGfsFileType, lead_hours: int
-) -> list[tuple[int, str, str, str]]:
+) -> list[tuple[int, str, str, str, tuple[str, ...]]]:
     return parse_grib_index_lines(
         cached_grib_index(index_url(era, file_type, lead_hours), _DATASET_ID)
     )
@@ -320,7 +320,9 @@ def test_every_windowed_window_string_matches_the_real_index(
     published = Counter(
         (element, level, window)
         for file_type in ("pgrb2", "pgrb2b")
-        for _, element, level, window in index_lines(era, file_type, lead_hours)
+        for _, element, level, window, _selectors in index_lines(
+            era, file_type, lead_hours
+        )
     )
     assert published
     windowed = [v for v in TEMPLATE_CONFIG.data_vars if v.attrs.step_type != "instant"]
@@ -363,7 +365,9 @@ def test_the_running_totals_render_the_window_the_source_uses(
     }[lead_hours]
     published = {
         (element, level, window)
-        for _, element, level, window in index_lines(era, "pgrb2", lead_hours)
+        for _, element, level, window, _selectors in index_lines(
+            era, "pgrb2", lead_hours
+        )
     }
 
     for name, element in (
@@ -493,7 +497,9 @@ def test_the_bucket_and_the_run_total_share_one_index_line_at_short_leads(
     identical messages for it. Both arrays must be filled, and neither twice."""
     duplicated = Counter(
         (element, level, window)
-        for _, element, level, window in index_lines(era, "pgrb2", lead_hours)
+        for _, element, level, window, _selectors in index_lines(
+            era, "pgrb2", lead_hours
+        )
     )
     assert [key for key, count in duplicated.items() if count > 1] == [
         ("APCP", "surface", f"0-{lead_hours} hour acc fcst"),

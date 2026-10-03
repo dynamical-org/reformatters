@@ -56,7 +56,7 @@ def index_url(
 
 def index_lines(
     era: str, file_type: NoaaGfsFileType, lead_hours: int, hour: str = "12"
-) -> list[tuple[int, str, str, str]]:
+) -> list[tuple[int, str, str, str, tuple[str, ...]]]:
     return parse_grib_index_lines(
         cached_grib_index(index_url(era, file_type, lead_hours, hour), _DATASET_ID)
     )
@@ -76,10 +76,10 @@ def test_pgrb2_preferred_messages_matches_the_real_indexes(
     assert PGRB2_PREFERRED_MESSAGES
     in_both = {
         (element, level)
-        for _, element, level, _ in index_lines(era, "pgrb2", lead_hours)
+        for _, element, level, _, _selectors in index_lines(era, "pgrb2", lead_hours)
     } & {
         (element, level)
-        for _, element, level, _ in index_lines(era, "pgrb2b", lead_hours)
+        for _, element, level, _, _selectors in index_lines(era, "pgrb2b", lead_hours)
     }
     assert in_both == PGRB2_PREFERRED_MESSAGES
 
@@ -95,7 +95,7 @@ def test_pressure_level_coordinate_covers_every_isobaric_level(era: str) -> None
     in_source = {
         level
         for file_type in ("pgrb2", "pgrb2b")
-        for _, _, level, _ in index_lines(era, file_type, 9)
+        for _, _, level, _, _selectors in index_lines(era, file_type, 9)
         if level.endswith(" mb")
     }
     assert len(published) == 57
@@ -145,7 +145,7 @@ def test_probe_levels_are_published_by_their_product(
     """
     published = {
         (element, level)
-        for _, element, level, _ in index_lines(era, file_type, lead_hours)
+        for _, element, level, _, _selectors in index_lines(era, file_type, lead_hours)
         if file_type == "pgrb2" or (element, level) not in PGRB2_PREFERRED_MESSAGES
     }
     probe_level = _LEVEL_FORMAT[group].format(
@@ -194,7 +194,7 @@ def test_height_coordinate_covers_every_published_height(era: str) -> None:
     in_source = {
         level
         for file_type in ("pgrb2", "pgrb2b")
-        for _, element, level, _ in index_lines(era, file_type, 9)
+        for _, element, level, _, _selectors in index_lines(era, file_type, 9)
         if level.endswith(" m above mean sea level") and element in elements
     }
     assert elements == {"TMP", "UGRD", "VGRD"}
@@ -404,10 +404,12 @@ def test_hour_0_overrides_match_what_f000_publishes(era: str) -> None:
     published_at_f000 = {
         (element, level)
         for file_type in ("pgrb2", "pgrb2b")
-        for _, element, level, _ in index_lines(era, file_type, 0)
+        for _, element, level, _, _selectors in index_lines(era, file_type, 0)
     }
     assert len(published_at_f000) > 500
-    assert {window for _, _, _, window in index_lines(era, "pgrb2", 0)} == {"anl"}
+    assert {window for _, _, _, window, _selectors in index_lines(era, "pgrb2", 0)} == {
+        "anl"
+    }
 
     instant_vars = [
         v for v in TEMPLATE_CONFIG.data_vars if v.attrs.step_type == "instant"
@@ -503,7 +505,7 @@ def test_cloud_mixing_ratio_element_was_respelled_at_a_single_cycle() -> None:
     spellings = {
         (era, hour, file_type): {
             element
-            for _, element, _, _ in index_lines(era, file_type, 9, hour)
+            for _, element, _, _, _selectors in index_lines(era, file_type, 9, hour)
             if element in ("CLMR", "CLWMR")
         }
         for era, hour in (("20230202", "18"), ("20230203", "00"))
@@ -530,7 +532,8 @@ def test_product_membership_matches_the_real_indexes(
     file re-ingest forever.
     """
     published = {
-        (element, level) for _, element, level, _ in index_lines(era, file_type, 9)
+        (element, level)
+        for _, element, level, _, _selectors in index_lines(era, file_type, 9)
     }
     # A pgrb2b index's copies of the messages pgrb2 owns are skipped, so they are not
     # part of what this product supplies.
@@ -566,7 +569,7 @@ def test_one_ref_per_position_at_the_leads_that_duplicate_accumulations(
     index_path = cached_grib_index(index_url(era, "pgrb2", lead_hours), _DATASET_ID)
     duplicated = Counter(
         (element, level, window)
-        for _, element, level, window in parse_grib_index_lines(index_path)
+        for _, element, level, window, _selectors in parse_grib_index_lines(index_path)
     )
     assert [key for key, count in duplicated.items() if count > 1] == [
         ("APCP", "surface", f"0-{lead_hours} hour acc fcst"),
