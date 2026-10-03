@@ -33,7 +33,8 @@ ARCHIVE_RCLONE_ROOT: Final = f":s3:us-west-2.opendata.source.coop/{ARCHIVE_PREFI
 ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/{ARCHIVE_PREFIX}"
 
 # The earliest an initialization is looked for after its 00 UTC reference time. ECDS
-# published 51.4-52.1 h after it (measured daily, 2026-06-26 to 2026-08-11).
+# published 51.4-52.1 h after it (measured daily, 2026-06-26 to 2026-08-11; 52.1 h for
+# 2026-10-01, with some selections visible about 2 minutes before the rest).
 PUBLICATION_DELAY: Final = pd.Timedelta("51h")
 # How long after its 00 UTC reference time a run keeps polling for the newest initialization.
 PUBLICATION_DEADLINE: Final = pd.Timedelta("54h30m")
