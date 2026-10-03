@@ -208,39 +208,16 @@ def assert_snapshot(ds: xr.Dataset, dataset_id: str, init: pd.Timestamp) -> None
 
 
 @pytest.mark.parametrize(
-    ("cls", "offset", "duration", "allowed"),
+    ("cls", "offset", "duration"),
     [
-        (
-            NoaaRrfsForecast84HourVirtualDataset,
-            100,
-            135,
-            {
-                "specific_humidity_surface",
-                "potential_evaporation_rate_surface",
-                "potential_evaporation_surface",
-            },
-        ),
-        (
-            NoaaRrfsForecast18HourVirtualDataset,
-            100,
-            60,
-            {
-                "specific_humidity_surface",
-                "potential_evaporation_rate_surface",
-                "potential_evaporation_surface",
-            },
-        ),
-        (NoaaRrfsForecastSubHourlyVirtualDataset, 75, 55, set()),
-        (
-            NoaaRefsForecastVirtualDataset,
-            75,
-            160,
-            {"aerosol_optical_thickness_atmosphere", "wildfire_potential_surface"},
-        ),
+        (NoaaRrfsForecast84HourVirtualDataset, 100, 135),
+        (NoaaRrfsForecast18HourVirtualDataset, 100, 60),
+        (NoaaRrfsForecastSubHourlyVirtualDataset, 75, 55),
+        (NoaaRefsForecastVirtualDataset, 75, 160),
     ],
 )
-def test_poll_deadline_validation_schedule_and_source_scoped_allowances(
-    cls: DatasetClass, offset: int, duration: int, allowed: set[str], tmp_path: Path
+def test_poll_deadline_validation_schedule_and_decode_health(
+    cls: DatasetClass, offset: int, duration: int, tmp_path: Path
 ) -> None:
     dataset = cls(
         primary_storage_config=StorageConfig(
@@ -268,4 +245,5 @@ def test_poll_deadline_validation_schedule_and_source_scoped_allowances(
         (0.05, 1.0) if dataset.template_config.sub_hourly else (1.0,)
     )
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
-    assert set(decode.allow_all_nan_vars) == allowed
+    assert decode.max_workers == 2
+    assert decode.allow_all_nan_vars == ()

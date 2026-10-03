@@ -19,7 +19,6 @@ from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfi
 class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]):
     template_config: NoaaRrfsForecastTemplateConfig
     _operational_timing: ClassVar[tuple[int, int]]
-    _allow_all_nan_vars: ClassVar[frozenset[str]]
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -88,12 +87,5 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
                 if self.template_config.sub_hourly
                 else (1.0,),
             ),
-            validation.CheckVirtualDecodeHealth(
-                max_workers=2,
-                allow_all_nan_vars=tuple(
-                    v.path
-                    for v in self.template_config.data_vars
-                    if v.path in self._allow_all_nan_vars
-                ),
-            ),
+            validation.CheckVirtualDecodeHealth(max_workers=2),
         )

@@ -156,7 +156,8 @@ _MEMBER_NAMES = frozenset(
         "convective_available_potential_energy_surface",
         "convective_inhibition_surface",
         "precipitable_water_atmosphere",
-        "aerosol_optical_thickness_atmosphere",
+        # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+        # "aerosol_optical_thickness_atmosphere",
         "total_cloud_cover_boundary_layer",
         "low_cloud_cover",
         "medium_cloud_cover",
@@ -166,7 +167,8 @@ _MEMBER_NAMES = frozenset(
         "cloud_ceiling_height",
         "downward_short_wave_radiation_flux_surface",
         "instantaneous_downward_short_wave_radiation_flux_surface",
-        "wildfire_potential_surface",
+        # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+        # "wildfire_potential_surface",
         "storm_relative_helicity_3000_0m",
         "storm_relative_helicity_1000_0m",
         "vertical_u_component_shear_0_1000m",
@@ -235,34 +237,36 @@ _SUB_HOURLY_NAMES = frozenset(
 )
 
 _DEFINITIONS = (
-    VariableDefinition(
-        name="minimum_vegetation_surface",
-        element="VEGMIN",
-        level="surface",
-        supported_leads=(0,),
-        attrs=DataVarAttrs(
-            long_name="Minimum vegetation fraction",
-            short_name="vegmin",
-            standard_name="vegetation_area_fraction",
-            units="percent",
-            step_type="instant",
-            comment="Published only at forecast initialization.",
-        ),
-    ),
-    VariableDefinition(
-        name="maximum_vegetation_surface",
-        element="VEGMAX",
-        level="surface",
-        supported_leads=(0,),
-        attrs=DataVarAttrs(
-            long_name="Maximum vegetation fraction",
-            short_name="vegmax",
-            standard_name="vegetation_area_fraction",
-            units="percent",
-            step_type="instant",
-            comment="Published only at forecast initialization.",
-        ),
-    ),
+    # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+    # VariableDefinition(
+    #     name="minimum_vegetation_surface",
+    #     element="VEGMIN",
+    #     level="surface",
+    #     supported_leads=(0,),
+    #     attrs=DataVarAttrs(
+    #         long_name="Minimum vegetation fraction",
+    #         short_name="vegmin",
+    #         standard_name="vegetation_area_fraction",
+    #         units="percent",
+    #         step_type="instant",
+    #         comment="Published only at forecast initialization.",
+    #     ),
+    # ),
+    # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+    # VariableDefinition(
+    #     name="maximum_vegetation_surface",
+    #     element="VEGMAX",
+    #     level="surface",
+    #     supported_leads=(0,),
+    #     attrs=DataVarAttrs(
+    #         long_name="Maximum vegetation fraction",
+    #         short_name="vegmax",
+    #         standard_name="vegetation_area_fraction",
+    #         units="percent",
+    #         step_type="instant",
+    #         comment="Published only at forecast initialization.",
+    #     ),
+    # ),
     VariableDefinition(
         name="composite_reflectivity",
         element="REFC",
@@ -702,18 +706,19 @@ _DEFINITIONS = (
             standard_name="air_potential_temperature",
         ),
     ),
-    VariableDefinition(
-        name="specific_humidity_surface",
-        element="SPFH",
-        level="surface",
-        attrs=DataVarAttrs(
-            long_name="Specific humidity",
-            short_name="q",
-            standard_name="specific_humidity",
-            units="1",
-            step_type="instant",
-        ),
-    ),
+    # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+    # VariableDefinition(
+    #     name="specific_humidity_surface",
+    #     element="SPFH",
+    #     level="surface",
+    #     attrs=DataVarAttrs(
+    #         long_name="Specific humidity",
+    #         short_name="q",
+    #         standard_name="specific_humidity",
+    #         units="1",
+    #         step_type="instant",
+    #     ),
+    # ),
     VariableDefinition(
         name="total_snowfall_run_total_surface",
         element="ASNOW",
@@ -848,18 +853,19 @@ _DEFINITIONS = (
             step_type="instant",
         ),
     ),
-    VariableDefinition(
-        name="potential_evaporation_rate_surface",
-        element="PEVPR",
-        level="surface",
-        attrs=DataVarAttrs(
-            long_name="Potential evaporation rate",
-            short_name="pevr",
-            units="W m-2",
-            comment="Potential evaporation demand computed by the land model, not the actual evaporative flux, so it is not bounded by available net radiation. NaN over open water.",
-            step_type="instant",
-        ),
-    ),
+    # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+    # VariableDefinition(
+    #     name="potential_evaporation_rate_surface",
+    #     element="PEVPR",
+    #     level="surface",
+    #     attrs=DataVarAttrs(
+    #         long_name="Potential evaporation rate",
+    #         short_name="pevr",
+    #         units="W m-2",
+    #         comment="Potential evaporation demand computed by the land model, not the actual evaporative flux, so it is not bounded by available net radiation. NaN over open water.",
+    #         step_type="instant",
+    #     ),
+    # ),
     VariableDefinition(
         name="sublimination_evaporation_from_snow_surface",
         element="SBSNO",
@@ -1468,20 +1474,21 @@ _DEFINITIONS = (
             step_type="avg",
         ),
     ),
-    VariableDefinition(
-        name="potential_evaporation_surface",
-        element="PEVAP",
-        level="surface",
-        window="acc",
-        hour_0=False,
-        attrs=DataVarAttrs(
-            long_name="Potential evaporation",
-            short_name="pevap",
-            units="kg m-2",
-            step_type="accum",
-            standard_name="water_potential_evaporation_amount",
-        ),
-    ),
+    # Reenable after a gribberish release fixes GRIB DRT 5.2 missing values.
+    # VariableDefinition(
+    #     name="potential_evaporation_surface",
+    #     element="PEVAP",
+    #     level="surface",
+    #     window="acc",
+    #     hour_0=False,
+    #     attrs=DataVarAttrs(
+    #         long_name="Potential evaporation",
+    #         short_name="pevap",
+    #         units="kg m-2",
+    #         step_type="accum",
+    #         standard_name="water_potential_evaporation_amount",
+    #     ),
+    # ),
     VariableDefinition(
         name="surface_roughness_surface",
         element="SFCR",

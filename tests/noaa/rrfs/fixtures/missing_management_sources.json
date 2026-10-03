@@ -38,5 +38,21 @@
     "sha256": "c61f5327be49f40764bd8c321e52df63454205780b39e946c577b9307b12551e",
     "drt": 2,
     "missing_management": 1
+  },
+  "vegmin-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/00/rrfs.t00z.2dfld.3km.f000.conus.grib2",
+    "offset": 91518716,
+    "length": 217,
+    "sha256": "a1e901604cbf1675ad815559abf600c0452ebf4a0e157e802c6354d1fec74fca",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "vegmax-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/00/rrfs.t00z.2dfld.3km.f000.conus.grib2",
+    "offset": 91518933,
+    "length": 217,
+    "sha256": "591a2765daa40245ca2a9b9c03114be9c3e60a25ee2fd1e852fdbf6116903de9",
+    "drt": 2,
+    "missing_management": 1
   }
 }
