@@ -692,7 +692,11 @@ def test_cf_standard_name_and_units(
         units = var_config.attrs.units
 
         if standard_name is None:
-            if var_config.name not in ALLOWED_MISSING_STANDARD_NAME:
+            if (
+                var_config.name not in ALLOWED_MISSING_STANDARD_NAME
+                and (dataset.dataset_id, var_config.name)
+                not in DATASET_MISSING_STANDARD_NAME_EXEMPT
+            ):
                 errors.append(
                     f"Variable '{var_config.name}' does not have a standard_name defined, "
                     f"but is not in ALLOWED_MISSING_STANDARD_NAME. "
@@ -998,8 +1002,22 @@ def test_ecmwf_parameter_compliance(
     for var_config in template_config.data_vars:
         short_name = var_config.attrs.short_name
         long_name = var_config.attrs.long_name
-        short_exempt = short_name in ECMWF_SHORTNAME_EXEMPT
-        long_exempt = long_name in ECMWF_LONGNAME_EXEMPT
+        short_exempt = (
+            short_name in ECMWF_SHORTNAME_EXEMPT
+            or (
+                dataset.dataset_id,
+                short_name,
+            )
+            in DATASET_ECMWF_SHORTNAME_EXEMPT
+        )
+        long_exempt = (
+            long_name in ECMWF_LONGNAME_EXEMPT
+            or (
+                dataset.dataset_id,
+                long_name,
+            )
+            in DATASET_ECMWF_LONGNAME_EXEMPT
+        )
 
         # Check short_name
         if not short_exempt and short_name not in ecmwf_shortnames:
@@ -1733,6 +1751,54 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     for var in dataset.template_config.data_vars
     if var.name in {"soil_type_surface", "vegetation_type_surface"}
     for attribute in ("flag_values", "flag_meanings")
+}
+
+
+_REFS_PRODUCTS_DATASET = next(
+    d
+    for d in IMPLEMENTED_DATASETS
+    if d.dataset_id == "noaa-refs-forecast-products-virtual"
+)
+_REFS_PRODUCTS_VARS = _REFS_PRODUCTS_DATASET.template_config.data_vars
+_REFS_DERIVED_FAMILIES = {"prob", "eas", "ffri", "pmmn", "lpmm", "avrg"}
+_REFS_LOCAL_QUANTITIES = {
+    "CRAIN",
+    "CFRZR",
+    "CICEP",
+    "CSNOW",
+    "VWSH",
+    "var discipline=0 center=7 local_table=1 parmcat=6 parm=202",
+}
+# Threshold probabilities and product-specific statistics lack ECMWF parameters.
+DATASET_ECMWF_SHORTNAME_EXEMPT = {
+    (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.short_name)
+    for var in _REFS_PRODUCTS_VARS
+    if var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+}
+DATASET_ECMWF_LONGNAME_EXEMPT = {
+    (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.long_name)
+    for var in _REFS_PRODUCTS_VARS
+    if var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+}
+# Ensemble occurrence fractions are neither horizontal area nor precipitation mass fractions.
+DATASET_MISSING_STANDARD_NAME_EXEMPT = {
+    (_REFS_PRODUCTS_DATASET.dataset_id, var.name)
+    for var in _REFS_PRODUCTS_VARS
+    if var.internal_attrs.source_families[0] in {"prob", "eas", "ffri"}
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+    or (
+        var.internal_attrs.source_families[0] == "pmmn"
+        and var.internal_attrs.grib_element in {"MXUPHL", "RETOP"}
+    )
+}
+# Grid-relative component winds retain the projected-grid quantity.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, "standard_name", _REFS_PRODUCTS_DATASET.dataset_id)
+    for var in _REFS_PRODUCTS_VARS
+    if var.attrs.standard_name in {"x_wind", "y_wind"}
+    for key in (var.name, var.attrs.short_name, var.attrs.long_name)
 }
 
 

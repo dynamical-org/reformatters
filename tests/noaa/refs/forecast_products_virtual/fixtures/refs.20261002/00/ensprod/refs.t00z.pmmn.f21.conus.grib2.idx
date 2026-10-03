@@ -1,0 +1,8 @@
+1:0:d=2026100200:MXUPHL:5000-2000 m above ground:21 hour fcst:wt ens mean:process=193
+2:66031:d=2026100200:HGT:surface:21 hour fcst:wt ens mean:process=193
+3:2106088:d=2026100200:APCP:surface:20-21 hour acc fcst:wt ens mean:process=193
+4:2981718:d=2026100200:APCP:surface:18-21 hour acc fcst:wt ens mean:process=193
+5:4222117:d=2026100200:REFD:1000 m above ground:21 hour fcst:wt ens mean:process=193
+6:4799402:d=2026100200:MAXREF:1000 m above ground:21 hour fcst:wt ens mean:process=193
+7:5339629:d=2026100200:REFC:entire atmosphere (considered as a single layer):21 hour fcst:wt ens mean:process=193
+8:6358491:d=2026100200:RETOP:entire atmosphere (considered as a single layer):21 hour fcst:wt ens mean:process=193

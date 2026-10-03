@@ -1,0 +1,45 @@
+{
+  "shape": [
+    2
+  ],
+  "data_type": "string",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        2
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "",
+  "codecs": [
+    {
+      "name": "vlen-utf8",
+      "configuration": {}
+    },
+    {
+      "name": "zstd",
+      "configuration": {
+        "level": 0,
+        "checksum": false
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Ensemble statistic",
+    "units": "1",
+    "comment": "Mean is the ensemble mean. Spread is NOAA's term for the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables."
+  },
+  "dimension_names": [
+    "statistic"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

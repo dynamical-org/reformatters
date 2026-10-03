@@ -123,6 +123,8 @@ What is already ingested is derived from ref existence in the icechunk manifest 
 
 `chunk_key` maps a ref's coordinate labels to its zarr chunk index, shared by the filter and the emitter so they cannot disagree. Geometry (dim order, chunk sizes) is read from the checked-in template, and the filter's string keys are built with zarr's own `chunk_key_encoding` — no hand-rolled formats that could drift. A label not yet present in the coords means "not yet ingested."
 
+Arrays may use different ordered subsets of their group's dimensions through `TemplateConfig.data_var_dims`. Emit coordinate labels for the axes each referenced array actually has. Source-file coordinates must carry only the variables available for that file's family, statistic, lead and window; completeness and decode checks use this list to exclude structural holes such as a spread-only variable's absent mean. For NOAA rolling accumulations, `window_duration` selects the interval ending at the lead, while `window_reset_frequency` selects a running total; these are mutually exclusive. Declare publishing cadence in source-coordinate generation, independently of the dataset's lead-time coordinate.
+
 ## Replicas
 
 The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next fire; replicas may briefly be a commit ahead, never behind.
