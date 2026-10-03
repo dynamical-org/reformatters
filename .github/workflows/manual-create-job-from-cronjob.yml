@@ -73,6 +73,14 @@ name: 'Manual: Create Job from CronJob'
         - noaa-mrms-conus-analysis-hourly-validate
         - noaa-ndvi-cdr-analysis-update
         - noaa-ndvi-cdr-analysis-validate
+        - noaa-refs-forecast-virtual-update
+        - noaa-refs-forecast-virtual-validate
+        - noaa-rrfs-forecast-18-hour-virtual-update
+        - noaa-rrfs-forecast-18-hour-virtual-validate
+        - noaa-rrfs-forecast-84-hour-virtual-update
+        - noaa-rrfs-forecast-84-hour-virtual-validate
+        - noaa-rrfs-forecast-sub-hourly-virtual-update
+        - noaa-rrfs-forecast-sub-hourly-virtual-validate
         - u-arizona-swann-analysis-update
         - u-arizona-swann-analysis-validate
         - ucsb-chc-chirps-analysis-final-update

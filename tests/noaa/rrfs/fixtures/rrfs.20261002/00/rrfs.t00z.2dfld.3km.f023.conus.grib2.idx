@@ -1,0 +1,318 @@
+1:0:d=2026100200:REFC:entire atmosphere (considered as a single layer):23 hour fcst:
+2:1223097:d=2026100200:VIL:entire atmosphere (considered as a single layer):23 hour fcst:
+3:1725299:d=2026100200:HGTMD:highest level > 1e-09 kg/m^3:23 hour fcst:
+4:2244498:d=2026100200:HGTMD:lowest level > 1e-09 kg/m^3:23 hour fcst:
+5:2760213:d=2026100200:VIS:surface:23 hour fcst:
+6:5605600:d=2026100200:REFD:263 K level:23 hour fcst:
+7:6114644:d=2026100200:UGRD:planetary boundary layer:23 hour fcst:
+8:7322959:d=2026100200:VGRD:planetary boundary layer:23 hour fcst:
+9:8488730:d=2026100200:VRATE:planetary boundary layer:23 hour fcst:
+10:9685938:d=2026100200:GUST:surface:23 hour fcst:
+11:10777465:d=2026100200:RETOP:entire atmosphere (considered as a single layer):23 hour fcst:
+12:11232832:d=2026100200:MAXUVV:100-1000 mb:22-23 hour max fcst:
+13:11763976:d=2026100200:MAXDVV:100-1000 mb:22-23 hour max fcst:
+14:12262503:d=2026100200:MSLET:mean sea level:23 hour fcst:
+15:14067460:d=2026100200:SDEN:surface:23 hour fcst:
+16:14320933:d=2026100200:REFD:1000 m above ground:23 hour fcst:
+17:14959879:d=2026100200:REFD:4000 m above ground:23 hour fcst:
+18:15793719:d=2026100200:MAXREF:1000 m above ground:22-23 hour max fcst:
+19:16600311:d=2026100200:MAXREF:263 K level:22-23 hour max fcst:
+20:17226569:d=2026100200:MXUPHL:5000-2000 m above ground:22-23 hour max fcst:
+21:17265852:d=2026100200:MNUPHL:5000-2000 m above ground:22-23 hour min fcst:
+22:17420898:d=2026100200:MXUPHL:3000-0 m above ground:22-23 hour max fcst:
+23:17511088:d=2026100200:MNUPHL:3000-0 m above ground:22-23 hour min fcst:
+24:17577196:d=2026100200:RELV:2000-0 m above ground:22-23 hour max fcst:
+25:19830730:d=2026100200:RELV:1000-0 m above ground:22-23 hour max fcst:
+26:22056148:d=2026100200:RELV:1 hybrid level:22-23 hour max fcst:
+27:24036115:d=2026100200:HAIL:surface:22-23 hour max fcst:
+28:24042501:d=2026100200:LTNGSD:1 m above ground:22-23 hour max fcst:
+29:24045652:d=2026100200:LTNGSD:2 m above ground:22-23 hour max fcst:
+30:24076072:d=2026100200:LTNG:entire atmosphere:22-23 hour max fcst:
+31:24098123:d=2026100200:PRES:surface:23 hour fcst:
+32:26184090:d=2026100200:HGT:surface:23 hour fcst:
+33:27890553:d=2026100200:TMP:surface:23 hour fcst:
+34:29690594:d=2026100200:POT:surface:23 hour fcst:
+35:32048979:d=2026100200:SPFH:surface:23 hour fcst:
+36:32049196:d=2026100200:ASNOW:surface:0-23 hour acc fcst:
+37:32052808:d=2026100200:TSOIL:0-0 m below ground:23 hour fcst:
+38:33661526:d=2026100200:SOILW:0-0 m below ground:23 hour fcst:
+39:35036507:d=2026100200:SOILL:0-0 m below ground:23 hour fcst:
+40:36411465:d=2026100200:TSOIL:0.01-0.01 m below ground:23 hour fcst:
+41:38020186:d=2026100200:SOILW:0.01-0.01 m below ground:23 hour fcst:
+42:39393022:d=2026100200:SOILL:0.01-0.01 m below ground:23 hour fcst:
+43:40765912:d=2026100200:TSOIL:0.04-0.04 m below ground:23 hour fcst:
+44:42377800:d=2026100200:SOILW:0.04-0.04 m below ground:23 hour fcst:
+45:43749564:d=2026100200:SOILL:0.04-0.04 m below ground:23 hour fcst:
+46:45121432:d=2026100200:TSOIL:0.1-0.1 m below ground:23 hour fcst:
+47:46729292:d=2026100200:SOILW:0.1-0.1 m below ground:23 hour fcst:
+48:48114578:d=2026100200:SOILL:0.1-0.1 m below ground:23 hour fcst:
+49:49500072:d=2026100200:TSOIL:0.3-0.3 m below ground:23 hour fcst:
+50:51062478:d=2026100200:SOILW:0.3-0.3 m below ground:23 hour fcst:
+51:52465613:d=2026100200:SOILL:0.3-0.3 m below ground:23 hour fcst:
+52:53869008:d=2026100200:TSOIL:0.6-0.6 m below ground:23 hour fcst:
+53:55447808:d=2026100200:SOILW:0.6-0.6 m below ground:23 hour fcst:
+54:56867807:d=2026100200:SOILL:0.6-0.6 m below ground:23 hour fcst:
+55:58288037:d=2026100200:TSOIL:1-1 m below ground:23 hour fcst:
+56:59895239:d=2026100200:SOILW:1-1 m below ground:23 hour fcst:
+57:61304918:d=2026100200:SOILL:1-1 m below ground:23 hour fcst:
+58:62714770:d=2026100200:TSOIL:1.6-1.6 m below ground:23 hour fcst:
+59:64365129:d=2026100200:SOILW:1.6-1.6 m below ground:23 hour fcst:
+60:65772211:d=2026100200:SOILL:1.6-1.6 m below ground:23 hour fcst:
+61:67179485:d=2026100200:TSOIL:3-3 m below ground:23 hour fcst:
+62:68651773:d=2026100200:SOILW:3-3 m below ground:23 hour fcst:
+63:70019353:d=2026100200:SOILL:3-3 m below ground:23 hour fcst:
+64:71387817:d=2026100200:MSTAV:0 m underground:23 hour fcst:
+65:72322283:d=2026100200:CISOILM:0 m underground:23 hour fcst:
+66:73329115:d=2026100200:CNWAT:surface:23 hour fcst:
+67:73673979:d=2026100200:WEASD:surface:23 hour fcst:
+68:73913334:d=2026100200:SNOWC:surface:23 hour fcst:
+69:74152840:d=2026100200:SNOD:surface:23 hour fcst:
+70:74392991:d=2026100200:PEVPR:surface:23 hour fcst:
+71:74393208:d=2026100200:SBSNO:surface:23 hour fcst:
+72:74394424:d=2026100200:SMDRY:surface:23 hour fcst:
+73:75258490:d=2026100200:POROS:surface:23 hour fcst:
+74:76111166:d=2026100200:TMP:2 m above ground:23 hour fcst:
+75:77842827:d=2026100200:SPFH:2 m above ground:23 hour fcst:
+76:79433799:d=2026100200:DPT:2 m above ground:23 hour fcst:
+77:81190341:d=2026100200:DEPR:2 m above ground:23 hour fcst:
+78:82459468:d=2026100200:RH:2 m above ground:23 hour fcst:
+79:84017946:d=2026100200:TMAX:2 m above ground:22-23 hour max fcst:
+80:85711904:d=2026100200:TMIN:2 m above ground:22-23 hour min fcst:
+81:87437339:d=2026100200:MAXRH:2 m above ground:22-23 hour max fcst:
+82:88669443:d=2026100200:MINRH:2 m above ground:22-23 hour min fcst:
+83:89880839:d=2026100200:MASSDEN:8 m above ground:23 hour fcst:aerosol=Particulate organic matter dry:aerosol_size <2.5e-06:
+84:90493420:d=2026100200:MASSDEN:8 m above ground:23 hour fcst:aerosol=Dust dry:aerosol_size <2.5e-06:
+85:90686197:d=2026100200:MASSDEN:8 m above ground:22-23 hour ave fcst:aerosol=Total aerosol:aerosol_size <2.5e-06
+86:91282642:d=2026100200:MASSDEN:8 m above ground:22-23 hour ave fcst:aerosol=Total aerosol:aerosol_size <1e-05
+87:91888402:d=2026100200:MASSDEN:8 m above ground:23 hour fcst:aerosol=Dust dry:aerosol_size >=2.5e-06,<1e-05:
+88:91900800:d=2026100200:UGRD:10 m above ground:23 hour fcst:
+89:93696080:d=2026100200:VGRD:10 m above ground:23 hour fcst:
+90:95452695:d=2026100200:MAXUW:10 m above ground:22-23 hour max fcst:
+91:96673994:d=2026100200:MAXVW:10 m above ground:22-23 hour max fcst:
+92:97875267:d=2026100200:WIND:10 m above ground:22-23 hour max fcst:
+93:98999745:d=2026100200:ICEG:10 m above mean sea level:23 hour fcst:
+94:98999964:d=2026100200:CPOFP:surface:23 hour fcst:
+95:99350123:d=2026100200:PRATE:surface:23 hour fcst:
+96:99843194:d=2026100200:PRATE:surface:22-23 hour max fcst:
+97:100587332:d=2026100200:APCP:surface:22-23 hour acc fcst:
+98:100841373:d=2026100200:APCP:surface:0-23 hour acc fcst:
+99:101505476:d=2026100200:FROZR:surface:0-23 hour acc fcst:
+100:101562833:d=2026100200:FRZR:surface:0-23 hour acc fcst:
+101:101564458:d=2026100200:TSNOWP:surface:0-23 hour acc fcst:
+102:101568205:d=2026100200:SNOM:surface:22-23 hour acc fcst:
+103:101570790:d=2026100200:SSRUN:surface:22-23 hour acc fcst:
+104:101904262:d=2026100200:FROZR:surface:22-23 hour acc fcst:
+105:101912449:d=2026100200:FRZR:surface:22-23 hour acc fcst:
+106:101912692:d=2026100200:TSNOWP:surface:22-23 hour acc fcst:
+107:101913335:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=197:surface:22-23 hour acc fcst:prob >1:prob fcst 0/1
+108:101913591:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=197:surface:23-23 hour acc fcst:prob >1:prob fcst 0/1
+109:101913847:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:22-23 hour acc fcst:prob >2:prob fcst 0/1
+110:101915198:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:23-23 hour acc fcst:prob >2:prob fcst 0/1
+111:101915454:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:22-23 hour acc fcst:prob >5:prob fcst 0/1
+112:101916361:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:23-23 hour acc fcst:prob >5:prob fcst 0/1
+113:101916617:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:22-23 hour acc fcst:prob >10:prob fcst 0/1
+114:101917191:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:23-23 hour acc fcst:prob >10:prob fcst 0/1
+115:101917447:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:22-23 hour acc fcst:prob >100:prob fcst 0/1
+116:101917703:d=2026100200:var discipline=1 center=7 local_table=1 parmcat=1 parm=196:surface:23-23 hour acc fcst:prob >100:prob fcst 0/1
+117:101917959:d=2026100200:HGT:lowest level of the wet bulb zero:23 hour fcst:
+118:104328401:d=2026100200:CSNOW:surface:23 hour fcst:
+119:104328620:d=2026100200:CICEP:surface:23 hour fcst:
+120:104328839:d=2026100200:CFRZR:surface:23 hour fcst:
+121:104329058:d=2026100200:CRAIN:surface:23 hour fcst:
+122:104427808:d=2026100200:LHTFL:surface:22-23 hour ave fcst:
+123:105830257:d=2026100200:SHTFL:surface:22-23 hour ave fcst:
+124:107800396:d=2026100200:GFLUX:surface:22-23 hour ave fcst:
+125:109334689:d=2026100200:SNOHF:surface:22-23 hour ave fcst:
+126:109575403:d=2026100200:PEVAP:surface:22-23 hour acc fcst:
+127:109575644:d=2026100200:SFCR:surface:23 hour fcst:
+128:110805759:d=2026100200:FRICV:surface:23 hour fcst:
+129:112666781:d=2026100200:CD:surface:23 hour fcst:
+130:113486733:d=2026100200:SHTFL:surface:23 hour fcst:
+131:115469619:d=2026100200:LHTFL:surface:23 hour fcst:
+132:116888120:d=2026100200:SFEXC:surface:23 hour fcst:
+133:117723395:d=2026100200:VEG:surface:23 hour fcst:
+134:119279038:d=2026100200:LAI:surface:23 hour fcst:
+135:120032491:d=2026100200:GFLUX:surface:23 hour fcst:
+136:121105096:d=2026100200:VGTYP:surface:23 hour fcst:
+137:121831181:d=2026100200:SOTYP:surface:23 hour fcst:
+138:122668208:d=2026100200:RSMIN:surface:23 hour fcst:
+139:123315823:d=2026100200:RLYRS:surface:23 hour fcst:
+140:123783429:d=2026100200:WILT:surface:23 hour fcst:
+141:124631946:d=2026100200:SMREF:surface:23 hour fcst:
+142:125546574:d=2026100200:PRES:top of atmosphere:23 hour fcst:
+143:125546793:d=2026100200:LFTX:500-1000 mb:23 hour fcst:
+144:126492102:d=2026100200:CAPE:surface:23 hour fcst:
+145:127650820:d=2026100200:CIN:surface:23 hour fcst:
+146:128278154:d=2026100200:PWAT:entire atmosphere (considered as a single layer):23 hour fcst:
+147:129331559:d=2026100200:AOTK:entire atmosphere (considered as a single layer):23 hour fcst:
+148:131189603:d=2026100200:COLMD:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Particulate organic matter dry:aerosol_size <2.5e-06:
+149:131553324:d=2026100200:COLMD:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Dust dry:aerosol_size <2.5e-06:
+150:131988072:d=2026100200:COLMD:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Dust dry:aerosol_size >=2.5e-06,<1e-05:
+151:132131903:d=2026100200:COLMD:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Dust dry:aerosol_size <1e-05:
+152:132367062:d=2026100200:HGTMD:entire atmosphere (considered as a single layer):23 hour fcst:
+153:133033063:d=2026100200:AEMFLX:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Particulate organic matter dry:aerosol_size <2.5e-06:
+154:133036647:d=2026100200:MCONV:entire atmosphere (considered as a single layer):23 hour fcst:
+155:134929946:d=2026100200:HGT:lowest bottom level of supercooled liquid water layer:23 hour fcst:
+156:135345690:d=2026100200:HGT:highest top level of supercooled liquid water layer:23 hour fcst:
+157:135737524:d=2026100200:TCDC:boundary layer cloud layer:23 hour fcst:
+158:136378536:d=2026100200:LCDC:low cloud layer:23 hour fcst:
+159:136989553:d=2026100200:MCDC:middle cloud layer:23 hour fcst:
+160:137449737:d=2026100200:HCDC:high cloud layer:23 hour fcst:
+161:137876921:d=2026100200:TCDC:entire atmosphere (considered as a single layer):23 hour fcst:
+162:138495252:d=2026100200:TCDC:entire atmosphere (considered as a single layer):22-23 hour ave fcst:
+163:139228054:d=2026100200:PRES:cloud base:23 hour fcst:
+164:141698479:d=2026100200:HGT:cloud base:23 hour fcst:
+165:143989155:d=2026100200:HGT:cloud ceiling:23 hour fcst:
+166:145773566:d=2026100200:CEIL:cloud ceiling:23 hour fcst:
+167:147492183:d=2026100200:PRES:grid scale cloud bottom level:23 hour fcst:
+168:149782239:d=2026100200:PRES:cloud top:23 hour fcst:
+169:151499628:d=2026100200:HGT:cloud top:23 hour fcst:
+170:153385445:d=2026100200:TMP:cloud top:23 hour fcst:
+171:155081786:d=2026100200:BRTEMP:top of atmosphere:23 hour fcst:
+172:155868643:d=2026100200:PRES:grid scale cloud top level:23 hour fcst:
+173:157586032:d=2026100200:DSWRF:surface:22-23 hour ave fcst:
+174:158183881:d=2026100200:DLWRF:surface:22-23 hour ave fcst:
+175:159195384:d=2026100200:USWRF:surface:22-23 hour ave fcst:
+176:160066271:d=2026100200:ULWRF:surface:22-23 hour ave fcst:
+177:160973199:d=2026100200:USWRF:top of atmosphere:22-23 hour ave fcst:
+178:162140745:d=2026100200:ULWRF:top of atmosphere:22-23 hour ave fcst:
+179:163067792:d=2026100200:ULWRF:top of atmosphere:23 hour fcst:
+180:165174400:d=2026100200:DSWRF:surface:23 hour fcst:
+181:166137195:d=2026100200:DLWRF:surface:23 hour fcst:
+182:168008867:d=2026100200:USWRF:surface:23 hour fcst:
+183:169319527:d=2026100200:ULWRF:surface:23 hour fcst:
+184:170900508:d=2026100200:var discipline=2 master_table=2 parmcat=4 parm=36:surface:23 hour fcst:
+185:170902777:d=2026100200:AEMFLX:entire atmosphere (considered as a single layer):23 hour fcst:aerosol=Dust dry:aerosol_size <1e-05:
+186:170903069:d=2026100200:var discipline=2 master_table=2 parmcat=4 parm=26:surface:22-23 hour ave fcst:
+187:172401169:d=2026100200:CSDSF:surface:23 hour fcst:
+188:172920434:d=2026100200:VBDSF:surface:23 hour fcst:
+189:174115951:d=2026100200:VDDSF:surface:23 hour fcst:
+190:175668251:d=2026100200:HLCY:3000-0 m above ground:23 hour fcst:
+191:176875582:d=2026100200:HLCY:1000-0 m above ground:23 hour fcst:
+192:178796283:d=2026100200:USTM:6000-0 m above ground:23 hour fcst:
+193:180537421:d=2026100200:VSTM:6000-0 m above ground:23 hour fcst:
+194:182214040:d=2026100200:UPHL:5000-2000 m above ground:23 hour fcst:
+195:182262699:d=2026100200:VUCSH:0-1000 m above ground:23 hour fcst:
+196:183276458:d=2026100200:VVCSH:0-1000 m above ground:23 hour fcst:
+197:184260238:d=2026100200:VUCSH:0-6000 m above ground:23 hour fcst:
+198:185340034:d=2026100200:VVCSH:0-6000 m above ground:23 hour fcst:
+199:186401405:d=2026100200:PRES:tropopause:23 hour fcst:
+200:188479638:d=2026100200:HGT:tropopause:23 hour fcst:
+201:190776319:d=2026100200:TMP:tropopause:23 hour fcst:
+202:191491101:d=2026100200:POT:tropopause:23 hour fcst:
+203:193356198:d=2026100200:UGRD:tropopause:23 hour fcst:
+204:194274891:d=2026100200:VGRD:tropopause:23 hour fcst:
+205:195144026:d=2026100200:VWSH:tropopause:23 hour fcst:
+206:196258478:d=2026100200:PRES:max wind:23 hour fcst:
+207:198759456:d=2026100200:HGT:max wind:23 hour fcst:
+208:201359115:d=2026100200:UGRD:max wind:23 hour fcst:
+209:202326425:d=2026100200:VGRD:max wind:23 hour fcst:
+210:203300008:d=2026100200:TMP:30 m above ground:23 hour fcst:
+211:204233140:d=2026100200:UGRD:30 m above ground:23 hour fcst:
+212:206047941:d=2026100200:VGRD:30 m above ground:23 hour fcst:
+213:207823987:d=2026100200:TMP:50 m above ground:23 hour fcst:
+214:208751053:d=2026100200:UGRD:50 m above ground:23 hour fcst:
+215:210570323:d=2026100200:VGRD:50 m above ground:23 hour fcst:
+216:212350991:d=2026100200:TMP:80 m above ground:23 hour fcst:
+217:213273880:d=2026100200:SPFH:80 m above ground:23 hour fcst:
+218:215597830:d=2026100200:PRES:80 m above ground:23 hour fcst:
+219:216304939:d=2026100200:UGRD:80 m above ground:23 hour fcst:
+220:218124020:d=2026100200:VGRD:80 m above ground:23 hour fcst:
+221:219907388:d=2026100200:TMP:100 m above ground:23 hour fcst:
+222:220827793:d=2026100200:UGRD:100 m above ground:23 hour fcst:
+223:222643677:d=2026100200:VGRD:100 m above ground:23 hour fcst:
+224:224424462:d=2026100200:TMP:160 m above ground:23 hour fcst:
+225:225341232:d=2026100200:UGRD:160 m above ground:23 hour fcst:
+226:227144360:d=2026100200:VGRD:160 m above ground:23 hour fcst:
+227:228915734:d=2026100200:TMP:305 m above mean sea level:23 hour fcst:
+228:229625918:d=2026100200:SPFH:305 m above mean sea level:23 hour fcst:
+229:231302416:d=2026100200:UGRD:305 m above mean sea level:23 hour fcst:
+230:232547099:d=2026100200:VGRD:305 m above mean sea level:23 hour fcst:
+231:233787636:d=2026100200:TMP:320 m above ground:23 hour fcst:
+232:234704170:d=2026100200:UGRD:320 m above ground:23 hour fcst:
+233:236467345:d=2026100200:VGRD:320 m above ground:23 hour fcst:
+234:238207944:d=2026100200:TMP:457 m above mean sea level:23 hour fcst:
+235:238992750:d=2026100200:UGRD:457 m above mean sea level:23 hour fcst:
+236:240421137:d=2026100200:VGRD:457 m above mean sea level:23 hour fcst:
+237:241839642:d=2026100200:TMP:610 m above mean sea level:23 hour fcst:
+238:242667629:d=2026100200:UGRD:610 m above mean sea level:23 hour fcst:
+239:243617071:d=2026100200:VGRD:610 m above mean sea level:23 hour fcst:
+240:244576137:d=2026100200:TMP:914 m above mean sea level:23 hour fcst:
+241:245430782:d=2026100200:UGRD:914 m above mean sea level:23 hour fcst:
+242:247050186:d=2026100200:VGRD:914 m above mean sea level:23 hour fcst:
+243:248654302:d=2026100200:TMP:1524 m above mean sea level:23 hour fcst:
+244:249566054:d=2026100200:UGRD:1524 m above mean sea level:23 hour fcst:
+245:251370486:d=2026100200:VGRD:1524 m above mean sea level:23 hour fcst:
+246:253147912:d=2026100200:TMP:1829 m above mean sea level:23 hour fcst:
+247:253955871:d=2026100200:UGRD:1829 m above mean sea level:23 hour fcst:
+248:255817765:d=2026100200:VGRD:1829 m above mean sea level:23 hour fcst:
+249:257652437:d=2026100200:TMP:2134 m above mean sea level:23 hour fcst:
+250:258596111:d=2026100200:UGRD:2134 m above mean sea level:23 hour fcst:
+251:260504190:d=2026100200:VGRD:2134 m above mean sea level:23 hour fcst:
+252:262383884:d=2026100200:TMP:2743 m above mean sea level:23 hour fcst:
+253:263334789:d=2026100200:UGRD:2743 m above mean sea level:23 hour fcst:
+254:265272817:d=2026100200:VGRD:2743 m above mean sea level:23 hour fcst:
+255:267177901:d=2026100200:TMP:3658 m above mean sea level:23 hour fcst:
+256:268115319:d=2026100200:UGRD:3658 m above mean sea level:23 hour fcst:
+257:270013849:d=2026100200:VGRD:3658 m above mean sea level:23 hour fcst:
+258:271874776:d=2026100200:TMP:4572 m above mean sea level:23 hour fcst:
+259:272560128:d=2026100200:UGRD:4572 m above mean sea level:23 hour fcst:
+260:274191458:d=2026100200:VGRD:4572 m above mean sea level:23 hour fcst:
+261:275783941:d=2026100200:HGT:0C isotherm:23 hour fcst:
+262:277159030:d=2026100200:RH:0C isotherm:23 hour fcst:
+263:277947180:d=2026100200:PRES:0C isotherm:23 hour fcst:
+264:278711750:d=2026100200:HGT:highest tropospheric freezing level:23 hour fcst:
+265:280891012:d=2026100200:RH:highest tropospheric freezing level:23 hour fcst:
+266:281677617:d=2026100200:PRES:highest tropospheric freezing level:23 hour fcst:
+267:282440979:d=2026100200:HGT:253 K level:23 hour fcst:
+268:282729673:d=2026100200:4LFTX:180-0 mb above ground:23 hour fcst:
+269:283664082:d=2026100200:CAPE:180-0 mb above ground:23 hour fcst:
+270:284716540:d=2026100200:CIN:180-0 mb above ground:23 hour fcst:
+271:285367738:d=2026100200:HPBL:surface:23 hour fcst:
+272:288229869:d=2026100200:HGT:level of adiabatic condensation from sfc:23 hour fcst:
+273:290956823:d=2026100200:PRES:level of adiabatic condensation from sfc:23 hour fcst:
+274:293457493:d=2026100200:CAPE:90-0 mb above ground:23 hour fcst:
+275:294325818:d=2026100200:CIN:90-0 mb above ground:23 hour fcst:
+276:294943384:d=2026100200:CAPE:255-0 mb above ground:23 hour fcst:
+277:296115738:d=2026100200:CIN:255-0 mb above ground:23 hour fcst:
+278:296769772:d=2026100200:HGT:equilibrium level:23 hour fcst:
+279:297654789:d=2026100200:ELMELT:equilibrium level:23 hour fcst:
+280:298716616:d=2026100200:PLPL:255-0 mb above ground:23 hour fcst:
+281:300730897:d=2026100200:CAPE:0-3000 m above ground:23 hour fcst:
+282:301719725:d=2026100200:EFHL:surface:23 hour fcst:
+283:302448709:d=2026100200:UESH:level of free convection:23 hour fcst:
+284:303940436:d=2026100200:VESH:level of free convection:23 hour fcst:
+285:305425175:d=2026100200:UEID:level of free convection:23 hour fcst:
+286:307809671:d=2026100200:VEID:level of free convection:23 hour fcst:
+287:310132474:d=2026100200:CANGLE:0-500 m above ground:23 hour fcst:
+288:311434881:d=2026100200:LAYTH:261 K level - 256 K level:23 hour fcst:
+289:312638128:d=2026100200:DCAPE:400-0 mb above ground:23 hour fcst:
+290:314542760:d=2026100200:RHPW:entire atmosphere:23 hour fcst:
+291:315153882:d=2026100200:NLAT:surface:23 hour fcst:
+292:315917045:d=2026100200:ELON:surface:23 hour fcst:
+293:316402539:d=2026100200:LAND:surface:23 hour fcst:
+294:316448518:d=2026100200:ICEC:surface:23 hour fcst:
+295:316448737:d=2026100200:LMH:surface:23 hour fcst:
+296:316448956:d=2026100200:LMV:surface:23 hour fcst:
+297:316449175:d=2026100200:ALBDO:surface:23 hour fcst:
+298:317513898:d=2026100200:MXSALB:surface:23 hour fcst:
+299:318712722:d=2026100200:WTMP:surface:23 hour fcst:
+300:319645259:d=2026100200:SBTA167:top of atmosphere:23 hour fcst:
+301:321240352:d=2026100200:SBTA168:top of atmosphere:23 hour fcst:
+302:322875064:d=2026100200:SBTA169:top of atmosphere:23 hour fcst:
+303:324601775:d=2026100200:SBTA1610:top of atmosphere:23 hour fcst:
+304:326406169:d=2026100200:SBTA1611:top of atmosphere:23 hour fcst:
+305:327935544:d=2026100200:SBTA1612:top of atmosphere:23 hour fcst:
+306:330094721:d=2026100200:SBTA1613:top of atmosphere:23 hour fcst:
+307:331666001:d=2026100200:SBTA1614:top of atmosphere:23 hour fcst:
+308:333240071:d=2026100200:SBTA1615:top of atmosphere:23 hour fcst:
+309:334786924:d=2026100200:SBTA1616:top of atmosphere:23 hour fcst:
+310:336919198:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=77:top of atmosphere:23 hour fcst:
+311:338670891:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=78:top of atmosphere:23 hour fcst:
+312:340512052:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=79:top of atmosphere:23 hour fcst:
+313:342410576:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=80:top of atmosphere:23 hour fcst:
+314:344064074:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=81:top of atmosphere:23 hour fcst:
+315:346253262:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=82:top of atmosphere:23 hour fcst:
+316:347948333:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=83:top of atmosphere:23 hour fcst:
+317:349643886:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=84:top of atmosphere:23 hour fcst:
+318:351306316:d=2026100200:var discipline=3 center=7 local_table=1 parmcat=192 parm=85:top of atmosphere:23 hour fcst:
