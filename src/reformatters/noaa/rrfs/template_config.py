@@ -56,9 +56,9 @@ class NoaaRrfsForecastTemplateConfig(
     @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        model = "REFS" if self.members else "RRFS"
+        model = "RRFS ensemble" if self.members else "RRFS"
         description = (
-            "CONUS forecasts from the RRFS Ensemble Forecast System (REFS), including every unique RRFS-based member run: current deterministic RRFS as member 0 and five perturbed members as members 1-5. The full REFS products additionally use these runs from the previous cycle and current and previous-cycle HRRR."
+            "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR."
             if self.members
             else "CONUS weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP."
         )

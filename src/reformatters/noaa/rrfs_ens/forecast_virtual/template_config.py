@@ -13,12 +13,14 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.types import Dims, Timedelta, Timestamp
-from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
+from reformatters.noaa.rrfs.template_config import (
+    NoaaRrfsForecastTemplateConfig,
+)
 
 
-class NoaaRefsForecastVirtualTemplateConfig(NoaaRrfsForecastTemplateConfig):
-    dataset_id: ClassVar[str] = "noaa-refs-forecast-virtual"
-    dataset_name: ClassVar[str] = "NOAA REFS forecast, virtual"
+class NoaaRrfsEnsForecastVirtualTemplateConfig(NoaaRrfsForecastTemplateConfig):
+    dataset_id: ClassVar[str] = "noaa-rrfs-ens-forecast-virtual"
+    dataset_name: ClassVar[str] = "NOAA RRFS ENS forecast, virtual"
     forecast_length: Timedelta = pd.Timedelta("60h")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
     dims: Dims = {

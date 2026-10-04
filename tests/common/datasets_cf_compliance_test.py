@@ -15,6 +15,7 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -1697,13 +1698,7 @@ type MetadataValue = str | tuple[int, ...] | None
 _RRFS_DATASETS = [
     d
     for d in IMPLEMENTED_DATASETS
-    if d.dataset_id
-    in {
-        "noaa-rrfs-forecast-84-hour-virtual",
-        "noaa-rrfs-forecast-18-hour-virtual",
-        "noaa-rrfs-forecast-sub-hourly-virtual",
-        "noaa-refs-forecast-virtual",
-    }
+    if isinstance(d.template_config, NoaaRrfsForecastTemplateConfig)
 ]
 
 # Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.

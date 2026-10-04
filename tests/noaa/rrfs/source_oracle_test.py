@@ -12,7 +12,13 @@ from reformatters.common.logging import get_logger
 from reformatters.noaa.rrfs.forecast_84_hour_virtual.template_config import (
     NoaaRrfsForecast84HourVirtualTemplateConfig,
 )
+from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.template_config import (
+    NoaaRrfsForecastSubHourlyVirtualTemplateConfig,
+)
 from reformatters.noaa.rrfs.region_job import NoaaRrfsSourceFileCoord
+from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
+    NoaaRrfsEnsForecastVirtualTemplateConfig,
+)
 
 log = get_logger(__name__)
 SNAPSHOTS = json.loads(
@@ -100,9 +106,9 @@ def test_quarter_hour_and_member_snapshots_match_independent_gdal(
     with rasterio.MemoryFile(response.content) as file, file.open() as source:
         actual = float(source.read(1, window=((635, 636), (1062, 1063)))[0, 0])
     dataset_id = (
-        "noaa-rrfs-forecast-sub-hourly-virtual"
+        NoaaRrfsForecastSubHourlyVirtualTemplateConfig.dataset_id
         if member is None
-        else "noaa-refs-forecast-virtual"
+        else NoaaRrfsEnsForecastVirtualTemplateConfig.dataset_id
     )
     index = minutes // 15 - 1 if member is None else member
     expected = SNAPSHOTS[dataset_id][init.isoformat()]["temperature_2m"][index]

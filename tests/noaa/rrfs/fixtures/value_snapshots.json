@@ -153,7 +153,7 @@
       ]
     }
   },
-  "noaa-refs-forecast-virtual": {
+  "noaa-rrfs-ens-forecast-virtual": {
     "2026-09-15T12:00:00": {
       "cloud_ceiling_height": [
         null,

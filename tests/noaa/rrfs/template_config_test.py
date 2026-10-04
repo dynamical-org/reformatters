@@ -6,9 +6,6 @@ import rasterio
 import xarray as xr
 
 from reformatters.common.iterating import flatten_groups
-from reformatters.noaa.refs.forecast_virtual.template_config import (
-    NoaaRefsForecastVirtualTemplateConfig,
-)
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.template_config import (
     NoaaRrfsForecast18HourVirtualTemplateConfig,
 )
@@ -19,6 +16,9 @@ from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.template_config import (
     NoaaRrfsForecastSubHourlyVirtualTemplateConfig,
 )
 from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
+from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
+    NoaaRrfsEnsForecastVirtualTemplateConfig,
+)
 
 
 @pytest.mark.parametrize(
@@ -27,7 +27,7 @@ from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfi
         (NoaaRrfsForecast84HourVirtualTemplateConfig(), 323),
         (NoaaRrfsForecast18HourVirtualTemplateConfig(), 323),
         (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 39),
-        (NoaaRefsForecastVirtualTemplateConfig(), 64),
+        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 64),
     ],
     ids=lambda value: (
         value.dataset_id
@@ -68,7 +68,7 @@ def test_decoder_dependent_fields_are_deferred_in_config_and_stored_template(
     ("fixture_name", "config"),
     [
         ("spfh", NoaaRrfsForecast84HourVirtualTemplateConfig()),
-        ("aotk", NoaaRefsForecastVirtualTemplateConfig()),
+        ("aotk", NoaaRrfsEnsForecastVirtualTemplateConfig()),
     ],
 )
 def test_conus_grid_matches_source_header(

@@ -9,9 +9,6 @@ import xarray as xr
 from reformatters.common import validation
 from reformatters.common.logging import get_logger
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.noaa.refs.forecast_virtual.dynamical_dataset import (
-    NoaaRefsForecastVirtualDataset,
-)
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaRrfsForecast18HourVirtualDataset,
 )
@@ -22,12 +19,15 @@ from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.dynamical_dataset import
     NoaaRrfsForecastSubHourlyVirtualDataset,
 )
 from reformatters.noaa.rrfs.region_job import NoaaRrfsRegionJob, NoaaRrfsSourceFileCoord
+from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
+    NoaaRrfsEnsForecastVirtualDataset,
+)
 
 type DatasetClass = type[
     NoaaRrfsForecast84HourVirtualDataset
     | NoaaRrfsForecast18HourVirtualDataset
     | NoaaRrfsForecastSubHourlyVirtualDataset
-    | NoaaRefsForecastVirtualDataset
+    | NoaaRrfsEnsForecastVirtualDataset
 ]
 
 SNAPSHOTS: dict[str, dict[str, dict[str, object]]] = json.loads(
@@ -38,7 +38,7 @@ CLASSES = (
     NoaaRrfsForecast84HourVirtualDataset,
     NoaaRrfsForecast18HourVirtualDataset,
     NoaaRrfsForecastSubHourlyVirtualDataset,
-    NoaaRefsForecastVirtualDataset,
+    NoaaRrfsEnsForecastVirtualDataset,
 )
 log = get_logger(__name__)
 POINT = {"y": 635, "x": 1062}
@@ -78,7 +78,8 @@ def test_real_source_backfill_and_update_in_isolated_store(
     config = dataset.template_config
     init = pd.Timestamp(
         "2026-09-15T12:00"
-        if cls in (NoaaRrfsForecast84HourVirtualDataset, NoaaRefsForecastVirtualDataset)
+        if cls
+        in (NoaaRrfsForecast84HourVirtualDataset, NoaaRrfsEnsForecastVirtualDataset)
         else "2026-09-15T00:00"
     )
     subhourly = getattr(config, "sub_hourly", False)
@@ -213,7 +214,7 @@ def assert_snapshot(ds: xr.Dataset, dataset_id: str, init: pd.Timestamp) -> None
         (NoaaRrfsForecast84HourVirtualDataset, 100, 135),
         (NoaaRrfsForecast18HourVirtualDataset, 100, 60),
         (NoaaRrfsForecastSubHourlyVirtualDataset, 75, 55),
-        (NoaaRefsForecastVirtualDataset, 75, 160),
+        (NoaaRrfsEnsForecastVirtualDataset, 75, 160),
     ],
 )
 def test_poll_deadline_validation_schedule_and_decode_health(

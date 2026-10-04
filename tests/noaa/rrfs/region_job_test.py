@@ -7,9 +7,6 @@ import xarray as xr
 
 from reformatters.common.pydantic import replace
 from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
-from reformatters.noaa.refs.forecast_virtual.template_config import (
-    NoaaRefsForecastVirtualTemplateConfig,
-)
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.template_config import (
     NoaaRrfsForecast18HourVirtualTemplateConfig,
 )
@@ -21,13 +18,16 @@ from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.template_config import (
 )
 from reformatters.noaa.rrfs.region_job import NoaaRrfsRegionJob, NoaaRrfsSourceFileCoord
 from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
+from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
+    NoaaRrfsEnsForecastVirtualTemplateConfig,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIGS = (
     NoaaRrfsForecast84HourVirtualTemplateConfig(),
     NoaaRrfsForecast18HourVirtualTemplateConfig(),
     NoaaRrfsForecastSubHourlyVirtualTemplateConfig(),
-    NoaaRefsForecastVirtualTemplateConfig(),
+    NoaaRrfsEnsForecastVirtualTemplateConfig(),
 )
 
 

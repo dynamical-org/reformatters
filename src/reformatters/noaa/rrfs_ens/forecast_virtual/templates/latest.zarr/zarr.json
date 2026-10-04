@@ -1,10 +1,10 @@
 {
   "attributes": {
-    "dataset_id": "noaa-refs-forecast-virtual",
+    "dataset_id": "noaa-rrfs-ens-forecast-virtual",
     "dataset_version": "0.1.0",
-    "name": "NOAA REFS forecast, virtual",
-    "description": "CONUS forecasts from the RRFS Ensemble Forecast System (REFS), including every unique RRFS-based member run: current deterministic RRFS as member 0 and five perturbed members as members 1-5. The full REFS products additionally use these runs from the previous cycle and current and previous-cycle HRRR.",
-    "attribution": "NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+    "name": "NOAA RRFS ENS forecast, virtual",
+    "description": "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR.",
+    "attribution": "NOAA NWS NCEP RRFS ensemble data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Continental United States",
     "spatial_resolution": "3 km",
@@ -2184,11 +2184,11 @@
       },
       "pressure_level": {
         "attributes": {
-          "dataset_id": "noaa-refs-forecast-virtual",
+          "dataset_id": "noaa-rrfs-ens-forecast-virtual",
           "dataset_version": "0.1.0",
-          "name": "NOAA REFS forecast, virtual",
-          "description": "CONUS forecasts from the RRFS Ensemble Forecast System (REFS), including every unique RRFS-based member run: current deterministic RRFS as member 0 and five perturbed members as members 1-5. The full REFS products additionally use these runs from the previous cycle and current and previous-cycle HRRR.",
-          "attribution": "NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
+          "name": "NOAA RRFS ENS forecast, virtual",
+          "description": "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR.",
+          "attribution": "NOAA NWS NCEP RRFS ensemble data processed by dynamical.org from NOAA Open Data Dissemination archives.",
           "license": "CC-BY-4.0",
           "spatial_domain": "Continental United States",
           "spatial_resolution": "3 km",
