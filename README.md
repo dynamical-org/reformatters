@@ -38,6 +38,7 @@ We use
 * Tests: 
    * Run tests in parallel on all available cores: `uv run pytest`
    * Run tests serially: `uv run pytest -n 0`
+   * List the slowest tests with CI's four-worker count: `uv run pytest -n 4 -p no:sugar --durations=50`
 
 ## Deploying to the cloud
 
