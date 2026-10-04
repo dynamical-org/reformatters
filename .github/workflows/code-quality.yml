@@ -16,17 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Code Quality (${{ matrix.arch }})
+  tests:
+    name: Tests (${{ matrix.arch }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.runner }}
 
     strategy:
+      fail-fast: false
       matrix:
+        arch: [amd64, arm64]
+        suite: [noaa, other]
         include:
           - arch: amd64
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
+          - suite: noaa
+            pytest_args: tests/noaa
+          - suite: other
+            pytest_args: --ignore=tests/noaa
 
     # Keep deploy-staging.yaml and these steps in sync
     steps:
@@ -55,16 +62,36 @@ jobs:
         run: "uv pip install -e ."
 
       - name: Run Ruff
+        if: matrix.suite == 'other'
         run: uv run ruff check --output-format=github
 
       - name: Check code format
+        if: matrix.suite == 'other'
         run: uv run ruff format --check
 
       - name: Run ty
+        if: matrix.suite == 'other'
         run: uv run ty check
 
       - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose
+        run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
+
+  quality:
+    # These check names are required by the main-branch ruleset.
+    name: Code Quality (${{ matrix.arch }})
+    needs: tests
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Require all test partitions to pass
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          echo "Test matrix result: $TEST_RESULT"
+          test "$TEST_RESULT" = success
 
   admission:
     name: Kubernetes admission
