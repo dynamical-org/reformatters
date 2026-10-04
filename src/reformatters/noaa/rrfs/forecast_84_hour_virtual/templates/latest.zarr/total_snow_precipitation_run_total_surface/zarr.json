@@ -39,7 +39,7 @@
     "short_name": "tsnowp",
     "standard_name": "snowfall_amount",
     "units": "kg m-2",
-    "comment": "Accumulation resets at each forecast initialization time.",
+    "comment": "Accumulated from the forecast initialization time to this step.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -38,7 +38,7 @@
     "long_name": "Column-integrated mass density",
     "short_name": "colmd",
     "units": "kg m-2",
-    "comment": "aerosol=Dust dry; aerosol_size <1e-05.",
+    "comment": "Dry dust aerosol with particle diameter below 10 \u00b5m.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

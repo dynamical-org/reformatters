@@ -38,7 +38,7 @@
     "long_name": "Mass density",
     "short_name": "mdens",
     "units": "kg m-3",
-    "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare. aerosol=Dust dry; aerosol_size >=2.5e-06,<1e-05.",
+    "comment": "Dry dust aerosol with particle diameter at least 2.5 \u00b5m and below 10 \u00b5m.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

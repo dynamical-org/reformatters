@@ -58,7 +58,7 @@
           "long_name": "Aerosol emission flux",
           "short_name": "aemflx",
           "units": "kg m-2 s-1",
-          "comment": "aerosol=Dust dry; aerosol_size <1e-05.",
+          "comment": "Dry dust aerosol with particle diameter below 10 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -113,7 +113,7 @@
           "long_name": "Aerosol emission flux",
           "short_name": "aemflx",
           "units": "kg m-2 s-1",
-          "comment": "aerosol=Particulate organic matter dry; aerosol_size <2.5e-06.",
+          "comment": "Dry particulate organic matter aerosol with particle diameter below 2.5 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -224,7 +224,7 @@
           "short_name": "fal",
           "standard_name": "surface_albedo",
           "units": "percent",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Exactly 0 wherever the averaging window received no sunlight; exclude those zeros from a time mean albedo.",
+          "comment": "Exactly 0 wherever there is no sunlight; exclude those zeros from a time mean albedo.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -279,7 +279,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.  aerosol=Total aerosol; aerosol_size <1e-05. Averaged over the preceding hour.",
+          "comment": "Total aerosol with particle diameter below 10 \u00b5m. Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -334,7 +334,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare.  aerosol=Total aerosol; aerosol_size <2.5e-06. Averaged over the preceding hour.",
+          "comment": "Total aerosol with particle diameter below 2.5 \u00b5m. Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1665,7 +1665,7 @@
           "long_name": "Precipitation exceeding 100-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours. Accumulation resets at each forecast initialization time.",
+          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -1725,7 +1725,7 @@
           "long_name": "Precipitation exceeding 100-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -1785,7 +1785,7 @@
           "long_name": "Precipitation exceeding 10-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours. Accumulation resets at each forecast initialization time.",
+          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -1845,7 +1845,7 @@
           "long_name": "Precipitation exceeding 10-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -1905,7 +1905,7 @@
           "long_name": "Precipitation exceeding 2-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours. Accumulation resets at each forecast initialization time.",
+          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -1965,7 +1965,7 @@
           "long_name": "Precipitation exceeding 2-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -2025,7 +2025,7 @@
           "long_name": "Precipitation exceeding 5-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours. Accumulation resets at each forecast initialization time.",
+          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6, 12 and 24 hours.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -2085,7 +2085,7 @@
           "long_name": "Precipitation exceeding 5-year average recurrence interval",
           "short_name": "qpfari",
           "units": "1",
-          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -2145,7 +2145,7 @@
           "long_name": "Precipitation exceeding flash flood guidance",
           "short_name": "qpfffg",
           "units": "1",
-          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6 and 12 hours. Accumulation resets at each forecast initialization time.",
+          "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6 and 12 hours.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -2205,7 +2205,7 @@
           "long_name": "Precipitation exceeding flash flood guidance",
           "short_name": "qpfffg",
           "units": "1",
-          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+          "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
           "step_type": "accum",
           "flag_values": [
             0,
@@ -2495,7 +2495,7 @@
           "long_name": "Column-integrated mass density",
           "short_name": "colmd",
           "units": "kg m-2",
-          "comment": "aerosol=Dust dry; aerosol_size <1e-05.",
+          "comment": "Dry dust aerosol with particle diameter below 10 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2550,7 +2550,7 @@
           "long_name": "Column-integrated mass density",
           "short_name": "colmd",
           "units": "kg m-2",
-          "comment": "aerosol=Dust dry; aerosol_size <2.5e-06.",
+          "comment": "Dry dust aerosol with particle diameter below 2.5 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2605,7 +2605,7 @@
           "long_name": "Column-integrated mass density",
           "short_name": "colmd",
           "units": "kg m-2",
-          "comment": "aerosol=Dust dry; aerosol_size >=2.5e-06,<1e-05.",
+          "comment": "Dry dust aerosol with particle diameter at least 2.5 \u00b5m and below 10 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2660,7 +2660,7 @@
           "long_name": "Column-integrated mass density",
           "short_name": "colmd",
           "units": "kg m-2",
-          "comment": "aerosol=Particulate organic matter dry; aerosol_size <2.5e-06.",
+          "comment": "Dry particulate organic matter aerosol with particle diameter below 2.5 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4610,7 +4610,7 @@
           "short_name": "sdlwrf",
           "standard_name": "surface_downwelling_longwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4666,7 +4666,7 @@
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5328,7 +5328,7 @@
           "long_name": "Freezing Rain",
           "short_name": "frzr",
           "units": "kg m-2",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5493,7 +5493,7 @@
           "long_name": "Ice pellets",
           "short_name": "frozr",
           "units": "kg m-2",
-          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100. Accumulation resets at each forecast initialization time.",
+          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100. Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6382,7 +6382,7 @@
           "short_name": "gflux",
           "standard_name": "upward_heat_flux_at_ground_level_in_soil",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. NaN over open water. Averaged over the preceding hour.",
+          "comment": "NaN over open water. Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8264,7 +8264,7 @@
           "short_name": "lhf",
           "standard_name": "surface_upward_latent_heat_flux",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8655,7 +8655,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare. aerosol=Dust dry; aerosol_size <2.5e-06.",
+          "comment": "Dry dust aerosol with particle diameter below 2.5 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8710,7 +8710,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare. aerosol=Dust dry; aerosol_size >=2.5e-06,<1e-05.",
+          "comment": "Dry dust aerosol with particle diameter at least 2.5 \u00b5m and below 10 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8765,7 +8765,7 @@
           "long_name": "Mass density",
           "short_name": "mdens",
           "units": "kg m-3",
-          "comment": "Near-surface smoke concentration. Source values at init_times before 2021-12-21T14Z are in ug m-3; NOAA corrected the encoding to kg m-3 from that cycle onward, so multiply earlier values by 1e-9 to compare. aerosol=Particulate organic matter dry; aerosol_size <2.5e-06.",
+          "comment": "Dry particulate organic matter aerosol with particle diameter below 2.5 \u00b5m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8820,7 +8820,6 @@
           "long_name": "Height of aerosol mass density",
           "short_name": "hgtmd",
           "units": "m",
-          "comment": "Height of aerosol mass density.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9095,7 +9094,7 @@
           "long_name": "Maximum downward vertical velocity",
           "short_name": "maxdvv",
           "units": "m s-1",
-          "comment": "Maximum value over the preceding hour in the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
+          "comment": "In the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9711,7 +9710,7 @@
           "short_name": "tmax",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Maximum value over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Maximum value over the preceding hour.",
+          "comment": "Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9877,7 +9876,7 @@
           "short_name": "maxuvv",
           "standard_name": "upward_air_velocity",
           "units": "m s-1",
-          "comment": "Maximum value over the preceding hour in the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
+          "comment": "In the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10270,7 +10269,7 @@
           "short_name": "tmin",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Minimum value over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Minimum value over the preceding hour.",
+          "comment": "Minimum value over the preceding hour.",
           "step_type": "min",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14177,7 +14176,7 @@
           "short_name": "shf",
           "standard_name": "surface_upward_sensible_heat_flux",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14403,7 +14402,7 @@
           "long_name": "Snow phase change heat flux",
           "short_name": "snohf",
           "units": "W m-2",
-          "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over water. Averaged over the preceding hour.",
+          "comment": "NaN over water. Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15611,7 +15610,7 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "sublimination_evaporation_from_snow_surface": {
+      "sublimation_evaporation_from_snow_surface": {
         "shape": [
           1,
           19,
@@ -16798,7 +16797,7 @@
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16909,7 +16908,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17021,7 +17020,7 @@
           "short_name": "tsnowp",
           "standard_name": "snowfall_amount",
           "units": "kg m-2",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17133,7 +17132,7 @@
           "short_name": "asnow",
           "standard_name": "thickness_of_snowfall_amount",
           "units": "m",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17353,7 +17352,7 @@
           "short_name": "sulwrf",
           "standard_name": "surface_upwelling_longwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17409,7 +17408,7 @@
           "short_name": "ulwrf",
           "standard_name": "toa_outgoing_longwave_flux",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17465,7 +17464,7 @@
           "short_name": "suswrf",
           "standard_name": "surface_upwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17521,7 +17520,7 @@
           "short_name": "uswrf",
           "standard_name": "toa_outgoing_shortwave_flux",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

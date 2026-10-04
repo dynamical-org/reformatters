@@ -38,7 +38,7 @@
     "long_name": "Snow phase change heat flux",
     "short_name": "snohf",
     "units": "W m-2",
-    "comment": "Average value in the last 6 hour period (lead times 6, 12, 18, ... hours) or 3 hour period (lead times 3, 9, 15, ... hours). NaN over water. Averaged over the preceding hour.",
+    "comment": "NaN over water. Averaged over the preceding hour.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

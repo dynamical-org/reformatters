@@ -38,7 +38,7 @@
     "long_name": "Precipitation exceeding 5-year average recurrence interval",
     "short_name": "qpfari",
     "units": "1",
-    "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Accumulated over the preceding hour.",
+    "comment": "Binary exceedance of the preceding hour precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance.",
     "step_type": "accum",
     "flag_values": [
       0,

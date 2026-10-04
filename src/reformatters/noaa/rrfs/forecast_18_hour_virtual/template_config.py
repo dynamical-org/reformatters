@@ -3,9 +3,7 @@ from typing import ClassVar
 import pandas as pd
 
 from reformatters.common.types import Timedelta, Timestamp
-from reformatters.noaa.rrfs.template_config import (
-    NoaaRrfsForecastTemplateConfig,
-)
+from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
 
 
 class NoaaRrfsForecast18HourVirtualTemplateConfig(NoaaRrfsForecastTemplateConfig):

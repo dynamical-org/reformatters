@@ -611,7 +611,7 @@
           "short_name": "sdswrf",
           "standard_name": "surface_downwelling_shortwave_flux_in_air",
           "units": "W m-2",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -833,7 +833,7 @@
           "long_name": "Freezing Rain",
           "short_name": "frzr",
           "units": "kg m-2",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1466,7 +1466,7 @@
           "long_name": "Maximum downward vertical velocity",
           "short_name": "maxdvv",
           "units": "m s-1",
-          "comment": "Maximum value over the preceding hour in the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
+          "comment": "In the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1758,7 +1758,7 @@
           "short_name": "maxuvv",
           "standard_name": "upward_air_velocity",
           "units": "m s-1",
-          "comment": "Maximum value over the preceding hour in the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
+          "comment": "In the 100-1000 hPa isobaric layer. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3778,7 +3778,7 @@
           "short_name": "tcc",
           "standard_name": "cloud_area_fraction",
           "units": "percent",
-          "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+          "comment": "Averaged over the preceding hour.",
           "step_type": "avg",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3895,7 +3895,7 @@
           "short_name": "tp",
           "standard_name": "precipitation_amount",
           "units": "kg m-2",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4013,7 +4013,7 @@
           "short_name": "asnow",
           "standard_name": "thickness_of_snowfall_amount",
           "units": "m",
-          "comment": "Accumulation resets at each forecast initialization time.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

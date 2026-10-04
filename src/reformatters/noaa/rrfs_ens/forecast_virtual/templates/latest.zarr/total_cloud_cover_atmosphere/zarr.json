@@ -41,7 +41,7 @@
     "short_name": "tcc",
     "standard_name": "cloud_area_fraction",
     "units": "percent",
-    "comment": "Averaged over the preceding 1-6 hours of forecast lead time, since the last lead time divisible by 6 before this step. Averaged over the preceding hour.",
+    "comment": "Averaged over the preceding hour.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

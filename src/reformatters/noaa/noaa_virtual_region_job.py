@@ -209,9 +209,9 @@ class NoaaVirtualRegionJob(
         tuple[str, str, str, tuple[str, ...] | None],
         list[tuple[NOAA_DATA_VAR, dict[Dim, CoordinateValue]]],
     ]:
-        """Map each (element, idx level string, idx window string) to the variables it
-        fills and the vertical label each ref carries. A root var contributes one entry;
-        a vertical-group var one per level (its grib_index_level is a "{level:g} ..."
+        """Map each (element, idx level string, idx window string, selectors) to the
+        variables it fills and the vertical label each ref carries. A root var contributes
+        one entry; a vertical-group var one per level (its grib_index_level is a "{level:g} ..."
         format string). The mapping is one-to-many: a run-total and a per-hour
         accumulation variant render the same window string at the reset lead, and both
         must be filled from the single matching message.

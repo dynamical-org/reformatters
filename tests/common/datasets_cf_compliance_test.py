@@ -492,7 +492,7 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "maximum_snow_albedo_surface",
     "minimal_stomatal_resistance_surface",
     "number_of_soil_layers_in_root_zone_surface",
-    "sublimination_evaporation_from_snow_surface",
+    "sublimation_evaporation_from_snow_surface",
     "updraft_helicity_5000_2000m",
     "velocity_grid_levels_surface",
     "water_temperature_surface",

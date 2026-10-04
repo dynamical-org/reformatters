@@ -4,9 +4,7 @@ import pandas as pd
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.types import Dims, Timedelta
-from reformatters.noaa.rrfs.template_config import (
-    NoaaRrfsForecastTemplateConfig,
-)
+from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
 
 
 class NoaaRrfsForecastSubHourlyVirtualTemplateConfig(NoaaRrfsForecastTemplateConfig):
