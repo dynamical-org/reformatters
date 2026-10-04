@@ -1755,11 +1755,16 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
 
 
 _REFS_PRODUCTS_DATASET = next(
-    d
-    for d in IMPLEMENTED_DATASETS
-    if d.dataset_id == "noaa-refs-forecast-products-virtual"
+    d for d in IMPLEMENTED_DATASETS if d.dataset_id == "noaa-refs-forecast-virtual"
 )
 _REFS_PRODUCTS_VARS = _REFS_PRODUCTS_DATASET.template_config.data_vars
+_REFS_TEMPERATURE_STANDARD_DEVIATIONS = {
+    var.name
+    for var in _REFS_PRODUCTS_VARS
+    if not var.has_statistic
+    and var.internal_attrs.source_families == ("sprd",)
+    and var.name.endswith("_standard_deviation")
+}
 _REFS_DERIVED_FAMILIES = {"prob", "eas", "ffri", "pmmn", "lpmm", "avrg"}
 _REFS_LOCAL_QUANTITIES = {
     "CRAIN",
@@ -1773,20 +1778,23 @@ _REFS_LOCAL_QUANTITIES = {
 DATASET_ECMWF_SHORTNAME_EXEMPT = {
     (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.short_name)
     for var in _REFS_PRODUCTS_VARS
-    if var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
 }
 DATASET_ECMWF_LONGNAME_EXEMPT = {
     (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.long_name)
     for var in _REFS_PRODUCTS_VARS
-    if var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
 }
 # Ensemble occurrence fractions are neither horizontal area nor precipitation mass fractions.
 DATASET_MISSING_STANDARD_NAME_EXEMPT = {
     (_REFS_PRODUCTS_DATASET.dataset_id, var.name)
     for var in _REFS_PRODUCTS_VARS
-    if var.internal_attrs.source_families[0] in {"prob", "eas", "ffri"}
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in {"prob", "eas", "ffri"}
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
     or (
         var.internal_attrs.source_families[0] == "pmmn"

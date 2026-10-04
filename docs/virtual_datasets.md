@@ -125,6 +125,8 @@ What is already ingested is derived from ref existence in the icechunk manifest 
 
 Arrays may use different ordered subsets of their group's dimensions through `TemplateConfig.data_var_dims`. Emit coordinate labels for the axes each referenced array actually has. Source-file coordinates must carry only the variables available for that file's family, statistic, lead and window; completeness and decode checks use this list to exclude structural holes such as a spread-only variable's absent mean. For NOAA rolling accumulations, `window_duration` selects the interval ending at the lead, while `window_reset_frequency` selects a running total; these are mutually exclusive. Declare publishing cadence in source-coordinate generation, independently of the dataset's lead-time coordinate.
 
+A source message may supply multiple arrays, including a statistic slice and a named mean without the statistic dimension. Declare each output in the source coordinate and retain completeness checks for each array. Deliberately empty statistic slices receive no references. Absolute temperatures use Celsius conversion; separate temperature standard deviations use K as a difference, without an offset.
+
 ## Replicas
 
 The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next fire; replicas may briefly be a commit ahead, never behind.
