@@ -41,7 +41,7 @@
     "short_name": "vis",
     "standard_name": "visibility_in_air",
     "units": "m",
-    "comment": "Mean and spread exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero spread does not imply agreement.",
+    "comment": "Mean and standard deviation exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero standard deviation does not imply agreement.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

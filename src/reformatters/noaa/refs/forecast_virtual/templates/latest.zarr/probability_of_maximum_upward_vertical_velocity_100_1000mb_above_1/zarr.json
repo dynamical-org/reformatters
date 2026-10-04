@@ -38,7 +38,7 @@
     "long_name": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1",
     "short_name": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_1",
     "units": "percent",
-    "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1. Maximum over the hour ending at the valid time.",
+    "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1. Maximum value over the preceding hour.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

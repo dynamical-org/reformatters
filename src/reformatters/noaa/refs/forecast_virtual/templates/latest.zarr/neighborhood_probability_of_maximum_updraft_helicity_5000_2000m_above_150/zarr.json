@@ -38,7 +38,7 @@
     "long_name": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2",
     "short_name": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_150",
     "units": "percent",
-    "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2. Maximum over the hour ending at the valid time.",
+    "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2. Maximum value over the preceding hour.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

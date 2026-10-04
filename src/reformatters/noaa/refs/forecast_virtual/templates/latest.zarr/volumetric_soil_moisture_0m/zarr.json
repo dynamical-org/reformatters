@@ -41,7 +41,7 @@
     "short_name": "soilw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
-    "comment": "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and spreads there are not soil moisture quantities. These cells are not marked; use a land mask.",
+    "comment": "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and standard deviations there are not soil moisture quantities. These cells are not marked; use a land mask.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

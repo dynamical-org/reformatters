@@ -1789,7 +1789,7 @@ DATASET_ECMWF_LONGNAME_EXEMPT = {
     or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
 }
-# Ensemble occurrence fractions are neither horizontal area nor precipitation mass fractions.
+# These derived ensemble quantities have no matching CF standard name.
 DATASET_MISSING_STANDARD_NAME_EXEMPT = {
     (_REFS_PRODUCTS_DATASET.dataset_id, var.name)
     for var in _REFS_PRODUCTS_VARS

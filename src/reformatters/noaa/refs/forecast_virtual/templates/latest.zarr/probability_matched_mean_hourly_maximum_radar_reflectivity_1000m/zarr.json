@@ -39,7 +39,7 @@
     "short_name": "probability_matched_mean_hourly_maximum_radar_reflectivity_1000m",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "Maximum over the hour ending at the valid time. A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
+    "comment": "Maximum value over the preceding hour. A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

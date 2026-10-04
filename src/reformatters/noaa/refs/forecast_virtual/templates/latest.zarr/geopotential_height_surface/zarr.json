@@ -41,7 +41,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "Spread reflects differences in terrain height between member grids.",
+    "comment": "Standard deviation reflects differences in terrain height between member grids.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

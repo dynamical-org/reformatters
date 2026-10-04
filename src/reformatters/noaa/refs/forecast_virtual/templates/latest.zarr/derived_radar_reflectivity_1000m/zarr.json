@@ -41,7 +41,7 @@
     "short_name": "refd",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Spread includes members' no-echo markers. Differences in echo presence or in the markers contribute to spread, so it does not measure only uncertainty in echo magnitude or height.",
+    "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

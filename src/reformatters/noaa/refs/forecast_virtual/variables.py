@@ -807,23 +807,23 @@ _FIELD_COMMENTS = {
     (
         "VIS",
         "surface",
-    ): "Mean and spread exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero spread does not imply agreement.",
+    ): "Mean and standard deviation exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero standard deviation does not imply agreement.",
     (
         "HGT",
         "cloud ceiling",
-    ): "Mean and spread exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero spread can indicate no uncapped members as well as agreement.",
+    ): "Mean and standard deviation exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero standard deviation can indicate no uncapped members as well as agreement.",
     (
         "HGT",
         "cloud base",
-    ): "Mean and spread use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the spread is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
+    ): "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
     (
         "TSOIL",
         "0-0 m below ground",
-    ): "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask.",
+    ): "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask.",
     (
         "SOILW",
         "0-0 m below ground",
-    ): "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and spreads there are not soil moisture quantities. These cells are not marked; use a land mask.",
+    ): "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and standard deviations there are not soil moisture quantities. These cells are not marked; use a land mask.",
     (
         "DZDT",
         "700-500 mb above ground",
@@ -831,7 +831,7 @@ _FIELD_COMMENTS = {
     (
         "var discipline=0 center=7 local_table=1 parmcat=6 parm=202",
         "0 m above ground",
-    ): "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Spread divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
+    ): "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Standard deviation divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
 }
 _FIELDS = {
     key: replace(
@@ -848,7 +848,7 @@ _FIELDS = {
         attrs=replace(
             field.attrs,
             step_type="max",
-            comment="Maximum over the hour ending at the valid time.",
+            comment="Maximum value over the preceding hour.",
         ),
     )
     if key[0] in ("MXUPHL", "MAXREF", "MAXUVV")
@@ -1441,12 +1441,12 @@ _FFRI_COMMENT = (
     "positive values near coverage boundaries can also be biased low. Mask values < -0.1."
 )
 _WIND_COMMENT = (
-    "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), "
+    "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), "
     "the vector spread including variation in direction, rather than the standard deviation of speed."
 )
 _RADAR_SPREAD_COMMENT = (
-    "Spread includes members' no-echo markers. Differences in echo presence or in the markers "
-    "contribute to spread, so it does not measure only uncertainty in echo magnitude or height."
+    "Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers "
+    "contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height."
 )
 _SPARSE_RADAR_COMMENTS = {
     "REFC": "The probability-matched mean retains member no-echo floors at -20, -10 or 0 dBZ. A value of 0 dBZ can also be a valid reflectivity; other negative dBZ values can be valid.",
@@ -1608,12 +1608,12 @@ def _statistic_attrs(field: ProductField, *, spread_only: bool) -> DataVarAttrs:
         category = _OCCURRENCE_CATEGORIES[element]
         attrs = replace(
             attrs,
-            comment=f"Mean divides the sum of weights of members diagnosing {category} by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+            comment=f"Mean divides the sum of weights of members diagnosing {category} by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
         )
     elif (element, level) == ("HGT", "surface"):
         attrs = replace(
             attrs,
-            comment="Spread reflects differences in terrain height between member grids.",
+            comment="Standard deviation reflects differences in terrain height between member grids.",
         )
     if element in _SPARSE_RADAR_COMMENTS:
         attrs = replace(
@@ -1668,7 +1668,7 @@ def _probability_attrs(
         if element in _PROBABILITY_CATEGORY_COMMENTS:
             comment += f" {_PROBABILITY_CATEGORY_COMMENTS[element]}"
     if field.attrs.step_type == "max":
-        comment += " Maximum over the hour ending at the valid time."
+        comment += " Maximum value over the preceding hour."
     return DataVarAttrs(
         short_name=name,
         long_name=f"{probability_label} {description}",

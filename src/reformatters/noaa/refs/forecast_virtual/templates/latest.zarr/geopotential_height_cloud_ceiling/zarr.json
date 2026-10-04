@@ -41,7 +41,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "Mean and spread exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero spread can indicate no uncapped members as well as agreement.",
+    "comment": "Mean and standard deviation exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero standard deviation can indicate no uncapped members as well as agreement.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

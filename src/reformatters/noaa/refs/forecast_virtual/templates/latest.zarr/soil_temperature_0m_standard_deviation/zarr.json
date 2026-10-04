@@ -38,7 +38,7 @@
     "long_name": "Standard deviation of soil temperature",
     "short_name": "soil_temperature_0m_standard_deviation",
     "units": "K",
-    "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask. NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
+    "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

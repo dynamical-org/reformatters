@@ -57,7 +57,7 @@ class NoaaRefsForecastVirtualTemplateConfig(
                     long_name="Ensemble statistic",
                     units="1",
                     statistics_approximate=None,
-                    comment="Mean is the ensemble mean. Standard_deviation is NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables.",
+                    comment="The mean label denotes the ensemble mean; standard_deviation denotes NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables.",
                 ),
             ),
         ]
@@ -69,7 +69,7 @@ class NoaaRefsForecastVirtualTemplateConfig(
             dataset_id=self.dataset_id,
             dataset_version="0.1.0",
             name=self.dataset_name,
-            description="CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. For temperature, dewpoint and soil temperature at all levels, the statistic array contains Celsius means and an empty standard_deviation slice; separate _mean variables duplicate these means and _standard_deviation variables hold unshifted temperature differences in K (numerically equal to differences in degree_Celsius). Standard deviation is member-weighted and population-normalized; conditional fields exclude capped members and wind spread includes direction, as described on the affected variables.",
+            description="CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. Temperature statistic arrays contain Celsius means and an empty standard_deviation slice; separate variables provide the same means and unshifted standard deviations.",
             attribution="NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
             spatial_domain="Continental United States",

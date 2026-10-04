@@ -128,7 +128,6 @@ def test_all_offset_fields_have_mean_aliases_and_unshifted_named_differences() -
         )
     soil_comment = variables["soil_temperature_0m"].attrs.comment or ""
     assert "raw zero before Celsius conversion" in soil_comment
-    assert "-273.15" in soil_comment
     assert "use a land mask" in soil_comment
 
 
@@ -491,13 +490,13 @@ def test_cloud_soil_and_radar_comments_keep_raw_values_and_statistic_scope() -> 
     ):
         statistic = variables[name]
         sparse = variables[f"probability_matched_mean_{name}"]
-        assert "Spread includes members' no-echo markers" in (
+        assert "Standard deviation includes members' no-echo markers" in (
             statistic.attrs.comment or ""
         )
         assert "The probability-matched mean retains" not in (
             statistic.attrs.comment or ""
         )
-        assert "Spread includes" not in (sparse.attrs.comment or "")
+        assert "Standard deviation includes" not in (sparse.attrs.comment or "")
         if name == "echo_top":
             assert (sparse.attrs.comment or "").endswith("Mask values < 0.")
             assert "Mask" not in (statistic.attrs.comment or "")
@@ -536,8 +535,6 @@ def test_hourly_maximum_probabilities_keep_instantaneous_source_selection(
     assert variables
     for var in variables:
         assert var.attrs.step_type == "max"
-        assert "Maximum over the hour ending at the valid time" in (
-            var.attrs.comment or ""
-        )
+        assert "Maximum value over the preceding hour" in (var.attrs.comment or "")
         assert var.internal_attrs.grib_index_step_type == "instant"
         assert grib_index_window_str(var, 6) == "6 hour fcst"

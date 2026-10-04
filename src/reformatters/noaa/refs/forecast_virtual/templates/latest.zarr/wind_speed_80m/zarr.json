@@ -41,7 +41,7 @@
     "short_name": "80si",
     "standard_name": "wind_speed",
     "units": "m s-1",
-    "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+    "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

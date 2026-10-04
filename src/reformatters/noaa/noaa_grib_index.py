@@ -21,8 +21,7 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) ->
     source_step_type = var.internal_attrs.grib_index_step_type or var.attrs.step_type
     assert reset_freq is None or duration is None
     if reset_freq is not None or duration is not None:
-        # Running totals (pd.Timedelta.max) and lead_hours=0 always anchor at 0;
-        # windowed vars compute the start of the current accumulation window.
+        # Fixed-duration windows end at the lead; reset buckets start at their preceding boundary.
         if duration is not None:
             assert pd.Timedelta(0) < duration <= lead
             start = lead - duration

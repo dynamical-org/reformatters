@@ -41,7 +41,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "Mean and spread use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the spread is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
+    "comment": "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

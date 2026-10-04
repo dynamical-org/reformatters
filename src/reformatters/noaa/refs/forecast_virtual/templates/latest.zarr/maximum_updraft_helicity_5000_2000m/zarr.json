@@ -40,7 +40,7 @@
     "long_name": "Updraft Helicity",
     "short_name": "uphl",
     "units": "m2 s-2",
-    "comment": "Maximum over the hour ending at the valid time. The mean slice is always missing; the probability-matched mean is provided as a separate variable.",
+    "comment": "Maximum value over the preceding hour. The mean slice is always missing; the probability-matched mean is provided as a separate variable.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

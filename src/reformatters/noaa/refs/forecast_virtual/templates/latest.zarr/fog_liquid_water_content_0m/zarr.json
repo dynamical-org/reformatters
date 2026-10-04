@@ -46,7 +46,7 @@
     "long_name": "Fog liquid water content",
     "short_name": "fog_lwc",
     "units": "kg kg-1",
-    "comment": "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Spread divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
+    "comment": "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Standard deviation divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

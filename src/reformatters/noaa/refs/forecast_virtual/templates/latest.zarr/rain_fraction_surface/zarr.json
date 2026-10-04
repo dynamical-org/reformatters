@@ -40,7 +40,7 @@
     "long_name": "Rain occurrence fraction",
     "short_name": "crain_fraction",
     "units": "1",
-    "comment": "Mean divides the sum of weights of members diagnosing rain by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+    "comment": "Mean divides the sum of weights of members diagnosing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

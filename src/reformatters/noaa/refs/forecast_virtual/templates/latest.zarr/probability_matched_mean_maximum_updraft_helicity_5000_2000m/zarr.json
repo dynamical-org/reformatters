@@ -38,7 +38,7 @@
     "long_name": "Probability-matched mean of updraft helicity",
     "short_name": "probability_matched_mean_maximum_updraft_helicity_5000_2000m",
     "units": "m2 s-2",
-    "comment": "Maximum over the hour ending at the valid time.",
+    "comment": "Maximum value over the preceding hour.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -3,7 +3,7 @@
     "dataset_id": "noaa-refs-forecast-virtual",
     "dataset_version": "0.1.0",
     "name": "NOAA REFS forecast, virtual",
-    "description": "CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. For temperature, dewpoint and soil temperature at all levels, the statistic array contains Celsius means and an empty standard_deviation slice; separate _mean variables duplicate these means and _standard_deviation variables hold unshifted temperature differences in K (numerically equal to differences in degree_Celsius). Standard deviation is member-weighted and population-normalized; conditional fields exclude capped members and wind spread includes direction, as described on the affected variables.",
+    "description": "CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. Temperature statistic arrays contain Celsius means and an empty standard_deviation slice; separate variables provide the same means and unshifted standard deviations.",
     "attribution": "NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Continental United States",
@@ -61,7 +61,7 @@
           "short_name": "refc",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Spread includes members' no-echo markers. Differences in echo presence or in the markers contribute to spread, so it does not measure only uncertainty in echo magnitude or height.",
+          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -473,7 +473,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Spread includes members' no-echo markers. Differences in echo presence or in the markers contribute to spread, so it does not measure only uncertainty in echo magnitude or height.",
+          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1441,7 +1441,7 @@
           "long_name": "Echo top",
           "short_name": "retop",
           "units": "m",
-          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Spread includes members' no-echo markers. Differences in echo presence or in the markers contribute to spread, so it does not measure only uncertainty in echo magnitude or height.",
+          "comment": "The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3540,7 +3540,7 @@
           "long_name": "Fog liquid water content",
           "short_name": "fog_lwc",
           "units": "kg kg-1",
-          "comment": "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Spread divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
+          "comment": "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Standard deviation divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3598,7 +3598,7 @@
           "long_name": "Freezing rain occurrence fraction",
           "short_name": "cfrzr_fraction",
           "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing freezing rain by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+          "comment": "Mean divides the sum of weights of members diagnosing freezing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4005,7 +4005,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "Mean and spread use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the spread is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
+          "comment": "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4064,7 +4064,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "Mean and spread exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero spread can indicate no uncapped members as well as agreement.",
+          "comment": "Mean and standard deviation exclude capped members. A mean of 20000 m denotes no reported cloud ceiling; zero standard deviation can indicate no uncapped members as well as agreement.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4123,7 +4123,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "Spread reflects differences in terrain height between member grids.",
+          "comment": "Standard deviation reflects differences in terrain height between member grids.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4240,7 +4240,7 @@
           "short_name": "maxref",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "Maximum over the hour ending at the valid time. The mean slice is always missing; the probability-matched mean is provided as a separate variable. Spread includes members' no-echo markers. Differences in echo presence or in the markers contribute to spread, so it does not measure only uncertainty in echo magnitude or height.",
+          "comment": "Maximum value over the preceding hour. The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4298,7 +4298,7 @@
           "long_name": "Ice pellets occurrence fraction",
           "short_name": "cicep_fraction",
           "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing ice pellets by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+          "comment": "Mean divides the sum of weights of members diagnosing ice pellets by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4809,7 +4809,7 @@
           "long_name": "Updraft Helicity",
           "short_name": "uphl",
           "units": "m2 s-2",
-          "comment": "Maximum over the hour ending at the valid time. The mean slice is always missing; the probability-matched mean is provided as a separate variable.",
+          "comment": "Maximum value over the preceding hour. The mean slice is always missing; the probability-matched mean is provided as a separate variable.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6795,7 +6795,7 @@
           "long_name": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 40 dBZ",
           "short_name": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_40",
           "units": "percent",
-          "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 40 dBZ. Maximum over the hour ending at the valid time.",
+          "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 40 dBZ. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6850,7 +6850,7 @@
           "long_name": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ",
           "short_name": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_50",
           "units": "percent",
-          "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ. Maximum over the hour ending at the valid time.",
+          "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6905,7 +6905,7 @@
           "long_name": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2",
           "short_name": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_150",
           "units": "percent",
-          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2. Maximum over the hour ending at the valid time.",
+          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 150 m2 s-2. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6960,7 +6960,7 @@
           "long_name": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 25 m2 s-2",
           "short_name": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_25",
           "units": "percent",
-          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 25 m2 s-2. Maximum over the hour ending at the valid time.",
+          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 25 m2 s-2. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7015,7 +7015,7 @@
           "long_name": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 75 m2 s-2",
           "short_name": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_75",
           "units": "percent",
-          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 75 m2 s-2. Maximum over the hour ending at the valid time.",
+          "comment": "Neighborhood probability of updraft helicity (5000-2000 m above ground) above 75 m2 s-2. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11149,7 +11149,7 @@
           "short_name": "probability_matched_mean_hourly_maximum_radar_reflectivity_1000m",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "Maximum over the hour ending at the valid time. A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
+          "comment": "Maximum value over the preceding hour. A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11204,7 +11204,7 @@
           "long_name": "Probability-matched mean of updraft helicity",
           "short_name": "probability_matched_mean_maximum_updraft_helicity_5000_2000m",
           "units": "m2 s-2",
-          "comment": "Maximum over the hour ending at the valid time.",
+          "comment": "Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15111,7 +15111,7 @@
           "long_name": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1",
           "short_name": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_1",
           "units": "percent",
-          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1. Maximum over the hour ending at the valid time.",
+          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 1 m s-1. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15166,7 +15166,7 @@
           "long_name": "Probability of maximum upward vertical velocity (100-1000 mb) above 10 m s-1",
           "short_name": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_10",
           "units": "percent",
-          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 10 m s-1. Maximum over the hour ending at the valid time.",
+          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 10 m s-1. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15221,7 +15221,7 @@
           "long_name": "Probability of maximum upward vertical velocity (100-1000 mb) above 20 m s-1",
           "short_name": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_20",
           "units": "percent",
-          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 20 m s-1. Maximum over the hour ending at the valid time.",
+          "comment": "Probability of maximum upward vertical velocity (100-1000 mb) above 20 m s-1. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17478,7 +17478,7 @@
           "long_name": "Rain occurrence fraction",
           "short_name": "crain_fraction",
           "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing rain by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+          "comment": "Mean divides the sum of weights of members diagnosing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17594,7 +17594,7 @@
           "long_name": "Snow occurrence fraction",
           "short_name": "csnow_fraction",
           "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing snow by the total weight of contributing members. Spread is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+          "comment": "Mean divides the sum of weights of members diagnosing snow by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17777,7 +17777,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates soil_temperature_0m_mean; standard deviation is provided by soil_temperature_0m_standard_deviation without the statistic dimension.",
+          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates soil_temperature_0m_mean; standard deviation is provided by soil_temperature_0m_standard_deviation without the statistic dimension.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17840,7 +17840,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask. Ensemble mean in degree_Celsius, identical to the mean slice of soil_temperature_0m.",
+          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. Ensemble mean in degree_Celsius, identical to the mean slice of soil_temperature_0m.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17895,7 +17895,7 @@
           "long_name": "Standard deviation of soil temperature",
           "short_name": "soil_temperature_0m_standard_deviation",
           "units": "K",
-          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask. NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
+          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18004,7 +18004,7 @@
         "attributes": {
           "long_name": "Ensemble statistic",
           "units": "1",
-          "comment": "Mean is the ensemble mean. Standard_deviation is NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables."
+          "comment": "The mean label denotes the ensemble mean; standard_deviation denotes NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables."
         },
         "dimension_names": [
           "statistic"
@@ -20091,7 +20091,7 @@
           "long_name": "Vertical wind shear",
           "short_name": "vws",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20149,7 +20149,7 @@
           "long_name": "Vertical wind shear",
           "short_name": "vws",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20208,7 +20208,7 @@
           "short_name": "vis",
           "standard_name": "visibility_in_air",
           "units": "m",
-          "comment": "Mean and spread exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero spread does not imply agreement.",
+          "comment": "Mean and standard deviation exclude members capped at the no-event visibility limit. A large mean can represent the cap when no uncapped member remains; the corresponding zero standard deviation does not imply agreement.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20267,7 +20267,7 @@
           "short_name": "soilw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and spreads there are not soil moisture quantities. These cells are not marked; use a land mask.",
+          "comment": "Over water, absent member soil values enter the statistics as zero, while some members may contribute nonzero values. Means and standard deviations there are not soil moisture quantities. These cells are not marked; use a land mask.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20326,7 +20326,7 @@
           "short_name": "10si",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20385,7 +20385,7 @@
           "short_name": "ws",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20444,7 +20444,7 @@
           "short_name": "ws",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20503,7 +20503,7 @@
           "short_name": "80si",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20562,7 +20562,7 @@
           "short_name": "ws",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -20621,7 +20621,7 @@
           "short_name": "ws",
           "standard_name": "wind_speed",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Spread is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

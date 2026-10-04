@@ -38,7 +38,7 @@
     "long_name": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ",
     "short_name": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_50",
     "units": "percent",
-    "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ. Maximum over the hour ending at the valid time.",
+    "comment": "Neighborhood probability of hourly maximum of simulated reflectivity (1000 m above ground) above 50 dBZ. Maximum value over the preceding hour.",
     "step_type": "max",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

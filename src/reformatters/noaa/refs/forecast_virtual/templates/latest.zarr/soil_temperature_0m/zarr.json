@@ -47,7 +47,7 @@
     "short_name": "sot",
     "standard_name": "soil_temperature",
     "units": "degree_Celsius",
-    "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. The Celsius mean can approach -273.15 degree_Celsius. Means and spreads there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates soil_temperature_0m_mean; standard deviation is provided by soil_temperature_0m_standard_deviation without the statistic dimension.",
+    "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates soil_temperature_0m_mean; standard deviation is provided by soil_temperature_0m_standard_deviation without the statistic dimension.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

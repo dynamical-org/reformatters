@@ -34,7 +34,7 @@
   "attributes": {
     "long_name": "Ensemble statistic",
     "units": "1",
-    "comment": "Mean is the ensemble mean. Standard_deviation is NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables."
+    "comment": "The mean label denotes the ensemble mean; standard_deviation denotes NOAA's spread: the member-weighted population standard deviation about that mean, with weights normalized over contributing members. Exceptions are described on the affected variables."
   },
   "dimension_names": [
     "statistic"
