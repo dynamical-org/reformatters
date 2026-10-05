@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from gribberish.zarr import GribberishCodec
 from pydantic import computed_field
 from zarr.codecs import ScaleOffset
 
@@ -158,14 +159,10 @@ def _virtual_encoding(
         shards=None,
         compressors=(),
         filters=filters,
-        serializer={
-            "name": "gribberish",
-            "configuration": {
-                "var": index_param,
-                "adjust_longitude_range": True,
-                "north_up": True,
-            },
-        },
+        # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
+        serializer=GribberishCodec(  # ty: ignore[call-non-callable]
+            var=index_param, adjust_longitude_range=True, north_up=True
+        ).to_dict(),
     )
 
 
