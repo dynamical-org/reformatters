@@ -120,11 +120,9 @@ def test_offset_fields_have_mean_only_slices_and_kelvin_deviations() -> None:
             == f"Standard deviation of {statistic.attrs.long_name.lower()}"
         )
         assert not deviation.encoding.filters
-        assert "intentionally NaN" in (statistic.attrs.comment or "")
-        assert "does not indicate missing source data" in (
+        assert f"not populated; read {deviation.name}" in (
             statistic.attrs.comment or ""
         )
-        assert deviation.name in (statistic.attrs.comment or "")
         assert config.data_var_dims(statistic) == (
             "init_time",
             "statistic",

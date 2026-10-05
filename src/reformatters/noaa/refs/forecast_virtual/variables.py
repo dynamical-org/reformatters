@@ -1701,7 +1701,7 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
                         None,
                         (
                             attrs.comment,
-                            f"The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as {name}_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+                            f"The standard_deviation slice is not populated; read {name}_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
                         ),
                     )
                 ),

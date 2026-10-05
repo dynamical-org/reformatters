@@ -3,7 +3,7 @@
     "dataset_id": "noaa-refs-forecast-virtual",
     "dataset_version": "0.1.0",
     "name": "NOAA REFS forecast, virtual",
-    "description": "CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. Temperature, dewpoint and soil-temperature means use Celsius. Their standard deviations are provided as <variable>_standard_deviation, in kelvin differences; 1 K of difference equals 1 \u00b0C of difference. The standard_deviation slices of the Celsius arrays are intentionally NaN and do not indicate missing source data.",
+    "description": "CONUS derived forecasts from NOAA's RRFS Ensemble Forecast System (REFS): ensemble mean and standard deviation (NOAA spread), probability-matched and localized probability-matched means, mean/PMM averages, threshold and neighborhood probabilities, ensemble-agreement-scale probabilities, and flash-flood guidance and recurrence-interval exceedance probabilities. The products combine current and previous-cycle RRFS deterministic and perturbed runs with HRRR, using up to 14 members; the number of contributing members depends on field and lead time. Temperature, dewpoint and soil-temperature means use Celsius. Their standard deviations are provided as <variable>_standard_deviation, in kelvin differences; 1 K of difference equals 1 \u00b0C of difference. The standard_deviation slices of the Celsius arrays are not populated; read <variable>_standard_deviation.",
     "attribution": "NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Continental United States",
@@ -538,7 +538,7 @@
           "short_name": "2d",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as dew_point_temperature_2m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read dew_point_temperature_2m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -658,7 +658,7 @@
           "short_name": "dpt",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as dew_point_temperature_500hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read dew_point_temperature_500hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -778,7 +778,7 @@
           "short_name": "dpt",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as dew_point_temperature_700hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read dew_point_temperature_700hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -898,7 +898,7 @@
           "short_name": "dpt",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as dew_point_temperature_850hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read dew_point_temperature_850hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1018,7 +1018,7 @@
           "short_name": "dpt",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as dew_point_temperature_925hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read dew_point_temperature_925hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17467,7 +17467,7 @@
           "short_name": "sot",
           "standard_name": "soil_temperature",
           "units": "degree_Celsius",
-          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as soil_temperature_0m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "Over water, absent member soil values enter the statistics as raw zero before Celsius conversion, while some members may contribute nonzero values. Means and standard deviations there are not soil temperature quantities. These cells are not marked; use a land mask. The standard_deviation slice is not populated; read soil_temperature_0m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17747,7 +17747,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_250hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_250hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17867,7 +17867,7 @@
           "short_name": "2t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_2m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_2m_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17987,7 +17987,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_500hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_500hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18107,7 +18107,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_700hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_700hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18227,7 +18227,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_850hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_850hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18347,7 +18347,7 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_925hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_925hpa_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18467,7 +18467,7 @@
           "short_name": "skt",
           "standard_name": "surface_temperature",
           "units": "degree_Celsius",
-          "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_surface_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+          "comment": "The standard_deviation slice is not populated; read temperature_surface_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
