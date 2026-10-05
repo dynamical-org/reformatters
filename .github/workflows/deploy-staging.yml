@@ -17,8 +17,16 @@ env:
 
 jobs:
   quality:
-    name: Code Quality
+    name: Code Quality (${{ matrix.suite }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: noaa
+            pytest_args: tests/noaa
+          - suite: other
+            pytest_args: --ignore=tests/noaa
 
     # Keep code-quality.yaml and these steps in sync
     steps:
@@ -42,16 +50,19 @@ jobs:
         run: "uv pip install -e ."
 
       - name: Run Ruff
+        if: matrix.suite == 'other'
         run: uv run ruff check --output-format=github
 
       - name: Check code format
+        if: matrix.suite == 'other'
         run: uv run ruff format --check
 
       - name: Run ty
+        if: matrix.suite == 'other'
         run: uv run ty check
 
       - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose
+        run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
 
   deploy:
     name: Deploy Staging
