@@ -77,14 +77,10 @@ jobs:
         run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
 
   quality:
-    # These check names are required by the main-branch ruleset.
-    name: Code Quality (${{ matrix.arch }})
+    name: Code Quality
     needs: tests
     if: ${{ always() }}
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - name: Require all test partitions to pass
         env:

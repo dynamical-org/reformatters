@@ -7,9 +7,9 @@ into `tests/noaa` and the remaining tests (`--ignore=tests/noaa`); together they
 include every test, including slow tests. Ruff, formatting, and ty run in the
 remaining-tests partition on each architecture.
 
-The required `Code Quality (amd64)` and `Code Quality (arm64)` checks both wait
-for the entire test matrix. Their gate jobs run even if a test job fails or is
-cancelled, and pass only when the matrix result is `success`. Production deploys
+The required `Code Quality` check waits for all four test partitions. Its gate
+job runs even if a test job fails or is cancelled, and passes only when the
+matrix result is `success`. Production deploys
 require a successful Code Quality workflow for a main-branch push.
 Staging uses the same two test partitions, and its deploy job requires both.
 
