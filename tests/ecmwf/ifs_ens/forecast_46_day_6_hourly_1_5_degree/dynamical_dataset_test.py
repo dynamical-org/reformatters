@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -157,8 +155,9 @@ def test_backfill_local_and_operational_update(
     assert_point_values(backfilled, [first_init])
 
     # The update reprocesses the latest existing initialization and appends the next.
-    monkeypatch.setattr(
-        pd.Timestamp, "now", Mock(return_value=pd.Timestamp("2026-08-12T00:00"))
-    )
+    def now(tz: str | None = None) -> pd.Timestamp:
+        return pd.Timestamp("2026-08-13T00:00", tz=tz)
+
+    monkeypatch.setattr(pd.Timestamp, "now", now)
     assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
     assert_point_values(xr.open_zarr(store, chunks=None), [first_init, second_init])

@@ -1,6 +1,7 @@
 """Read and transform real ECMWF 46-day messages of the 2026-08-10T00Z initialization."""
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ import pytest
 import rasterio
 import xarray as xr
 from rasterio.env import Env
+from zarr.storage import MemoryStore
 
 from reformatters.common.iterating import item
 from reformatters.common.types import Group
@@ -19,6 +21,9 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
     EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
 )
+from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.template_config import (
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
     EcmwfIfsEns46DayDataVar,
 )
@@ -29,10 +34,92 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     _sub_step_lead_times,
     selections_by_variable,
 )
+from reformatters.ecmwf.ifs_ens.forecast_46_day_template_config import (
+    EcmwfIfsEns46DayCommonTemplateConfig,
+)
 from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
 
 INIT_TIME = pd.Timestamp("2026-08-10T00:00")
 DAILY_CONFIG = EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
+
+
+@pytest.mark.parametrize(
+    "config",
+    [DAILY_CONFIG, EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig()],
+    ids=["daily", "6-hourly"],
+)
+@pytest.mark.parametrize(
+    ("now", "stored_init", "expected_end"),
+    [
+        ("2026-08-12T23:59:59.999999Z", "2026-08-09", "2026-08-10"),
+        ("2026-08-13T00:00:00Z", "2026-08-09", "2026-08-11"),
+        ("2026-08-13T00:00:00.000001Z", "2026-08-09", "2026-08-11"),
+        ("2026-08-13T01:00:00Z", "2026-08-10", "2026-08-11"),
+        ("2026-08-13T23:59:59Z", "2026-08-10", "2026-08-11"),
+        ("2026-08-14T00:00:00Z", "2026-08-10", "2026-08-12"),
+        ("2026-08-13T06:00:00Z", "2026-08-07", "2026-08-11"),
+        ("2026-08-13T09:00:00Z", "2026-08-11", "2026-08-11"),
+        ("2026-08-13T10:00:00Z", "2026-08-10", "2026-08-11"),
+        ("2026-08-12T23:59:59Z", "2026-08-11", "2026-08-11"),
+        (
+            pd.Timestamp("2026-03-07T19:00:00", tz="America/New_York"),
+            "2026-03-05",
+            "2026-03-06",
+        ),
+        (
+            pd.Timestamp("2026-03-08T20:00:00", tz="America/New_York"),
+            "2026-03-06",
+            "2026-03-07",
+        ),
+        (
+            pd.Timestamp("2026-10-31T20:00:00", tz="America/New_York"),
+            "2026-10-29",
+            "2026-10-30",
+        ),
+        (
+            pd.Timestamp("2026-11-01T19:00:00", tz="America/New_York"),
+            "2026-10-30",
+            "2026-10-31",
+        ),
+    ],
+)
+def test_operational_jobs_include_only_expected_inits_and_stored_redo(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    config: EcmwfIfsEns46DayCommonTemplateConfig,
+    now: str | pd.Timestamp,
+    stored_init: str,
+    expected_end: str,
+) -> None:
+    clock = Mock(return_value=pd.Timestamp(now))
+    monkeypatch.setattr(pd.Timestamp, "now", clock)
+    existing = xr.Dataset(coords={"init_time": pd.date_range(stored_init, periods=1)})
+    monkeypatch.setattr(xr, "open_zarr", Mock(return_value=existing))
+
+    jobs, template = EcmwfIfsEns46DayRegionJob.operational_update_jobs(
+        primary_store=MemoryStore(),
+        tmp_store=tmp_path / "tmp.zarr",
+        get_template_fn=config.get_template,
+        append_dim=config.append_dim,
+        all_data_vars=config.data_vars,
+        reformat_job_name="test-update",
+    )
+
+    expected_inits = pd.date_range(stored_init, expected_end)
+    assert len(jobs) == len(expected_inits) * len(config.data_vars)
+    for init_time in expected_inits:
+        init_jobs = [
+            job
+            for job in jobs
+            if template.init_time.values[job.region.start] == init_time
+        ]
+        assert {var.path for job in init_jobs for var in job.data_vars} == {
+            var.path for var in config.data_vars
+        }
+    assert all(job.region.stop == job.region.start + 1 for job in jobs)
+    for node in template.subtree:
+        assert node.init_time.values[-1] == pd.Timestamp(expected_end)
+    clock.assert_called_once_with("UTC")
 
 
 # read_data fills one (init_time, lead_time, ensemble_member) slot of the output, so
