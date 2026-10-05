@@ -26,7 +26,6 @@ import pandas as pd
 import pytest
 import xarray as xr
 import zarr
-from gribberish.zarr import GribberishCodec
 from pydantic import ValidationError, computed_field
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
@@ -55,7 +54,14 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, Dim, Dims, Timedelta, Timestamp
+from reformatters.common.types import (
+    AppendDim,
+    CodecConfig,
+    Dim,
+    Dims,
+    Timedelta,
+    Timestamp,
+)
 from reformatters.common.virtual_region_job import (
     VirtualRef,
     VirtualRegionJob,
@@ -2106,7 +2112,7 @@ def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -
     and ref emit without ever being invoked. We never decode here (no real GRIB) -
     we assert the codec persists in metadata and the ref lands in the manifest."""
     dataset = _make_dataset(tmp_path)
-    serializer = GribberishCodec(var="TMP").to_dict()
+    serializer: CodecConfig = {"name": "gribberish", "configuration": {"var": "TMP"}}
     template_utils.write_metadata(
         _create_template_ds(1, serializer=serializer), dataset.store_factory
     )

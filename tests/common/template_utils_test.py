@@ -5,7 +5,6 @@ import dask.array
 import numpy as np
 import pytest
 import xarray as xr
-from gribberish.zarr import GribberishCodec
 
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
@@ -24,6 +23,7 @@ from reformatters.common.template_utils import (
     sort_consolidated_metadata,
     store_written_coords,
 )
+from reformatters.common.types import CodecConfig
 
 # --- _get_mode_from_path_store tests ---
 
@@ -174,7 +174,7 @@ def test_assign_var_metadata_units_not_duplicated_when_in_encoding() -> None:
 
 
 def test_assign_var_metadata_includes_serializer_when_set() -> None:
-    codec = GribberishCodec(var="TMP")
+    serializer: CodecConfig = {"name": "gribberish", "configuration": {"var": "TMP"}}
 
     class SerializerVar(DataVar[BaseInternalAttrs]):
         encoding: Encoding = Encoding(
@@ -182,7 +182,7 @@ def test_assign_var_metadata_includes_serializer_when_set() -> None:
             fill_value=np.nan,
             chunks=(1,),
             shards=None,
-            serializer=codec.to_dict(),
+            serializer=serializer,
         )
         attrs: DataVarAttrs = DataVarAttrs(
             units="K",
@@ -197,7 +197,7 @@ def test_assign_var_metadata_includes_serializer_when_set() -> None:
     da = xr.DataArray([1.0, 2.0], name="temperature_2m")
     result = assign_var_metadata(da, SerializerVar(name="temperature_2m"))
 
-    assert result.encoding["serializer"] == codec.to_dict()
+    assert result.encoding["serializer"] == serializer
 
 
 def test_assign_var_metadata_omits_serializer_when_none() -> None:

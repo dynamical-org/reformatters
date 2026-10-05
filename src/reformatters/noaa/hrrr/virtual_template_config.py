@@ -5,7 +5,6 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 import xarray as xr
-from gribberish.zarr import GribberishCodec
 from pydantic import computed_field
 from zarr.codecs import ScaleOffset
 
@@ -382,9 +381,14 @@ def _virtual_encoding(
         shards=None,
         compressors=(),
         filters=filters,
-        serializer=GribberishCodec(
-            var=element, adjust_longitude_range=True, north_up=True
-        ).to_dict(),
+        serializer={
+            "name": "gribberish",
+            "configuration": {
+                "var": element,
+                "adjust_longitude_range": True,
+                "north_up": True,
+            },
+        },
     )
 
 

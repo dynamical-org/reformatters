@@ -19,7 +19,7 @@
 #     )
 #     assert var.encoding.shards is None
 #     assert var.encoding.compressors == ()
-#     assert var.encoding.serializer is not None  # e.g. GribberishCodec(...).to_dict()
+#     assert var.encoding.serializer is not None  # a CodecConfig dictionary
 
 
 # def test_coords_match_codec_decoded_grid() -> None:

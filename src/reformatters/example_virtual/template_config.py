@@ -31,8 +31,7 @@ from reformatters.common.zarr import (
 # VARIABLE encoding (see `data_vars` below); the coordinates are small arrays we
 # materialize normally, so this template's coords are identical to a materialized
 # dataset's. The per-variable serializer that decodes a raw GRIB message lives in
-# the data var encoding, e.g.:
-# from gribberish.zarr import GribberishCodec
+# the data var encoding as a CodecConfig dictionary.
 
 
 class ExampleInternalAttrs(BaseInternalAttrs):
@@ -306,9 +305,10 @@ class ExampleVirtualTemplateConfig(TemplateConfig[ExampleDataVar]):
            place each reference, so it must match the source file layout exactly.
 
         2. We never re-encode the bytes for storage (no compressors of our own); a
-           per-variable `serializer` (a zarr v3 ArrayBytesCodec, e.g. GribberishCodec)
-           decodes the raw GRIB message at read time. Declare `dtype` as whatever that
-           codec produces (GribberishCodec decodes to float64) to avoid a cast.
+           per-variable `serializer` is a CodecConfig dictionary naming a zarr v3
+           ArrayBytesCodec (e.g. GribberishCodec) that decodes the raw GRIB message at
+           read time. Declare `dtype` as whatever that codec produces (GribberishCodec
+           decodes to float64) to avoid a cast.
 
         Served values are otherwise the RAW source values. A transform the materialized
         pipeline applies splits two ways here:
@@ -338,9 +338,14 @@ class ExampleVirtualTemplateConfig(TemplateConfig[ExampleDataVar]):
         #     # north_up flips each message north-first (row 0 = largest latitude) and
         #     # adjust_longitude_range rewraps a global grid to -180..+180 (no-op otherwise);
         #     # set both on every GribberishCodec so all our datasets share one grid convention.
-        #     serializer=GribberishCodec(
-        #         var="TMP", north_up=True, adjust_longitude_range=True
-        #     ).to_dict(),
+        #     serializer={
+        #         "name": "gribberish",
+        #         "configuration": {
+        #             "var": "TMP",
+        #             "north_up": True,
+        #             "adjust_longitude_range": True,
+        #         },
+        #     },
         # )
 
         # return [
