@@ -47,7 +47,7 @@
     "short_name": "skt",
     "standard_name": "surface_temperature",
     "units": "degree_Celsius",
-    "comment": "The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates temperature_surface_mean; standard deviation is provided by temperature_surface_standard_deviation without the statistic dimension.",
+    "comment": "The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as temperature_surface_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

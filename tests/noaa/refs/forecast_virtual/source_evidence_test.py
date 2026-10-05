@@ -33,18 +33,7 @@ def test_retained_zero_width_messages_account_for_the_affected_schema() -> None:
             v.name
             for v, _ in lookup[element, level, window, coord.index_selectors(selectors)]
         }
-        expected = set()
-        for name in record["variables"]:
-            var = next(v for v in job.data_vars if v.name == name)
-            if var.has_statistic and var.internal_attrs.source_families == ("mean",):
-                expected.update(
-                    (name, f"{name}_mean")
-                    if family == "mean"
-                    else (f"{name}_standard_deviation",)
-                )
-            else:
-                expected.add(name)
-        assert names == expected, key
+        assert names == set(record["variables"]), key
         affected.update(names)
     declared = {v.name for v in NoaaRefsForecastVirtualTemplateConfig().data_vars}
     assert len(affected) == 60

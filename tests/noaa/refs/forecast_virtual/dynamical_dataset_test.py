@@ -115,18 +115,6 @@ def assert_offset_gdal_samples(
                     file.open() as source,
                 ):
                     expected = source.read(1)
-                alias = variables[f"{name}_{label}"]
-                (alias_key,) = job._resolve_chunk_keys([(loc, alias)])
-                assert alias_key is not None
-                refs = asyncio.run(manifest_refs(store, alias.name))
-                assert refs[alias_key] == (url, offset, length)
-                actual = ds[alias.name].sel(loc).values
-                np.testing.assert_allclose(
-                    actual,
-                    expected - 273.15 if family == "mean" else expected,
-                    rtol=GDAL_RTOL,
-                    atol=1e-4,
-                )
                 statistic_refs = asyncio.run(manifest_refs(store, name))
                 assert all(key[1] == 0 for key in statistic_refs)
                 (statistic_key,) = job._resolve_chunk_keys(
@@ -134,17 +122,27 @@ def assert_offset_gdal_samples(
                 )
                 assert statistic_key is not None
                 if family == "mean":
-                    assert statistic_refs[statistic_key] == refs[alias_key]
-                    np.testing.assert_array_equal(
-                        actual, ds[name].sel({**loc, "statistic": label}).values
-                    )
+                    assert statistic_refs[statistic_key] == (url, offset, length)
+                    actual = ds[name].sel({**loc, "statistic": label}).values
                 else:
+                    deviation = variables[f"{name}_standard_deviation"]
+                    (deviation_key,) = job._resolve_chunk_keys([(loc, deviation)])
+                    assert deviation_key is not None
+                    deviation_refs = asyncio.run(manifest_refs(store, deviation.name))
+                    assert deviation_refs[deviation_key] == (url, offset, length)
+                    actual = ds[deviation.name].sel(loc).values
                     assert statistic_key not in statistic_refs
                     assert np.isnan(
                         ds[name].sel({**loc, "statistic": label}).values
                     ).all()
+                np.testing.assert_allclose(
+                    actual,
+                    expected - 273.15 if family == "mean" else expected,
+                    rtol=GDAL_RTOL,
+                    atol=1e-4,
+                )
                 log.info(
-                    f"OFFSET GDAL ORACLE {init} {name} {family} offset={offset} bytes={length} mean_alias_equal={family == 'mean'}"
+                    f"OFFSET GDAL ORACLE {init} {name} {family} offset={offset} bytes={length}"
                 )
 
 
@@ -249,11 +247,7 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     variables = [
         *SNAPSHOTS["variables"],
         *[name for name in OFFSET_SAMPLES if name not in SNAPSHOTS["variables"]],
-        *[
-            f"{name}_{label}"
-            for name in OFFSET_SAMPLES
-            for label in ("mean", "standard_deviation")
-        ],
+        *[f"{name}_standard_deviation" for name in OFFSET_SAMPLES],
     ]
     selected = [v for v in config.data_vars if v.name in variables]
     original_template = config.get_template

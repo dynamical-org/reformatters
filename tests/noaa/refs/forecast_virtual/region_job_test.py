@@ -1,5 +1,4 @@
 import re
-from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -129,30 +128,7 @@ def test_every_source_message_is_referenced_except_the_explicit_duplicate(
         assert {ref.offset for ref in refs} == {
             line[0] for line in lines
         } - accounted, path
-        aliases = [
-            v
-            for v in coord.data_vars
-            if v.name.endswith("_mean")
-            and not v.has_statistic
-            and v.internal_attrs.source_families == ("mean",)
-        ]
-        assert len(aliases) == (13 if family == "mean" else 0), path
-        assert len(refs) == len(lines) - len(accounted) + len(aliases), path
-        by_name = {ref.data_var.name: ref for ref in refs}
-        offset_counts = Counter(ref.offset for ref in refs)
-        alias_offsets = set()
-        for var in aliases:
-            original = by_name[var.name.removesuffix("_mean")]
-            alias = by_name[var.name]
-            assert (original.location, original.offset, original.length) == (
-                alias.location,
-                alias.offset,
-                alias.length,
-            )
-            alias_offsets.add(alias.offset)
-        assert {
-            offset: count for offset, count in offset_counts.items() if count > 1
-        } == dict.fromkeys(alias_offsets, 2), path
+        assert len(refs) == len(lines) - len(accounted), path
         assert all(ref.out_loc == coord.out_loc() for ref in refs)
         if family == "prob":
             categorical_names = {
@@ -180,14 +156,14 @@ def test_every_source_message_is_referenced_except_the_explicit_duplicate(
             with pytest.raises(AssertionError, match="required GRIB messages absent"):
                 job._check_refs_complete(
                     coord,
-                    [ref for ref in refs if ref.data_var.name != "temperature_2m_mean"],
+                    [ref for ref in refs if ref.data_var.name != "temperature_2m"],
                 )
             with pytest.raises(AssertionError, match="duplicate output references"):
                 job._check_refs_complete(coord, [*refs, refs[0]])
         duplicates += len(accounted)
         total_refs += len(refs)
     assert duplicates == (60 if day == "20261002" else 8)
-    assert total_refs > 2500
+    assert total_refs == (20349 if day == "20261002" else 2975)
 
 
 def test_mean_coords_exclude_exactly_the_five_spread_only_fields() -> None:

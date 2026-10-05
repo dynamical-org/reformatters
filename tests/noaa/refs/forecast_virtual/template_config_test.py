@@ -33,8 +33,15 @@ class TinyProductsConfig(NoaaRefsForecastVirtualTemplateConfig):
 def test_complete_schema_dimensions_and_encoding() -> None:
     config = NoaaRefsForecastVirtualTemplateConfig()
     variables = config.data_vars
-    assert len(variables) == len({v.path for v in variables}) == 373
+    assert len(variables) == len({v.path for v in variables}) == 360
     assert sum(v.has_statistic for v in variables) == 82
+    assert {
+        families: sum(
+            v.has_statistic and v.internal_attrs.source_families == families
+            for v in variables
+        )
+        for families in (("mean", "sprd"), ("mean",), ("sprd",))
+    } == {("mean", "sprd"): 64, ("mean",): 13, ("sprd",): 5}
     assert (
         sum(
             v.internal_attrs.source_families[0] in ("pmmn", "lpmm", "avrg")
@@ -49,6 +56,9 @@ def test_complete_schema_dimensions_and_encoding() -> None:
         )
         == 252
     )
+    assert all(
+        v.has_statistic for v in variables if "mean" in v.internal_attrs.source_families
+    )
     assert all(v.group is ROOT for v in variables)
     assert set(config.dimension_coordinates()) == set(config.all_dims)
     assert config.groups == (ROOT,)
@@ -61,7 +71,7 @@ def test_complete_schema_dimensions_and_encoding() -> None:
         assert np.isnan(var.encoding.fill_value)
 
 
-def test_all_offset_fields_have_mean_aliases_and_unshifted_named_differences() -> None:
+def test_offset_fields_have_mean_only_slices_and_kelvin_deviations() -> None:
     config = NoaaRefsForecastVirtualTemplateConfig()
     variables = {v.name: v for v in config.data_vars}
     offset_names = {
@@ -96,36 +106,33 @@ def test_all_offset_fields_have_mean_aliases_and_unshifted_named_differences() -
     }
     assert differences == {f"{name}_standard_deviation" for name in offset_names}
     for name in offset_names:
-        statistic, mean, deviation = (
-            variables[key]
-            for key in (name, f"{name}_mean", f"{name}_standard_deviation")
-        )
-        assert (
-            statistic.internal_attrs.source_families
-            == mean.internal_attrs.source_families
-            == ("mean",)
-        )
+        statistic = variables[name]
+        deviation = variables[f"{name}_standard_deviation"]
+        assert statistic.internal_attrs.source_families == ("mean",)
         assert statistic.has_statistic
-        assert not mean.has_statistic
         assert not deviation.has_statistic
-        assert statistic.attrs.units == mean.attrs.units == "degree_Celsius"
-        assert statistic.encoding.filters == mean.encoding.filters
+        assert statistic.attrs.units == "degree_Celsius"
         assert deviation.attrs.units == "K"
         assert deviation.attrs.standard_name is None
         assert deviation.attrs.short_name == deviation.name
         assert (
             deviation.attrs.long_name
-            == f"Standard deviation of {mean.attrs.long_name.lower()}"
+            == f"Standard deviation of {statistic.attrs.long_name.lower()}"
         )
         assert not deviation.encoding.filters
-        assert "deliberately empty" in (statistic.attrs.comment or "")
-        assert mean.name in (statistic.attrs.comment or "")
-        assert deviation.name in (statistic.attrs.comment or "")
-        assert (
-            config.data_var_dims(mean)
-            == config.data_var_dims(deviation)
-            == ("init_time", "lead_time", "y", "x")
+        assert "intentionally NaN" in (statistic.attrs.comment or "")
+        assert "does not indicate missing source data" in (
+            statistic.attrs.comment or ""
         )
+        assert deviation.name in (statistic.attrs.comment or "")
+        assert config.data_var_dims(statistic) == (
+            "init_time",
+            "statistic",
+            "lead_time",
+            "y",
+            "x",
+        )
+        assert config.data_var_dims(deviation) == ("init_time", "lead_time", "y", "x")
     soil_comment = variables["soil_temperature_0m"].attrs.comment or ""
     assert "raw zero before Celsius conversion" in soil_comment
     assert "use a land mask" in soil_comment
@@ -146,7 +153,7 @@ def test_single_isobaric_names_use_hpa_without_renaming_layers() -> None:
             assert "hpa" not in var.name
             assert "mb" in level
             layers.append(var)
-    assert len(single_levels) == 100
+    assert len(single_levels) == 91
     assert layers
     names = {v.name for v in config.data_vars}
     assert {

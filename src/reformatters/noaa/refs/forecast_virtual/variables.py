@@ -1701,7 +1701,7 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
                         None,
                         (
                             attrs.comment,
-                            f"The standard_deviation slice is deliberately empty (NaN). The mean slice duplicates {name}_mean; standard deviation is provided by {name}_standard_deviation without the statistic dimension.",
+                            f"The standard_deviation slice is intentionally NaN and does not indicate missing source data. Standard deviation is provided as {name}_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
                         ),
                     )
                 ),
@@ -1719,49 +1719,40 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
             )
         )
         if has_offset:
-            for label, family in (("mean", "mean"), ("standard_deviation", "sprd")):
-                alias_name = f"{name}_{label}"
-                alias_attrs = replace(
-                    field.attrs,
-                    comment=" ".join(
-                        filter(
-                            None,
-                            (
-                                field.attrs.comment,
-                                f"Ensemble mean in degree_Celsius, identical to the mean slice of {name}."
-                                if label == "mean"
-                                else "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
-                            ),
-                        )
+            deviation_name = f"{name}_standard_deviation"
+            deviation_attrs = replace(
+                field.attrs,
+                short_name=deviation_name,
+                long_name=f"Standard deviation of {field.attrs.long_name.lower()}",
+                standard_name=None,
+                units="K",
+                comment=" ".join(
+                    filter(
+                        None,
+                        (
+                            field.attrs.comment,
+                            "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
+                        ),
+                    )
+                ),
+            )
+            result.append(
+                _variable(
+                    dims,
+                    field,
+                    name=deviation_name,
+                    attrs=deviation_attrs,
+                    families=("sprd",),
+                    duration=duration,
+                    selectors=selectors,
+                    filters=tuple(
+                        codec
+                        for codec in field.filters
+                        if codec.get("name") != "scale_offset"
+                        or codec.get("configuration", {}).get("offset", 0) == 0
                     ),
                 )
-                if label == "standard_deviation":
-                    alias_attrs = replace(
-                        alias_attrs,
-                        short_name=alias_name,
-                        long_name=f"Standard deviation of {field.attrs.long_name.lower()}",
-                        standard_name=None,
-                        units="K",
-                    )
-                result.append(
-                    _variable(
-                        dims,
-                        field,
-                        name=alias_name,
-                        attrs=alias_attrs,
-                        families=(family,),
-                        duration=duration,
-                        selectors=selectors,
-                        filters=tuple(
-                            codec
-                            for codec in field.filters
-                            if codec.get("name") != "scale_offset"
-                            or codec.get("configuration", {}).get("offset", 0) == 0
-                        )
-                        if label == "standard_deviation"
-                        else None,
-                    )
-                )
+            )
     for family, element, level, duration, selectors in _SPARSE:
         field = _FIELDS[element, level]
         prefix, description = {
