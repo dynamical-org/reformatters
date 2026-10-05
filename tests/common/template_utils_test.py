@@ -174,7 +174,8 @@ def test_assign_var_metadata_units_not_duplicated_when_in_encoding() -> None:
 
 
 def test_assign_var_metadata_includes_serializer_when_set() -> None:
-    codec = GribberishCodec(var="TMP")
+    # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
+    codec = GribberishCodec(var="TMP")  # ty: ignore[call-non-callable]
 
     class SerializerVar(DataVar[BaseInternalAttrs]):
         encoding: Encoding = Encoding(

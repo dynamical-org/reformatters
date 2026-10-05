@@ -50,7 +50,7 @@ dev = [
     "markdown-it-py>=4.0.0",
     "matplotlib~=3.11",
     "pandas-stubs~=3.0",
-    "prek==0.5.3",
+    "prek==0.5.4",
     "pyqt6>=6.7.1",
     "pytest~=9.1",
     "pytest-sugar~=1.0",
