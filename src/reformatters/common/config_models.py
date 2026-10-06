@@ -154,7 +154,10 @@ def codecs_to_dicts(
             # converted on first construction); pass through so this is idempotent.
             result.append(codec)
         elif hasattr(codec, "to_dict"):
-            result.append(codec.to_dict())  # ty: ignore[call-non-callable]
+            assert callable(codec.to_dict)
+            codec_config = codec.to_dict()
+            assert isinstance(codec_config, dict)
+            result.append(codec_config)
         else:
             result.append(dict(codec.__dict__))
     return result

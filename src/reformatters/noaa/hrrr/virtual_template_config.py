@@ -382,8 +382,7 @@ def _virtual_encoding(
         shards=None,
         compressors=(),
         filters=filters,
-        # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
-        serializer=GribberishCodec(  # ty: ignore[call-non-callable]
+        serializer=GribberishCodec(
             var=element, adjust_longitude_range=True, north_up=True
         ).to_dict(),
     )

@@ -26,18 +26,17 @@ dependencies = [
     "icechunk~=2.2",
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
-    "gribberish==1.8.0",
+    "gribberish==1.8.1",
 ]
 
 [build-system]
 requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
-# icechunk 2.2.2 (2026-09-17) reviewed and approved for immediate use;
-# remove this exception after 2026-09-22, once the release clears the 5-day exclude-newer window.
+# Reviewed releases can have package-specific cutoffs within the five-day window.
 [tool.uv]
 exclude-newer = "5 days"
-exclude-newer-package = { icechunk = "2026-09-18T00:00:00Z" }
+exclude-newer-package = { icechunk = "2026-09-18T00:00:00Z", gribberish = "2026-10-07T00:00:00Z" }
 
 
 [project.scripts]
