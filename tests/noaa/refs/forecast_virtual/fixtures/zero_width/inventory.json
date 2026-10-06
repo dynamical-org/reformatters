@@ -5,7 +5,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -16,7 +15,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -27,7 +25,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -38,7 +35,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -49,7 +45,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -60,7 +55,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -71,7 +65,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -82,7 +75,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -93,7 +85,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -104,7 +95,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -115,7 +105,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -126,7 +115,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -137,7 +125,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -148,7 +135,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "freezing_rain_fraction_surface"
     ]
@@ -159,7 +145,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -170,7 +155,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -181,7 +165,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -192,7 +175,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -203,7 +185,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -214,7 +195,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -225,7 +205,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -236,7 +215,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -247,7 +225,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -258,7 +235,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -269,7 +245,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -280,7 +255,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -291,7 +265,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -302,7 +275,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "ice_pellets_fraction_surface"
     ]
@@ -313,7 +285,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -324,7 +295,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -335,7 +305,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -346,7 +315,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -357,7 +325,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -368,7 +335,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -379,7 +345,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -390,7 +355,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -401,7 +365,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -412,7 +375,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -423,7 +385,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -434,7 +395,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snow_fraction_surface"
     ]
@@ -445,7 +405,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -456,7 +415,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -467,7 +425,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -478,7 +435,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -489,7 +445,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -500,7 +455,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -511,7 +465,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -522,7 +475,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "rain_fraction_surface"
     ]
@@ -533,7 +485,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -544,7 +495,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -555,7 +505,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -566,7 +515,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -577,7 +525,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -588,7 +535,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -599,7 +545,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -610,7 +555,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f5000342c8000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_convective_inhibition_90_0mb_below_0"
     ]
@@ -621,7 +565,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -632,7 +575,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -643,7 +585,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -654,7 +595,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -665,7 +605,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -676,7 +615,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -687,7 +625,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -698,7 +635,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
     ]
@@ -709,7 +645,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -720,7 +655,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -731,7 +665,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -742,7 +675,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -753,7 +685,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -764,7 +695,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -775,7 +705,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254"
     ]
@@ -786,7 +715,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -797,7 +725,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -808,7 +735,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -819,7 +745,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -830,7 +755,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -841,7 +765,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -852,7 +775,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -863,7 +785,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54"
     ]
@@ -874,7 +795,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -885,7 +805,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -896,7 +815,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -907,7 +825,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -918,7 +835,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -929,7 +845,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -940,7 +855,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -951,7 +865,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35"
     ]
@@ -962,7 +875,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -973,7 +885,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -984,7 +895,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -995,7 +905,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -1006,7 +915,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -1017,7 +925,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -1028,7 +935,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_1000hpa_at_least_1"
     ]
@@ -1039,7 +945,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1050,7 +955,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1061,7 +965,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1072,7 +975,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1083,7 +985,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1094,7 +995,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_900hpa_at_least_1"
     ]
@@ -1105,7 +1005,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_800hpa_at_least_1"
     ]
@@ -1116,7 +1015,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_800hpa_at_least_1"
     ]
@@ -1127,7 +1025,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_icing_800hpa_at_least_1"
     ]
@@ -1138,7 +1035,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_freezing_rain_surface"
     ]
@@ -1149,7 +1045,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_freezing_rain_surface"
     ]
@@ -1160,7 +1055,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_freezing_rain_surface"
     ]
@@ -1171,7 +1065,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_freezing_rain_surface"
     ]
@@ -1182,7 +1075,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_freezing_rain_surface"
     ]
@@ -1193,7 +1085,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_ice_pellets_surface"
     ]
@@ -1204,7 +1095,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_ice_pellets_surface"
     ]
@@ -1215,7 +1105,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_ice_pellets_surface"
     ]
@@ -1226,7 +1115,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1237,7 +1125,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1248,7 +1135,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1259,7 +1145,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1270,7 +1155,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1281,7 +1165,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_41p2"
     ]
@@ -1292,7 +1175,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1303,7 +1185,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1314,7 +1195,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1325,7 +1205,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1336,7 +1215,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1347,7 +1225,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1358,7 +1235,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1369,7 +1245,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_850hpa_above_51p5"
     ]
@@ -1380,7 +1255,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_41p2"
     ]
@@ -1391,7 +1265,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_41p2"
     ]
@@ -1402,7 +1275,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_41p2"
     ]
@@ -1413,7 +1285,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1424,7 +1295,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1435,7 +1305,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1446,7 +1315,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1457,7 +1325,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1468,7 +1335,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1479,7 +1345,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1490,7 +1355,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_550hpa_above_51p5"
     ]
@@ -1501,7 +1365,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p076"
     ]
@@ -1512,7 +1375,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p076"
     ]
@@ -1523,7 +1385,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p076"
     ]
@@ -1534,7 +1395,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p076"
     ]
@@ -1545,7 +1405,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1556,7 +1415,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1567,7 +1425,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1578,7 +1435,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1589,7 +1445,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1600,7 +1455,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152"
     ]
@@ -1611,7 +1465,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p076"
     ]
@@ -1622,7 +1475,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p076"
     ]
@@ -1633,7 +1485,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p076"
     ]
@@ -1644,7 +1495,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1655,7 +1505,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1666,7 +1515,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1677,7 +1525,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1688,7 +1535,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1699,7 +1545,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152"
     ]
@@ -1710,7 +1555,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1721,7 +1565,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1732,7 +1575,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1743,7 +1585,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1754,7 +1595,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1765,7 +1605,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304"
     ]
@@ -1776,7 +1615,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254"
     ]
@@ -1787,7 +1625,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254"
     ]
@@ -1798,7 +1635,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254"
     ]
@@ -1809,7 +1645,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254"
     ]
@@ -1820,7 +1655,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254"
     ]
@@ -1831,7 +1665,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1842,7 +1675,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1853,7 +1685,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1864,7 +1695,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1875,7 +1705,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1886,7 +1715,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54"
     ]
@@ -1897,7 +1725,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1908,7 +1735,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1919,7 +1745,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1930,7 +1755,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1941,7 +1765,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1952,7 +1775,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35"
     ]
@@ -1963,7 +1785,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254"
     ]
@@ -1974,7 +1795,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254"
     ]
@@ -1985,7 +1805,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254"
     ]
@@ -1996,7 +1815,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254"
     ]
@@ -2007,7 +1825,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2018,7 +1835,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2029,7 +1845,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2040,7 +1855,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2051,7 +1865,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2062,7 +1875,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54"
     ]
@@ -2073,7 +1885,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2084,7 +1895,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2095,7 +1905,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2106,7 +1915,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2117,7 +1925,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2128,7 +1935,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35"
     ]
@@ -2139,7 +1945,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2150,7 +1955,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2161,7 +1965,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2172,7 +1975,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2183,7 +1985,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2194,7 +1995,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7"
     ]
@@ -2205,7 +2005,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p304"
     ]
@@ -2216,7 +2015,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p304"
     ]
@@ -2227,7 +2025,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p304"
     ]
@@ -2238,7 +2035,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p304"
     ]
@@ -2249,7 +2045,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p457"
     ]
@@ -2260,7 +2055,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p457"
     ]
@@ -2271,7 +2065,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p457"
     ]
@@ -2282,7 +2075,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p457"
     ]
@@ -2293,7 +2085,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p304"
     ]
@@ -2304,7 +2095,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p304"
     ]
@@ -2315,7 +2105,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p304"
     ]
@@ -2326,7 +2115,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p304"
     ]
@@ -2337,7 +2125,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p457"
     ]
@@ -2348,7 +2135,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p457"
     ]
@@ -2359,7 +2145,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p457"
     ]
@@ -2370,7 +2155,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p457"
     ]
@@ -2381,7 +2165,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54"
     ]
@@ -2392,7 +2175,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54"
     ]
@@ -2403,7 +2185,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54"
     ]
@@ -2414,7 +2195,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54"
     ]
@@ -2425,7 +2205,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35"
     ]
@@ -2436,7 +2215,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35"
     ]
@@ -2447,7 +2225,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35"
     ]
@@ -2458,7 +2235,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35"
     ]
@@ -2469,7 +2245,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7"
     ]
@@ -2480,7 +2255,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7"
     ]
@@ -2491,7 +2265,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7"
     ]
@@ -2502,7 +2275,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7"
     ]
@@ -2513,7 +2285,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54"
     ]
@@ -2524,7 +2295,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54"
     ]
@@ -2535,7 +2305,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54"
     ]
@@ -2546,7 +2315,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54"
     ]
@@ -2557,7 +2325,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35"
     ]
@@ -2568,7 +2335,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35"
     ]
@@ -2579,7 +2345,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35"
     ]
@@ -2590,7 +2355,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35"
     ]
@@ -2601,7 +2365,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7"
     ]
@@ -2612,7 +2375,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7"
     ]
@@ -2623,7 +2385,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7"
     ]
@@ -2634,7 +2395,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7"
     ]
@@ -2645,7 +2405,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4"
     ]
@@ -2656,7 +2415,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4"
     ]
@@ -2667,7 +2425,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4"
     ]
@@ -2678,7 +2435,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4"
     ]
@@ -2689,7 +2445,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_1_hour_surface"
     ]
@@ -2700,7 +2455,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_1_hour_surface"
     ]
@@ -2711,7 +2465,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_1_hour_surface"
     ]
@@ -2722,7 +2475,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_1_hour_surface"
     ]
@@ -2733,7 +2485,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_3_hour_surface"
     ]
@@ -2744,7 +2495,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "snowfall_water_equivalent_3_hour_surface"
     ]
@@ -2755,7 +2505,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "total_snowfall_1_hour_surface"
     ]
@@ -2766,7 +2515,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "total_snowfall_1_hour_surface"
     ]
@@ -2777,7 +2525,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "fog_liquid_water_content_0m"
     ]
@@ -2788,7 +2535,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "fog_liquid_water_content_0m"
     ]
@@ -2799,7 +2545,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_precipitation_12_hour_surface_above_203p2"
     ]
@@ -2810,7 +2555,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p025"
     ]
@@ -2821,7 +2565,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p025"
     ]
@@ -2832,7 +2575,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p025"
     ]
@@ -2843,7 +2585,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p025"
     ]
@@ -2854,7 +2595,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p076"
     ]
@@ -2865,7 +2605,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p076"
     ]
@@ -2876,7 +2615,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p152"
     ]
@@ -2887,7 +2625,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p152"
     ]
@@ -2898,7 +2635,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p152"
     ]
@@ -2909,7 +2645,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p152"
     ]
@@ -2920,7 +2655,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_0p254"
     ]
@@ -2931,7 +2665,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_12_hour_surface_above_0p254"
     ]
@@ -2942,7 +2675,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_0p254"
     ]
@@ -2953,7 +2685,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_freezing_rain_24_hour_surface_above_0p254"
     ]
@@ -2964,7 +2695,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_categorical_snow_surface"
     ]
@@ -2975,7 +2705,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_wind_speed_10m_above_25p72"
     ]
@@ -2986,7 +2715,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_wind_speed_10m_above_30p9"
     ]
@@ -2997,7 +2725,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_wind_speed_10m_above_30p9"
     ]
@@ -3008,7 +2735,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "neighborhood_probability_of_wind_speed_10m_above_30p9"
     ]
@@ -3019,7 +2745,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_wind_speed_10m_at_least_9_and_relative_humidity_2m_at_most_20"
     ]
@@ -3030,7 +2755,6 @@
     "drt": 3,
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
-    "error": "PanicException('cannot load 32 bits from a 0-bit region')",
     "variables": [
       "probability_of_temperature_2m_below_273p15"
     ]

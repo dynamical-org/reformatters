@@ -154,17 +154,20 @@ def test_operational_configuration_is_suspended_and_requires_complete_manifests(
             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
         )
     )
-    update, validate = dataset.operational_kubernetes_resources("test")
+    (update,) = dataset.operational_kubernetes_resources("test")
     assert update.suspend
-    assert validate.suspend
     assert update.schedule == "55 1,7,13,19 * * *"
-    assert validate.schedule == "5 4,10,16,22 * * *"
+    assert update.pod_active_deadline == pd.Timedelta("125min")
+    assert update.cpu == "2"
+    assert update.memory == "3.7G"
     assert dataset.icechunk_virtual_config is not None
     assert (
         dataset.icechunk_virtual_config.containers[0].url_prefix
         == "s3://noaa-rrfs-ops-pds/"
     )
-    _, completeness, decode = dataset.validators()
+    current, completeness, decode = dataset.validators()
+    assert isinstance(current, validation.CheckCurrentData)
+    assert current.max_delay == pd.Timedelta("235min")
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (1.0,)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
