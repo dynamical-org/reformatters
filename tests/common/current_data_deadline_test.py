@@ -7,12 +7,14 @@ import zarr.storage
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
+from reformatters.common.kubernetes import ReformatCronJob
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 _FRESHNESS_DEADLINES = [
     ("noaa-gfs-forecast", "2026-09-27 00:00", "5h48m"),
     ("noaa-gfs-analysis", "2026-09-26 20:00", "7h"),
-    ("noaa-gfs-analysis-virtual", "2026-09-26 22:00", "3h33m"),
-    ("noaa-gfs-forecast-virtual", "2026-09-26 18:00", "3h33m"),
+    ("noaa-gfs-analysis-virtual", "2026-09-26 22:00", "3h37m"),
+    ("noaa-gfs-forecast-virtual", "2026-09-26 18:00", "3h37m"),
     ("noaa-gefs-analysis", "2026-09-26 15:00", "12h"),
     ("noaa-gefs-forecast-35-day", "2026-09-27 00:00", "7h05m"),
     ("noaa-gefs-analysis-0-25-degree-virtual", "2026-09-27 00:00", "3h49m"),
@@ -21,7 +23,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
     ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h03m"),
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "4h"),
-    ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "52m"),
+    ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "54m"),
     ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
@@ -119,7 +121,7 @@ def test_current_data_cases_cover_registered_datasets() -> None:
     ("dataset_id", "now", "latest"),
     [
         ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:51", "2026-09-26 23:00"),
-        ("noaa-gfs-forecast-virtual", "2026-09-27 03:32", "2026-09-26 18:00"),
+        ("noaa-gfs-forecast-virtual", "2026-09-27 03:36", "2026-09-26 18:00"),
         ("noaa-mrms-conus-analysis-hourly", "2026-09-27 05:04", "2026-09-27 04:00"),
         ("noaa-hrrr-analysis", "2026-09-27 03:58", "2026-09-27 00:00"),
     ],
@@ -130,3 +132,21 @@ def test_current_data_allows_source_and_processing_time(
     assert _check_at_time(
         dataset_id, pd.Timestamp(now), pd.Timestamp(latest), monkeypatch
     ).passed
+
+
+def test_virtual_polling_starts_before_freshness_deadline() -> None:
+    init = pd.Timestamp("2026-09-27")
+    for dataset in DYNAMICAL_DATASETS:
+        if not issubclass(dataset.region_job_class, VirtualRegionJob):
+            continue
+        for check in dataset.validators():
+            if not isinstance(check, validation.CheckCurrentData):
+                continue
+            update = next(
+                job
+                for job in dataset.operational_kubernetes_resources("test-image")
+                if isinstance(job, ReformatCronJob)
+            )
+            assert update.next_fire_time(init) < init + check.max_delay, (
+                dataset.dataset_id
+            )

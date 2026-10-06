@@ -285,8 +285,8 @@ class CheckCurrentData(Validator):
 
     A position is due `max_delay` after its own timestamp: expected source
     availability plus ingestion time and slack. Materialized datasets also account
-    for their update schedule and processing time. Deadlines follow the template's
-    append_dim_frequency grid, regardless of when validation runs.
+    for their update schedule and processing time. The append_dim_frequency grid is
+    anchored to the dataset's own positions, regardless of when validation runs.
     """
 
     max_delay: timedelta

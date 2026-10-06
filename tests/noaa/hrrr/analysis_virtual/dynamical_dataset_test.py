@@ -212,7 +212,7 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(minutes=52)
+    assert current_data.max_delay == timedelta(minutes=54)
 
     # discover_available extends time only to an hour holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no
