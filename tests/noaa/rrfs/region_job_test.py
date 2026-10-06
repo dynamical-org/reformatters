@@ -71,8 +71,6 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
         p for p in FIXTURES.glob(pattern) if ("subh" in p.name) == config.sub_hourly
     ]
     assert len(paths) >= 3
-    declared_deferred: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
-    seen_deferred: set[tuple[str, str, str, str, tuple[str, ...]]] = set()
     for path in paths:
         hour = int(path.name.split(".f")[1][:3])
         lead = pd.Timedelta(hours=hour)
@@ -109,51 +107,6 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
         refs = job.file_refs(coord, lines[-1][0] + 10_000_000)
         assert refs
         used_offsets = {r.offset for r in refs}
-        instant = "anl" if hour == 0 else f"{hour} hour fcst"
-        if family != "2dfld":
-            deferred = set()
-        elif config.members:
-            deferred = {
-                (
-                    "2dfld",
-                    "AOTK",
-                    "entire atmosphere (considered as a single layer)",
-                    instant,
-                    ("ENS=+1",),
-                ),
-                (
-                    "2dfld",
-                    "var discipline=2 master_table=2 parmcat=4 parm=26",
-                    "surface",
-                    "0-0 day ave fcst"
-                    if hour == 0
-                    else f"{hour - 1}-{hour} hour ave fcst",
-                    ("ENS=+1",),
-                ),
-            }
-        else:
-            deferred = {
-                ("2dfld", "SPFH", "surface", instant, ()),
-                ("2dfld", "PEVPR", "surface", instant, ()),
-            }
-            if hour == 0:
-                deferred.update(
-                    {
-                        ("2dfld", "VEGMIN", "surface", "anl", ()),
-                        ("2dfld", "VEGMAX", "surface", "anl", ()),
-                    }
-                )
-            if hour > 0:
-                deferred.add(
-                    (
-                        "2dfld",
-                        "PEVAP",
-                        "surface",
-                        f"{hour - 1}-{hour} hour acc fcst",
-                        (),
-                    )
-                )
-        declared_deferred.update(deferred)
         seen: set[tuple[str, str, str, tuple[str, ...]]] = set()
         for offset, element, level, window, selectors in lines:
             identity = (element, level, window, selectors)
@@ -166,13 +119,8 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                     and "-" in window
                     and len(set(window.split()[0].split("-"))) == 1
                 )
-                assert (
-                    duplicate or zero_placeholder or (family, *identity) in deferred
-                ), (path, identity)
-                if (family, *identity) in deferred:
-                    seen_deferred.add((family, *identity))
+                assert duplicate or zero_placeholder, (path, identity)
             seen.add(identity)
-    assert seen_deferred == declared_deferred
 
 
 def test_sub_hourly_file_contributes_four_precise_leads() -> None:

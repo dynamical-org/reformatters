@@ -19,6 +19,7 @@ from reformatters.noaa.rrfs.region_job import NoaaRrfsSourceFileCoord
 from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
     NoaaRrfsEnsForecastVirtualTemplateConfig,
 )
+from tests.noaa.rrfs.decoder_helpers import write_single_grib_chunk
 
 log = get_logger(__name__)
 SNAPSHOTS = json.loads(
@@ -37,16 +38,8 @@ def test_echo_top_no_echo_is_masked_by_cf_reader(tmp_path: Path) -> None:
 
     template = NoaaRrfsForecast84HourVirtualTemplateConfig().template_path()
     metadata = json.loads((template / "echo_top/zarr.json").read_text())
-    metadata["shape"] = [1, 1, 1059, 1799]
     store = tmp_path / "echo-top.zarr"
-    array_path = store / "echo_top"
-    chunk_path = array_path / "c/0/0/0/0"
-    chunk_path.parent.mkdir(parents=True)
-    (store / "zarr.json").write_text(
-        json.dumps({"zarr_format": 3, "node_type": "group", "attributes": {}})
-    )
-    (array_path / "zarr.json").write_text(json.dumps(metadata))
-    chunk_path.write_bytes(source_path.read_bytes())
+    write_single_grib_chunk(store, "echo_top", metadata, source_path.read_bytes())
 
     with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
         actual = dataset.echo_top.values.squeeze()

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import rasterio
 import xarray as xr
@@ -24,10 +25,10 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 323),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 323),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 328),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 328),
         (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 39),
-        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 64),
+        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 66),
     ],
     ids=lambda value: (
         value.dataset_id
@@ -35,23 +36,20 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
         else str(value)
     ),
 )
-def test_decoder_dependent_fields_are_deferred_in_config_and_stored_template(
+def test_source_available_fields_are_in_config_and_stored_template(
     config: NoaaRrfsForecastTemplateConfig, count: int
 ) -> None:
-    deterministic_deferred = {
+    deterministic_fields = {
         "minimum_vegetation_surface",
         "maximum_vegetation_surface",
         "specific_humidity_surface",
         "potential_evaporation_rate_surface",
         "potential_evaporation_surface",
     }
-    member_deferred = {
+    member_fields = {
         "aerosol_optical_thickness_atmosphere",
         "wildfire_potential_surface",
     }
-    deferred = deterministic_deferred | (
-        member_deferred if config.members or config.sub_hourly else set()
-    )
     configured_paths = {v.path for v in config.data_vars}
     with xr.open_datatree(
         config.template_path(), engine="zarr", chunks=None, consolidated=False
@@ -59,9 +57,52 @@ def test_decoder_dependent_fields_are_deferred_in_config_and_stored_template(
         stored_paths = set(flatten_groups(tree).data_vars)
     assert len(config.data_vars) == len(configured_paths) == count
     assert stored_paths == configured_paths
-    assert configured_paths.isdisjoint(deferred)
-    if not config.members and not config.sub_hourly:
-        assert member_deferred <= configured_paths
+    if config.sub_hourly:
+        assert configured_paths.isdisjoint(deterministic_fields | member_fields)
+    elif config.members:
+        assert member_fields <= configured_paths
+        assert configured_paths.isdisjoint(deterministic_fields)
+    else:
+        assert deterministic_fields | member_fields <= configured_paths
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        NoaaRrfsForecast84HourVirtualTemplateConfig(),
+        NoaaRrfsForecast18HourVirtualTemplateConfig(),
+        NoaaRrfsEnsForecastVirtualTemplateConfig(),
+    ],
+    ids=lambda c: c.dataset_id,
+)
+def test_source_lead_availability(
+    config: NoaaRrfsForecastTemplateConfig,
+) -> None:
+    hours = int(config.forecast_length / pd.Timedelta("1h")) + 1
+    expected = (
+        {
+            "aerosol_optical_thickness_atmosphere": range(hours),
+            "wildfire_potential_surface": range(hours),
+        }
+        if config.members
+        else {
+            "minimum_vegetation_surface": range(1),
+            "maximum_vegetation_surface": range(1),
+            "specific_humidity_surface": range(hours),
+            "potential_evaporation_rate_surface": range(hours),
+            "potential_evaporation_surface": range(1, hours),
+            "aerosol_optical_thickness_atmosphere": range(hours),
+            "wildfire_potential_surface": range(hours),
+        }
+    )
+    variables = {v.path: v for v in config.data_vars}
+    for name, available_hours in expected.items():
+        var = variables[name]
+        assert var.internal_attrs.source_family == "2dfld"
+        assert [
+            h for h in range(hours) if var.available_at(pd.Timedelta(hours=h))
+        ] == list(available_hours)
+        assert np.isnan(var.encoding.fill_value)
 
 
 @pytest.mark.parametrize(
