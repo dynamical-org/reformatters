@@ -7,7 +7,7 @@ To add a new dataset/data product, or add variable(s) to an existing dataset, fo
 Datasets are created in 3 phases:
 1. A template of the dataset, in the form of zarr metadata that is checked into the repo, is created with `uv run main <dataset_id> update-template`. This template (not in-code config) is loaded by steps 2 and 3 and drives processing and output in those steps. This approach of checking in the metadata allow us to review diffs if the structure or metadata of the dataset changes.
 2. A zarr backfill is run. A backfill validates the request against the existing store, then kicks off a kubernetes indexed job with each job index responsible for writing a portion of the zarr chunk data into the zarr archive.
-3. Operational updates to the zarr are run using a kubernetes cronjob and validated by another kubernetes cronjob which runs after the update is expected to succeed. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk backfills and materialized updates use a temporary branch that is atomically merged to main; virtual updates commit directly to main.
+3. Operational updates to the zarr are run using a kubernetes cronjob; the final update pod validates the result. Updates use the same parallel worker model as backfills. To ensure the archive is valid to readers throughout the update, zarr v3 metadata is written only after all workers finish, and icechunk backfills and materialized updates use a temporary branch that is atomically merged to main; virtual updates commit directly to main.
 
 ## Repository structure
 
@@ -122,7 +122,7 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 **Brings together** a `TemplateConfig` and `RegionJob` class, plus storage and operational configuration. Key responsibilities:
 - Declare `template_config` and `region_job_class`
 - Configure `primary_storage_config` and optional `replica_storage_configs`. Every new store is icechunk; zarr v3 is deprecated and the remaining zarr v3 stores are only ever replicas of an icechunk primary.
-- Implement `operational_kubernetes_resources()` - define update/validate cron jobs
+- Implement `operational_kubernetes_resources()` - define the update cron job
 - Implement `validators()` - return the operational validation checks for the dataset
 
 ## Dataset structures
@@ -169,7 +169,7 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 * `pytest` for testing
 * `prek` to automatically lint and format as you git commit
 * `docker` to package the code and dependencies
-* `kubernetes` indexed jobs to run work in parallel and cronjobs to run ongoing dataset updates and validation
+* `kubernetes` indexed jobs to run work in parallel and cronjobs to run ongoing dataset updates
 
 ## Development commands
 * `uv run prek install` to set up the git hooks that will ensure ruff check, ruff format and ty pass.

@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 
 from reformatters.__main__ import DYNAMICAL_DATASETS, app
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.storage import DatasetFormat
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
@@ -175,15 +175,11 @@ def test_operational_kubernetes_resources_are_valid(
     """Every dataset must define operational_kubernetes_resources that returns valid CronJobs."""
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image"))
 
-    assert len(cron_jobs) >= 2, (
-        f"{dataset.dataset_id}: expected at least an update and validate cronjob"
-    )
-
     reformat_jobs = [c for c in cron_jobs if isinstance(c, ReformatCronJob)]
-    validation_jobs = [c for c in cron_jobs if isinstance(c, ValidationCronJob)]
-
-    assert len(reformat_jobs) >= 1, f"{dataset.dataset_id}: missing ReformatCronJob"
-    assert len(validation_jobs) >= 1, f"{dataset.dataset_id}: missing ValidationCronJob"
+    assert len(reformat_jobs) == 1, (
+        f"{dataset.dataset_id}: expected one ReformatCronJob"
+    )
+    assert all(c.command != ["validate"] for c in cron_jobs)
 
 
 @pytest.mark.parametrize(

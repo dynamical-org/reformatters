@@ -5,7 +5,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -60,27 +60,13 @@ class NoaaGfsForecastVirtualDataset(
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="59 5,11,17,23 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="3.7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # An init is ingested by ~init+6h at the latest. Keep this under the
-            # ~12h between an init and the second validation run after it, or a wholly
-            # missed cycle is not yet due when that run looks.
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=30)),
+            # Allow for variation in source publication time.
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=50)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .region_job import (
@@ -41,23 +41,11 @@ class EcmwfAifsSingleForecastDataset(
             workers_total=workers,
             parallelism=workers,
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="23 */6 * * *",  # 10m (pod_active_deadline) after reformat at :13
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+6h13m (files publish by ~init+6h10m);
-            # validation fires at init+6h23m.
             validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=23)),
             validation.CheckRecentNans(append_dim_window=3),
         )

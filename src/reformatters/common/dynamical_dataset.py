@@ -1,5 +1,6 @@
 import inspect
 import json
+import math
 import os
 import subprocess
 from collections.abc import Sequence
@@ -29,7 +30,6 @@ from reformatters.common.kubernetes import (
     CronJob,
     Job,
     ReformatCronJob,
-    ValidationCronJob,
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
@@ -87,18 +87,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule=_VALIDATION_CRON_SCHEDULE,
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
         ```
         """
         raise NotImplementedError(
@@ -611,9 +601,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         replica.
         """
         with self._monitor(
-            ValidationCronJob,
+            ReformatCronJob,
             reformat_job_name,
             monitor_name=self._validation_monitor_name,
+            # Validate shares the same cron schedule as update, but we give it margin
+            # so it's not expected to start until after the update work completes.
+            checkin_margin=lambda cron: (
+                math.ceil(cron.pod_active_deadline.total_seconds() / 60) + 10
+            ),
         ):
             self._validate_dataset(reformat_job_name)
 
@@ -625,7 +620,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             return staging_cronjob_name(
                 self.dataset_id, self.template_config.version, "validate"
             )
-        return self._operational_cron_job(ValidationCronJob).name
+        update_name = self._operational_cron_job(ReformatCronJob).name
+        assert update_name.endswith("-update")
+        return update_name.removesuffix("-update") + "-validate"
 
     def _validate_dataset(self, reformat_job_name: str) -> None:
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)

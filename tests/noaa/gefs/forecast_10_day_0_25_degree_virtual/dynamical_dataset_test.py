@@ -14,7 +14,6 @@ import xarray as xr
 from reformatters.common import validation
 from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.dynamical_dataset import (
     NoaaGefsForecast10Day025DegreeVirtualDataset,
 )
@@ -22,7 +21,6 @@ from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.region_job impor
     NoaaGefsForecast10Day025DegreeVirtualRegionJob,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
-    GEFS_INIT_TIME_FREQUENCY,
     NoaaGefsVirtualDataVar,
 )
 from reformatters.noaa.gefs.virtual_region_job import (
@@ -30,7 +28,6 @@ from reformatters.noaa.gefs.virtual_region_job import (
 )
 from tests.common.dynamical_dataset_test import (
     assert_configured_validators,
-    stalled_cycles_before_alerting,
 )
 
 # 40N 100W, a land cell so the soil and snow bitmaps carry values there.
@@ -216,9 +213,7 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources(
     dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     # f000 publishes ~init+3h47m and the last member's f240 ~init+5h37m, so the fire
     # leads the burst and the deadline covers its end with over half an hour to spare.
@@ -229,24 +224,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
 
-    # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
-    # validator never reads the store while the update is still committing.
-    assert validation_cron_job.schedule == "25 6,12,18,0 * * *"
-    margin = timedelta(minutes=10)
-    day_minutes = 24 * 60
-    assert sorted(_fire_minutes(validation_cron_job.schedule)) == sorted(
-        (
-            fire
-            + int((update_cron_job.pod_active_deadline + margin).total_seconds() // 60)
-        )
-        % day_minutes
-        for fire in _fire_minutes(update_cron_job.schedule)
-    )
-    # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
-    assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
-
     assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(
@@ -255,7 +233,7 @@ def test_operational_update_window_spans_three_update_fires(
     """Two consecutive failed or lost updates still self-heal: the span the next fire
     re-sweeps reaches back past both. Derived from the schedule rather than pinned as
     hours, so changing the cron cadence alone cannot silently shrink the recovery."""
-    update_cron_job, _ = dataset.operational_kubernetes_resources("test-image-tag")
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
     fires = _fire_minutes(update_cron_job.schedule)
     intervals = {b - a for a, b in itertools.pairwise(fires)}
     assert len(intervals) == 1, fires
@@ -268,9 +246,7 @@ def test_operational_update_window_spans_three_update_fires(
 def test_cron_job_names_fit_the_kubernetes_limit(
     dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
 ) -> None:
-    """The dataset id plus "-validate" is two characters over, so the names drop
-    "-degree". Constructing the CronJobs at all is the check -- the field validator
-    rejects a longer name -- but pin the abbreviation so it stays recognizable."""
+    """The abbreviated operational name is stable and fits the CronJob name limit."""
     for cron_job in dataset.operational_kubernetes_resources("test-image-tag"):
         assert cron_job.name.startswith("noaa-gefs-forecast-10-day-0-25-virtual-")
         assert len(cron_job.name) <= 52
@@ -279,38 +255,14 @@ def test_cron_job_names_fit_the_kubernetes_limit(
 
 def test_validators(
     dataset: NoaaGefsForecast10Day025DegreeVirtualDataset,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
 
-    _, validation_cron_job = dataset.operational_kubernetes_resources("test-image-tag")
-    validation_fire = pd.Timestamp("2026-09-01") + pd.Timedelta(
-        minutes=min(_fire_minutes(validation_cron_job.schedule))
-    )
-    # The cycle the update that this fire follows ingested.
-    newest_init = (
-        validation_fire.floor(f"{whole_hours(GEFS_INIT_TIME_FREQUENCY)}h")
-        - GEFS_INIT_TIME_FREQUENCY
-    )
-
-    # The newest init is 6h25m old when validation fires and the update that ingested
-    # it stopped writing 10 minutes earlier, so the first stalled cycle alerts.
-    assert validation_fire - newest_init == pd.Timedelta("6h25m")
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=6, minutes=20)
-    assert (
-        stalled_cycles_before_alerting(
-            current_data.max_delay,
-            validation_fire,
-            newest_init,
-            GEFS_INIT_TIME_FREQUENCY,
-            monkeypatch,
-        )
-        == 1
-    )
+    assert current_data.max_delay == timedelta(hours=3, minutes=48)
 
     completeness = next(
         v
@@ -319,9 +271,8 @@ def test_validators(
     )
     assert completeness.include_vars == "all"
     assert completeness.exclude_vars == ()
-    # Every init the store reached must be whole: the source finishes publishing before
-    # validation fires, and an init the source has not started is skipped by the
-    # append-dim extent clamp rather than checked here.
+    # Every init the store reached must be whole; an init the source has not started
+    # is skipped by the append-dim extent clamp.
     assert completeness.min_present_fraction == (1.0,)
 
     decode_health = next(

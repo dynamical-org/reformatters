@@ -123,9 +123,9 @@ Reformatting locally can be slow. Choosing an `<append_dim_end>` not long after 
 
 ### 5. Implement `DynamicalDataset` subclass
 
-To operationalize your dataset and have the `update` and `validate` Kubernetes cron jobs be deployed automatically by GitHub CI, implement the two methods in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`.
+To operationalize your dataset and have its update Kubernetes cron job deployed automatically by GitHub CI, implement `operational_kubernetes_resources()` and `validators()` in `src/reformatters/$DATASET_PATH/dynamical_dataset.py`. The final update pod runs the configured validators.
 
-The scaffold sets `suspend=True` on both cron jobs so updates and validation stay off until the store is backfilled. Leave it set through this PR; a follow-up PR removes it once the backfill is complete (the Backfill stage of the [dataset development guide](dataset_development_guide.md)).
+The scaffold sets `suspend=True` on the update cron job so updates stay off until the store is backfilled. Leave it set through this PR; a follow-up PR removes it once the backfill is complete (the Backfill stage of the [dataset development guide](dataset_development_guide.md)).
 
 Kubernetes resource values, materialized (fan-out across indexed jobs):
   - shared memory: Round the value calculated in the chunk/shard size tool output up to the nearest half GB.
@@ -136,9 +136,9 @@ Kubernetes resource values, materialized (fan-out across indexed jobs):
 
 For virtual updates, use `workers_total = 1` and `parallelism = 1` (they are single-writer); `cpu="1.7"` and `memory="7G"` are good starting points. See [Operational updates](virtual_datasets.md#operational-updates-single-writer), and [Manifest splitting](virtual_datasets.md#manifest-splitting) for sizing the manifest split the storage config needs.
 
-For a materialized source whose publication lag exceeds 48 hours, set `expected_unavailable_window` on its region job so not-yet-published days log at info. Set the dataset's `CheckCurrentData.max_delay` to include any additional update latency.
+For a materialized source whose publication lag exceeds 48 hours, set `expected_unavailable_window` on its region job so not-yet-published days log at info.
 
-The update cron schedule should run shortly after the source data is expected to be available and the validate cron should run at `update cron start + update pod_active_deadline`.
+The update cron schedule should run shortly after the source data is expected to be available. Its `pod_active_deadline` must cover both processing and validation.
 
 #### Integration test with snapshot values
 

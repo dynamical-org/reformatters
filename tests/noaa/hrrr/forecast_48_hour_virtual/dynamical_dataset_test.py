@@ -257,15 +257,14 @@ def test_operational_kubernetes_resources(
     dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     # Single-writer virtual update: no fan-out.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.pod_active_deadline < timedelta(hours=6)
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -278,14 +277,13 @@ def test_validators(dataset: NoaaHrrrForecast48HourVirtualDataset) -> None:
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_allows_8_hours(
+def test_current_data_validator_due_at_update_fire(
     dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    # 6h cycle + ~2h publication slack.
-    assert current_data.max_delay == timedelta(hours=2, minutes=40)
+    assert current_data.max_delay == timedelta(minutes=52)
 
 
 def _resolved_split_size(

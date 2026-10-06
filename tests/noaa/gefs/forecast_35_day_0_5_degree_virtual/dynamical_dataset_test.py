@@ -17,7 +17,6 @@ from reformatters.common import validation
 from reformatters.common.config import Config
 from reformatters.common.monitoring import monitor_cron
 from reformatters.common.storage import DatasetFormat, StorageConfig
-from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.gefs.forecast_35_day_0_5_degree_virtual.dynamical_dataset import (
     NoaaGefsForecast35Day05DegreeVirtualDataset,
 )
@@ -32,7 +31,6 @@ from reformatters.noaa.gefs.virtual_template_config import PRESSURE_LEVELS
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    stalled_cycles_before_alerting,
 )
 
 _INIT_TIME_FREQUENCY = pd.Timedelta("24h")
@@ -46,7 +44,7 @@ def test_polling_leaves_validation_time_inside_single_deadline(
             update={"format": DatasetFormat.ICECHUNK}
         )
     )
-    cron_job, _ = dataset.operational_kubernetes_resources("test")
+    (cron_job,) = dataset.operational_kubernetes_resources("test")
     fire = pd.Timestamp("2026-09-27T03:45")
     assert cron_job.pod_active_deadline == timedelta(hours=6)
     assert dataset._virtual_poll_deadline(fire) == pd.Timestamp("2026-09-27T09:38")
@@ -309,9 +307,7 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources(
     dataset: NoaaGefsForecast35Day05DegreeVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     # The first file lands ~init+3h46m and the lead times through 384 hours finish
     # ~init+6h43m, so the fire leads that stage and the deadline covers its end with
@@ -332,24 +328,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
 
-    # The update's fire plus its pod_active_deadline, plus 10 minutes of margin so the
-    # validator never reads the store while the update is still committing.
-    assert validation_cron_job.schedule == "55 9 * * *"
-    margin = timedelta(minutes=10)
-    day_minutes = 24 * 60
-    assert sorted(_fire_minutes(validation_cron_job.schedule)) == sorted(
-        (
-            fire
-            + int((update_cron_job.pod_active_deadline + margin).total_seconds() // 60)
-        )
-        % day_minutes
-        for fire in _fire_minutes(update_cron_job.schedule)
-    )
-    # Without this the 6 hour default returns and a stuck validation overlaps its next fire.
-    assert validation_cron_job.pod_active_deadline == timedelta(minutes=30)
-
     assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
 
 
 def test_operational_update_window_spans_three_update_fires(
@@ -358,7 +337,7 @@ def test_operational_update_window_spans_three_update_fires(
     """Two consecutive failed or lost updates still self-heal: the span the next fire
     re-sweeps reaches back past both. A cycle's own extension also publishes past the
     next fire, so even with none missed the window has to reach a second init."""
-    update_cron_job, _ = dataset.operational_kubernetes_resources("test-image-tag")
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
     (fire,) = _fire_minutes(update_cron_job.schedule)
     window = NoaaGefsForecast35Day05DegreeVirtualRegionJob.operational_update_window
     assert window == 3 * _INIT_TIME_FREQUENCY
@@ -368,10 +347,7 @@ def test_operational_update_window_spans_three_update_fires(
 def test_cron_job_names_fit_the_kubernetes_limit(
     dataset: NoaaGefsForecast35Day05DegreeVirtualDataset,
 ) -> None:
-    """The dataset id plus "-validate" exceeds the 52 character limit, so the names
-    drop "-degree". Constructing the CronJobs at all is the check -- the field
-    validator rejects a longer name -- but pin the abbreviation so it stays
-    recognizable."""
+    """The abbreviated operational name is stable and fits the CronJob name limit."""
     for cron_job in dataset.operational_kubernetes_resources("test-image-tag"):
         assert cron_job.name.startswith("noaa-gefs-forecast-35-day-0-5-virtual-")
         assert len(cron_job.name) <= 52
@@ -380,36 +356,14 @@ def test_cron_job_names_fit_the_kubernetes_limit(
 
 def test_validators(
     dataset: NoaaGefsForecast35Day05DegreeVirtualDataset,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     validators = tuple(dataset.validators())
     assert len(validators) == 3
 
-    _, validation_cron_job = dataset.operational_kubernetes_resources("test-image-tag")
-    validation_fire = pd.Timestamp("2026-09-01") + pd.Timedelta(
-        minutes=min(_fire_minutes(validation_cron_job.schedule))
-    )
-    # The cycle the update that this fire follows ingested. Inits are a day apart and
-    # the fire is inside that day, so it is the cycle of the fire's own date.
-    newest_init = validation_fire.floor(f"{whole_hours(_INIT_TIME_FREQUENCY)}h")
-    assert validation_fire - newest_init == pd.Timedelta("9h55m")
-
-    # A missed cycle would go unreported for a whole day if it were tolerated, so a
-    # cycle is due as soon as the validation that follows it fires.
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=9, minutes=50)
-    assert (
-        stalled_cycles_before_alerting(
-            current_data.max_delay,
-            validation_fire,
-            newest_init,
-            _INIT_TIME_FREQUENCY,
-            monkeypatch,
-        )
-        == 1
-    )
+    assert current_data.max_delay == timedelta(hours=3, minutes=50)
 
     completeness = next(
         v
@@ -430,7 +384,7 @@ def test_validators(
         if (expected_files_per_init - missing) / expected_files_per_init >= 0.57
     )
     # The newest init may be missing its whole extension past 384 hours, which is what
-    # it is missing when validation fires: 76 of its 181 lead times.
+    # it is missing at the update deadline: 76 of its 181 lead times.
     extension_files = 76 * files_per_lead_time
     assert extension_files <= allowed_missing
     # What is left over is under one member's share of the compact first stage, so a

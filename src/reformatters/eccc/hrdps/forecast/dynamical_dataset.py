@@ -6,7 +6,7 @@ import typer
 
 from reformatters.common import kubernetes, validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.eccc.hrdps.archive_gribs.copy_files_from_eccc import (
     copy_files_from_eccc_https,
 )
@@ -32,7 +32,7 @@ class EcccHrdpsForecastDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Return the kubernetes cron job definitions to operationally update and validate this dataset."""
+        """Return the kubernetes cron job definitions to operationally update this dataset."""
         archive_grib_files_job = CronJob(
             command=["archive-grib-files"],
             workers_total=1,
@@ -74,27 +74,14 @@ class EcccHrdpsForecastDataset(
             parallelism=workers,
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="0 5,11,17,23 * * *",  # 30m (pod_active_deadline) after the update
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.7",
-            memory="3.5G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
         return [
             archive_grib_files_job,
             operational_update_cron_job,
-            validation_cron_job,
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
         return (
-            # The update ingests each init at init+4h30m; validation fires at init+5h.
             validation.CheckCurrentData(max_delay=timedelta(hours=5)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.

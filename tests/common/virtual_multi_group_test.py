@@ -40,7 +40,7 @@ from reformatters.common.config_models import (
     Group,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.region_job import CoordinateValue, SourceFileCoord
 from reformatters.common.storage import (
     DatasetFormat,
@@ -356,18 +356,6 @@ class MultiGroupDataset(
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule="0 0 * * *",
-                pod_active_deadline=timedelta(minutes=5),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
-                memory="1G",
-                shared_memory="1G",
-                ephemeral_storage="1G",
-                secret_names=self.store_factory.k8s_secret_names(),
-            ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule="0 1 * * *",
                 pod_active_deadline=timedelta(minutes=5),
                 image=image_tag,
                 dataset_id=self.dataset_id,

@@ -7,7 +7,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
@@ -25,7 +24,7 @@ class NoaaHrrrAnalysisDataset(
     region_job_class: type[NoaaHrrrAnalysisRegionJob] = NoaaHrrrAnalysisRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        """Define Kubernetes cron jobs for operational updates and validation."""
+        """Define Kubernetes cron jobs for operational updates."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # Every 3 hours at 57 minutes past the hour.
@@ -43,20 +42,7 @@ class NoaaHrrrAnalysisDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # 20m (pod_active_deadline) after reformat at :57 = :77 = :17 of the next hour.
-            # "17 1-23/3 * * *" gives 01:17, 04:17, 07:17, ... matching reformat at 00:57, 03:57, 06:57, ...
-            schedule="17 1-23/3 * * *",
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="0.7",
-            memory="3.5G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         # Source-fill-value vars are NaN wherever the source's missing state applies

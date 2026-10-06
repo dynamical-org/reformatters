@@ -53,6 +53,7 @@ class OperationalResources(FrozenBaseModel):
         send_in_progress: bool = True,
         send_result: bool = True,
         monitor_name: str | Callable[[], str] | None = None,
+        checkin_margin: int | Callable[[CronJob], int] = 10,
     ) -> Iterator[None]:
         # No registered monitors -> nothing to report to, and no need to require
         # operational_kubernetes_resources to be defined.
@@ -76,6 +77,11 @@ class OperationalResources(FrozenBaseModel):
                         send_in_progress=send_in_progress,
                         send_result=send_result,
                         monitor_name=resolved_monitor_name,
+                        checkin_margin=(
+                            checkin_margin
+                            if isinstance(checkin_margin, int)
+                            else checkin_margin(cron_job)
+                        ),
                     )
                 )
             yield
@@ -98,6 +104,7 @@ class RunMonitor(Protocol):
         send_in_progress: bool,
         send_result: bool,
         monitor_name: str | None,
+        checkin_margin: int,
     ) -> AbstractContextManager[None]: ...
 
 

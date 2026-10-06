@@ -203,8 +203,8 @@ def test_operational_kubernetes_resources(
 ) -> None:
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
 
-    assert len(cron_jobs) == 3
-    archive_job, update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 2
+    archive_job, update_cron_job = cron_jobs
 
     assert archive_job.name == f"{dataset.dataset_id}-archive-grib-files"
     assert archive_job.pod_active_deadline == ARCHIVE_GRIB_FILES_DEADLINE
@@ -212,14 +212,12 @@ def test_operational_kubernetes_resources(
     assert archive_job.pod_active_deadline < timedelta(hours=6)
     assert archive_job.schedule == "0 4,10,16,22 * * *"
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
 
     # All schedules should run every day
     for cron_job in cron_jobs:
         assert cron_job.schedule.endswith(" * * *")
 
     assert len(update_cron_job.secret_names) > 0
-    assert len(validation_cron_job.secret_names) > 0
 
 
 def test_validators(dataset: DwdIconEuForecast5DayDataset) -> None:

@@ -6,7 +6,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -69,25 +69,12 @@ class NoaaHrrrForecast48HourVirtualDataset(
             memory="3.7G",
             secret_names=self.store_factory.k8s_secret_names(),
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # After each update (:50) + its 1h40m deadline.
-            schedule="40 2,8,14,20 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="3.7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update polls each init from init+50m (f48 publishes ~init+1h50m);
-            # validation fires at init+2h40m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

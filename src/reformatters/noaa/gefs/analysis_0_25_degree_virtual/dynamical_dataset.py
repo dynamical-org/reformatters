@@ -5,7 +5,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -59,27 +59,12 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
             workers_total=1,
             parallelism=1,
         )
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            # The update's fire plus its pod_active_deadline, so the run being
-            # validated has always stopped writing.
-            schedule="25 4,10,16,22 * * *",
-            pod_active_deadline=timedelta(minutes=30),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.3",
-            memory="3.7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
 
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # A 00, 06, 12 or 18 hour waits on its own cycle, so a position lands
-            # ~4h15m after its timestamp at the latest. Keep this under the 6h cycle
-            # spacing or a wholly missed cycle is not yet due at the next validation run.
-            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=20)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=49)),
             # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

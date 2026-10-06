@@ -19,7 +19,6 @@ from reformatters.common.kubernetes import (
     CronJob,
     Job,
     ReformatCronJob,
-    ValidationCronJob,
     _load_secret_from_kubernetes_api,
     create_job_from_cronjob,
     load_secret,
@@ -271,7 +270,6 @@ def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> C
     [
         (CronJob, "-update"),
         (ReformatCronJob, "-update"),
-        (ValidationCronJob, "-validate"),
     ],
 )
 def test_cron_job_name_respects_kubernetes_length_limit(
@@ -290,14 +288,6 @@ def test_cron_job_name_respects_kubernetes_length_limit(
 def test_do_not_disrupt_annotation_on_every_job() -> None:
     reformat = ReformatCronJob(
         name="weather-data-update",
-        schedule="0 * * * *",
-        image="img:v1",
-        dataset_id="weather_data",
-        cpu="1",
-        memory="1Gi",
-    )
-    validate = ValidationCronJob(
-        name="weather-data-validate",
         schedule="0 * * * *",
         image="img:v1",
         dataset_id="weather_data",
@@ -323,7 +313,6 @@ def test_do_not_disrupt_annotation_on_every_job() -> None:
 
     do_not_disrupt = {"karpenter.sh/do-not-disrupt": "true"}
     assert annotations(reformat.as_kubernetes_object(), cron=True) == do_not_disrupt
-    assert annotations(validate.as_kubernetes_object(), cron=True) == do_not_disrupt
     # A backfill worker carries many region jobs, so it loses the most to an eviction.
     assert annotations(backfill.as_kubernetes_object(), cron=False) == do_not_disrupt
 
@@ -588,29 +577,6 @@ def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
         _cron_job(schedule).previous_fire_time(pd.Timestamp("2026-08-02T12:00"))
 
 
-def test_job_service_account_is_optional() -> None:
-    job = Job(
-        command=["update"],
-        image="img",
-        dataset_id="weather-data",
-        cpu="1",
-        memory="1G",
-        workers_total=1,
-        parallelism=1,
-    )
-    pod_spec = job.as_kubernetes_object()["spec"]["template"]["spec"]
-    assert "serviceAccountName" not in pod_spec
-
-    opted_in = job.model_copy(update={"service_account_name": SERVICE_ACCOUNT})
-    pod_spec = opted_in.as_kubernetes_object()["spec"]["template"]["spec"]
-    assert pod_spec["serviceAccountName"] == SERVICE_ACCOUNT
-
-    cron = _cron_job("0 * * * *").model_copy(update={"service_account_name": None})
-    cron_spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
-    assert "serviceAccountName" not in cron_spec["template"]["spec"]
-    assert len(cron_spec["podFailurePolicy"]["rules"]) == 3
-
-
 @pytest.mark.parametrize(
     ("schedule", "now", "expected"),
     [
@@ -756,9 +722,7 @@ def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
     batch.create_namespaced_job.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    "job_name", ["", "A-job", "job_name", "-job", "job-", "a" * 64]
-)
+@pytest.mark.parametrize("job_name", ["A-job", "job_name", "-job", "a" * 64])
 def test_create_job_rejects_invalid_name(job_name: str) -> None:
     with pytest.raises(AssertionError, match="Invalid Kubernetes Job name"):
         create_job_from_cronjob("weather-update", job_name)

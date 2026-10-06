@@ -184,8 +184,8 @@ def test_operational_kubernetes_resources(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     # Single-writer virtual update: no fan-out.
@@ -193,8 +193,6 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.parallelism == 1
     assert update_cron_job.pod_active_deadline < timedelta(hours=6)
     assert update_cron_job.suspend is False
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.suspend is False
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -212,14 +210,13 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_allows_7_hours(
+def test_current_data_validator_due_at_update_fire(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    # Each init is due when its validation fires, at init+6h20m.
-    assert current_data.max_delay == timedelta(hours=6, minutes=20)
+    assert current_data.max_delay == timedelta(hours=6, minutes=11)
 
 
 def _resolved_split_size(

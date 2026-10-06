@@ -188,20 +188,15 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources(
     dataset: NoaaGfsAnalysisVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=45)
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "14 4,10,16,22 * * *"
     assert len(update_cron_job.secret_names) > 0
     assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
 
 
 def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
@@ -210,7 +205,7 @@ def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=5, minutes=30)
+    assert current_data.max_delay == timedelta(hours=3, minutes=50)
 
     # The gate holds the frontier to a complete hour but can still release an earlier
     # incomplete one, so a whole 1.0 over every variable is what catches that.

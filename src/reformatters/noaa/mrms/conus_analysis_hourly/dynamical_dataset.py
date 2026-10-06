@@ -6,7 +6,6 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
-    ValidationCronJob,
 )
 
 from .region_job import NoaaMrmsRegionJob, NoaaMrmsSourceFileCoord
@@ -36,25 +35,11 @@ class NoaaMrmsConusAnalysisHourlyDataset(
             secret_names=self.store_factory.k8s_secret_names(),
         )
 
-        validation_cron_job = ValidationCronJob(
-            name=f"{self.dataset_id}-validate",
-            schedule="13 * * * *",
-            pod_active_deadline=timedelta(minutes=10),
-            image=image_tag,
-            dataset_id=self.dataset_id,
-            cpu="1.5",
-            memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
-        )
-
-        return [operational_update_cron_job, validation_cron_job]
+        return [operational_update_cron_job]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The hourly update at :03 writes each hour's position (radar-only fields
-            # arrive within minutes; pass 2 fills in on later runs); validation fires
-            # at :13.
-            validation.CheckCurrentData(max_delay=timedelta(minutes=13)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=5)),
             validation.CheckRecentNans(
                 # Gauge-corrected values arrive an hour late, leaving the newest
                 # timestamp entirely NaN (excused by the leading 1.0). Measured

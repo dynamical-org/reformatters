@@ -261,20 +261,15 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources(
     dataset: NoaaGfsForecastVirtualDataset,
 ) -> None:
-    update_cron_job, validation_cron_job = dataset.operational_kubernetes_resources(
-        "test-image-tag"
-    )
+    (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(hours=2, minutes=30)
-    assert validation_cron_job.name == f"{dataset.dataset_id}-validate"
-    assert validation_cron_job.schedule == "59 5,11,17,23 * * *"
     assert len(update_cron_job.secret_names) > 0
     assert not update_cron_job.suspend
-    assert not validation_cron_job.suspend
 
 
 def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
@@ -283,7 +278,7 @@ def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=6, minutes=30)
+    assert current_data.max_delay == timedelta(hours=3, minutes=50)
 
     completeness = next(
         v

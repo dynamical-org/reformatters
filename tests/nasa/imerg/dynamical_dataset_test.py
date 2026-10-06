@@ -128,12 +128,11 @@ def test_backfill_local_and_operational_update(
 def test_operational_kubernetes_resources() -> None:
     dataset = NasaImergAnalysisEarlyDataset(primary_storage_config=NOOP_STORAGE_CONFIG)
     cron_jobs = list(dataset.operational_kubernetes_resources("test-image-tag"))
-    assert len(cron_jobs) == 2
-    update_cron_job, validation_cron_job = cron_jobs
+    assert len(cron_jobs) == 1
+    (update_cron_job,) = cron_jobs
     assert update_cron_job.name == "nasa-imerg-analysis-early-update"
     assert "nasa-pps" in update_cron_job.secret_names
     assert "nasa-earthdata" in update_cron_job.secret_names
-    assert validation_cron_job.name == "nasa-imerg-analysis-early-validate"
 
 
 @pytest.mark.parametrize(

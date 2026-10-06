@@ -20,4 +20,3 @@ class UcsbChcChirpsAnalysisPreliminaryDataset(UcsbChcChirpsAnalysisMaterializedD
     )
 
     update_schedule: ClassVar[str] = "0 19 * * *"
-    validate_schedule: ClassVar[str] = "0 20 * * *"
