@@ -6,7 +6,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob, ValidationCronJob
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
 from reformatters.noaa.rrfs.models import NoaaRrfsDataVar
 from reformatters.noaa.rrfs.region_job import (
@@ -41,34 +41,21 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
         cadence = int(self.template_config.append_dim_frequency.total_seconds() / 3600)
         offset_minutes, deadline_minutes = self._operational_timing
 
-        def schedule(offset: int) -> str:
-            hours = ",".join(
-                str(h)
-                for h in sorted(
-                    {(h + offset // 60) % 24 for h in range(0, 24, cadence)}
-                )
+        hours = ",".join(
+            str(h)
+            for h in sorted(
+                {(h + offset_minutes // 60) % 24 for h in range(0, 24, cadence)}
             )
-            return f"{offset % 60} {hours} * * *"
+        )
 
         return (
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                schedule=schedule(offset_minutes),
+                schedule=f"{offset_minutes % 60} {hours} * * *",
                 pod_active_deadline=timedelta(minutes=deadline_minutes),
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="2",
-                memory="3.7G",
-                secret_names=self.store_factory.k8s_secret_names(),
-                suspend=True,
-            ),
-            ValidationCronJob(
-                name=f"{self.dataset_id}-validate",
-                schedule=schedule(offset_minutes + deadline_minutes + 5),
-                pod_active_deadline=timedelta(minutes=30),
-                image=image_tag,
-                dataset_id=self.dataset_id,
-                cpu="1",
                 memory="3.7G",
                 secret_names=self.store_factory.k8s_secret_names(),
                 suspend=True,
@@ -79,7 +66,8 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
         offset_minutes, deadline_minutes = self._operational_timing
         return (
             validation.CheckCurrentData(
-                max_delay=timedelta(minutes=offset_minutes + deadline_minutes + 5)
+                max_delay=timedelta(minutes=offset_minutes + deadline_minutes)
+                - self.virtual_poll_deadline_grace
             ),
             # Hourly windows include an unpublished next init; the newest ingested init is normally the previous one.
             validation.CheckVirtualManifestCompleteness(

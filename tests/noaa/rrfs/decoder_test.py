@@ -1,6 +1,5 @@
 import hashlib
 import json
-from importlib.metadata import version
 from pathlib import Path
 
 import numpy as np
@@ -75,14 +74,4 @@ def test_real_noaa_missing_management_values_agree_with_gdal(
     decoded_values: tuple[np.ndarray, np.ndarray],
 ) -> None:
     actual, expected = decoded_values
-    known_failure = version("gribberish") == "1.8.0"
-    try:
-        np.testing.assert_allclose(actual, expected, rtol=0, atol=0, equal_nan=True)
-    except AssertionError:
-        if known_failure:
-            pytest.xfail("gribberish 1.8.0 ignores GRIB DRT 5.2 missing management.")
-        raise
-    if known_failure:
-        pytest.fail(
-            "Unexpected pass on gribberish 1.8.0; update the known-failure version."
-        )
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=0, equal_nan=True)

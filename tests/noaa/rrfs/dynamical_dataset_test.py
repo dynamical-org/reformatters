@@ -54,7 +54,7 @@ def test_operational_jobs_are_suspended_and_use_the_source_container(
         )
     )
     jobs = dataset.operational_kubernetes_resources("test")
-    assert len(jobs) == 2
+    assert len(jobs) == 1
     assert all(job.suspend for job in jobs)
     assert all(job.dataset_id == dataset.dataset_id for job in jobs)
     assert all(job.as_kubernetes_object()["spec"]["suspend"] is True for job in jobs)
@@ -209,23 +209,36 @@ def assert_snapshot(ds: xr.Dataset, dataset_id: str, init: pd.Timestamp) -> None
 
 
 @pytest.mark.parametrize(
-    ("cls", "offset", "duration"),
+    ("cls", "offset", "duration", "schedule"),
     [
-        (NoaaRrfsForecast84HourVirtualDataset, 100, 135),
-        (NoaaRrfsForecast18HourVirtualDataset, 100, 60),
-        (NoaaRrfsForecastSubHourlyVirtualDataset, 75, 55),
-        (NoaaRrfsEnsForecastVirtualDataset, 75, 160),
+        (NoaaRrfsForecast84HourVirtualDataset, 100, 135, "40 1,7,13,19 * * *"),
+        (
+            NoaaRrfsForecast18HourVirtualDataset,
+            100,
+            60,
+            "40 1,4,7,10,13,16,19,22 * * *",
+        ),
+        (
+            NoaaRrfsForecastSubHourlyVirtualDataset,
+            75,
+            55,
+            "15 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23 * * *",
+        ),
+        (NoaaRrfsEnsForecastVirtualDataset, 75, 160, "15 1,7,13,19 * * *"),
     ],
 )
-def test_poll_deadline_validation_schedule_and_decode_health(
-    cls: DatasetClass, offset: int, duration: int, tmp_path: Path
+def test_poll_deadline_update_schedule_and_decode_health(
+    cls: DatasetClass, offset: int, duration: int, schedule: str, tmp_path: Path
 ) -> None:
     dataset = cls(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
         )
     )
-    update, validate = dataset.operational_kubernetes_resources("test")
+    (update,) = dataset.operational_kubernetes_resources("test")
+    assert update.schedule == schedule
+    assert update.cpu == "2"
+    assert update.memory == "3.7G"
     init = pd.Timestamp("2026-10-02T00")
     fire = init + pd.Timedelta(minutes=offset)
     end = fire + pd.Timedelta(minutes=duration)
@@ -235,12 +248,11 @@ def test_poll_deadline_validation_schedule_and_decode_health(
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("10min")
     ) == end - pd.Timedelta("5min")
-    assert validate.previous_fire_time(
-        end + pd.Timedelta("5min")
-    ) == end + pd.Timedelta("5min")
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == pd.Timedelta(minutes=offset + duration + 5)
+    assert current.max_delay == (
+        pd.Timedelta(minutes=offset + duration) - dataset.virtual_poll_deadline_grace
+    )
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (
         (0.05, 1.0) if dataset.template_config.sub_hourly else (1.0,)
