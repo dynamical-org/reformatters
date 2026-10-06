@@ -26,7 +26,7 @@ dependencies = [
     "icechunk~=2.2",
     "google-crc32c>=1.8.0",
     "httpx>=0.28.1",
-    "gribberish==1.8.1",
+    "gribberish~=1.8",
 ]
 
 [build-system]
@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 # Reviewed releases can have package-specific cutoffs within the five-day window.
 [tool.uv]
 exclude-newer = "5 days"
-exclude-newer-package = { icechunk = "2026-09-18T00:00:00Z", gribberish = "2026-10-07T00:00:00Z" }
+exclude-newer-package = { gribberish = "2026-10-07T00:00:00Z" }
 
 
 [project.scripts]

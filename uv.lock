@@ -13,7 +13,6 @@ exclude-newer-span = "P5D"
 
 [options.exclude-newer-package]
 gribberish = "2026-10-07T00:00:00Z"
-icechunk = "2026-09-18T00:00:00Z"
 
 [[package]]
 name = "affine"
@@ -1455,7 +1454,7 @@ dev = [
 requires-dist = [
     { name = "dask", specifier = "~=2026.7" },
     { name = "google-crc32c", specifier = ">=1.8.0" },
-    { name = "gribberish", specifier = "==1.8.1" },
+    { name = "gribberish", specifier = "~=1.8" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "icechunk", specifier = "~=2.2" },
     { name = "kubernetes", specifier = ">=36.0.3,<37" },
