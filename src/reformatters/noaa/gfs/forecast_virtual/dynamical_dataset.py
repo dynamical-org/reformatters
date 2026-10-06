@@ -65,7 +65,8 @@ class NoaaGfsForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=37)),
+            # Allow for variation in source publication time.
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=50)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

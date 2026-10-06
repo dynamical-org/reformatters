@@ -278,7 +278,7 @@ def test_validators(dataset: NoaaGfsForecastVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=3, minutes=37)
+    assert current_data.max_delay == timedelta(hours=3, minutes=50)
 
     completeness = next(
         v
