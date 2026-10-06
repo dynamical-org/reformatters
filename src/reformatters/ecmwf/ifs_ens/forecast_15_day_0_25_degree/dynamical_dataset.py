@@ -50,7 +50,6 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+8h05m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=5)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=40)),
             validation.CheckRecentNans(append_dim_window=3),
         )

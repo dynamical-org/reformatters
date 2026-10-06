@@ -64,9 +64,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Each update polls the 00, 06, 12 or 18 cycle until its files land or
-            # the deadline expires; a wholly missed cycle is due after that update.
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=49)),
             # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

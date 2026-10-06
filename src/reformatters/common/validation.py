@@ -283,8 +283,10 @@ def validate_dataset(
 class CheckCurrentData(Validator):
     """Fail when an append-dim position that is due has not been ingested.
 
-    A position is due `max_delay` after its own timestamp, on the template's
-    append_dim_frequency grid anchored to the dataset's own positions.
+    A position is due `max_delay` after its own timestamp: expected source
+    availability plus ingestion time and slack. Materialized datasets also account
+    for their update schedule and processing time. Deadlines follow the template's
+    append_dim_frequency grid, regardless of when validation runs.
     """
 
     max_delay: timedelta

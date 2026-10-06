@@ -604,6 +604,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             ReformatCronJob,
             reformat_job_name,
             monitor_name=self._validation_monitor_name,
+            # Validate shares the same cron schedule as update, but we give it margin
+            # so it's not expected to start until after the update work completes.
             checkin_margin=lambda cron: (
                 math.ceil(cron.pod_active_deadline.total_seconds() / 60) + 10
             ),
@@ -618,10 +620,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             return staging_cronjob_name(
                 self.dataset_id, self.template_config.version, "validate"
             )
-        return (
-            self._operational_cron_job(ReformatCronJob).name.removesuffix("-update")
-            + "-validate"
-        )
+        update_name = self._operational_cron_job(ReformatCronJob).name
+        assert update_name.endswith("-update")
+        return update_name.removesuffix("-update") + "-validate"
 
     def _validate_dataset(self, reformat_job_name: str) -> None:
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)

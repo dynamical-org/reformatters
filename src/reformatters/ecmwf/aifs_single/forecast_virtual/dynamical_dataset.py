@@ -74,8 +74,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update polls from init+5h20m while files publish through ~init+6h10m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=20)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=11)),
             # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

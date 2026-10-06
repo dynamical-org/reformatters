@@ -70,9 +70,7 @@ class NoaaHrrrAnalysisVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # An hour is ingested when its own f00 files publish, ~1h after its
-            # timestamp. The :50 fire allows the prior hour to roll to this update.
-            validation.CheckCurrentData(max_delay=timedelta(hours=1, minutes=30)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
             # discover_available extends time only to an hour holding every file it
             # needs, so every ingested position is whole.
             validation.CheckVirtualManifestCompleteness(),

@@ -64,9 +64,7 @@ class NoaaGfsAnalysisVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Each update polls the 00, 06, 12 or 18 cycle until its files land or
-            # the deadline expires; a wholly missed cycle is due after that update.
-            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=45)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=33)),
             # discover_available holds the frontier back to a whole hour, but releases
             # an earlier incomplete hour once a later one is complete, so an interior
             # gap is reachable and this is what finds it.

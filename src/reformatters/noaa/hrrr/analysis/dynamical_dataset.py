@@ -52,7 +52,7 @@ class NoaaHrrrAnalysisDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4)),
             validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
             # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
             # coverage is small and clustered: a sampled quadrant is regularly all

@@ -209,7 +209,7 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: EcccHrdpsForecastDataset) -> None:
     validators = tuple(dataset.validators())
     assert validators == (
-        validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
+        validation.CheckCurrentData(max_delay=timedelta(hours=5)),
         validation.CheckRecentNans(append_dim_window=4),
     )
 

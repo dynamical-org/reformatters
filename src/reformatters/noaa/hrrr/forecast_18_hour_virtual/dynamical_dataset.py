@@ -66,8 +66,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The hourly update polls each init from init+50m (f00 publishes ~init+51m).
-            validation.CheckCurrentData(max_delay=timedelta(minutes=50)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
             # Newest ingested init: the run that just ended may have deferred late files
             # to the next fire, but f00 lands an hour before its poll deadline, so 5%
             # (3 of 57 files, one lead's worth) separates a deferral from a cycle that

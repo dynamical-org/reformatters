@@ -82,8 +82,7 @@ class EcccHrdpsForecastDataset(
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
         return (
-            # The update ingests each init at init+4h30m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=5)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(append_dim_window=4),

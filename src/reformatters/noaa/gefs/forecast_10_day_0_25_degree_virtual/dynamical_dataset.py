@@ -61,7 +61,7 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=48)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

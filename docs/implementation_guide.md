@@ -140,7 +140,6 @@ For a materialized source whose publication lag exceeds 48 hours, set `expected_
 
 The update cron schedule should run shortly after the source data is expected to be available. Its `pod_active_deadline` must cover both processing and validation.
 
-Choose `CheckCurrentData.max_delay` so the position that an update must require is already due at its scheduled fire. Include intentional source lag, but do not add processing duration: validation runs after processing and must fail if that required position is missing.
 
 #### Integration test with snapshot values
 

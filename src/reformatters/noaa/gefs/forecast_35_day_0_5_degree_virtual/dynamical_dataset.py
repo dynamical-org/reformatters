@@ -74,7 +74,7 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=50)),
             # The newest init can be partial while its long-lead extension publishes.
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.57, 1.0)

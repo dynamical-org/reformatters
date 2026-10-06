@@ -216,7 +216,7 @@ def test_current_data_validator_due_at_update_fire(
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=5, minutes=20)
+    assert current_data.max_delay == timedelta(hours=6, minutes=11)
 
 
 def _resolved_split_size(

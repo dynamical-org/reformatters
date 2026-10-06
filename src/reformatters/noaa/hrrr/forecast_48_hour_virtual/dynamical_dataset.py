@@ -74,8 +74,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update polls each init from init+50m (f48 publishes ~init+1h50m).
-            validation.CheckCurrentData(max_delay=timedelta(minutes=50)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

@@ -45,8 +45,7 @@ class GefsForecast35DayDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+6h45m.
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=45)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=5)),
             # The newest init_time stops at GEFS_PRE_EXTENSION_MAX, leaving 76 of
             # 181 lead times NaN at any spatial point: 0.42, or 0.422 for a variable
             # with no hour-0 value, whose lead_time=0 slice is dropped before the

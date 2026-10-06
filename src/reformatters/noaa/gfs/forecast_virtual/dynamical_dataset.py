@@ -65,10 +65,7 @@ class NoaaGfsForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # An init is ingested by ~init+6h at the latest. Keep this under the
-            # ~12h between an init and the second validation run after it, or a wholly
-            # missed cycle is not yet due when that run looks.
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=30)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=33)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

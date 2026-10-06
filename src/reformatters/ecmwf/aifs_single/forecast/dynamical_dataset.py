@@ -46,7 +46,6 @@ class EcmwfAifsSingleForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # The update ingests each init at init+6h13m (files publish by ~init+6h10m).
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=13)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=23)),
             validation.CheckRecentNans(append_dim_window=3),
         )
