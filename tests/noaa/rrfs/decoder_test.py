@@ -80,9 +80,7 @@ def test_real_noaa_missing_management_values_agree_with_gdal(
         np.testing.assert_allclose(actual, expected, rtol=0, atol=0, equal_nan=True)
     except AssertionError:
         if known_failure:
-            pytest.xfail(
-                "gribberish 1.8.0 ignores GRIB DRT 5.2 missing management; requires the #200 fix release."
-            )
+            pytest.xfail("gribberish 1.8.0 ignores GRIB DRT 5.2 missing management.")
         raise
     if known_failure:
         pytest.fail(
