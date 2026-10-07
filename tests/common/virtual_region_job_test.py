@@ -44,6 +44,7 @@ from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.region_job import (
     CoordinateValue,
+    LaunchScope,
     SourceFileCoord,
 )
 from reformatters.common.storage import (
@@ -2411,3 +2412,118 @@ def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
 
     assert result == dict.fromkeys(keys, True)
     assert peak <= batch_size
+
+
+@pytest.mark.parametrize("weathernext", [False, True])
+def test_backfill_provenance_on_setup_write_and_finalize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, weathernext: bool
+) -> None:
+
+    dataset = _make_dataset(tmp_path)
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda self, end: _create_template_ds(4)
+    )
+    metadata = {}
+    if weathernext:
+        metadata = {
+            "publication_cutoff": "2025-01-01T23:59:59+00:00",
+            "reformat_job_name": "local",
+        }
+        monkeypatch.setattr(
+            VirtualTestRegionJob,
+            "commit_metadata",
+            lambda self: (
+                metadata | {"launch_scope": self.launch_scope.model_dump_json()}
+            ),
+        )
+    dataset.backfill_local(
+        APPEND_DIM_START + 4 * APPEND_DIM_FREQ,
+        reference_time=pd.Timestamp("2025-01-02T00:59:59"),
+        filter_start=APPEND_DIM_START + APPEND_DIM_FREQ,
+        filter_end=APPEND_DIM_START + 3 * APPEND_DIM_FREQ,
+        filter_contains=[APPEND_DIM_START + 2 * APPEND_DIM_FREQ],
+        filter_variable_names=["temperature_2m"],
+    )
+    refreshed = _create_template_ds(4)
+    refreshed.attrs["title"] = "Refreshed synthetic dataset"
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda self, end: refreshed
+    )
+    monkeypatch.setattr(VirtualTestDataset, "_can_run_in_kubernetes", lambda self: True)
+    dataset.backfill_kubernetes(
+        overwrite_metadata=True, reference_time=pd.Timestamp("2025-01-02T00:59:59")
+    )
+    snapshots = list(_primary_repo(dataset.store_factory).ancestry(branch="main"))
+    commits = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.message != "Repository initialized"
+    ]
+    assert len(commits) >= 4
+    assert commits[0].message == "Refresh metadata from template"
+    assert commits[-1].message == "Expand dataset"
+    assert all(
+        {
+            key: value
+            for key, value in snapshot.metadata.items()
+            if key not in ("__icechunk", "launch_scope")
+        }
+        == metadata
+        for snapshot in commits
+    )
+    if weathernext:
+        scope = LaunchScope(
+            append_dim_end=APPEND_DIM_START + 4 * APPEND_DIM_FREQ,
+            filter_start=APPEND_DIM_START + APPEND_DIM_FREQ,
+            filter_end=APPEND_DIM_START + 3 * APPEND_DIM_FREQ,
+            filter_contains=[APPEND_DIM_START + 2 * APPEND_DIM_FREQ],
+            filter_variable_names=["temperature_2m"],
+        )
+        assert all(
+            snapshot.metadata["launch_scope"] == scope.model_dump_json()
+            for snapshot in commits[1:]
+        )
+        refresh_scope = LaunchScope.model_validate_json(
+            commits[0].metadata["launch_scope"]
+        )
+        assert scope.append_dim_end is not None
+        assert refresh_scope.append_dim_end == scope.append_dim_end.tz_localize("UTC")
+        assert refresh_scope.filter_contains is None
+    else:
+        assert all("launch_scope" not in snapshot.metadata for snapshot in commits)
+
+
+@pytest.mark.parametrize("new_data", [False, True])
+def test_operational_refresh_preserves_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, new_data: bool
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    job = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    repo = _primary_repo(dataset.store_factory)
+    previous = repo.lookup_branch("main")
+    template = _create_template_ds(4 if new_data else 2)
+    template["temperature_2m"].attrs["comment"] = "corrected metadata"
+    job = _make_region_job(
+        template, region=slice(0, 4 if new_data else 2), processing_mode="update"
+    )
+    metadata = {
+        "publication_cutoff": "2025-01-02T00:00:00+00:00",
+        "launch_scope": '{"filter_variable_names":["temperature_2m"]}',
+    }
+    monkeypatch.setattr(VirtualTestRegionJob, "commit_metadata", lambda self: metadata)
+    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    commits = []
+    for snapshot in repo.ancestry(branch="main"):
+        if snapshot.id == previous:
+            break
+        commits.append(snapshot)
+    assert len(commits) == (3 if new_data else 1)
+    assert commits[-1].message == "Refresh metadata from template"
+    assert all(
+        all(snapshot.metadata[key] == value for key, value in metadata.items())
+        for snapshot in commits
+    )

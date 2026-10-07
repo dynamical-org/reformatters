@@ -12,12 +12,14 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
-    weathernext2_virtual_chunk_containers,
 )
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
 )
-from reformatters.google.weathernext2.forecast_virtual.validation import (
+from reformatters.google.weathernext_virtual.listing import (
+    weathernext_virtual_chunk_containers,
+)
+from reformatters.google.weathernext_virtual.validation import (
     CheckNoRefsInsideHoldback,
 )
 
@@ -40,7 +42,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
-            containers=weathernext2_virtual_chunk_containers(),
+            containers=weathernext_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,

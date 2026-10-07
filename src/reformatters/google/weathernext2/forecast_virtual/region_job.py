@@ -1,25 +1,16 @@
-from base64 import b64decode
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, NamedTuple, Self
+from typing import ClassVar, Self
 
-import httpx
-import icechunk
 import pandas as pd
 import xarray as xr
-from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
-from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
-    InitLeadSourceFileCoord,
     RegionJob,
 )
-from reformatters.common.retry import retry
 from reformatters.common.types import (
     AppendDim,
     DatetimeLike,
@@ -27,7 +18,21 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.google.weathernext_virtual.holdback import (
+    PUBLICATION_HOLDBACK,
+)
+from reformatters.google.weathernext_virtual.holdback import (
+    utc_now as _utc_now,
+)
+from reformatters.google.weathernext_virtual.listing import (
+    PROXY_LOCATION_PREFIX,
+    ObjectListingQuery,
+)
+from reformatters.google.weathernext_virtual.region_job import (
+    NativeSourceChunk,
+    WeatherNextSourceFileCoord,
+    WeatherNextVirtualRegionJob,
+)
 
 from .template_config import (
     INIT_TIME_FREQUENCY,
@@ -39,42 +44,21 @@ from .template_config import (
 )
 
 SOURCE_LOCATION_PREFIX = "gs://weathernext/"
-PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
-OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-PUBLICATION_HOLDBACK = pd.Timedelta("1h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
 OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
 OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
 
-log = get_logger(__name__)
 
-
-class NativeObjectMetadata(NamedTuple):
-    size: int
-    etag_checksum: str
-
-
-def weathernext2_virtual_chunk_containers() -> tuple[
-    icechunk.VirtualChunkContainer, ...
-]:
-    return (
-        icechunk.VirtualChunkContainer(PROXY_LOCATION_PREFIX, icechunk.http_store()),
-    )
-
-
-class GoogleWeathernext2ForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
+class GoogleWeathernext2ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoord):
     """One forecast lead from one native annual or per-init source Zarr store."""
 
     source_layout: SourceLayout
     data_vars: Sequence[GoogleWeathernext2DataVar]
-    chunk_metadata: dict[str, NativeObjectMetadata] = Field(
-        default_factory=dict, frozen=False
-    )
 
     def get_url(self) -> str:
         if self.source_layout == "operational":
@@ -118,24 +102,13 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
         return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
-class NativeSourceChunk(NamedTuple):
-    data_var: GoogleWeathernext2DataVar
-    out_loc: Mapping[Dim, CoordinateValue]
-    location: str
-
-
-class ObjectListingQuery(NamedTuple):
-    prefix: str
-    match_glob: str | None = None
-
-
 class GoogleWeathernext2ForecastVirtualRegionJob(
-    VirtualRegionJob[
+    WeatherNextVirtualRegionJob[
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
+    requires_scan_provenance: ClassVar[bool] = False
     source_layout: ClassVar[SourceLayout]
-    manifest_init_split: ClassVar[int]
     publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
@@ -150,6 +123,8 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
+        reference_time: Timestamp | None = None,
+        append_dim_end: Timestamp | None = None,
     ) -> Sequence[Self]:
         jobs = super().get_jobs(
             tmp_store=tmp_store,
@@ -161,10 +136,12 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_end=filter_end,
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
+            reference_time=reference_time,
+            append_dim_end=append_dim_end,
         )
         if cls.source_layout == "historical":
             return jobs
-        cutoff = _utc_now() - PUBLICATION_HOLDBACK
+        cutoff = (reference_time or _utc_now()) - PUBLICATION_HOLDBACK
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -217,54 +194,34 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             job.model_copy(update={"publication_cutoff": publication_cutoff})
         ], template_ds
 
-    def generate_source_file_coords(
+    def _available_lead_times(
+        self, init_time: Timestamp, processing_region_ds: xr.Dataset
+    ) -> Sequence[Timedelta]:
+        if (init_time >= PER_INIT_STORE_DATE) != (self.source_layout == "operational"):
+            return []
+        return [
+            pd.Timedelta(value) for value in processing_region_ds["lead_time"].values
+        ]
+
+    def _coords_for_step(
         self,
-        processing_region_ds: xr.Dataset,
+        init_time: Timestamp,
+        lead_time: Timedelta,
         data_var_group: Sequence[GoogleWeathernext2DataVar],
     ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
-        return self._step_coords(processing_region_ds, data_var_group, publishable=True)
-
-    def held_back_source_file_coords(
-        self,
-    ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
-        """Return every held-back source step in this job's processing region."""
-        return self._step_coords(
-            self._processing_region_ds(), self.data_vars, publishable=False
-        )
-
-    def _step_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[GoogleWeathernext2DataVar],
-        *,
-        publishable: bool,
-    ) -> Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
-        coords = []
-        for init_time_value in processing_region_ds["init_time"].values:
-            init_time = pd.Timestamp(init_time_value)
-            if (init_time >= PER_INIT_STORE_DATE) != (
-                self.source_layout == "operational"
-            ):
-                continue
-            for lead_time_value in processing_region_ds["lead_time"].values:
-                lead_time = pd.Timedelta(lead_time_value)
-                is_publishable = init_time + lead_time <= self.publication_cutoff
-                if is_publishable is not publishable:
-                    continue
-                coords.extend(
-                    GoogleWeathernext2ForecastVirtualSourceFileCoord(
-                        source_layout=self.source_layout,
-                        init_time=init_time,
-                        lead_time=lead_time,
-                        data_vars=(data_var,),
-                    )
-                    for data_var in data_var_group
-                )
-        return coords
+        return [
+            GoogleWeathernext2ForecastVirtualSourceFileCoord(
+                source_layout=self.source_layout,
+                init_time=init_time,
+                lead_time=lead_time,
+                data_vars=(data_var,),
+            )
+            for data_var in data_var_group
+        ]
 
     def _source_chunks(
         self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
-    ) -> list[NativeSourceChunk]:
+    ) -> list[NativeSourceChunk[GoogleWeathernext2DataVar]]:
         assert coord.source_layout == self.source_layout
         store_key_prefix = _store_key(coord.get_url()) + "/"
         ensemble_members = [
@@ -318,99 +275,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                         match_glob=(
                             f"{prefix}{_OPERATIONAL_MEMBER_GLOB}.{coord.lead_index}.*"
                         ),
+                        delimiter="/",
                     )
                 )
         return queries
-
-    def discover_available(
-        self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
-    ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
-        queries = sorted(
-            {query for coord in pending for query in self._listing_queries(coord)}
-        )
-        with (
-            httpx.Client(timeout=30) as client,
-            ThreadPoolExecutor(self.download_concurrency) as pool,
-        ):
-            listed = dict(
-                zip(
-                    queries,
-                    pool.map(partial(_list_objects, client), queries),
-                    strict=True,
-                )
-            )
-
-        available = []
-        for coord in pending:
-            coord_objects: dict[str, NativeObjectMetadata] = {}
-            for query in self._listing_queries(coord):
-                objects = listed[query]
-                if objects is None:
-                    break
-                coord_objects.update(objects)
-            else:
-                locations = {chunk.location for chunk in self._source_chunks(coord)}
-                if locations <= coord_objects.keys():
-                    coord.chunk_metadata.clear()
-                    coord.chunk_metadata.update(
-                        {location: coord_objects[location] for location in locations}
-                    )
-                    available.append((coord, 0))
-                else:
-                    missing = locations - coord_objects.keys()
-                    log.debug(
-                        f"{len(missing)} source chunks unavailable for "
-                        f"{coord.get_url()} {coord.data_vars[0].path}; "
-                        f"first: {min(missing)}"
-                    )
-        return available
-
-    def process_virtual_refs(
-        self,
-        remaining: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
-    ) -> Iterator[
-        Sequence[
-            tuple[
-                GoogleWeathernext2ForecastVirtualSourceFileCoord,
-                Sequence[VirtualRef],
-            ]
-        ]
-    ]:
-        if self.processing_mode == "update":
-            yield from super().process_virtual_refs(remaining)
-            return
-
-        coords_by_manifest: dict[
-            int, list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
-        ] = {}
-        init_times = self.template_ds.to_dataset().get_index("init_time")
-        for coord in remaining:
-            init_index = init_times.get_loc(coord.init_time)
-            assert isinstance(init_index, int)
-            manifest_index = init_index // self.manifest_init_split
-            coords_by_manifest.setdefault(manifest_index, []).append(coord)
-        for coords in coords_by_manifest.values():
-            coords.sort(key=lambda coord: (coord.init_time, coord.lead_time))
-            yield from super().process_virtual_refs(coords)
-
-    def file_refs(
-        self,
-        coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
-        file_size: int,  # noqa: ARG002 - each coord covers several native objects
-    ) -> list[VirtualRef]:
-        chunks = self._source_chunks(coord)
-        assert set(coord.chunk_metadata) == {chunk.location for chunk in chunks}
-        return [
-            VirtualRef(
-                data_var=chunk.data_var,
-                out_loc=chunk.out_loc,
-                location=chunk.location,
-                offset=0,
-                length=coord.chunk_metadata[chunk.location].size,
-                etag_checksum=coord.chunk_metadata[chunk.location].etag_checksum,
-            )
-            for chunk in chunks
-        ]
 
 
 class GoogleWeathernext2ForecastHistoricalVirtualRegionJob(
@@ -432,52 +300,3 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
 
 def _store_key(url: str) -> str:
     return url.removeprefix(SOURCE_LOCATION_PREFIX)
-
-
-def _utc_now() -> Timestamp:
-    return pd.Timestamp.now(tz="UTC").tz_localize(None)
-
-
-def _list_objects(
-    client: httpx.Client, query: ObjectListingQuery
-) -> dict[str, NativeObjectMetadata] | None:
-    objects: dict[str, NativeObjectMetadata] = {}
-    page_token: str | None = None
-    while True:
-        params = {"prefix": query.prefix, "maxResults": "1000"}
-        if query.match_glob is not None:
-            params.update({"matchGlob": query.match_glob, "delimiter": "/"})
-        if page_token is not None:
-            params["pageToken"] = page_token
-
-        def get_page(params: dict[str, str] = params) -> httpx.Response:
-            response = client.get(OBJECTS_LOCATION, params=params)
-            if response.status_code in {408, 429} or response.status_code >= 500:
-                response.raise_for_status()
-            return response
-
-        response = retry(
-            get_page,
-            retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
-        )
-        if response.status_code in {403, 404}:
-            return None
-        response.raise_for_status()
-        payload = response.json()
-        for item in payload.get("items", []):
-            key = str(item["name"])
-            assert key.startswith(query.prefix), (
-                f"listed object escaped prefix {query.prefix}: {key}"
-            )
-            size = int(item["size"])
-            assert size > 0, f"invalid object size for {key}: {size}"
-            location = f"{PROXY_LOCATION_PREFIX}{key}"
-            assert location not in objects, f"duplicate listed object: {key}"
-            md5 = b64decode(str(item["md5Hash"]), validate=True)
-            assert len(md5) == 16, f"invalid object MD5 for {key}"
-            objects[location] = NativeObjectMetadata(
-                size=size, etag_checksum=f'"{md5.hex()}"'
-            )
-        page_token = payload.get("nextPageToken")
-        if page_token is None:
-            return objects

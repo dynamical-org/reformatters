@@ -36,9 +36,13 @@ from reformatters.common.config_models import DataVar, split_var_path
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
-from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.region_job import LaunchScope, SourceFileCoord
 from reformatters.common.retry import retry
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
+from reformatters.google.weathernext_virtual.holdback import PUBLICATION_HOLDBACK
+from reformatters.google.weathernext_virtual.region_job import (
+    WeatherNextVirtualRegionJob,
+)
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     read_checkpoint,
@@ -77,10 +81,41 @@ def coord_position(coord: SourceFileCoord) -> pd.Timestamp:
 
 
 def _probe_job(
-    job: VirtualRegionJob[Any, Any], store: IcechunkStore
+    job: VirtualRegionJob[Any, Any],
+    store: IcechunkStore,
+    probe_dims: tuple[str, ...] = (),
 ) -> list[tuple[SourceFileCoord, bool]]:
     """(coord, is_present) for every source file one region job covers."""
     candidates = list(job.source_file_coords())
+    if probe_dims:
+        group = zarr.open_group(store, mode="r")
+        keys_by_var = {
+            var.path: _var_keys(job.template_ds, group, var) for var in job.data_vars
+        }
+        keyed = [
+            (
+                coord,
+                [
+                    key
+                    for var in job.data_vars
+                    if _coord_carries(coord, var)
+                    for key in _var_chunk_keys(
+                        keys_by_var[var.path], coord.out_loc(), probe_dims
+                    )
+                ],
+            )
+            for coord in candidates
+        ]
+        presence = _exists_many(
+            store,
+            list({key for _, keys in keyed for key in keys}),
+            max_attempts=_SCAN_MAX_RETRIES,
+        )
+        return [
+            (coord, bool(keys) and all(presence[key] for key in keys))
+            for coord, keys in keyed
+        ]
+
     # Retried: a whole-archive scan makes enough reads that a transient object store
     # failure is near-certain, and one un-retried probe would kill the run.
     missing = retry(
@@ -96,6 +131,7 @@ def probe_jobs(
     store: IcechunkStore,
     # 48 network-bound probe workers is the tuned value for the target run host.
     max_workers: int = 48,
+    probe_dims: tuple[str, ...] = (),
 ) -> Iterator[tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]]:
     """Probe every job's source files concurrently, yielding (job, [(coord, present)])
     as jobs complete. In-flight work is bounded so a whole-archive scan never holds
@@ -103,7 +139,7 @@ def probe_jobs(
     job_iter = iter(jobs)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_probe_job, job, store): job
+            pool.submit(_probe_job, job, store, probe_dims): job
             for job in islice(job_iter, max_workers * 4)
         }
         while futures:
@@ -111,7 +147,7 @@ def probe_jobs(
             for future in done:
                 job = futures.pop(future)
                 for refill in islice(job_iter, 1):
-                    futures[pool.submit(_probe_job, refill, store)] = refill
+                    futures[pool.submit(_probe_job, refill, store, probe_dims)] = refill
                 yield job, future.result()
 
 
@@ -144,14 +180,17 @@ def _fold_file_availability(
     coord_presence: Sequence[tuple[SourceFileCoord, bool]],
     lead_limits: dict[pd.Timestamp, pd.Timedelta],
     counts: dict[pd.Timestamp, list[int]],
+    *,
+    admission_units: bool = False,
 ) -> None:
-    """Fold one job's probes into per-position [present_files, expected_files] counts.
-
-    Dedups source files by (position, url) so a file shared by several of the job's
-    coords is counted once (virtual jobs carry one variable group per region, so a file
-    never spans jobs); present if any coord saw it present. Files past a position's
-    expected_forecast_length are not expected (e.g. leads beyond a 36-hour-era init).
-    """
+    """Count source files, or individual admission units when requested."""
+    if admission_units:
+        for coord, is_present in coord_presence:
+            if coord_is_expected(coord, lead_limits):
+                bucket = counts.setdefault(coord_position(coord), [0, 0])
+                bucket[1] += 1
+                bucket[0] += int(is_present)
+        return
     present_by_file: dict[tuple[pd.Timestamp, str], bool] = {}
     for coord, is_present in coord_presence:
         if not coord_is_expected(coord, lead_limits):
@@ -251,13 +290,19 @@ def _var_keys(
     )
 
 
-def _var_chunk_keys(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> list[str]:
+def _var_chunk_keys(
+    keys: _VarKeys,
+    out_loc: Mapping[Any, Any],
+    probe_dims: tuple[str, ...] = (),
+) -> list[str]:
     """Chunk keys at `out_loc`, covering unlabeled levels and one spatial chunk."""
     indices = []
     for dim, chunk_size, count in zip(
         keys.dims, keys.chunks, keys.chunk_counts, strict=True
     ):
-        if dim in out_loc:
+        if dim in probe_dims:
+            indices.append(range(count))
+        elif dim in out_loc:
             position = keys.indexes[dim].get_loc(out_loc[dim])
             assert isinstance(position, int)
             indices.append((position // chunk_size,))
@@ -340,6 +385,112 @@ def _flush_var_probes(
     probes.clear()
 
 
+def _scan_reference_time(
+    reference_time: pd.Timestamp | None,
+    publication_cutoff: pd.Timestamp | None,
+    snapshot_metadata: Mapping[str, Any] | None,
+) -> pd.Timestamp | None:
+    metadata = snapshot_metadata or {}
+    if reference_time is None:
+        if publication_cutoff is None and "publication_cutoff" in metadata:
+            publication_cutoff = pd.Timestamp(metadata["publication_cutoff"])
+        if publication_cutoff is not None:
+            if publication_cutoff.tz is not None:
+                publication_cutoff = publication_cutoff.tz_convert("UTC").tz_localize(
+                    None
+                )
+            if publication_cutoff == pd.Timestamp.max:
+                return None
+            reference_time = publication_cutoff + PUBLICATION_HOLDBACK
+        elif "reference_time" in metadata:
+            reference_time = pd.Timestamp(metadata["reference_time"])
+    if reference_time is not None and reference_time.tz is not None:
+        reference_time = reference_time.tz_convert("UTC").tz_localize(None)
+    return reference_time
+
+
+def _scan_launch_scope(
+    scope: LaunchScope,
+    data_vars: Sequence[DataVar[Any]],
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    variables: list[str] | None,
+) -> tuple[
+    pd.Timestamp | None,
+    pd.Timestamp | None,
+    list[str] | None,
+    list[pd.Timestamp] | None,
+]:
+    def naive(value: pd.Timestamp) -> pd.Timestamp:
+        return (
+            value.tz_convert("UTC").tz_localize(None) if value.tz is not None else value
+        )
+
+    starts = [
+        naive(value) for value in (start, scope.filter_start) if value is not None
+    ]
+    ends = [
+        naive(value)
+        for value in (end, scope.append_dim_end, scope.filter_end)
+        if value is not None
+    ]
+    contains = (
+        [naive(value) for value in scope.filter_contains]
+        if scope.filter_contains is not None
+        else None
+    )
+    if scope.filter_variable_names is not None:
+        variables = [
+            var.path
+            for var in data_vars
+            if (
+                var.name in scope.filter_variable_names
+                or var.path in scope.filter_variable_names
+            )
+            and (variables is None or var.name in variables or var.path in variables)
+        ]
+        assert variables, "No variables in the requested launch scope"
+    return (
+        max(starts) if starts else None,
+        min(ends) if ends else None,
+        variables,
+        contains,
+    )
+
+
+def _validate_scan_provenance(
+    region_job_class: type[WeatherNextVirtualRegionJob[Any, Any]],
+    metadata: Mapping[str, Any],
+    reference_time: pd.Timestamp | None,
+) -> None:
+    recorded_cutoff = metadata.get("publication_cutoff")
+    unrestricted = metadata.get("publication_policy") == "unrestricted" or (
+        recorded_cutoff is not None
+        and pd.Timestamp(recorded_cutoff).tz_localize(None) == pd.Timestamp.max
+    )
+    strict = region_job_class.requires_scan_provenance
+    if strict or (
+        any(
+            key in metadata
+            for key in (
+                "publication_cutoff",
+                "reference_time",
+                "launch_scope",
+                "publication_policy",
+                "reformat_job_name",
+            )
+        )
+        and not unrestricted
+    ):
+        assert reference_time is not None, (
+            "WeatherNext scans require a recorded cutoff or explicit reference_time"
+        )
+    if unrestricted:
+        assert not strict, (
+            "Unrestricted publication is only supported for legacy WeatherNext"
+        )
+
+
 def scan_manifest(
     dataset: DynamicalDataset[Any, Any],
     store: IcechunkStore,
@@ -350,6 +501,12 @@ def scan_manifest(
     checkpoint_dir: Path | None = None,
     window: pd.Timedelta | None = None,
     probe_workers: int | None = None,
+    reference_time: pd.Timestamp | None = None,
+    publication_cutoff: pd.Timestamp | None = None,
+    snapshot_metadata: Mapping[str, Any] | None = None,
+    probe_dims: tuple[str, ...] = (),
+    admission_units: bool = False,
+    replay_launch_scope: bool = False,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
@@ -361,13 +518,68 @@ def scan_manifest(
     ensemble archive runs for hours, long enough that an interruption is likely; without
     checkpoints the whole scan is lost and starts over.
     """
+    assert not set(probe_dims) & {
+        "latitude",
+        "longitude",
+        "y",
+        "x",
+        "init_time",
+        "time",
+        "lead_time",
+    }
+    reference_time = _scan_reference_time(
+        reference_time, publication_cutoff, snapshot_metadata
+    )
+    filter_contains = None
+    metadata = snapshot_metadata or {}
+    if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
+        _validate_scan_provenance(dataset.region_job_class, metadata, reference_time)
+        if replay_launch_scope:
+            assert "launch_scope" in metadata, (
+                "Launch-scope replay requires recorded launch_scope"
+            )
+            start, end, variables, filter_contains = _scan_launch_scope(
+                LaunchScope.model_validate_json(metadata["launch_scope"]),
+                dataset.template_config.data_vars,
+                start,
+                end,
+                variables,
+            )
+        admission_units = True
+        statistic_dims = (
+            ("statistic",) if "statistic" in dataset.template_config.all_dims else ()
+        )
+        probe_dims = tuple(dict.fromkeys((*probe_dims, *statistic_dims)))
+        if start is None or end is None:
+            start, end = _resolve_bounds(dataset, store, start=start, end=end)
+    if checkpoint_dir is not None and (
+        reference_time is not None or probe_dims or admission_units
+    ):
+        checkpoint_dir = checkpoint_dir / digest(
+            [
+                store.session.snapshot_id,
+                str(reference_time),
+                *probe_dims,
+                str(admission_units),
+                str(replay_launch_scope),
+                str(metadata.get("launch_scope") if replay_launch_scope else None),
+            ],
+            length=12,
+        )
     if checkpoint_dir is not None and window is None:
         window = _CHECKPOINT_WINDOW
     windows: list[tuple[pd.Timestamp | None, pd.Timestamp | None]] = [(start, end)]
     if window is not None:
         start, end = _resolve_bounds(dataset, store, start=start, end=end)
         assert start < end, f"Nothing to scan: [{start} .. {end}]"
-        windows = list(_scan_windows(start, end, window=window))
+        bounded_windows = list(_scan_windows(start, end, window=window))
+        if filter_contains is not None:
+            bounded_windows = [
+                (first, last)
+                for first, last in bounded_windows
+                if any(first <= value < last for value in filter_contains)
+            ]
+        windows = list(bounded_windows)
     merged = ManifestScanResult(file_availability={}, var_availability={})
     for index, (window_start, window_end) in enumerate(windows, start=1):
         if len(windows) > 1:
@@ -394,6 +606,10 @@ def scan_manifest(
                 end=window_end,
                 variables=variables,
                 probe_workers=probe_workers,
+                reference_time=reference_time,
+                probe_dims=probe_dims,
+                admission_units=admission_units,
+                filter_contains=filter_contains,
             )
             if path is not None:
                 _write_checkpoint(path, result)
@@ -508,11 +724,22 @@ def _scan_window(
     end: pd.Timestamp | None,
     variables: list[str] | None,
     probe_workers: int | None = None,
+    reference_time: pd.Timestamp | None = None,
+    probe_dims: tuple[str, ...] = (),
+    admission_units: bool = False,
+    filter_contains: list[pd.Timestamp] | None = None,
 ) -> ManifestScanResult:
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
         "list[VirtualRegionJob[Any, Any]]",
-        build_virtual_jobs(dataset, end=end, start=start, variables=variables),
+        build_virtual_jobs(
+            dataset,
+            end=end,
+            start=start,
+            variables=variables,
+            reference_time=reference_time,
+            filter_contains=filter_contains,
+        ),
     )
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
     lead_limits = expected_lead_limits(store)
@@ -527,9 +754,17 @@ def _scan_window(
     progress_every = max(1, len(jobs) // 20)
     probe_kwargs = {} if probe_workers is None else {"max_workers": probe_workers}
     for i, (job, coord_presence) in enumerate(
-        probe_jobs(jobs, store, **probe_kwargs), start=1
+        probe_jobs(
+            jobs,
+            store,
+            probe_dims=probe_dims,
+            **probe_kwargs,
+        ),
+        start=1,
     ):
-        _fold_file_availability(coord_presence, lead_limits, file_counts)
+        _fold_file_availability(
+            coord_presence, lead_limits, file_counts, admission_units=admission_units
+        )
         for var in job.data_vars:
             var_availability.setdefault(var.path, {})
         pending_probes.extend(_var_probes(job, coord_presence, group, keys_by_var))

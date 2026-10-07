@@ -81,6 +81,8 @@ Set `dataset_id` and `name` in `dataset_attributes` following the id/name conven
 
 Read the [chunk/shard layout tool](./chunk_shard_layout_tool.md) docs and use the tool to find chunk and shard sizes for your data variables.
 
+String dimension coordinates use `Encoding(dtype="str", fill_value="", ...)` and string labels, which serialize as Zarr `string` arrays with `vlen-utf8`.
+
 Follow the `keep_mantissa_bits` guidance in AGENTS.md when setting each data variable's encoding.
 
 Using the information in the `TemplateConfig`, `reformatters` writes the Zarr metadata for your dataset to `src/reformatters/$DATASET_PATH/templates/latest.zarr`. Run this command in your terminal to create or update the template based on the your `TemplateConfig` subclass:

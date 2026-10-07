@@ -25,6 +25,7 @@ from reformatters.common.region_job import (
     DATA_VAR,
     SOURCE_FILE_COORD,
     CoordinateValue,
+    LaunchScope,
     RegionJob,
     SourceFileResult,
 )
@@ -97,6 +98,9 @@ class VirtualRegionJob(
     # A dataset implements file_refs and generate_source_file_coords (from
     # RegionJob) and sets operational_update_window; the rest have working defaults.
 
+    def commit_metadata(self) -> dict[str, str]:
+        return {}
+
     @classmethod
     def operational_update_jobs(
         cls,
@@ -131,6 +135,12 @@ class VirtualRegionJob(
             region=slice(window_start, len(append_dim_index)),
             reformat_job_name=reformat_job_name,
             processing_mode="update",
+            launch_scope=LaunchScope(
+                append_dim_end=append_dim_end,
+                filter_start=append_dim_end - cls.operational_update_window,
+                filter_end=append_dim_end,
+                filter_variable_names=[var.path for var in all_data_vars],
+            ),
         )
         return [job], template_ds
 
@@ -437,6 +447,7 @@ class VirtualRegionJob(
                 f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 primary_session.store,
                 [s.store for s in replica_sessions],
+                metadata=self.commit_metadata(),
             )
             log.info(
                 f"Committed {len(refs)} refs "
@@ -584,6 +595,7 @@ class VirtualRegionJob(
             self.append_dim,
             tmp_store,
             consolidated=self.consolidated_metadata,
+            metadata=self.commit_metadata(),
         )
 
     def sync_dims_to(
