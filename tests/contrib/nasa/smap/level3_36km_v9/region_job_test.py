@@ -154,10 +154,10 @@ def test_download_file_retries_on_failure(
     assert result.read_bytes() == b"success"
 
 
-def test_download_file_fallback_to_002(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("suffix", range(2, 10))
+def test_download_file_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: int
 ) -> None:
-    """Test that download_file falls back to _002.h5 when _001.h5 returns 404."""
     template_config = NasaSmapLevel336KmV9TemplateConfig()
     template_ds = template_config.get_template(pd.Timestamp("2015-04-01"))
 
@@ -172,18 +172,18 @@ def test_download_file_fallback_to_002(
 
     coord = NasaSmapLevel336KmV9SourceFileCoord(time=pd.Timestamp("2015-04-01"))
 
-    # Mock 404 response for _001.h5
     mock_response_404 = Mock()
     mock_response_404.status_code = 404
 
-    # Mock success response for _002.h5
     mock_response_success = Mock()
     mock_response_success.status_code = 200
     mock_response_success.raise_for_status = Mock()
     mock_response_success.iter_content = Mock(return_value=[b"reprocessed", b"data"])
 
     mock_session = Mock()
-    mock_session.get = Mock(side_effect=[mock_response_404, mock_response_success])
+    mock_session.get = Mock(
+        side_effect=[mock_response_404] * (suffix - 1) + [mock_response_success]
+    )
 
     monkeypatch.setattr(
         "reformatters.contrib.nasa.smap.level3_36km_v9.region_job.get_earthdata_session",
@@ -192,13 +192,9 @@ def test_download_file_fallback_to_002(
 
     result = region_job.download_file(coord)
 
-    # Should have called get twice: once for _001.h5, once for _002.h5
-    assert mock_session.get.call_count == 2
-
-    # Verify the URLs called
-    call_args_list = mock_session.get.call_args_list
-    assert "_001.h5" in call_args_list[0][0][0]
-    assert "_002.h5" in call_args_list[1][0][0]
+    assert [call.args[0] for call in mock_session.get.call_args_list] == [
+        coord.get_url().replace("_001.h5", f"_{i:03}.h5") for i in range(1, suffix + 1)
+    ]
 
     # Verify file was written with reprocessed data
     assert result.exists()
