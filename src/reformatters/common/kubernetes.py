@@ -378,6 +378,58 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     return image
 
 
+def has_running_cronjob_job(cronjob_name: str, job_name: str | None = None) -> bool:
+    """Check for unfinished target Jobs, or older siblings when job_name is given."""
+    config.load_incluster_config()
+    namespace = os.environ["POD_NAMESPACE"]
+    batch_v1 = client.BatchV1Api()
+    cronjob = batch_v1.read_namespaced_cron_job(
+        cronjob_name, namespace, _request_timeout=10
+    )
+    cronjob_uid = cronjob.metadata.uid
+    assert isinstance(cronjob_uid, str), "CronJob has no UID"
+    jobs = batch_v1.list_namespaced_job(namespace, _request_timeout=10)
+    own_key = None
+    if job_name is not None:
+        own_job = next(
+            (job for job in jobs.items if job.metadata.name == job_name), None
+        )
+        assert own_job is not None, f"Job {job_name} not found in namespace {namespace}"
+        own_key = (own_job.metadata.creation_timestamp, job_name)
+    for job in jobs.items:
+        if job_name is not None and job.metadata.name == job_name:
+            continue
+        labels = job.metadata.labels or {}
+        if not (
+            (
+                labels.get(_CRONJOB_NAME_LABEL) == cronjob_name
+                and labels.get(_CRONJOB_UID_LABEL) == cronjob_uid
+            )
+            or any(
+                owner.kind == "CronJob"
+                and owner.name == cronjob_name
+                and owner.uid == cronjob_uid
+                for owner in job.metadata.owner_references or []
+            )
+        ):
+            continue
+        conditions = (job.status.conditions or []) if job.status else []
+        if any(
+            condition.type in ("Complete", "Failed") and condition.status == "True"
+            for condition in conditions
+        ):
+            continue
+        if own_key is not None:
+            if (job.metadata.creation_timestamp, job.metadata.name) >= own_key:
+                continue
+            # Validation-retry parents submit only after finalizing their writes.
+            if retry_job_name(job.metadata.name)[1] == job_name:
+                continue
+        log.info(f"CronJob {cronjob_name} has unfinished Job {job.metadata.name}")
+        return True
+    return False
+
+
 def create_job_from_cronjob(
     cronjob_name: str,
     job_name: str,
@@ -391,7 +443,9 @@ def create_job_from_cronjob(
     config.load_incluster_config()
     namespace = os.environ["POD_NAMESPACE"]
     batch_v1 = client.BatchV1Api()
-    cronjob = batch_v1.read_namespaced_cron_job(cronjob_name, namespace)
+    cronjob = batch_v1.read_namespaced_cron_job(
+        cronjob_name, namespace, _request_timeout=10
+    )
     if cronjob.spec.suspend:
         log.info(f"Skipping {job_name}: CronJob {cronjob_name} is suspended")
         return False
@@ -424,12 +478,14 @@ def create_job_from_cronjob(
         spec=copy.deepcopy(template.spec),
     )
     try:
-        batch_v1.create_namespaced_job(namespace, job)
+        batch_v1.create_namespaced_job(namespace, job, _request_timeout=10)
         log.info(f"Created Job {job_name} from CronJob {cronjob_name}")
     except ApiException as error:
         if error.status != 409:
             raise
-        existing = batch_v1.read_namespaced_job(job_name, namespace)
+        existing = batch_v1.read_namespaced_job(
+            job_name, namespace, _request_timeout=10
+        )
         if existing.metadata.name != job_name or any(
             (existing.metadata.labels or {}).get(key) != value
             for key, value in (
