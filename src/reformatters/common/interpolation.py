@@ -31,7 +31,7 @@ def _linear_interpolate_zero_dim_1d_inplace_numba(
     values: ArrayFloat32, where: Array1D[np.bool]
 ) -> None:
     # Interpolate along dim 0, parallel loop over dim 1, and loop over dim 2
-    for i in prange(values.shape[1]):  # ty: ignore[not-iterable]
+    for i in prange(values.shape[1]):
         for j in range(values.shape[2]):
             # Interpolate along `seq` skipping first and last points where we can't interpolate
             seq = values[:, i, j]
