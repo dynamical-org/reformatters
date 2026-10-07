@@ -32,10 +32,19 @@ Both phases list the source and destination, then copy only the missing files wi
 `rclone copyurl`, so a run interrupted part way through is completed by the next one. The
 icosahedral phase copies one run at a time, oldest first, and skips runs younger than 4 hours,
 which may still be publishing. It starts neither its listing nor a run within 30 minutes of the
-job's deadline, failing the job instead. After copying, it also fails the job if a selected run
-between 4 and 18 hours old is missing, if a run lacks files that other listed runs of its kind
-(main or intermediate) have, or if a run lacks single-level files or a selected level type. A
-parameter missing from every run at once is not detected.
+job's deadline, failing the job instead. After each successful copy it relists the destination
+and retries if any source-listed paths are still absent; a run needing no copy reuses its
+destination listing. After copying, it also fails the job if a selected run between 4 and 18
+hours old is missing from DWD, if an archived run lacks selected files archived for other runs
+of its kind (main or intermediate) that DWD still lists, or if it lacks a requested parameter
+or, when all parameters are requested, single-level files or a selected level type. Files already archived continue to
+count when they disappear from DWD. Destination comparisons ignore other parameters, unselected
+level types, sidecars, and unsupported path shapes. A parameter missing from every compared archive
+run at once is not detected unless explicitly requested.
+
+Failed rclone listings with partial file output raise, allowing configured listing retries to run.
+Only a directory-not-found error with empty file output is treated as an absent prefix; the
+icosahedral source listing still fails if it finds no files.
 
 This code uses [`rclone`](https://rclone.org) under the hood. `rclone copyurl --urls` needs a
 newer `rclone` than Ubuntu's package; the Docker image copies it from `rclone/rclone:latest`, and

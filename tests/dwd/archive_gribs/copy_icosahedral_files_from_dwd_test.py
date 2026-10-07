@@ -97,9 +97,13 @@ SRC_ROOT = ":http:/weather/nwp/v1/m/icon-eu/p/"
 URL_ROOT = "https://opendata.dwd.de/weather/nwp/v1/m/icon-eu/p"
 
 
-def _fake_list_files(files_by_path: dict[str, list[str]]) -> MagicMock:
+def _fake_list_files(files_by_path: dict[str, list[list[str]]]) -> MagicMock:
+    listings_by_path = {
+        path: iter(listings) for path, listings in files_by_path.items()
+    }
+
     def list_files(path: str, **_kwargs: object) -> list[PurePosixPath]:
-        return [PurePosixPath(p) for p in files_by_path[path]]
+        return [PurePosixPath(p) for p in next(listings_by_path[path])]
 
     return MagicMock(side_effect=list_files)
 
@@ -110,6 +114,7 @@ def _copy(
     level_types: Sequence[int] = (100,),
     time_budget: timedelta = timedelta(hours=1),
     now: pd.Timestamp = NOW,
+    params: Sequence[str] = (),
 ) -> None:
     with (
         patch(f"{MODULE}.list_files", mock_list_files),
@@ -119,7 +124,7 @@ def _copy(
             dst_root_path=":s3:bucket/icosahedral",
             nwp_init_hours=nwp_init_hours,
             level_types=level_types,
-            params=[],
+            params=params,
             time_budget=time_budget,
             transfer_parallelism=8,
             checkers=4,
@@ -143,9 +148,19 @@ def test_copy_icosahedral_files_copies_missing_files_one_run_at_a_time_oldest_fi
 ) -> None:
     mock_list_files = _fake_list_files(
         {
-            SRC_ROOT: TWO_RUNS_ON_DWD,
-            ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
-            ":s3:bucket/icosahedral/2026-09-15T03/": [],
+            SRC_ROOT: [TWO_RUNS_ON_DWD],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [
+                ["T_2M/PT000H00M.grib2"],
+                [
+                    "T_2M/PT000H00M.grib2",
+                    "T_2M/PT001H00M.grib2",
+                    "T/lvt1/100/lv1/85000/PT000H00M.grib2",
+                ],
+            ],
+            ":s3:bucket/icosahedral/2026-09-15T03/": [
+                [],
+                ["T_2M/PT000H00M.grib2", "T/lvt1/100/lv1/85000/PT000H00M.grib2"],
+            ],
         }
     )
     _copy(mock_list_files)
@@ -194,20 +209,27 @@ def test_copy_icosahedral_files_is_a_no_op_when_dst_is_complete(
 ) -> None:
     mock_list_files = _fake_list_files(
         {
-            SRC_ROOT: ["T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2"],
-            ":s3:bucket/icosahedral/2026-09-15T00/": ["T_2M/PT000H00M.grib2"],
+            SRC_ROOT: [["T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2"]],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [["T_2M/PT000H00M.grib2"]],
         }
     )
     _copy(mock_list_files, nwp_init_hours=[0], level_types=[])
 
     mock_copy_urls.assert_not_called()
+    assert mock_list_files.call_count == 2
 
 
 @patch(f"{MODULE}.copy_urls")
 def test_copy_icosahedral_files_retries_a_failed_copy_with_only_the_files_still_missing(
     mock_copy_urls: MagicMock,
 ) -> None:
-    dst_listings = iter([[], ["T_2M/PT000H00M.grib2"]])
+    dst_listings = iter(
+        [
+            [],
+            ["T_2M/PT000H00M.grib2"],
+            ["T_2M/PT000H00M.grib2", "T_2M/PT001H00M.grib2"],
+        ]
+    )
     mock_list_files = MagicMock(
         side_effect=lambda path, **_kwargs: [
             PurePosixPath(p)
@@ -248,8 +270,15 @@ def test_copy_icosahedral_files_skips_runs_that_may_still_be_publishing(
     # No destination listing for the 03 run: listing it would raise KeyError.
     mock_list_files = _fake_list_files(
         {
-            SRC_ROOT: TWO_RUNS_ON_DWD,
-            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+            SRC_ROOT: [TWO_RUNS_ON_DWD],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [
+                [],
+                [
+                    "T_2M/PT000H00M.grib2",
+                    "T_2M/PT001H00M.grib2",
+                    "T/lvt1/100/lv1/85000/PT000H00M.grib2",
+                ],
+            ],
         }
     )
     _copy(mock_list_files, now=pd.Timestamp("2026-09-15T06:59Z"))
@@ -266,7 +295,7 @@ def test_copy_icosahedral_files_raises_when_dwd_lists_no_files(
     mock_copy_urls: MagicMock,
 ) -> None:
     with pytest.raises(RuntimeError, match="Found no icosahedral files"):
-        _copy(_fake_list_files({SRC_ROOT: []}))
+        _copy(_fake_list_files({SRC_ROOT: [[]]}))
 
     mock_copy_urls.assert_not_called()
 
@@ -289,9 +318,16 @@ def test_copy_icosahedral_files_stops_before_a_run_once_the_time_budget_runs_out
 ) -> None:
     mock_list_files = _fake_list_files(
         {
-            SRC_ROOT: TWO_RUNS_ON_DWD,
-            ":s3:bucket/icosahedral/2026-09-15T00/": [],
-            ":s3:bucket/icosahedral/2026-09-15T03/": [],
+            SRC_ROOT: [TWO_RUNS_ON_DWD],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [
+                [],
+                [
+                    "T_2M/PT000H00M.grib2",
+                    "T_2M/PT001H00M.grib2",
+                    "T/lvt1/100/lv1/85000/PT000H00M.grib2",
+                ],
+            ],
+            ":s3:bucket/icosahedral/2026-09-15T03/": [[]],
         }
     )
     # Readings: budget start, before the listing, before the 00 run, before the 03 run.
@@ -311,8 +347,15 @@ def test_copy_icosahedral_files_copies_then_raises_when_an_expected_run_is_missi
 ) -> None:
     mock_list_files = _fake_list_files(
         {
-            SRC_ROOT: TWO_RUNS_ON_DWD[:3],
-            ":s3:bucket/icosahedral/2026-09-15T00/": [],
+            SRC_ROOT: [TWO_RUNS_ON_DWD[:3]],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [
+                [],
+                [
+                    "T_2M/PT000H00M.grib2",
+                    "T_2M/PT001H00M.grib2",
+                    "T/lvt1/100/lv1/85000/PT000H00M.grib2",
+                ],
+            ],
         }
     )
     with pytest.raises(RuntimeError, match="2026-09-15T03 is not on DWD's server"):
@@ -328,18 +371,160 @@ def test_copy_icosahedral_files_copies_an_incomplete_run_then_raises(
     mock_list_files = _fake_list_files(
         {
             SRC_ROOT: [
-                "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
-                "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
-                "T_2M/r/2026-09-15T06:00/s/PT000H00M.grib2",
+                [
+                    "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
+                    "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
+                    "T_2M/r/2026-09-15T06:00/s/PT000H00M.grib2",
+                ]
             ],
-            ":s3:bucket/icosahedral/2026-09-15T00/": [],
-            ":s3:bucket/icosahedral/2026-09-15T06/": [],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [
+                [],
+                ["T_2M/PT000H00M.grib2", "T_2M/PT001H00M.grib2"],
+            ],
+            ":s3:bucket/icosahedral/2026-09-15T06/": [
+                [],
+                ["T_2M/PT000H00M.grib2"],
+            ],
         }
     )
     with pytest.raises(RuntimeError, match="2026-09-15T06 lacks 1 files"):
         _copy(mock_list_files, nwp_init_hours=[0, 6], level_types=[])
 
     assert mock_copy_urls.call_count == 2
+
+
+@pytest.mark.parametrize(
+    ("old_archive_has_mh", "new_source_has_mh", "incomplete_run"),
+    [
+        (True, True, None),
+        (False, True, "2026-09-14T09"),
+        (True, False, "2026-09-15T03"),
+    ],
+)
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_compares_archived_paths_when_source_files_age_off(
+    mock_copy_urls: MagicMock,
+    old_archive_has_mh: bool,
+    new_source_has_mh: bool,
+    incomplete_run: str | None,
+) -> None:
+    src_paths = [
+        "T_2M/r/2026-09-14T09:00/s/PT000H00M.grib2",
+        "T_2M/r/2026-09-15T03:00/s/PT000H00M.grib2",
+    ]
+    old_archived = ["T_2M/PT000H00M.grib2"]
+    new_archived = ["T_2M/PT000H00M.grib2"]
+    if old_archive_has_mh:
+        old_archived.append("MH/PT000H00M.grib2")
+    if new_source_has_mh:
+        src_paths.append("MH/r/2026-09-15T03:00/s/PT000H00M.grib2")
+        new_archived.append("MH/PT000H00M.grib2")
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: [src_paths],
+            ":s3:bucket/icosahedral/2026-09-14T09/": (
+                [old_archived] if old_archive_has_mh else [[], old_archived]
+            ),
+            ":s3:bucket/icosahedral/2026-09-15T03/": [[], new_archived],
+        }
+    )
+
+    if incomplete_run is None:
+        _copy(mock_list_files, nwp_init_hours=[3, 9], level_types=[])
+    else:
+        with pytest.raises(
+            RuntimeError,
+            match=f"archive completeness check failed: {incomplete_run} lacks 1 files",
+        ):
+            _copy(mock_list_files, nwp_init_hours=[3, 9], level_types=[])
+
+    assert mock_copy_urls.call_count == (1 if old_archive_has_mh else 2)
+    assert mock_list_files.call_count == (4 if old_archive_has_mh else 5)
+
+
+@pytest.mark.parametrize("eventually_complete", [True, False])
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_verifies_successful_copies_and_retries_only_missing(
+    mock_copy_urls: MagicMock, eventually_complete: bool
+) -> None:
+    partial = ["T_2M/PT000H00M.grib2"]
+    complete = [*partial, "T_2M/PT001H00M.grib2"]
+    dst_listings = [[], partial, partial]
+    dst_listings += [complete] if eventually_complete else [partial] * 3
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: [
+                [
+                    "T_2M/r/2026-09-15T00:00/s/PT000H00M.grib2",
+                    "T_2M/r/2026-09-15T00:00/s/PT001H00M.grib2",
+                ]
+            ],
+            ":s3:bucket/icosahedral/2026-09-15T00/": dst_listings,
+        }
+    )
+
+    with patch("reformatters.common.retry.time.sleep"):
+        if eventually_complete:
+            _copy(mock_list_files, nwp_init_hours=[0], level_types=[])
+        else:
+            with pytest.raises(
+                RuntimeError,
+                match="Archived run 2026-09-15T00 lacks 1 source-listed files after copying",
+            ):
+                _copy(mock_list_files, nwp_init_hours=[0], level_types=[])
+
+    copied_paths = [
+        [dst for _url, dst in call.kwargs["sources_and_dst_paths"]]
+        for call in mock_copy_urls.call_args_list
+    ]
+    assert copied_paths[0] == [
+        PurePosixPath("2026-09-15T00", path) for path in complete
+    ]
+    assert copied_paths[1:] == [
+        [PurePosixPath("2026-09-15T00/T_2M/PT001H00M.grib2")]
+    ] * (1 if eventually_complete else 2)
+
+
+@pytest.mark.parametrize("params", [[], ["T_2M", "T", "T_SO"]])
+@patch(f"{MODULE}.copy_urls")
+def test_copy_icosahedral_files_ignores_unselected_and_unsupported_archive_paths(
+    mock_copy_urls: MagicMock, params: list[str]
+) -> None:
+    selected = [
+        "T_2M/PT000H00M.grib2",
+        "T/lvt1/100/lv1/85000/PT000H00M.grib2",
+        "T_SO/lvt1/106/lv1/0.005/PT000H00M.grib2",
+    ]
+    extra_paths = [
+        "T/lvt1/150/lv1/1/PT000H00M.grib2",
+        "T/lvt1/103/lv1/2/PT000H00M.grib2",
+        "T/lvt2/100/lv1/85000/PT000H00M.grib2",
+        "T/lvt1/100/lv2/85000/PT000H00M.grib2",
+        "T/lvt1/100/lv1/85000/s/PT000H00M.grib2",
+        "T_2M/PT000H00M.grib2.idx",
+        "T_2M/PT000H00M.grib2.bz2",
+        "T/lvt1/100/lv1/85000/PT000H00M.grib2.idx",
+        "manifest.json",
+    ]
+    if params:
+        extra_paths += ["OTHER/PT000H00M.grib2", "OTHER/lvt1/100/lv1/1/PT000H00M.grib2"]
+    src_paths = [
+        f"{path.parent}/r/{run}:00/s/{path.name}"
+        for run in ("2026-09-15T00", "2026-09-15T06")
+        for path in map(PurePosixPath, selected)
+    ]
+    mock_list_files = _fake_list_files(
+        {
+            SRC_ROOT: [src_paths],
+            ":s3:bucket/icosahedral/2026-09-15T00/": [[*selected, *extra_paths]],
+            ":s3:bucket/icosahedral/2026-09-15T06/": [selected],
+        }
+    )
+
+    _copy(mock_list_files, nwp_init_hours=[0, 6], level_types=[100, 106], params=params)
+
+    mock_copy_urls.assert_not_called()
+    assert mock_list_files.call_count == 3
 
 
 def _runs(*runs: Sequence[str]) -> list[list[PurePosixPath]]:
@@ -370,7 +555,7 @@ def test_incomplete_runs_reports_files_another_run_of_its_kind_has() -> None:
     )
     assert incomplete_runs(runs, level_types=[], params=[]) == [
         (
-            "2026-09-15T06 lacks 1 files that other runs of its kind have,"
+            "2026-09-15T06 lacks 1 files archived for other runs of its kind,"
             " e.g. T_2M/PT120H00M.grib2"
         )
     ]
