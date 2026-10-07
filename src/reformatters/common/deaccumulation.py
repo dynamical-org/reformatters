@@ -166,7 +166,7 @@ def _deaccumulate_to_rates_numba(
     invalid_negative_count = 0
     clamped_count = 0
 
-    for i in prange(values.shape[0]):  # ty: ignore[not-iterable]
+    for i in prange(values.shape[0]):
         for j in range(values.shape[2]):
             sequence = values[i, :, j]
             previous_seconds = seconds[0]
