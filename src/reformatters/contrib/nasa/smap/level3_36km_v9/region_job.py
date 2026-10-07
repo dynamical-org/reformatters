@@ -71,8 +71,7 @@ class NasaSmapLevel336KmV9RegionJob(
             response = session.get(url, timeout=10, stream=True, allow_redirects=True)
             if response.status_code == 404:
                 # URLs contain a per file reprocessed version suffix (e.g. _001.h5, _002.h5, etc.)
-                # In practice, we've only seen `2` but try a few more just in case.
-                for i in [2, 3, 4, 5]:
+                for i in range(2, 7):
                     reprocessed_url = url.replace("_001.h5", f"_{i:03}.h5")
                     log.warning(
                         f"File not found at {url}, trying alternative {reprocessed_url}"
