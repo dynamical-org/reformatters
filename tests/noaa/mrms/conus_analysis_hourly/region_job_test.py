@@ -67,10 +67,17 @@ def test_source_file_coord_get_url_iowa() -> None:
     )
 
 
-def test_source_file_coord_get_url_ncep() -> None:
+@pytest.mark.parametrize(
+    ("product", "directory"),
+    [
+        ("MultiSensor_QPE_01H_Pass2", "MultiSensor_QPE_01H_Pass2"),
+        ("FLASH_QPE_FFGMAX", "FLASH/QPE_FFGMAX"),
+    ],
+)
+def test_source_file_coord_get_url_ncep(product: str, directory: str) -> None:
     coord = NoaaMrmsSourceFileCoord(
         time=pd.Timestamp("2024-01-15T23:00"),
-        product="MultiSensor_QPE_01H_Pass2",
+        product=product,
         level="00.00",
         fallback_products=(),
         data_var_name="precipitation_pass_2_surface",
@@ -78,8 +85,8 @@ def test_source_file_coord_get_url_ncep() -> None:
     url = coord.get_url(source="ncep")
     assert url == (
         "https://mrms.ncep.noaa.gov/2D/"
-        "MultiSensor_QPE_01H_Pass2/"
-        "MRMS_MultiSensor_QPE_01H_Pass2_00.00_20240115-230000.grib2.gz"
+        f"{directory}/"
+        f"MRMS_{product}_00.00_20240115-230000.grib2.gz"
     )
 
 
