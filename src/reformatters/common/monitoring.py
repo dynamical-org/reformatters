@@ -8,6 +8,8 @@ from typing import Literal, NoReturn
 
 import sentry_sdk
 import sentry_sdk.crons
+from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
+from sentry_sdk.utils import AnnotatedValue
 
 from reformatters.common.config import Config
 from reformatters.common.iterating import digest
@@ -15,6 +17,47 @@ from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
+
+
+class CredentialScrubber(EventScrubber):
+    def __init__(self) -> None:
+        super().__init__(
+            denylist=[
+                *DEFAULT_DENYLIST,
+                "access_key",
+                "access_key_id",
+                "secret_access_key",
+                "session_token",
+                "aws_access_key_id",
+                "aws_secret_access_key",
+                "aws_session_token",
+                "private-token",
+            ],
+            recursive=True,
+        )
+
+    def scrub_dict(self, d: object) -> None:
+        if isinstance(d, dict):
+            for key in d:
+                if (
+                    isinstance(key, str)
+                    and key.lower().startswith("rclone_")
+                    and any(
+                        part in key.lower()
+                        for part in (
+                            "_secret",
+                            "_access_key",
+                            "_session_token",
+                            "_password",
+                            "_api_key",
+                            "_token",
+                        )
+                    )
+                ):
+                    d[key] = (
+                        AnnotatedValue.substituted_because_contains_sensitive_data()
+                    )
+        super().scrub_dict(d)
 
 
 def log_peak_memory() -> None:
@@ -45,6 +88,7 @@ def monitor_cron(
     *,
     send_in_progress: bool = True,
     send_result: bool = True,
+    monitor_name: str | None = None,
 ) -> Iterator[None]:
     """Send Sentry cron check-ins for `cron_job` around the wrapped block, so a
     missed or overrunning run alerts, not just a raised exception."""
@@ -54,12 +98,12 @@ def monitor_cron(
 
     # Use the actual cronjob name from k8s env when available. This ensures
     # staging cronjobs report to their own Sentry monitor, not production's.
-    monitor_slug = os.getenv("CRON_JOB_NAME") or cron_job.name
+    monitor_slug = monitor_name or os.getenv("CRON_JOB_NAME") or cron_job.name
 
     def capture_checkin(status: Literal["ok", "in_progress", "error"]) -> None:
         sentry_sdk.crons.capture_checkin(
             monitor_slug=monitor_slug,
-            check_in_id=digest([reformat_job_name], length=32),
+            check_in_id=digest([monitor_slug, reformat_job_name], length=32),
             status=status,
             monitor_config={
                 "schedule": {"type": "crontab", "value": cron_job.schedule},

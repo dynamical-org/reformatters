@@ -1,10 +1,11 @@
 import inspect
 import json
+import os
 import subprocess
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, Generic, Literal, Self, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -16,6 +17,7 @@ from icechunk.store import IcechunkStore
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
+    kubernetes,
     parallel_coordination,
     template_utils,
     validation,
@@ -37,6 +39,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
+from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -63,6 +66,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -183,9 +187,36 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     update_template_with_results=True,
                 )
 
+        if is_last:
+            self._validate_after_update(reformat_job_name)
+
         log.info(
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
+
+    def _validate_after_update(self, reformat_job_name: str) -> None:
+        try:
+            self.validate_dataset(reformat_job_name)
+        except Exception as error:
+            log.exception("Operational validation failed for %s", reformat_job_name)
+            if (
+                isinstance(error, validation.OperationalValidationError)
+                and Config.is_prod
+            ):
+                should_retry, retry_job_name = kubernetes.retry_job_name(
+                    reformat_job_name
+                )
+                if should_retry:
+                    try:
+                        kubernetes.create_job_from_cronjob(
+                            os.environ["CRON_JOB_NAME"],
+                            retry_job_name,
+                            skip_if_next_run_within_deadline=True,
+                        )
+                    except Exception:
+                        log.exception("Could not submit %s", retry_job_name)
+            # Stop with exit code that fails the job rather than having this pod retry
+            raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
 
     def backfill_kubernetes(
         self,
@@ -619,51 +650,66 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         references rather than shards), and CheckReplicaMatchesPrimary on every
         replica.
         """
+        with self._monitor(
+            ValidationCronJob,
+            reformat_job_name,
+            monitor_name=self._validation_monitor_name,
+        ):
+            self._validate_dataset(reformat_job_name)
+
+    def _validation_monitor_name(self) -> str:
+        if os.getenv("CRON_JOB_NAME") in {
+            staging_cronjob_name(self.dataset_id, self.template_config.version, command)
+            for command in ("update", "validate")
+        }:
+            return staging_cronjob_name(
+                self.dataset_id, self.template_config.version, "validate"
+            )
+        return self._operational_cron_job(ValidationCronJob).name
+
+    def _validate_dataset(self, reformat_job_name: str) -> None:
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         validators = list(self.validators())
         if not is_virtual:
             validators.append(validation.CheckExpectedShards())
-        with self._monitor(ValidationCronJob, reformat_job_name):
-            region_job = self._virtual_validation_region_job(
-                validators, reformat_job_name
-            )
+        region_job = self._virtual_validation_region_job(validators, reformat_job_name)
 
-            primary_store = self.store_factory.primary_store()
+        primary_store = self.store_factory.primary_store()
+        validation.validate_dataset(
+            validators,
+            store=primary_store,
+            append_dim=self.template_config.append_dim,
+            append_dim_frequency=self.template_config.append_dim_frequency,
+            data_vars=self.template_config.data_vars,
+            dataset_id=self.dataset_id,
+            region_job=region_job,
+        )
+        log.info(f"Done validating {primary_store}")
+
+        replica_stores = self.store_factory.replica_stores()
+        if not replica_stores:
+            return
+
+        replica_validators = [
+            *validators,
+            validation.CheckReplicaMatchesPrimary(),
+        ]
+        primary_ds = validation.open_flattened_dataset(
+            primary_store,
+            consolidated=not isinstance(primary_store, IcechunkStore),
+        )
+        for replica_store in replica_stores:
             validation.validate_dataset(
-                validators,
-                store=primary_store,
+                replica_validators,
+                store=replica_store,
                 append_dim=self.template_config.append_dim,
                 append_dim_frequency=self.template_config.append_dim_frequency,
                 data_vars=self.template_config.data_vars,
                 dataset_id=self.dataset_id,
                 region_job=region_job,
+                primary_ds=primary_ds,
             )
-            log.info(f"Done validating {primary_store}")
-
-            replica_stores = self.store_factory.replica_stores()
-            if not replica_stores:
-                return
-
-            replica_validators = [
-                *validators,
-                validation.CheckReplicaMatchesPrimary(),
-            ]
-            primary_ds = validation.open_flattened_dataset(
-                primary_store,
-                consolidated=not isinstance(primary_store, IcechunkStore),
-            )
-            for replica_store in replica_stores:
-                validation.validate_dataset(
-                    replica_validators,
-                    store=replica_store,
-                    append_dim=self.template_config.append_dim,
-                    append_dim_frequency=self.template_config.append_dim_frequency,
-                    data_vars=self.template_config.data_vars,
-                    dataset_id=self.dataset_id,
-                    region_job=region_job,
-                    primary_ds=primary_ds,
-                )
-                log.info(f"Done validating {replica_store}")
+            log.info(f"Done validating {replica_store}")
 
     def _operational_update_jobs(
         self, reformat_job_name: str, tmp_store: Path
@@ -840,15 +886,18 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         Anchored to the scheduled fire rather than to `now`, so a pod replacing an
         evicted one stops when the pod it replaced would have, instead of polling into
         the next fire and being killed mid-poll. Lands a grace period before the pod's
-        own active deadline, leaving room to exit and check in.
+        own active deadline, leaving room to validate, exit and check in.
         """
-        poll_deadline_grace = pd.Timedelta(seconds=30)
-        assert poll_deadline_grace.total_seconds() > 0
         cron_job = self._operational_cron_job(ReformatCronJob)
+        assert (
+            timedelta(0)
+            < self.virtual_poll_deadline_grace
+            < cron_job.pod_active_deadline
+        )
         return (
             cron_job.previous_fire_time(now)
             + cron_job.pod_active_deadline
-            - poll_deadline_grace
+            - self.virtual_poll_deadline_grace
         )
 
     @model_validator(mode="after")

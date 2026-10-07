@@ -16,24 +16,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Code Quality (${{ matrix.arch }})
+  tests:
+    name: Tests (${{ matrix.arch }}, ${{ matrix.suite }})
     runs-on: ${{ matrix.runner }}
 
     strategy:
+      fail-fast: false
       matrix:
+        arch: [amd64, arm64]
+        suite: [noaa, other]
         include:
           - arch: amd64
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
+          - suite: noaa
+            pytest_args: tests/noaa
+          - suite: other
+            pytest_args: --ignore=tests/noaa
 
     # Keep deploy-staging.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -55,23 +62,39 @@ jobs:
         run: "uv pip install -e ."
 
       - name: Run Ruff
+        if: matrix.suite == 'other'
         run: uv run ruff check --output-format=github
 
       - name: Check code format
+        if: matrix.suite == 'other'
         run: uv run ruff format --check
 
       - name: Run ty
+        if: matrix.suite == 'other'
         run: uv run ty check
 
       - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose
+        run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
+
+  quality:
+    name: Code Quality
+    needs: tests
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require all test partitions to pass
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: |
+          echo "Test matrix result: $TEST_RESULT"
+          test "$TEST_RESULT" = success
 
   admission:
     name: Kubernetes admission
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
         with:
           python-version-file: ".python-version"

@@ -518,6 +518,7 @@ def empty_copy_with_reindex(
         ds[coord_name].attrs = template_coord.attrs.copy()
         ds[coord_name].encoding = template_coord.encoding.copy()
 
+    data_vars = {}
     for var_name, var in template_ds.data_vars.items():
         nan_array = dask.array.full(
             fill_value=np.nan,
@@ -527,8 +528,11 @@ def empty_copy_with_reindex(
             # Check the chunks/shards in the encoding for the stored sizes.
             chunks=-1,
         )
-        ds[var_name] = (var.dims, nan_array)
-        ds[var_name].attrs = var.attrs.copy()
-        ds[var_name].encoding = var.encoding.copy()
+        data_vars[var_name] = xr.Variable(
+            var.dims,
+            nan_array,
+            attrs=var.attrs.copy(),
+            encoding=var.encoding.copy(),
+        )
 
-    return ds
+    return ds.assign(data_vars)

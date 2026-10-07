@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -23,6 +24,7 @@ class GoogleWeathernext3ForecastVirtualDataset(
 ):
     template_config: GoogleWeathernext3ForecastVirtualTemplateConfig
     region_job_class: type[GoogleWeathernext3ForecastVirtualRegionJob]
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=15)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         prefix = (

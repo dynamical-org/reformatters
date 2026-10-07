@@ -15,6 +15,8 @@ import pandas as pd
 import typer
 
 from reformatters.common import kubernetes
+from reformatters.common.config import Config
+from reformatters.common.iterating import digest
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
@@ -30,11 +32,13 @@ ARCHIVE_PREFIX: Final = "dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens-forecast-46-day"
 ARCHIVE_RCLONE_ROOT: Final = f":s3:us-west-2.opendata.source.coop/{ARCHIVE_PREFIX}/"
 ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/{ARCHIVE_PREFIX}"
 
-# ECMWF's licence sets a 48 hour minimum delay, but ECDS publishes an initialization
-# about 51.6 hours after its 00 UTC reference time (measured 51.4-52.1 h daily,
-# 2026-06-26 to 2026-08-11). With the archive cron at 06 UTC, the initialization this
-# selects is one published a couple of hours earlier.
-PUBLICATION_DELAY: Final = pd.Timedelta("53h")
+# The earliest an initialization is looked for after its 00 UTC reference time. ECDS
+# published 51.4-52.1 h after it (measured daily, 2026-06-26 to 2026-08-11; 52.1 h for
+# 2026-10-01, with some selections visible about 2 minutes before the rest).
+PUBLICATION_DELAY: Final = pd.Timedelta("51h")
+# How long after its 00 UTC reference time a run keeps polling for the newest initialization.
+PUBLICATION_DEADLINE: Final = pd.Timedelta("54h30m")
+LICENCE_DELAY: Final = pd.Timedelta("48h")
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
 EARLIEST_INIT_TIME: Final = pd.Timestamp("2023-06-28")
@@ -110,6 +114,12 @@ ECDS_VARIABLES: Final[tuple[str, ...]] = tuple(
 )
 
 
+def latest_init_time(now: pd.Timestamp, delay: pd.Timedelta) -> pd.Timestamp:
+    """Newest daily initialization at least delay old, as timezone-naive UTC."""
+    now = now.tz_localize("UTC") if now.tz is None else now.tz_convert("UTC")
+    return (now - delay).normalize().tz_localize(None)
+
+
 class EcmwfIfsEns46DayGribArchiver(OperationalResources):
     """Retrieves ECMWF IFS ENS 46-day initializations from ECDS into dynamical's GRIB archive."""
 
@@ -124,7 +134,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 workers_total=1,
                 parallelism=1,
                 name=f"{self.dataset_id}-archive-grib-files",
-                schedule="0 6 * * *",
+                schedule="0 3 * * *",
                 pod_active_deadline=timedelta(hours=6),
                 image=image_tag,
                 dataset_id=self.dataset_id,
@@ -132,6 +142,7 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 memory="8G",
                 ephemeral_storage="60G",
                 secret_names=[SOURCE_COOP_SECRET_NAME, ECDS_API_KEY_SECRET_NAME],
+                service_account_name=kubernetes.SERVICE_ACCOUNT,
             )
         ]
 
@@ -165,23 +176,41 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
         ):
             _set_ecds_api_key_from_secret()
             selections = initialization_selections(ECDS_VARIABLES)
-            for init_time in self.init_times_to_archive(init_times_back):
+            newest_ready = False
+            init_times = self.init_times_to_archive(init_times_back)
+            for init_time in init_times:
                 log.info("Archiving %s", init_time)
-                archive_initialization(
+                is_newest = init_time == max(init_times)
+                ready = archive_initialization(
                     init_time,
                     selections,
                     dst_root_path,
                     checkers=checkers,
                     concurrent_requests=concurrent_requests,
                     env_vars=_source_coop_rclone_env_vars(),
+                    publication_deadline=(
+                        (init_time + PUBLICATION_DEADLINE).tz_localize("UTC")
+                        if is_newest
+                        else None
+                    ),
                 )
+                if is_newest:
+                    newest_ready = ready
+
+            if newest_ready and Config.is_prod and dst_root_path == ARCHIVE_RCLONE_ROOT:
+                for frequency in MATERIALIZED_PRODUCT_ECDS_VARIABLES:
+                    cron_name = f"ecmwf-ifs-ens-46-day-{frequency}-update"
+                    kubernetes.create_job_from_cronjob(
+                        cron_name,
+                        f"{cron_name}-t{digest([reformat_job_name], length=4)}",
+                    )
 
     def init_times_to_archive(
         self, init_times_back: int, now: pd.Timestamp | None = None
     ) -> Sequence[pd.Timestamp]:
         """The initializations one run checks, newest first."""
         now = now if now is not None else pd.Timestamp.now("UTC")
-        newest_init_time = (now - PUBLICATION_DELAY).normalize().tz_localize(None)
+        newest_init_time = latest_init_time(now, PUBLICATION_DELAY)
         init_times = pd.date_range(
             end=newest_init_time, periods=init_times_back, freq=INIT_FREQUENCY
         )

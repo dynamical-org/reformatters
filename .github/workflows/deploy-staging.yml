@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -18,15 +17,23 @@ env:
 
 jobs:
   quality:
-    name: Code Quality
+    name: Code Quality (${{ matrix.suite }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: noaa
+            pytest_args: tests/noaa
+          - suite: other
+            pytest_args: --ignore=tests/noaa
 
     # Keep code-quality.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -43,51 +50,56 @@ jobs:
         run: "uv pip install -e ."
 
       - name: Run Ruff
+        if: matrix.suite == 'other'
         run: uv run ruff check --output-format=github
 
       - name: Check code format
+        if: matrix.suite == 'other'
         run: uv run ruff format --check
 
       - name: Run ty
+        if: matrix.suite == 'other'
         run: uv run ty check
 
       - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose
+        run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
 
   deploy:
     name: Deploy Staging
     needs: quality
     runs-on: ubuntu-24.04
     environment: prod
+    permissions:
+      id-token: write
+      contents: read
 
     # Keep deploy-operational-updates.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Fetch main so deploy-staging can compare versions via git show
           fetch-depth: 0
 
       - name: Parse branch name
         id: parse
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
-          BRANCH="${{ github.ref_name }}"
           # Branch format: stage/{dataset_id}/v{version}
-          # Strip "stage/" prefix, then split on "/v"
-          WITHOUT_PREFIX="${BRANCH#stage/}"
-          DATASET_ID="${WITHOUT_PREFIX%/v*}"
-          VERSION="${WITHOUT_PREFIX##*/v}"
-
-          if [[ "$DATASET_ID" == "$VERSION" || -z "$DATASET_ID" || -z "$VERSION" ]]; then
+          # Match the dataset and version components before exporting them.
+          if [[ ! "$BRANCH" =~ ^stage/([a-z0-9][a-z0-9-]*)/v([a-z0-9][a-z0-9.-]*)$ ]]; then
             echo "::error::Could not parse dataset_id and version from branch '${BRANCH}'. Expected format: stage/{dataset_id}/v{version}"
             exit 1
           fi
+          DATASET_ID="${BASH_REMATCH[1]}"
+          VERSION="${BASH_REMATCH[2]}"
 
           echo "dataset_id=${DATASET_ID}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Parsed dataset_id=${DATASET_ID}, version=${VERSION}"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -101,7 +113,7 @@ jobs:
         run: uv sync --all-extras --dev --locked
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -132,8 +144,11 @@ jobs:
           file: deploy/Dockerfile
 
       - name: Deploy staging
+        env:
+          DATASET_ID: ${{ steps.parse.outputs.dataset_id }}
+          VERSION: ${{ steps.parse.outputs.version }}
         run: >
           uv run main deploy-staging
-          ${{ steps.parse.outputs.dataset_id }}
-          ${{ steps.parse.outputs.version }}
-          ${{ env.IMAGE_TAG }}
+          "$DATASET_ID"
+          "$VERSION"
+          "$IMAGE_TAG"

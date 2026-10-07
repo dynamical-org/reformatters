@@ -12,6 +12,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.ucsb_chc.chirps import region_job as chirps_region_job
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
@@ -22,8 +23,6 @@ from reformatters.ucsb_chc.chirps.dynamical_dataset import (
     UcsbChcChirpsAnalysisMaterializedDataset,
 )
 from reformatters.ucsb_chc.chirps.template_config import (
-    GRID_LAT_SIZE,
-    GRID_LON_SIZE,
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
 )
@@ -31,11 +30,13 @@ from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 # A land point in the western Amazon and an open ocean point in the Pacific.
 _LAND_POINT = {"latitude": -1.975, "longitude": -60.025}
 _OCEAN_POINT = {"latitude": 0.025, "longitude": -140.025}
+_MOCK_GRID_SHAPE = (4, 4)
 
 
 def _final_dataset() -> UcsbChcChirpsAnalysisFinalDataset:
@@ -134,10 +135,21 @@ def test_backfill_local_and_operational_update(
 def _patch_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    dataset: UcsbChcChirpsAnalysisMaterializedDataset,
     available: Callable[[pd.Timestamp], bool],
     requested_urls: list[str],
 ) -> None:
-    """Serve a fresh constant grid for available days and report all others missing."""
+    """Serve a small constant grid for available days and report all others missing."""
+    original_get_template = type(dataset.template_config).get_template
+    monkeypatch.setattr(
+        type(dataset.template_config),
+        "get_template",
+        lambda self, end_time: original_get_template(self, end_time).sel(
+            latitude=slice(-1.9, -2.1), longitude=slice(-60.1, -59.9)
+        ),
+    )
+    monkeypatch.setattr(chirps_region_job, "GRID_LAT_SIZE", _MOCK_GRID_SHAPE[0])
+    monkeypatch.setattr(chirps_region_job, "GRID_LON_SIZE", _MOCK_GRID_SHAPE[1])
 
     def fake_download(url: str, dataset_id: str) -> Path:
         requested_urls.append(url)
@@ -148,7 +160,7 @@ def _patch_source(
         path.touch()
         return path
 
-    values = np.full((GRID_LAT_SIZE, GRID_LON_SIZE), 24.0, dtype=np.float32)
+    values = np.full(_MOCK_GRID_SHAPE, 24.0, dtype=np.float32)
     values[0, 0] = np.float32(SOURCE_FILL_VALUE)
     reader = MagicMock()
     reader.read.side_effect = lambda *args, **kwargs: values.copy()
@@ -162,6 +174,7 @@ def _patch_source(
 
 
 def _assert_constant_land_values(ds: xr.Dataset) -> None:
+    assert np.isnan(ds["precipitation_surface"].isel(latitude=0, longitude=0)).all()
     land = ds.sel(_LAND_POINT, method="nearest")["precipitation_surface"]
     assert_allclose(
         land.values,
@@ -186,7 +199,7 @@ def _icechunk_dataset_with_three_days(
             raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
         return day <= pd.Timestamp("2025-01-03")
 
-    _patch_source(monkeypatch, tmp_path, available, [])
+    _patch_source(monkeypatch, tmp_path, dataset, available, [])
     dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-04"))
     return dataset, failed_days
 
@@ -201,6 +214,7 @@ def test_update_trims_to_last_day_with_data(
     _patch_source(
         monkeypatch,
         tmp_path,
+        dataset,
         lambda day: day <= pd.Timestamp("2025-01-04"),
         requested_urls,
     )
@@ -251,6 +265,7 @@ def test_update_advances_past_an_unread_day_and_fills_it_in_later(
     _patch_source(
         monkeypatch,
         tmp_path,
+        dataset,
         lambda day: day <= pd.Timestamp("2025-01-04") and day not in missing_gap,
         requested_urls,
     )
@@ -261,7 +276,7 @@ def test_update_advances_past_an_unread_day_and_fills_it_in_later(
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
 
     gap_ds = _open_store(dataset)
     assert_array_equal(gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
@@ -294,7 +309,7 @@ def test_failed_reread_before_a_later_success_writes_nan_then_refills(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
 
-    dataset.update("test-failed-reread")
+    assert_update_fails_validation(dataset, "test-failed-reread", "CheckRecentNans")
     failed_reread_ds = _open_store(dataset)
     assert_array_equal(
         failed_reread_ds["time"], pd.date_range("2025-01-01", "2025-01-03")
@@ -366,7 +381,7 @@ def test_update_spanning_two_time_shards_extends_through_the_second(
         ),
     )
     requested_urls: list[str] = []
-    _patch_source(monkeypatch, tmp_path, lambda _day: True, requested_urls)
+    _patch_source(monkeypatch, tmp_path, dataset, lambda _day: True, requested_urls)
 
     dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-03"))
     monkeypatch.setattr(

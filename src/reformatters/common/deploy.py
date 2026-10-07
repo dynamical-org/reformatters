@@ -1,6 +1,5 @@
 import json
 import subprocess
-import time
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -56,16 +55,12 @@ def deploy_operational_resources(
         f" for dataset_id_filter={dataset_id_filter!r}" if dataset_id_filter else ""
     )
 
-    verify_trigger_admission("default", [])
     authorized_targets = trigger_role_targets("default")
     workloads, _ = trigger_deployment_resources(reformat_jobs)
     _apply_resources(workloads)
     names = sorted(authorized_targets | {job.name for job in reformat_jobs})
-    created_bindings = create_trigger_bindings("default", names)
-    live_targets = verify_trigger_admission("default", names)
-    if created_bindings or set(names) - authorized_targets:
-        time.sleep(10)
-    _, permissions = trigger_deployment_resources([], sorted(live_targets))
+    create_trigger_bindings("default", names)
+    _, permissions = trigger_deployment_resources([], names)
     _apply_resources(permissions)
 
     log.info(
@@ -104,7 +99,7 @@ def register_commands(
                     "-o",
                     "json",
                 ],
-                capture_output=True,
+                stdout=subprocess.PIPE,
                 text=True,
                 check=True,
             )

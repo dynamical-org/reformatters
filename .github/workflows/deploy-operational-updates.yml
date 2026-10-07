@@ -7,10 +7,11 @@ on:
     types: [completed]
     branches: [main]
 
-# Prevent concurrent runs since this is deploying to the K8S cluster. Queued runs
-# apply in trigger order, which Code Quality's concurrency group makes equal to commit order.
+# Prevent concurrent runs since this is deploying to the K8S cluster.
+# Queued main pushes apply in trigger order, which Code Quality's concurrency group
+# makes equal to commit order. Other completions use separate groups.
 concurrency:
-  group: "deploy"
+  group: "deploy-${{ github.event.workflow_run.event }}-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.conclusion }}"
   cancel-in-progress: false
 
 permissions:
@@ -25,18 +26,22 @@ env:
 jobs:
   deploy:
     name: Deploy
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     environment: prod
 
     # Keep deploy-staging.yaml and these steps in sync
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -50,7 +55,7 @@ jobs:
         run: uv sync --all-extras --dev --locked
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}

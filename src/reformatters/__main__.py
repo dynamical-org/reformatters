@@ -401,6 +401,8 @@ if Config.is_sentry_enabled:
         project_root="src/",
         in_app_include=["reformatters"],
         default_integrations=True,
+        include_local_variables=True,
+        event_scrubber=monitoring.CredentialScrubber(),
         # Connection idles cause us to lose events after quiet periods
         keep_alive=True,
         # Truncate long values so Sentry doesn't reject the event

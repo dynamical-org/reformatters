@@ -174,7 +174,8 @@ def test_assign_var_metadata_units_not_duplicated_when_in_encoding() -> None:
 
 
 def test_assign_var_metadata_includes_serializer_when_set() -> None:
-    codec = GribberishCodec(var="TMP")
+    # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
+    codec = GribberishCodec(var="TMP")  # ty: ignore[call-non-callable]
 
     class SerializerVar(DataVar[BaseInternalAttrs]):
         encoding: Encoding = Encoding(
@@ -214,55 +215,6 @@ def test_assign_var_metadata_omits_serializer_when_none() -> None:
 # --- empty_copy_with_reindex tests ---
 
 
-def test_empty_copy_with_reindex_new_dim_size() -> None:
-    original = xr.Dataset(
-        {
-            "var": xr.Variable(
-                ("time", "lat"),
-                np.zeros((3, 2), dtype=np.float32),
-                encoding={"fill_value": np.nan},
-            )
-        },
-        coords={
-            "time": xr.Variable(("time",), [0, 1, 2], encoding={"fill_value": -1}),
-            "lat": xr.Variable(("lat",), [10, 20], encoding={"fill_value": -1}),
-        },
-        attrs={"description": "test dataset"},
-    )
-
-    new_times = [0, 1, 2, 3, 4]
-    result = empty_copy_with_reindex(original, "time", new_times)
-
-    assert result.sizes["time"] == 5
-    assert result.sizes["lat"] == 2
-
-
-def test_empty_copy_with_reindex_preserves_attrs() -> None:
-    original = xr.Dataset(
-        {"var": xr.Variable(("time",), [1.0], encoding={"fill_value": np.nan})},
-        coords={"time": xr.Variable(("time",), [0], encoding={"fill_value": -1})},
-        attrs={"description": "test"},
-    )
-    result = empty_copy_with_reindex(original, "time", [0, 1])
-    assert result.attrs["description"] == "test"
-
-
-def test_empty_copy_with_reindex_preserves_var_encoding() -> None:
-    original_encoding = {"fill_value": np.nan, "dtype": "float32"}
-    original = xr.Dataset(
-        {
-            "var": xr.Variable(
-                ("time",),
-                [1.0],
-                encoding=original_encoding,
-            )
-        },
-        coords={"time": xr.Variable(("time",), [0], encoding={"fill_value": -1})},
-    )
-    result = empty_copy_with_reindex(original, "time", [0, 1])
-    assert np.isnan(result["var"].encoding["fill_value"])
-
-
 def test_empty_copy_with_reindex_with_derive_fn() -> None:
     original = xr.Dataset(
         {"var": xr.Variable(("time",), [1.0], encoding={"fill_value": np.nan})},
@@ -277,6 +229,48 @@ def test_empty_copy_with_reindex_with_derive_fn() -> None:
     )
     assert "derived" in result.coords
     assert len(result.coords["derived"]) == 2
+
+
+def test_empty_copy_with_reindex_preserves_mixed_variables_and_metadata() -> None:
+    original = xr.Dataset(
+        {
+            "field": xr.Variable(
+                ("time", "latitude"),
+                np.ones((1, 2), dtype=np.float32),
+                attrs={"units": "K"},
+                encoding={"chunks": (1, 2), "fill_value": np.nan},
+            ),
+            "static": xr.Variable(
+                ("latitude",),
+                np.ones(2, dtype=np.float64),
+                attrs={"units": "m"},
+                encoding={"chunks": (2,), "fill_value": np.nan},
+            ),
+        },
+        coords={"time": [0], "latitude": [10.0, 20.0]},
+        attrs={"description": "template"},
+    )
+    original.time.attrs = {"axis": "T"}
+    original.time.encoding = {"dtype": "int64", "fill_value": -1}
+    result = empty_copy_with_reindex(original, "time", [0, 1, 2])
+
+    assert list(result.data_vars) == list(original.data_vars)
+    assert result.attrs == original.attrs
+    for name in original.variables:
+        assert result[name].dims == original[name].dims
+        assert result[name].dtype == original[name].dtype
+        assert result[name].attrs == original[name].attrs
+        assert result[name].encoding == original[name].encoding
+    for var in result.data_vars.values():
+        assert isinstance(var.data, dask.array.Array)
+        assert var.chunks == tuple((size,) for size in var.shape)
+        assert np.isnan(var.values).all()
+    assert result.field.shape == (3, 2)
+    assert result.static.shape == (2,)
+    result.field.attrs["units"] = "changed"
+    result.field.encoding["chunks"] = (3, 2)
+    assert original.field.attrs["units"] == "K"
+    assert original.field.encoding["chunks"] == (1, 2)
 
 
 # --- assert_no_structural_drift_from_existing_store tests ---

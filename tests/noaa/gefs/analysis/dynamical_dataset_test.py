@@ -12,6 +12,7 @@ from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 
@@ -192,7 +193,7 @@ def test_backfill_local_and_operational_update(
             *args, **{**kwargs, "filter_variable_names": filter_variable_names}
         ),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
 
     # Check resulting dataset
     updated_ds = xr.open_zarr(

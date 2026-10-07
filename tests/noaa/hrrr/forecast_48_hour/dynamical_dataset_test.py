@@ -15,6 +15,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -111,7 +112,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         ),
     )
 
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckCurrentData")
 
     # Check resulting dataset
     updated_ds = xr.open_zarr(

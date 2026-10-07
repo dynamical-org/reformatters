@@ -2107,7 +2107,8 @@ def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -
     and ref emit without ever being invoked. We never decode here (no real GRIB) -
     we assert the codec persists in metadata and the ref lands in the manifest."""
     dataset = _make_dataset(tmp_path)
-    serializer = GribberishCodec(var="TMP").to_dict()
+    # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
+    serializer = GribberishCodec(var="TMP").to_dict()  # ty: ignore[call-non-callable]
     template_utils.write_metadata(
         _create_template_ds(1, serializer=serializer), dataset.store_factory
     )
