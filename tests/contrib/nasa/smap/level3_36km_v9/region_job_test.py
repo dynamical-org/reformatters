@@ -154,7 +154,7 @@ def test_download_file_retries_on_failure(
     assert result.read_bytes() == b"success"
 
 
-@pytest.mark.parametrize("suffix", [2, 3, 4, 5, 6])
+@pytest.mark.parametrize("suffix", range(2, 10))
 def test_download_file_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: int
 ) -> None:
