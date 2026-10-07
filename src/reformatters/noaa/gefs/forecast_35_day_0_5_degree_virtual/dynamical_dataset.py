@@ -52,17 +52,18 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
-        # f000-f384 publishes ~init+3h46m through ~init+6h43m; f390-f840 publishes in
-        # bursts until ~init+28h05m. Fire just before the first burst; the 6h deadline
-        # covers it and early extension members; later members roll to the next fire.
+        # f000-f384 publishes ~init+3h46m to +6h43m. Extension member waves start
+        # near init+6h30m, +12h30m and +18h30m; overnight dumps finish around
+        # init+27h06m to +28h11m. Poll before the previous cycle finishes and through
+        # the newest morning extension wave, which can end around init+10h06m.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="45 3 * * *",
-            pod_active_deadline=timedelta(hours=6),
+            schedule="15 2 * * *",
+            pod_active_deadline=timedelta(hours=8, minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
-            # A fire opens by ingesting the whole extension of the previous cycle,
+            # A fire opens by catching up most of the previous cycle's extension,
             # the largest single batch of refs it holds.
             memory="15G",
             secret_names=self.store_factory.k8s_secret_names(),
