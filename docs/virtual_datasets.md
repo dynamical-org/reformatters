@@ -80,6 +80,14 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`.
 
+### Materialized update triggers
+
+The AIFS Single, GFS forecast, HRRR48 and GEFS35 virtual updates also poll wxopticon's public source-availability summary once per minute per trigger. Their `materialized_update_triggers` declarations select the target CronJob and source coverage: AIFS GCS through f360, GFS pgrb2 through f384, HRRR surface files through f48, and two GEFS phases: the previous init through f840 after its 28-hour extension gate, and the newest init through f384. Phases are evaluated independently while virtual ingestion continues; an unrelated incomplete init does not delay the GEFS extension trigger. The newest-init trigger also catches day-16 data that arrives after the daily materialized cron.
+
+The trigger uses `create_job_from_cronjob` with a deterministic name per init and lead horizon. It runs only in the declared production CronJob, never backfills or staging. While any target Job is unfinished, the virtual poller defers submission and checks again next minute. This lets an older cron with an empty or outdated plan finish before the trigger submits new work. The target's own sibling check covers the remaining non-atomic race.
+
+The loop can wait for the summary or target after ingesting all references, bounded by the existing polling deadline. Source-summary and Kubernetes API/network errors are logged and defer the optional trigger without stopping virtual ingestion; materialized planning fails on a source-summary error. All materialized schedules remain as backstops; their shared [update plan](parallel_processing.md#materialized-update-plan) avoids most overlap and repeated work. GEFS retains frontier reprocessing to repair late ensemble members, so its phases and cron can roughly double routine update compute. If source readiness arrives after both the cron and the virtual polling deadline, publication waits for the next scheduled run; validation does not alert until that init is due.
+
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
 
 ## Backfill: parallel on a pre-sized temp branch

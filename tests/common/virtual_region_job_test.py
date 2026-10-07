@@ -42,10 +42,12 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
 )
+from reformatters.common.source_availability import SourceAvailability
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -2410,3 +2412,100 @@ def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
 
     assert result == dict.fromkeys(keys, True)
     assert peak <= batch_size
+
+
+def test_trigger_waits_for_summary_with_no_remaining_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trigger = MaterializedUpdateTrigger(
+        source_cronjob="virtual-update",
+        target_cronjob="materialized-update",
+        availability=SourceAvailability(product_id="source", lead_hours=6),
+    )
+    poller = Mock()
+    poller.pending.side_effect = [True, False]
+    make_poller = Mock(return_value=poller)
+    monkeypatch.setattr(MaterializedUpdateTrigger, "poller", make_poller)
+    monkeypatch.setattr(
+        _NothingPublishedJob, "materialized_update_triggers", (trigger,)
+    )
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+    job = _polling_job("1h")
+    assert list(job.process_virtual_refs([])) == []
+    assert poller.pending.call_count == 2
+    make_poller.assert_called_once_with(APPEND_DIM_START + 3 * APPEND_DIM_FREQ)
+
+
+def test_trigger_summary_wait_obeys_poll_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trigger = MaterializedUpdateTrigger(
+        source_cronjob="virtual-update",
+        target_cronjob="materialized-update",
+        availability=SourceAvailability(product_id="source", lead_hours=6),
+    )
+    poller = Mock()
+    poller.pending.return_value = True
+    monkeypatch.setattr(MaterializedUpdateTrigger, "poller", Mock(return_value=poller))
+    monkeypatch.setattr(
+        _NothingPublishedJob, "materialized_update_triggers", (trigger,)
+    )
+    assert list(_polling_job("-1s").process_virtual_refs([])) == []
+    poller.pending.assert_called_once()
+
+
+def test_trigger_phases_are_polled_independently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trigger = MaterializedUpdateTrigger(
+        source_cronjob="virtual-update",
+        target_cronjob="materialized-update",
+        availability=SourceAvailability(product_id="source", lead_hours=6),
+    )
+    extension, current = Mock(), Mock()
+    extension.pending.return_value = True
+    current.pending.return_value = False
+    monkeypatch.setattr(
+        MaterializedUpdateTrigger, "poller", Mock(side_effect=[extension, current])
+    )
+    monkeypatch.setattr(
+        _NothingPublishedJob, "materialized_update_triggers", (trigger, trigger)
+    )
+    assert list(_polling_job("-1s").process_virtual_refs([])) == []
+    extension.pending.assert_called_once()
+    current.pending.assert_called_once()
+
+
+def test_all_present_update_still_drives_trigger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(4)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    job = _make_region_job(template_ds, region=slice(0, 4), processing_mode="update")
+    monkeypatch.setattr(
+        VirtualTestRegionJob, "filter_already_present", Mock(return_value=[])
+    )
+    drive = Mock()
+    monkeypatch.setattr(VirtualTestRegionJob, "process_virtual", drive)
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "materialized_update_triggers",
+        (
+            MaterializedUpdateTrigger(
+                source_cronjob="virtual-update",
+                target_cronjob="materialized-update",
+                availability=SourceAvailability(product_id="source", lead_hours=6),
+            ),
+        ),
+    )
+    VirtualTestRegionJob.process_worker_jobs(
+        [job],
+        dataset.store_factory,
+        "main",
+        worker_index=0,
+        overwrite_chunks=False,
+    )
+    drive.assert_called_once()
+    assert drive.call_args.args[-1] == []

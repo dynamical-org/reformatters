@@ -4,14 +4,21 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.source_availability import SourceAvailability
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
 from reformatters.noaa.models import NoaaDataVar
 
 from .region_job import NoaaGfsForecastRegionJob
 from .template_config import NoaaGfsForecastTemplateConfig
 
+SOURCE_AVAILABILITY = SourceAvailability(
+    product_id="external-noaa-gfs-aws", lead_hours=384, components=()
+)
+
 
 class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoord]):
+    materialized_source_availability: SourceAvailability = SOURCE_AVAILABILITY
+
     template_config: NoaaGfsForecastTemplateConfig = NoaaGfsForecastTemplateConfig()
     region_job_class: type[NoaaGfsForecastRegionJob] = NoaaGfsForecastRegionJob
 

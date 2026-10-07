@@ -21,6 +21,7 @@ from reformatters.common import storage, template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.iterating import node_group_name
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.region_job import (
     DATA_VAR,
     SOURCE_FILE_COORD,
@@ -92,6 +93,7 @@ class VirtualRegionJob(
 
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = ()
 
     # ----- Overridable methods -----
     # A dataset implements file_refs and generate_source_file_coords (from
@@ -268,11 +270,27 @@ class VirtualRegionJob(
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        triggers = [
+            poller
+            for trigger in self.materialized_update_triggers
+            if self.processing_mode == "update"
+            and (
+                poller := trigger.poller(
+                    pd.Timestamp(
+                        self.template_ds.to_dataset().get_index(self.append_dim)[-1]
+                    )
+                )
+            )
+            is not None
+        ]
+        trigger_pending = bool(triggers)
         last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
-            while pending:
+            while pending or trigger_pending:
                 tick_start = time.monotonic()
-                available = self.discover_available(pending)
+                trigger_states = [trigger.pending() for trigger in triggers]
+                trigger_pending = any(trigger_states)
+                available = self.discover_available(pending) if pending else []
                 discover_s = time.monotonic() - tick_start
                 if available:
                     coords, sizes = zip(*available, strict=True)
@@ -304,12 +322,11 @@ class VirtualRegionJob(
                             f"(first: {pending[0].get_url()})"
                         )
                     return
-                if pending:
+                if pending or trigger_pending:
                     if pd.Timestamp.now() >= self.poll_deadline:
                         log.info(
                             f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet published, leaving them to the next update "
-                            f"(first: {pending[0].get_url()})"
+                            "not yet published, leaving remaining work to the next update"
                         )
                         return
                     # Break the silence under the 350s network idle timeout.
@@ -372,9 +389,10 @@ class VirtualRegionJob(
                 )
             )
         ]
-        # An all-already-present worker writes nothing; an empty icechunk commit
-        # would raise, so skip the write loop entirely.
-        if remaining:
+        # An all-already-present update may still be waiting to trigger its materialized target.
+        if remaining or (
+            jobs[0].processing_mode == "update" and jobs[0].materialized_update_triggers
+        ):
             # A worker's jobs share template_ds/processing_mode/tick_interval, so any
             # one drives the write loop over the union of their coords; its region is
             # poisoned because the loop spans every job's region (see _NoRegion).
