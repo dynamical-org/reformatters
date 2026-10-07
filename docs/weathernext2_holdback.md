@@ -16,6 +16,8 @@ Decode validation samples two initialization positions, one lead per position, e
 
 Start a controlled update just after a `:10` fire and require inline validation to start before the next `:10`. Validation rebuilds expectations from the preceding scheduled fire at validation start: crossing that boundary both expects additional leads and weakens the holdback check relative to the writer's cutoff. Compare the validation log's cutoff with the committed snapshot's `publication_cutoff`; if they differ, repeat the controlled update for the new fire even if validation passed. A validation failure can follow a successful commit. For either outcome, retain and audit the committed snapshot against its recorded cutoff. Require successful inline validation with matching cutoff before unsuspending. Completeness permits only the newest ingested position to be partial; overlapping late arrivals can still fail that check.
 
+The timing gate requires the first pod to complete successfully, with no restarts or replacement pods. If a pod ends with `DeadlineExceeded` or `Received SIGTERM`, or the Job has more than one pod, treat the timing measurement as failed even if a replacement succeeds. The operator must stop further replacements before repeating the controlled run, and audit every snapshot the Job committed against its own recorded cutoff.
+
 The 0.1° products contain 19 variables, including three separately named precipitation forecast heads served as rates. The 0.05° products contain station-trained temperature and dewpoint fields defined everywhere. Unit conversions decode source Kelvin to Celsius, one-hour precipitation totals to kg m-2 s-1, one-hour radiation totals to W m-2, and cloud fractions to percent.
 
 ## Audit
