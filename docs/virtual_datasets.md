@@ -152,11 +152,3 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).
-
-## Shared WeatherNext mechanics
-
-`reformatters.google.weathernext_virtual` provides proxy listings, publication holdback filtering, ref emission, manifest-window batching, and holdback validation and auditing. `WeatherNextVirtualRegionJob` subclasses supply `_available_lead_times`, `_coords_for_step`, `_listing_queries`, and `_source_chunks`; their source coords inherit `WeatherNextSourceFileCoord`. The listing client accepts `ObjectListingQuery(prefix, match_glob=None, delimiter=None)`, paginates and retries, skips directory placeholders, and pins refs to quoted hexadecimal MD5 ETags. A delimiter is independent of a glob and must be passed explicitly when required.
-
-Model packages own source layouts and keys, lead mapping, job cutoffs and update-window alignment, and manifest split sizes. WeatherNext 2 keeps its annual-store exemption and operational one-hour holdback policy in its region job. Its audit CLI and destructive remediation remain in `src/scripts/weathernext2_holdback.py`; the shared audit engine only reads snapshots and writes local reports.
-
-WeatherNext 3 uses six statistic objects per variable and hourly lead. Its per-step listings use an exact six-statistic glob without a delimiter; fully publishable source horizons use one prefix listing per init and variable. See the [WeatherNext holdback runbook](weathernext2_holdback.md#weathernext-3) for product windows, schedules, and validation budgets.
