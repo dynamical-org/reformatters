@@ -23,14 +23,11 @@ def ecmwf_download_with_fallback(
             return download_one(source)
         except FALLBACK_EXCEPTIONS as e:
             detail = str(e)
-            if isinstance(e, FileNotFoundError) and (
-                match := re.match(
-                    r"Object at location [^\n]+ not found: Error performing GET (https?://\S+)"
-                    r" in \S+ - Server returned non-2xx status code: 404 Not Found:",
-                    detail,
-                )
-            ):
-                detail = f"{type(e).__name__}: 404 Not Found for {match[1]}"
+            if "404 Not Found" in detail:
+                url = re.search(r"https?://\S+", detail)
+                detail = f"{type(e).__name__}: 404 Not Found"
+                if url:
+                    detail += f" for {url[0]}"
             log.warning(
                 f"ECMWF download from {source!r} failed, will fall back: {detail}"
             )

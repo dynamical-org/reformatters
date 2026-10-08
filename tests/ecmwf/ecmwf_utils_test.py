@@ -93,9 +93,7 @@ def test_404_warning_is_concise(
         GenericError(
             _http_error_detail("https://example.com", "416 Range Not Satisfiable")
         ),
-        GenericError(_http_error_detail("https://example.com")),
         FileNotFoundError("local file missing\nfull detail"),
-        FileNotFoundError("404 Not Found: unfamiliar exception format\nfull detail"),
         FileNotFoundError(_http_error_detail("https://example.com", "403 Forbidden")),
     ],
 )
@@ -110,6 +108,26 @@ def test_other_warnings_keep_full_detail(
 
     assert [record.getMessage() for record in caplog.records] == [
         f"ECMWF download from 'gcs' failed, will fall back: {error}"
+    ]
+
+
+@pytest.mark.parametrize("exception_type", [FileNotFoundError, GenericError])
+@pytest.mark.parametrize("url", ["https://example.com/forecast.index", None])
+def test_404_substring_shortens_unfamiliar_formats(
+    exception_type: type[Exception],
+    url: str | None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    error = exception_type(f"404 Not Found: {url or 'missing object'}\nfull detail")
+    download = Mock(side_effect=[error, Path("downloaded.grib2")])
+
+    ecmwf_download_with_fallback(("gcs", "s3"), download)
+
+    detail = f"{exception_type.__name__}: 404 Not Found"
+    if url:
+        detail += f" for {url}"
+    assert [record.getMessage() for record in caplog.records] == [
+        f"ECMWF download from 'gcs' failed, will fall back: {detail}"
     ]
 
 
