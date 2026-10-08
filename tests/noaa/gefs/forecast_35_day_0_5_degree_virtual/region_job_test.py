@@ -175,7 +175,7 @@ def test_operational_update_jobs_reach_back_past_the_extension(
 ) -> None:
     """A cycle's 840 hour lead times publish until ~init+28h, past the next fire, so the
     window has to cover more than the newest init even when no run is missed."""
-    now = pd.Timestamp("2024-06-03T03:45")
+    now = pd.Timestamp("2024-06-03T02:15")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
     jobs, template_ds = (

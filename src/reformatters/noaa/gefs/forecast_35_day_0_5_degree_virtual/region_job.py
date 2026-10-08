@@ -9,5 +9,5 @@ from reformatters.noaa.gefs.virtual_region_job import NoaaGefsForecastVirtualReg
 class NoaaGefsForecast35Day05DegreeVirtualRegionJob(NoaaGefsForecastVirtualRegionJob):
     """RegionJob for the GEFS 35 day 0.5 degree virtual forecast dataset."""
 
-    # Three update cron fires' span, so two consecutive missed runs still self-heal.
+    # Three daily inits retain the previous cycle's extension after a missed fire.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("72h")

@@ -45,9 +45,9 @@ def test_polling_leaves_validation_time_inside_single_deadline(
         )
     )
     (cron_job,) = dataset.operational_kubernetes_resources("test")
-    fire = pd.Timestamp("2026-09-27T03:45")
-    assert cron_job.pod_active_deadline == timedelta(hours=6)
-    assert dataset._virtual_poll_deadline(fire) == pd.Timestamp("2026-09-27T09:38")
+    fire = pd.Timestamp("2026-09-27T02:15")
+    assert cron_job.pod_active_deadline == timedelta(hours=8, minutes=30)
+    assert dataset._virtual_poll_deadline(fire) == pd.Timestamp("2026-09-27T10:38")
     assert dataset._virtual_poll_deadline(fire + pd.Timedelta("2h")) == (
         fire + cron_job.pod_active_deadline - timedelta(minutes=7)
     )
@@ -58,7 +58,14 @@ def test_polling_leaves_validation_time_inside_single_deadline(
     monkeypatch.setattr(sentry_sdk, "flush", Mock())
     with monitor_cron(cron_job, "test"):
         pass
-    assert capture.call_args_list[0].kwargs["monitor_config"]["max_runtime"] == 360
+    assert capture.call_args_list[0].kwargs["monitor_config"]["max_runtime"] == 510
+
+    monkeypatch.setattr("reformatters.common.operational._RUN_MONITORS", [monitor_cron])
+    monkeypatch.setattr(type(dataset), "_validate_dataset", Mock())
+    dataset.validate_dataset("test")
+    validation_monitor = capture.call_args_list[-2].kwargs["monitor_config"]
+    assert validation_monitor["schedule"]["value"] == "15 2 * * *"
+    assert validation_monitor["checkin_margin"] == 520
 
 
 # 40N 100W, a land cell so the soil and snow bitmaps carry values there.
@@ -309,19 +316,27 @@ def test_operational_kubernetes_resources(
 ) -> None:
     (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
-    # The first file lands ~init+3h46m and the lead times through 384 hours finish
-    # ~init+6h43m, so the fire leads that stage and the deadline covers its end with
-    # three hours to spare. It also reaches past ~init+28h05m of the cycle a day older,
-    # where that cycle's 840 hour extension finishes.
-    assert update_cron_job.schedule == "45 3 * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(hours=6)
+    # Poll before the previous cycle completes and through the newest morning
+    # extension, including a late member wave ending around 10:06 UTC.
+    assert update_cron_job.schedule == "15 2 * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(hours=8, minutes=30)
     fire_to_next_fire = timedelta(hours=24)
     assert update_cron_job.pod_active_deadline < fire_to_next_fire
     (fire,) = _fire_minutes(update_cron_job.schedule)
-    previous_cycle_complete = timedelta(hours=28, minutes=5) - timedelta(days=1)
-    assert (
-        timedelta(minutes=fire) + update_cron_job.pod_active_deadline
-        > previous_cycle_complete
+    previous_cycle_complete = timedelta(hours=28, minutes=11) - timedelta(days=1)
+    assert timedelta(minutes=fire) < timedelta(hours=3, minutes=6)
+    poll_cutoff = (
+        timedelta(minutes=fire)
+        + update_cron_job.pod_active_deadline
+        - dataset.virtual_poll_deadline_grace
+    )
+    assert poll_cutoff > previous_cycle_complete
+    assert poll_cutoff > timedelta(hours=10, minutes=6)
+    validation_end = (
+        pd.Timestamp("2026-09-27T02:15") + update_cron_job.pod_active_deadline
+    )
+    assert update_cron_job.next_fire_time(validation_end) > (
+        validation_end + update_cron_job.pod_active_deadline
     )
     # Virtual updates are single writer.
     assert update_cron_job.workers_total == 1
@@ -334,14 +349,13 @@ def test_operational_kubernetes_resources(
 def test_operational_update_window_spans_three_update_fires(
     dataset: NoaaGefsForecast35Day05DegreeVirtualDataset,
 ) -> None:
-    """Two consecutive failed or lost updates still self-heal: the span the next fire
-    re-sweeps reaches back past both. A cycle's own extension also publishes past the
-    next fire, so even with none missed the window has to reach a second init."""
+    """A missed daily fire must not strand the previous cycle's extension, which
+    publishes past its own next fire."""
     (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
     (fire,) = _fire_minutes(update_cron_job.schedule)
     window = NoaaGefsForecast35Day05DegreeVirtualRegionJob.operational_update_window
     assert window == 3 * _INIT_TIME_FREQUENCY
-    assert window > pd.Timedelta(minutes=fire) + pd.Timedelta("28h5m")
+    assert window >= 2 * _INIT_TIME_FREQUENCY + pd.Timedelta(minutes=fire)
 
 
 def test_cron_job_names_fit_the_kubernetes_limit(
