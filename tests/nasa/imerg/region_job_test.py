@@ -1,5 +1,6 @@
+import logging
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ from reformatters.nasa.imerg.analysis_late.region_job import (
 from reformatters.nasa.imerg.region_job import (
     _HDF5_MAGIC,
     _JSIMPSON_MAX_AGE,
+    DownloadSource,
     NasaImergAnalysisSourceFileCoord,
 )
 from reformatters.nasa.imerg.template_config import (
@@ -129,9 +131,12 @@ def _job() -> NasaImergAnalysisEarlyRegionJob:
     )
 
 
-def _fake_response(body: bytes) -> MagicMock:
+def _fake_response(
+    body: bytes, *, status: int = 200, content_type: str = "application/x-hdf5"
+) -> MagicMock:
     response = MagicMock()
-    response.status_code = 200
+    response.status_code = status
+    response.headers = {"Content-Type": content_type}
     response.raise_for_status.return_value = None
     response.iter_content.return_value = [body]
     return response
@@ -161,7 +166,9 @@ def _patch_sessions(
 
 
 def test_download_file_falls_through_connection_error_to_archive(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     # jsimpson resets the connection for a not-yet-published granule; the GES DISC
     # archive candidate must still be tried rather than the whole attempt aborting.
@@ -174,15 +181,223 @@ def test_download_file_falls_through_connection_error_to_archive(
     path = _job().download_file(_recent_coord())
 
     assert path.read_bytes().startswith(_HDF5_MAGIC)
-    assert jsimpson.get.called
-    assert gesdisc.get.called
+    assert jsimpson.get.call_count == 2
+    assert gesdisc.get.call_count == 1
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelno == logging.WARNING
+    assert "outcome=recovered last_source=gesdisc" in caplog.text
+    assert "'connection_error': 2" in caplog.text
+
+
+def test_download_file_summarizes_mixed_failures_on_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    coord = _recent_coord()
+    candidates = coord.candidate_urls()
+    session = MagicMock()
+    session.get.side_effect = [
+        _fake_response(b"", status=404, content_type="text/plain"),
+        requests.ConnectionError("Connection reset by peer"),
+        _fake_response(
+            b"<html>authentication or upstream failure</html>", content_type="text/html"
+        ),
+        _fake_response(_HDF5_MAGIC + b"granule-bytes"),
+    ]
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+
+    path = _job().download_file(coord)
+
+    assert path.read_bytes() == _HDF5_MAGIC + b"granule-bytes"
+    assert session.get.call_args_list == [
+        call(url, timeout=30, stream=True, allow_redirects=True)
+        for _, url in candidates
+    ]
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.levelno == logging.WARNING
+    assert "outcome=recovered last_source=gesdisc" in record.getMessage()
+    assert record.args == (
+        coord.run,
+        coord.time,
+        "recovered",
+        "gesdisc",
+        {"not_found": 1, "connection_error": 1, "non_hdf5": 1},
+        {
+            "not_found": "source=jsimpson status=404 content_type='text/plain'",
+            "connection_error": "source=jsimpson",
+            "non_hdf5": "source=gesdisc status=200 content_type='text/html'",
+        },
+        [candidates[0][1], candidates[2][1]],
+    )
+    assert "authentication or upstream failure" not in caplog.text
+
+
+def test_download_file_first_success_has_no_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = MagicMock()
+    session.get.return_value = _fake_response(_HDF5_MAGIC)
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+
+    assert _job().download_file(_recent_coord()).read_bytes() == _HDF5_MAGIC
+    assert session.get.call_count == 1
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize(
+    "category", ["not_found", "connection_error", "non_hdf5", "mixed"]
+)
+def test_download_file_exhaustion_summarizes_each_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    category: str,
+) -> None:
+    coord = _recent_coord()
+    session = MagicMock()
+    not_found = _fake_response(b"", status=404)
+    non_hdf5 = _fake_response(b"<html>error</html>", content_type="text/html")
+    connection_error = requests.ConnectionError("Connection reset by peer")
+    failures = {
+        "not_found": [not_found] * 4,
+        "connection_error": [connection_error] * 4,
+        "non_hdf5": [non_hdf5] * 4,
+        "mixed": [not_found, connection_error, non_hdf5, not_found],
+    }
+    session.get.side_effect = failures[category] * 6
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    sleeps: list[float] = []
+    monkeypatch.setattr("reformatters.common.retry.time.sleep", sleeps.append)
+    monkeypatch.setattr("reformatters.common.retry.exponential_backoff_time", float)
+
+    with pytest.raises(FileNotFoundError) as raised:
+        _job().download_file(coord)
+
+    assert str(raised.value) == f"No IMERG granule found for {coord.run} {coord.time}"
+    assert (
+        session.get.call_args_list
+        == [
+            call(url, timeout=30, stream=True, allow_redirects=True)
+            for _, url in coord.candidate_urls()
+        ]
+        * 6
+    )
+    assert sleeps == [0.0, 1.0, 2.0, 3.0, 4.0]
+    assert len(caplog.records) == 6
+    counts = {"not_found": 0, "connection_error": 0, "non_hdf5": 0}
+    if category == "mixed":
+        counts.update(not_found=2, connection_error=1, non_hdf5=1)
+    else:
+        counts[category] = 4
+    for record in caplog.records:
+        assert record.levelno == logging.WARNING
+        assert isinstance(record.args, tuple)
+        assert record.args[2:5] == ("exhausted", "gesdisc", counts)
+        assert "outcome=exhausted last_source=gesdisc" in record.getMessage()
+
+
+@pytest.mark.parametrize("earlier_failure", [True, False])
+@pytest.mark.parametrize("failure_location", ["request", "status", "stream", "session"])
+def test_download_file_preserves_unexpected_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    earlier_failure: bool,
+    failure_location: str,
+) -> None:
+    error = (
+        requests.HTTPError("403 Forbidden")
+        if failure_location == "status"
+        else OSError("unexpected failure")
+    )
+    session = MagicMock()
+    response = _fake_response(
+        _HDF5_MAGIC, status=403 if failure_location == "status" else 200
+    )
+    if failure_location == "status":
+        response.raise_for_status.side_effect = error
+    if failure_location == "stream":
+        response.iter_content.side_effect = error
+    failure = error if failure_location == "request" else response
+    session.get.side_effect = (
+        [_fake_response(b"", status=404), failure] if earlier_failure else [failure]
+    ) * 6
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    if failure_location == "session":
+        session.get.side_effect = None
+        session.get.return_value = _fake_response(b"", status=404)
+        factory = MagicMock(
+            side_effect=([session, error] if earlier_failure else [error]) * 6
+        )
+        monkeypatch.setattr(
+            "reformatters.nasa.imerg.region_job.get_pps_session", factory
+        )
+
+    with pytest.raises(type(error)) as raised:
+        _job().download_file(_recent_coord())
+
+    assert raised.value is error
+    requests_per_sweep = int(earlier_failure) + int(failure_location != "session")
+    assert session.get.call_count == requests_per_sweep * 6
+    assert len(caplog.records) == (6 if earlier_failure else 0)
+    for record in caplog.records:
+        assert isinstance(record.args, tuple)
+        assert record.args[2] == f"unexpected_exception:{type(error).__name__}"
+        assert (
+            f"outcome=unexpected_exception:{type(error).__name__} last_source=jsimpson"
+            in record.getMessage()
+        )
+        assert "'not_found': 1" in record.getMessage()
+
+
+@pytest.mark.parametrize("candidate_count", [40, 4000])
+def test_download_file_summary_state_stays_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    candidate_count: int,
+) -> None:
+    candidates: list[tuple[DownloadSource, str]] = [
+        ("gesdisc", f"https://example.org/{index}/" + "x" * 2000)
+        for index in range(candidate_count)
+    ]
+    monkeypatch.setattr(
+        NasaImergAnalysisSourceFileCoord, "candidate_urls", lambda self: candidates
+    )
+    session = MagicMock()
+    session.get.return_value = _fake_response(b"", status=404, content_type="x" * 10000)
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+
+    with pytest.raises(FileNotFoundError):
+        _job().download_file(_recent_coord())
+
+    assert session.get.call_count == candidate_count * 6
+    assert len(caplog.records) == 6
+    for record in caplog.records:
+        assert isinstance(record.args, tuple)
+        assert record.args[4] == {
+            "not_found": candidate_count,
+            "connection_error": 0,
+            "non_hdf5": 0,
+        }
+        assert record.args[5] == {
+            "not_found": f"source=gesdisc status=404 content_type={'x' * 128!r}",
+            "connection_error": "",
+            "non_hdf5": "",
+        }
+        assert record.args[6] == [candidates[0][1][:512], candidates[-1][1][:512]]
+        assert len(record.getMessage()) < 2000
 
 
 def test_download_file_rejects_non_hdf5_body(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # GES DISC returns an HTML/JSON error body (not a 404) for a not-yet-published
-    # granule; a non-HDF5 body must never be handed to the reader as a granule.
+    # A successful HTTP response can contain an error or authentication body;
+    # a non-HDF5 body must never be handed to the reader as a granule.
     session = MagicMock()
     session.get.return_value = _fake_response(b"<html>not found</html>")
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)

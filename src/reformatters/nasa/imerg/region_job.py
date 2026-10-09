@@ -138,44 +138,90 @@ class NasaImergAnalysisMaterializedRegionJob(
 
     def download_file(self, coord: NasaImergAnalysisSourceFileCoord) -> Path:
         def _download() -> Path:
-            for source, url in coord.candidate_urls():
-                session = (
-                    get_pps_session()
-                    if source == "jsimpson"
-                    else get_earthdata_session()
-                )
-                try:
-                    response = session.get(
-                        url, timeout=30, stream=True, allow_redirects=True
+            failure_counts = {"not_found": 0, "connection_error": 0, "non_hdf5": 0}
+            failure_context = dict.fromkeys(failure_counts, "")
+            sample_urls: list[str] = []
+            outcome = "unexpected_exception"
+            outcome_source: DownloadSource | None = None
+
+            def record_failure(
+                category: Literal["not_found", "connection_error", "non_hdf5"],
+                source: DownloadSource,
+                url: str,
+                response: requests.Response | None = None,
+            ) -> None:
+                failure_counts[category] += 1
+                context = f"source={source}"
+                if response is not None:
+                    content_type = response.headers.get("Content-Type", "")[:128]
+                    context += (
+                        f" status={response.status_code} content_type={content_type!r}"
                     )
-                    if response.status_code == 404:
-                        log.warning(f"File not found at {url}, trying next candidate")
+                failure_context[category] = context
+                if len(sample_urls) == 2:
+                    sample_urls[-1] = url[:512]
+                else:
+                    sample_urls.append(url[:512])
+
+            try:
+                for source, url in coord.candidate_urls():
+                    outcome_source = source
+                    session = (
+                        get_pps_session()
+                        if source == "jsimpson"
+                        else get_earthdata_session()
+                    )
+                    try:
+                        response = session.get(
+                            url, timeout=30, stream=True, allow_redirects=True
+                        )
+                        if response.status_code == 404:
+                            record_failure("not_found", source, url, response)
+                            continue
+                        response.raise_for_status()
+                        local_path = get_local_path(
+                            self.template_ds.attrs["dataset_id"],
+                            path=urlparse(url).path,
+                        )
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(local_path, "wb") as f:
+                            f.writelines(response.iter_content(chunk_size=8192))
+                    except requests.ConnectionError:
+                        # jsimpson resets the connection for a not-yet-published
+                        # granule rather than returning 404; fall through to the
+                        # next candidate (e.g. the GES DISC archive).
+                        record_failure("connection_error", source, url)
                         continue
-                    response.raise_for_status()
-                    local_path = get_local_path(
-                        self.template_ds.attrs["dataset_id"], path=urlparse(url).path
+                    with open(local_path, "rb") as f:
+                        is_hdf5 = f.read(len(_HDF5_MAGIC)) == _HDF5_MAGIC
+                    if not is_hdf5:
+                        # A successful HTTP response can contain an error or
+                        # authentication body instead of an HDF5 granule.
+                        record_failure("non_hdf5", source, url, response)
+                        continue
+                    outcome = "recovered"
+                    return local_path
+                outcome = "exhausted"
+                raise FileNotFoundError(
+                    f"No IMERG granule found for {coord.run} {coord.time}"
+                )
+            except Exception as error:
+                if outcome == "unexpected_exception":
+                    outcome = f"unexpected_exception:{type(error).__name__}"
+                raise
+            finally:
+                if any(failure_counts.values()):
+                    log.warning(
+                        "IMERG candidate sweep run=%s time=%s outcome=%s last_source=%s "
+                        "failures=%s last_failure_context=%s sample_urls=%s",
+                        coord.run,
+                        coord.time,
+                        outcome,
+                        outcome_source,
+                        failure_counts,
+                        failure_context,
+                        sample_urls,
                     )
-                    local_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(local_path, "wb") as f:
-                        f.writelines(response.iter_content(chunk_size=8192))
-                except requests.ConnectionError:
-                    # jsimpson resets the connection for a not-yet-published
-                    # granule rather than returning 404; fall through to the
-                    # next candidate (e.g. the GES DISC archive).
-                    log.warning(f"Connection failed for {url}, trying next candidate")
-                    continue
-                with open(local_path, "rb") as f:
-                    is_hdf5 = f.read(len(_HDF5_MAGIC)) == _HDF5_MAGIC
-                if not is_hdf5:
-                    # GES DISC serves an HTML/JSON error body (not a 404) for a
-                    # not-yet-published granule; skip it rather than handing a
-                    # non-HDF5 file to the reader.
-                    log.warning(f"Non-HDF5 body from {url}, trying next candidate")
-                    continue
-                return local_path
-            raise FileNotFoundError(
-                f"No IMERG granule found for {coord.run} {coord.time}"
-            )
 
         return retry(_download, max_attempts=6)
 
