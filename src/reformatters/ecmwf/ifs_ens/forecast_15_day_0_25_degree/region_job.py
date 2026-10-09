@@ -3,6 +3,7 @@ from collections import defaultdict
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from pathlib import Path
+from threading import Lock
 from typing import ClassVar, assert_never
 
 import numpy as np
@@ -114,12 +115,48 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
                 coords.append(coord)
         return coords
 
-    def download_file(self, coord: IfsEnsSourceFileCoord) -> Path:
+    def _download_processing_group(
+        self,
+        source_file_coords: Sequence[IfsEnsSourceFileCoord],
+        data_var_names: Sequence[str],
+    ) -> list[IfsEnsSourceFileCoord]:
+        lock = Lock()
+        recovered_count = 0
+        example = ""
+
+        def record_recovery(warning: str) -> None:
+            nonlocal recovered_count, example
+            with lock:
+                recovered_count += 1
+                if not example:
+                    example = warning[:512]
+
+        def download_file(coord: IfsEnsSourceFileCoord) -> Path:
+            return self.download_file(coord, on_recovered_gcs_404=record_recovery)
+
+        try:
+            return self._download_source_files(
+                source_file_coords, data_var_names, download_file
+            )
+        finally:
+            if recovered_count:
+                log.warning(
+                    f"Recovered {recovered_count} GCS 404 fallbacks via S3 "
+                    f"for {data_var_names}; example: {example}"
+                )
+
+    def download_file(
+        self,
+        coord: IfsEnsSourceFileCoord,
+        *,
+        on_recovered_gcs_404: Callable[[str], None] | None = None,
+    ) -> Path:
         """Download the file for the given coordinate and return the local path."""
         if isinstance(coord, OpenDataSourceFileCoord):
             return ecmwf_download_with_fallback(
                 ("gcs", "s3"),
                 lambda source: self._download_from_source(coord, source),
+                on_recovered_gcs_404=on_recovered_gcs_404,
             )
         # MARS lives on Dynamical's source.coop archive; no mirror to fall back to.
         return self._download_from_source(coord, "s3-source-coop")

@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -305,10 +305,19 @@ class MaterializedRegionJob(
         list[SOURCE_FILE_COORD]
             List of SourceFileCoord objects with updated download status and path.
         """
+        return self._download_source_files(
+            source_file_coords, data_var_names, self.download_file
+        )
 
+    def _download_source_files(
+        self,
+        source_file_coords: Sequence[SOURCE_FILE_COORD],
+        data_var_names: Sequence[str],
+        download_file: Callable[[SOURCE_FILE_COORD], Path],
+    ) -> list[SOURCE_FILE_COORD]:
         def _call_download_file(coord: SOURCE_FILE_COORD) -> SOURCE_FILE_COORD:
             try:
-                path = self.download_file(coord)
+                path = download_file(coord)
                 return replace(coord, downloaded_path=path)
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)

@@ -164,3 +164,87 @@ def test_success_does_not_warn_or_try_another_source(
 
     download.assert_called_once_with("gcs")
     assert not caplog.records
+
+
+def test_recovered_gcs_404_can_be_aggregated(caplog: pytest.LogCaptureFixture) -> None:
+    error = FileNotFoundError(_http_error_detail("https://example.com/forecast.index"))
+    recovered = Mock()
+    download = Mock(side_effect=[error, Path("downloaded.grib2")])
+
+    assert ecmwf_download_with_fallback(
+        ("gcs", "s3"), download, on_recovered_gcs_404=recovered
+    ) == Path("downloaded.grib2")
+
+    recovered.assert_called_once_with(
+        "ECMWF download from 'gcs' failed, will fall back: "
+        "FileNotFoundError: 404 Not Found for https://example.com/forecast.index"
+    )
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "final_error",
+    [
+        FileNotFoundError(_http_error_detail("https://s3.example.com/forecast.index")),
+        PermissionDeniedError("403 Forbidden\nfull diagnostic detail"),
+        GenericError("503 Service Unavailable\nfull diagnostic detail"),
+        ValueError("unexpected failure"),
+    ],
+)
+def test_unrecovered_404_stays_visible(
+    final_error: Exception, caplog: pytest.LogCaptureFixture
+) -> None:
+    recovered = Mock()
+    first_error = FileNotFoundError(_http_error_detail("https://gcs.example.com/file"))
+    download = Mock(side_effect=[first_error, final_error])
+
+    with pytest.raises(type(final_error)) as caught:
+        ecmwf_download_with_fallback(
+            ("gcs", "s3"), download, on_recovered_gcs_404=recovered
+        )
+
+    assert caught.value is final_error
+    recovered.assert_not_called()
+    assert caplog.messages[0] == (
+        "ECMWF download from 'gcs' failed, will fall back: "
+        "FileNotFoundError: 404 Not Found for https://gcs.example.com/file"
+    )
+    if isinstance(final_error, ValueError):
+        assert len(caplog.records) == 1
+    elif isinstance(final_error, FileNotFoundError):
+        assert len(caplog.records) == 2
+        assert (
+            "FileNotFoundError: 404 Not Found for https://s3.example.com"
+            in caplog.messages[1]
+        )
+    else:
+        assert caplog.messages[1] == (
+            f"ECMWF download from 's3' failed, will fall back: {final_error}"
+        )
+
+
+@pytest.mark.parametrize(
+    ("sources", "error"),
+    [
+        (("gcs", "s3"), PermissionDeniedError("403 Forbidden\nfull detail")),
+        (("gcs", "s3"), GenericError("503 Service Unavailable\nfull detail")),
+        (("gcs", "s3"), FileNotFoundError("local missing file\nfull detail")),
+        (
+            ("s3", "gcs"),
+            FileNotFoundError("404 Not Found for https://example.com/file"),
+        ),
+    ],
+)
+def test_other_recoveries_keep_individual_warnings(
+    sources: tuple[EcmwfOpenDataSource, EcmwfOpenDataSource],
+    error: Exception,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    recovered = Mock()
+    download = Mock(side_effect=[error, Path("downloaded.grib2")])
+
+    ecmwf_download_with_fallback(sources, download, on_recovered_gcs_404=recovered)
+
+    recovered.assert_not_called()
+    assert len(caplog.records) == 1
+    assert str(error) in caplog.messages[0]

@@ -266,6 +266,103 @@ def test_region_job_download_file_open_data_falls_back_to_s3(
     assert all("ecmwf-forecasts.s3" in u for u in urls[1:])
 
 
+def test_recovered_fallback_summaries_are_scoped_to_processing_groups(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    region_job = _make_ifs_ens_region_job()
+
+    def download_from_source(
+        self: EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+        coord: OpenDataSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "gcs":
+            raise FileNotFoundError(
+                f"404 Not Found for https://example.com/{'x' * 2000}"
+            )
+        return Path("downloaded.grib2")
+
+    monkeypatch.setattr(
+        EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+        "_download_from_source",
+        download_from_source,
+    )
+    coord = _t2m_open_data_coord()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(
+            region_job._download_processing_group, [coord] * 32, ["first"]
+        )
+        second = executor.submit(
+            region_job._download_processing_group, [coord] * 17, ["second"]
+        )
+        assert len(first.result()) == 32
+        assert all(
+            c.downloaded_path == Path("downloaded.grib2") for c in first.result()
+        )
+        assert all(
+            c.downloaded_path == Path("downloaded.grib2") for c in second.result()
+        )
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 2
+    assert any(
+        "Recovered 32 GCS 404 fallbacks via S3 for ['first']" in m for m in warnings
+    )
+    assert any(
+        "Recovered 17 GCS 404 fallbacks via S3 for ['second']" in m for m in warnings
+    )
+    assert all(len(m) < 650 for m in warnings)
+
+
+@pytest.mark.parametrize("recover_one", [False, True])
+def test_group_preserves_failed_download_reporting(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    recover_one: bool,
+) -> None:
+    region_job = _make_ifs_ens_region_job()
+
+    def download_from_source(
+        self: EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+        coord: OpenDataSourceFileCoord,
+        source: str,
+    ) -> Path:
+        if source == "gcs":
+            raise FileNotFoundError("404 Not Found for https://gcs.example.com/file")
+        if coord.ensemble_member == 1:
+            return Path("downloaded.grib2")
+        raise ValueError("unexpected S3 failure")
+
+    monkeypatch.setattr(
+        EcmwfIfsEnsForecast15Day025DegreeRegionJob,
+        "_download_from_source",
+        download_from_source,
+    )
+
+    coords = [_t2m_open_data_coord()]
+    if recover_one:
+        coords.append(replace(coords[0], ensemble_member=1))
+    results = region_job._download_processing_group(coords, ["temperature_2m"])
+
+    assert results[0].downloaded_path is None
+    warning_index = next(
+        i
+        for i, message in enumerate(caplog.messages)
+        if message.startswith("ECMWF download from 'gcs'")
+    )
+    error_index = next(
+        i for i, record in enumerate(caplog.records) if record.levelname == "ERROR"
+    )
+    assert warning_index < error_index
+    summaries = [m for m in caplog.messages if m.startswith("Recovered")]
+    assert len(summaries) == int(recover_one)
+    if recover_one:
+        assert "Recovered 1 GCS 404 fallbacks via S3" in summaries[0]
+        assert results[1].downloaded_path == Path("downloaded.grib2")
+    assert any(r.levelname == "ERROR" and r.exc_info for r in caplog.records)
+
+
 def test_region_job_download_file_mars_no_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
