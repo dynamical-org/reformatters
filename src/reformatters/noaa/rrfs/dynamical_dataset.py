@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import ClassVar
 
-from pydantic import Field
+from pydantic import Field, NonNegativeInt, PositiveInt
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -18,7 +18,8 @@ from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfi
 
 class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]):
     template_config: NoaaRrfsForecastTemplateConfig
-    _operational_timing: ClassVar[tuple[int, int]]
+    update_offset_minutes: NonNegativeInt
+    update_deadline_minutes: PositiveInt
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -39,23 +40,25 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cadence = int(self.template_config.append_dim_frequency.total_seconds() / 3600)
-        offset_minutes, deadline_minutes = self._operational_timing
 
         hours = ",".join(
             str(h)
             for h in sorted(
-                {(h + offset_minutes // 60) % 24 for h in range(0, 24, cadence)}
+                {
+                    (h + self.update_offset_minutes // 60) % 24
+                    for h in range(0, 24, cadence)
+                }
             )
         )
 
         return (
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                schedule=f"{offset_minutes % 60} {hours} * * *",
-                pod_active_deadline=timedelta(minutes=deadline_minutes),
+                schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
+                pod_active_deadline=timedelta(minutes=self.update_deadline_minutes),
                 image=image_tag,
                 dataset_id=self.dataset_id,
-                cpu="2",
+                cpu="1.5",
                 memory="3.7G",
                 secret_names=self.store_factory.k8s_secret_names(),
                 suspend=True,
@@ -63,17 +66,13 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
         )
 
     def validators(self) -> Sequence[validation.Validator]:
-        offset_minutes, deadline_minutes = self._operational_timing
         return (
             validation.CheckCurrentData(
-                max_delay=timedelta(minutes=offset_minutes + deadline_minutes)
+                max_delay=timedelta(
+                    minutes=self.update_offset_minutes + self.update_deadline_minutes
+                )
                 - self.virtual_poll_deadline_grace
             ),
-            # Hourly windows include an unpublished next init; the newest ingested init is normally the previous one.
-            validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.05, 1.0)
-                if self.template_config.sub_hourly
-                else (1.0,),
-            ),
+            validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(max_workers=2),
         )

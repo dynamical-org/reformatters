@@ -1,5 +1,5 @@
-from reformatters.noaa.rrfs.region_job import NoaaRrfsRegionJob
+from reformatters.noaa.rrfs.region_job import NoaaRrfsHourlyRegionJob
 
 
-class NoaaRrfsForecast84HourVirtualRegionJob(NoaaRrfsRegionJob):
+class NoaaRrfsForecast84HourVirtualRegionJob(NoaaRrfsHourlyRegionJob):
     pass

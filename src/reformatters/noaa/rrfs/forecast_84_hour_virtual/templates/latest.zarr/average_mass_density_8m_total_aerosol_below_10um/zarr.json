@@ -38,7 +38,7 @@
     "long_name": "Mass density",
     "short_name": "mdens",
     "units": "kg m-3",
-    "comment": "Total aerosol with particle diameter below 10 \u00b5m. Averaged over the preceding hour.",
+    "comment": "Total aerosol with particle diameter below 10 micrometres. Averaged over the preceding hour.",
     "step_type": "avg",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

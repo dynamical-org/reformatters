@@ -38,7 +38,7 @@
     "long_name": "Mass density",
     "short_name": "mdens",
     "units": "kg m-3",
-    "comment": "Dry dust aerosol with particle diameter at least 2.5 \u00b5m and below 10 \u00b5m.",
+    "comment": "Dry dust aerosol with particle diameter at least 2.5 micrometres and below 10 micrometres.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

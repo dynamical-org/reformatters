@@ -168,7 +168,7 @@ def test_rrfs_current_init_is_due_at_poll_deadline(
     due = pd.Timestamp("2026-09-27 00:00")
     (update,) = dataset.operational_kubernetes_resources("test-image")
     assert isinstance(dataset, NoaaRrfsDataset)
-    fire = due + timedelta(minutes=dataset._operational_timing[0])
+    fire = due + timedelta(minutes=dataset.update_offset_minutes)
     assert update.previous_fire_time(fire) == fire
     deadline = dataset._virtual_poll_deadline(fire)
     previous = due - dataset.template_config.append_dim_frequency

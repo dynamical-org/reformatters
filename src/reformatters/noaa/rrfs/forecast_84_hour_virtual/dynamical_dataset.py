@@ -1,4 +1,4 @@
-from typing import ClassVar
+from pydantic import NonNegativeInt, PositiveInt
 
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
@@ -8,7 +8,8 @@ from .template_config import NoaaRrfsForecast84HourVirtualTemplateConfig
 
 class NoaaRrfsForecast84HourVirtualDataset(NoaaRrfsDataset):
     # Files publish near init +108-212 min; polling starts before the first lead.
-    _operational_timing: ClassVar[tuple[int, int]] = (100, 135)
+    update_offset_minutes: NonNegativeInt = 100
+    update_deadline_minutes: PositiveInt = 135
     template_config: NoaaRrfsForecast84HourVirtualTemplateConfig = (
         NoaaRrfsForecast84HourVirtualTemplateConfig()
     )

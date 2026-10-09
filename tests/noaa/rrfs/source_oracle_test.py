@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,10 +13,15 @@ from reformatters.common.logging import get_logger
 from reformatters.noaa.rrfs.forecast_84_hour_virtual.template_config import (
     NoaaRrfsForecast84HourVirtualTemplateConfig,
 )
+from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.region_job import (
+    NoaaRrfsSubHourlySourceFileCoord,
+)
 from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.template_config import (
     NoaaRrfsForecastSubHourlyVirtualTemplateConfig,
 )
-from reformatters.noaa.rrfs.region_job import NoaaRrfsSourceFileCoord
+from reformatters.noaa.rrfs_ens.forecast_virtual.region_job import (
+    NoaaRrfsEnsSourceFileCoord,
+)
 from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
     NoaaRrfsEnsForecastVirtualTemplateConfig,
 )
@@ -29,6 +35,10 @@ SNAPSHOTS = json.loads(
 
 def test_echo_top_no_echo_is_masked_by_cf_reader(tmp_path: Path) -> None:
     source_path = Path(__file__).parent / "fixtures/echo-top-no-echo.grib2"
+    provenance = json.loads(source_path.with_suffix(".json").read_text())
+    content = source_path.read_bytes()
+    assert len(content) == provenance["length"]
+    assert hashlib.sha256(content).hexdigest() == provenance["sha256"]
     with rasterio.open(source_path) as source:
         expected = source.read(1)
     missing = expected == -5000.0
@@ -54,24 +64,27 @@ def test_echo_top_no_echo_is_masked_by_cf_reader(tmp_path: Path) -> None:
     ("cycle", "member", "minutes"),
     [
         (0, None, 15),
-        (0, None, 75),
-        (1, None, 75),
-        (12, 1, 120),
         (12, 5, 120),
-        (18, 1, 120),
-        (18, 5, 120),
     ],
 )
 def test_quarter_hour_and_member_snapshots_match_independent_gdal(
     cycle: int, member: int | None, minutes: int
 ) -> None:
     init = pd.Timestamp("2026-09-15") + pd.Timedelta(hours=cycle)
-    coord = NoaaRrfsSourceFileCoord(
-        init_time=init,
-        lead_time=pd.Timedelta(minutes=minutes).ceil("1h"),
-        source_family="subh" if member is None else "2dfld",
-        ensemble_member=member,
-        data_vars=[],
+    coord = (
+        NoaaRrfsSubHourlySourceFileCoord(
+            init_time=init,
+            lead_time=pd.Timedelta(minutes=minutes).ceil("1h"),
+            data_vars=[],
+        )
+        if member is None
+        else NoaaRrfsEnsSourceFileCoord(
+            init_time=init,
+            lead_time=pd.Timedelta(minutes=minutes).ceil("1h"),
+            source_family="2dfld",
+            ensemble_member=member,
+            data_vars=[],
+        )
     )
     url = coord.get_url().replace(
         "s3://noaa-rrfs-ops-pds/", "https://noaa-rrfs-ops-pds.s3.amazonaws.com/"

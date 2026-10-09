@@ -35,7 +35,7 @@ class NoaaRrfsEnsForecastVirtualTemplateConfig(NoaaRrfsForecastTemplateConfig):
         ),
     }
     members: bool = True
-    append_dim_start: Timestamp = pd.Timestamp("2026-09-09T12:00")
+    append_dim_start: Timestamp = pd.Timestamp("2026-09-10T00:00")
 
     def _vertical_dimension_coordinates(self) -> dict[str, Any]:
         return {

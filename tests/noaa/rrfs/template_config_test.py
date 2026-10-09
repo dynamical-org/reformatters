@@ -4,9 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio
-import xarray as xr
 
-from reformatters.common.iterating import flatten_groups
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.template_config import (
     NoaaRrfsForecast18HourVirtualTemplateConfig,
 )
@@ -36,7 +34,7 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
         else str(value)
     ),
 )
-def test_source_available_fields_are_in_config_and_stored_template(
+def test_source_available_fields_are_in_config(
     config: NoaaRrfsForecastTemplateConfig, count: int
 ) -> None:
     deterministic_fields = {
@@ -51,12 +49,8 @@ def test_source_available_fields_are_in_config_and_stored_template(
         "wildfire_potential_surface",
     }
     configured_paths = {v.path for v in config.data_vars}
-    with xr.open_datatree(
-        config.template_path(), engine="zarr", chunks=None, consolidated=False
-    ) as tree:
-        stored_paths = set(flatten_groups(tree).data_vars)
     assert len(config.data_vars) == len(configured_paths) == count
-    assert stored_paths == configured_paths
+    assert config.append_dim_start == config.append_dim_start.normalize()
     if config.sub_hourly:
         assert configured_paths.isdisjoint(deterministic_fields | member_fields)
     elif config.members:

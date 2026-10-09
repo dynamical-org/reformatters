@@ -58,9 +58,9 @@ class NoaaRrfsForecastTemplateConfig(
     def dataset_attributes(self) -> DatasetAttributes:
         model = "RRFS ensemble" if self.members else "RRFS"
         description = (
-            "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR."
+            "Ensemble weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP."
             if self.members
-            else "CONUS weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP."
+            else "Weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP."
         )
         return DatasetAttributes(
             dataset_id=self.dataset_id,
@@ -73,9 +73,9 @@ class NoaaRrfsForecastTemplateConfig(
             spatial_resolution="3 km",
             time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
             time_resolution=(
-                "Forecasts initialized hourly with 15-minute forecast steps"
+                "Forecasts initialized every hour"
                 if self.sub_hourly
-                else f"Forecasts initialized every {int(self.append_dim_frequency / pd.Timedelta('1h'))} hours with hourly forecast steps"
+                else f"Forecasts initialized every {int(self.append_dim_frequency / pd.Timedelta('1h'))} hours"
             ),
             forecast_domain=(
                 "Forecast lead time 15 minutes to 18 hours ahead"

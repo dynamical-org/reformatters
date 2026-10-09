@@ -42,7 +42,7 @@
     "long_name": "Valid time",
     "standard_name": "time",
     "statistics_approximate": {
-      "min": "2026-09-09T12:00:00",
+      "min": "2026-09-10T00:00:00",
       "max": "Present + 60 hours"
     },
     "units": "seconds since 1970-01-01",

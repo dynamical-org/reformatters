@@ -3,13 +3,13 @@
     "dataset_id": "noaa-rrfs-ens-forecast-virtual",
     "dataset_version": "0.1.0",
     "name": "NOAA RRFS ENS forecast, virtual",
-    "description": "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR.",
+    "description": "Ensemble weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP.",
     "attribution": "NOAA NWS NCEP RRFS ensemble data processed by dynamical.org from NOAA Open Data Dissemination archives.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Continental United States",
     "spatial_resolution": "3 km",
-    "time_domain": "Forecasts initialized 2026-09-09 12:00:00 UTC to Present",
-    "time_resolution": "Forecasts initialized every 6 hours with hourly forecast steps",
+    "time_domain": "Forecasts initialized 2026-09-10 00:00:00 UTC to Present",
+    "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-60 hours ahead",
     "forecast_resolution": "Hourly"
   },
@@ -1123,7 +1123,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2026-09-09T12:00:00",
+            "min": "2026-09-10T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -2245,13 +2245,13 @@
           "dataset_id": "noaa-rrfs-ens-forecast-virtual",
           "dataset_version": "0.1.0",
           "name": "NOAA RRFS ENS forecast, virtual",
-          "description": "CONUS ensemble forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP, with deterministic RRFS as member 0 and five perturbed members as members 1-5. These six runs are not the full 14-member REFS ensemble, whose derived products also use the same runs from the previous cycle and current and previous-cycle HRRR.",
+          "description": "Ensemble weather forecasts from the Rapid Refresh Forecast System (RRFS) operated by NOAA NWS NCEP.",
           "attribution": "NOAA NWS NCEP RRFS ensemble data processed by dynamical.org from NOAA Open Data Dissemination archives.",
           "license": "CC-BY-4.0",
           "spatial_domain": "Continental United States",
           "spatial_resolution": "3 km",
-          "time_domain": "Forecasts initialized 2026-09-09 12:00:00 UTC to Present",
-          "time_resolution": "Forecasts initialized every 6 hours with hourly forecast steps",
+          "time_domain": "Forecasts initialized 2026-09-10 00:00:00 UTC to Present",
+          "time_resolution": "Forecasts initialized every 6 hours",
           "forecast_domain": "Forecast lead time 0-60 hours ahead",
           "forecast_resolution": "Hourly"
         },
@@ -2600,7 +2600,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2026-09-09T12:00:00",
+            "min": "2026-09-10T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -3133,7 +3133,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2026-09-09T12:00:00",
+            "min": "2026-09-10T00:00:00",
             "max": "Present + 60 hours"
           },
           "units": "seconds since 1970-01-01",
@@ -4131,7 +4131,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2026-09-09T12:00:00",
+            "min": "2026-09-10T00:00:00",
             "max": "Present + 60 hours"
           },
           "units": "seconds since 1970-01-01",
