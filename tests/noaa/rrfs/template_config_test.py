@@ -37,6 +37,9 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 def test_configured_field_inventory(
     config: NoaaRrfsForecastTemplateConfig, count: int
 ) -> None:
+    # These surface fields are effectively empty in NOAA's source as of 2026-10-09.
+    # RRFS is not yet operational, so this may change. specific_humidity_2m is
+    # present and remains in the dataset.
     removed_fields = {
         "minimum_vegetation_surface",
         "maximum_vegetation_surface",
@@ -53,6 +56,8 @@ def test_configured_field_inventory(
     assert configured_paths.isdisjoint(removed_fields)
     assert config.append_dim_start == config.append_dim_start.normalize()
     if config.sub_hourly or config.members:
+        # The ensemble fields are effectively empty in NOAA's source as of
+        # 2026-10-09; RRFS is not yet operational, so this may change.
         assert configured_paths.isdisjoint(deterministic_fields)
     else:
         assert deterministic_fields <= configured_paths
@@ -76,6 +81,8 @@ def test_source_lead_availability(
 ) -> None:
     hours = int(config.forecast_length / pd.Timedelta("1h")) + 1
     expected = {"total_precipitation_surface": range(1, hours)}
+    # These two fields are effectively empty in NOAA's ensemble source as of
+    # 2026-10-09; RRFS is not yet operational, so this may change.
     if not config.members:
         expected |= {
             "aerosol_optical_thickness_atmosphere": range(hours),

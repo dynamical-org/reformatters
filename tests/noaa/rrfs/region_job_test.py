@@ -159,12 +159,17 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                     and "-" in window
                     and len(set(window.split()[0].split("-"))) == 1
                 )
+                # These surface fields are effectively empty in NOAA's source as
+                # of 2026-10-09; RRFS is not yet operational, so this may change.
+                # specific_humidity_2m is present and remains in the dataset.
                 excluded_surface_product = (
                     not config.members
                     and not config.sub_hourly
                     and level == "surface"
                     and element in {"SPFH", "VEGMIN", "VEGMAX", "PEVAP", "PEVPR"}
                 )
+                # These ensemble fields are effectively empty in NOAA's source
+                # as of 2026-10-09; RRFS is not yet operational, so this may change.
                 excluded_member_product = config.members and (
                     (element, level)
                     in {
