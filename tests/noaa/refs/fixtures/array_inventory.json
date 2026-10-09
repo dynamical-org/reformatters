@@ -1,0 +1,1802 @@
+[
+  {
+    "path": "composite_reflectivity",
+    "cadence_hours": 1,
+    "metadata_sha256": "bc1d8e6e03f8efba9b6cf5da3e6505a88221d937818d935fa00d88947149061c"
+  },
+  {
+    "path": "convective_available_potential_energy_180_0mb",
+    "cadence_hours": 1,
+    "metadata_sha256": "28816085b827bb0051e2fe76c4e4d8f8a584d5f01d73306754c3998081ae5ca6"
+  },
+  {
+    "path": "convective_available_potential_energy_90_0mb",
+    "cadence_hours": 1,
+    "metadata_sha256": "9cee368ff56993567a9d228edaf4827a6e6998059d64dbd7dc83fb73dc452ca1"
+  },
+  {
+    "path": "convective_available_potential_energy_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "3c3c8349e3810fd32f7ef1a14dd530ed0ead028b64d6f69cab896adc96e7b28e"
+  },
+  {
+    "path": "convective_inhibition_180_0mb",
+    "cadence_hours": 1,
+    "metadata_sha256": "c933f41729ba79ec599e106795373a07e58956f13ca20e3e314450e9f738b3e4"
+  },
+  {
+    "path": "convective_inhibition_90_0mb",
+    "cadence_hours": 1,
+    "metadata_sha256": "f492772bcc98fe903782854e0a41f75bba3f16c822c4d45144fef3e692e1f595"
+  },
+  {
+    "path": "convective_inhibition_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "c9187c3056d4c71acdc853566b18c350a73aa1563dde8f24be4c6a30f0a7d96a"
+  },
+  {
+    "path": "derived_radar_reflectivity_1000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "d603b49be7ab10ed90500ed6aee4f968447ff3d5c8699ddf8e1f37b5e5a01da8"
+  },
+  {
+    "path": "dew_point_temperature_2m",
+    "cadence_hours": 1,
+    "metadata_sha256": "6bd703152032ea99c537e94e510acbede8a35239b34f5d3f2bdf14cbbfff0617"
+  },
+  {
+    "path": "dew_point_temperature_2m_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "06fb612b41098ee4b1ba4e7147f2bd562175efc6be9231087ae5495842993f94"
+  },
+  {
+    "path": "dew_point_temperature_500hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "81c18d16e3cdc2c89f488458d5cf7def6e27a9c40d7aadf8e8d688bc11763c65"
+  },
+  {
+    "path": "dew_point_temperature_500hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "1eee34dc7502d1d8ded7e420bbadd4f8219c8777e75b27a21b85d23803718422"
+  },
+  {
+    "path": "dew_point_temperature_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "843b6829fc5af33325edc67261a4016f4d709aff6651719b15b65b32410809a2"
+  },
+  {
+    "path": "dew_point_temperature_700hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "b1b208dc4288f96fb6d396670ee186cdd5e66ea170a8f69dbdae2a9b119b63f4"
+  },
+  {
+    "path": "dew_point_temperature_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "fa5a97cc791273f9beecd417184c8e401908a50f2123811c3c705579b077574c"
+  },
+  {
+    "path": "dew_point_temperature_850hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "e25f469123387b5f508769f1b74885e1aaec1e8bb584e91ddb25b405dcf47be6"
+  },
+  {
+    "path": "dew_point_temperature_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "d86ce30a18fb6a2878264b0f99f0eeafa155236d2347891c22b7865d20846246"
+  },
+  {
+    "path": "dew_point_temperature_925hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "5be36fabcff1824bc9f053a14cdfdf54c189fdf2004f7749ad5e0047d8278861"
+  },
+  {
+    "path": "echo_top",
+    "cadence_hours": 1,
+    "metadata_sha256": "069a80daeac2e4b3509125f3c39a89f983d6dd623fc3e888941d958f9b6e39fc"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "d76e66a5238c89ecfa010e04898b3bd1e36e127146d23b451e32e4fc5ec90a57"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "6161ade44971f0f306789c5aac8c6691c878f0ccc00e93afe31e9c69e679114b"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "fa92f5d8c86b6d7bf7b34814cc59e3317ff50235829d5ff7af52d6d88fc8d96d"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "36f888a92bed76e14aab3eeda5599f8e1439fcc3e00447635861901534fddfd1"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "fce7c5fd6772553a826dc4b3eb99aab3cb3f9556896c4a0224eb4e584a282a41"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "019af3c91f44fc8b6a3891c61cc1c58e570e9f16f0700c07cf51fe9979337051"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "fd2be42638999ba9768867ae22319924abcc1786fa8d553adb6274bfc1f85795"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_1_hour_surface_above_0p254",
+    "cadence_hours": 1,
+    "metadata_sha256": "0b79dcf5ef5cb7f5fb8a19e4044785882252b5b11e2051eb3d47909024786da4"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_1_hour_surface_above_12p7",
+    "cadence_hours": 1,
+    "metadata_sha256": "f1b03207273dae9172d98d8d8e58deb2d7c19f84acc563df0170b724cb68ec63"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_1_hour_surface_above_25p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "d0224142ab7161333b02b16e6adf66dbaeade6e690151f362d0e08a7acad2fde"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_1_hour_surface_above_6p35",
+    "cadence_hours": 1,
+    "metadata_sha256": "8c29d9d6539477fca803abc3ca586617f1baba84f87567fc077218ba84a61a4b"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "229c2319a522913eb438016322277627c8e38bb03ea9a3f24e07a249f9631db0"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "9c4e00daa23402e62fa88a67705c86036fcd2f5af4ef5f53dc05c59b072e9dc7"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "82e91e9eb1b9cd5337ec21e9ad1a70659b33953f496d9e0279420825a442d325"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "fd0b71520308fd0ee806ffa92bfe5608bbfd14965bd4e627b4c98311a528497f"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "2db61011412fa997ebf56e6f12df50326e6d68d91112657b96096b21a769a7b2"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "8eccd0cc912c2ec128f71907cdaf38eab89ff846a2c4786b1d5558152b98d804"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_24_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "78da3099057b149c72f27ee60b8c2960ab4c6886312add99fa6f7baecfe661b8"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_3_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "a7776600da26e3d885390ff0d6d760a7d904c0b14f75687b4f5f7d487090c3b8"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_3_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "18c18a13140f9285feef94e8742a9a29d8876bba68d5d6704a51164f99c59b9b"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_3_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "ea3090906a7389215b785263ddbb071960ba12fcc3252ef93338484a66efcf4a"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_3_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "218f94888666aef081a0109b974b22d3886d49645d9d4d4d43c8ea3d33f4942b"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_3_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "709ecfdc48be6b27dc22abb4b975bb983428de6b6f492530b4255a0a83b7671f"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "12acaf5bdf70b428ae17bcbdb549e3459000605705bd570436e48f8f13ab6d93"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "55fb46c61e1cec04f807da696f088690009cebf6ef394ba72190f674a66be219"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "805c7783a9e3e2db39b7ca2808b204199e2a0a76eae122b278cd44a0c1533a16"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "dcf6c34d9bb16a87e5a5a7a1dac646c9af333a6ac0804404f481eaa08870ffef"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "2f9548044fe14de190533a27b642ae76b66b1e6af8a213e30c6117c6c0ba6d09"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_precipitation_6_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "2da9e60f7fdb9dcfdd776bef8d3946199de9768d4b965ae8871ab2effe9b135d"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_1_hour_surface_above_0p025",
+    "cadence_hours": 1,
+    "metadata_sha256": "c8e561bd2f93c97438e39a3aa82a04be48c612b2e1dde90bb0437e8dbfdedd8c"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_1_hour_surface_above_0p076",
+    "cadence_hours": 1,
+    "metadata_sha256": "ec2964f3d742e96a5f7524a4e91c0455842dd808905cd26a3625c9552eb57265"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_3_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "086f0de6f100b275953d393466387842e5b20fbdf28b3c911f366d4069809b4c"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_3_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "e41af9aac611a599086357fd78c0a74c43e373cf3829741d7020355b3a194010"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_6_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "249cad7d44e83bf256264d53d860ba6d403d96fb0d2c168f0ce6b79cef485785"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_6_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "1ae1a3d75f8d10dd87076da975fd56e960dbf3d21c032654cbd5abb219626875"
+  },
+  {
+    "path": "ensemble_agreement_scale_probability_of_total_snowfall_6_hour_surface_above_0p152",
+    "cadence_hours": 3,
+    "metadata_sha256": "dc12a17a9a8b2fc9251f608a7246176630eddc222270059d1874171bd9760b7b"
+  },
+  {
+    "path": "fog_liquid_water_content_0m",
+    "cadence_hours": 1,
+    "metadata_sha256": "b520b0f28a7b5297bba9b486da39814d357c6144f33a0d0c8704c607991ba68f"
+  },
+  {
+    "path": "freezing_rain_fraction_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "815844c576bbd73126ae2a73c9154c1b1fc430004b5feec2d8beeb8444ddf17c"
+  },
+  {
+    "path": "geopotential_height_0c_isotherm",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_250hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_500hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e40f7f1aa6cb2697f4b97fef0884adc55e2f328effb4e94866ac6c91dcad51"
+  },
+  {
+    "path": "geopotential_height_cloud_base",
+    "cadence_hours": 1,
+    "metadata_sha256": "5cf694699a599be02b9b67510ed16dadad8fab853fc19ac02724db14606db36e"
+  },
+  {
+    "path": "geopotential_height_cloud_ceiling",
+    "cadence_hours": 1,
+    "metadata_sha256": "05d397b3c2b7642d211ce314b3867f17df5e06ece05f01386e0b794756985581"
+  },
+  {
+    "path": "geopotential_height_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "69147de581dba97eba21cc99934b7e527566d76bd3eabb620746b45d472b724c"
+  },
+  {
+    "path": "high_cloud_cover",
+    "cadence_hours": 1,
+    "metadata_sha256": "e1906f13ab4ef78848433bae383cb55718d30c308ce35f313194d733ea38751e"
+  },
+  {
+    "path": "hourly_maximum_radar_reflectivity_1000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "0597cfcebee4ea038f7304ec040cd955f7d8cd4063d03c5065197408396ca51d"
+  },
+  {
+    "path": "ice_pellets_fraction_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "1f94663a7a8c79640fdb181433a99a353623423238392295a8ebdcbbd0f12fa3"
+  },
+  {
+    "path": "localized_probability_matched_mean_total_precipitation_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "78bf725a618951e411818b18f0c858723ca22c6a119046f0e5a952c325e7b139"
+  },
+  {
+    "path": "localized_probability_matched_mean_total_precipitation_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "5fadd6c61dee3872d3546fe2fa185f28f361eb01210abd147d8e41c6e7aca4dd"
+  },
+  {
+    "path": "localized_probability_matched_mean_total_precipitation_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "7184849b91f695760c7d29a13149de77d73a312b1383c7773edd3a3e7b3b728a"
+  },
+  {
+    "path": "low_cloud_cover",
+    "cadence_hours": 1,
+    "metadata_sha256": "5ad3e29921b119c1f8303385d2f48920490db613f3e7c410ad62e574b09b647f"
+  },
+  {
+    "path": "maximum_updraft_helicity_5000_2000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "9d5997099cb1bfb494524509bc6cdf4ade7cacb09794f51785d15e491cf6f01c"
+  },
+  {
+    "path": "mean_probability_matched_mean_average_total_precipitation_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "d74db8204f2f9b6b812e96ae6d5d6dfa565976648f9c80cf95fb9923742e25bf"
+  },
+  {
+    "path": "mean_probability_matched_mean_average_total_precipitation_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "3aebf67eb04a8381140b91dcfc119bc31caf2a1e9ca0b5c45dbe7616e32df79c"
+  },
+  {
+    "path": "medium_cloud_cover",
+    "cadence_hours": 1,
+    "metadata_sha256": "5a47cd9429cb005a71d4c54dc9b7fff0d37e57a57b56fe9e29fa1b218a28f928"
+  },
+  {
+    "path": "neighborhood_probability_of_composite_reflectivity_above_10",
+    "cadence_hours": 1,
+    "metadata_sha256": "be8bd7788c972f05be425dbda4c0c6d5f73a9c486f4810ad3e8980fb32da0901"
+  },
+  {
+    "path": "neighborhood_probability_of_composite_reflectivity_above_20",
+    "cadence_hours": 1,
+    "metadata_sha256": "2fbbb1107d12cf629619865a733a03de077553bae507129f747653a8e21ad8df"
+  },
+  {
+    "path": "neighborhood_probability_of_composite_reflectivity_above_30",
+    "cadence_hours": 1,
+    "metadata_sha256": "9d588d90b50842a712107dd23dda8c4aa128ce3db698a33f69845323c9cd69f1"
+  },
+  {
+    "path": "neighborhood_probability_of_composite_reflectivity_above_40",
+    "cadence_hours": 1,
+    "metadata_sha256": "0408555858125905703547bb1cd553551da1026681c4e852adea91778cfeb5e7"
+  },
+  {
+    "path": "neighborhood_probability_of_composite_reflectivity_above_50",
+    "cadence_hours": 1,
+    "metadata_sha256": "55e9b8863b37359b99b31cbe314847becb898709dba51b06018af2ae814ec5b0"
+  },
+  {
+    "path": "neighborhood_probability_of_derived_radar_reflectivity_1000m_above_30",
+    "cadence_hours": 1,
+    "metadata_sha256": "80fa6c23040972f7739dc25b2128b7dda3ddc34bb119ac82fe9ec93544835cac"
+  },
+  {
+    "path": "neighborhood_probability_of_derived_radar_reflectivity_1000m_above_40",
+    "cadence_hours": 1,
+    "metadata_sha256": "a4837d8cf467a8f0e16ef85c7fd2bb71a0df48b86f39c90409fa663200eda6f7"
+  },
+  {
+    "path": "neighborhood_probability_of_derived_radar_reflectivity_1000m_above_50",
+    "cadence_hours": 1,
+    "metadata_sha256": "0afb8931aba3f5640680c81bc320e1c100990324bea49a3512f67d3346c206e9"
+  },
+  {
+    "path": "neighborhood_probability_of_echo_top_above_10668",
+    "cadence_hours": 1,
+    "metadata_sha256": "3535df960160f8725a14305576275653b558cbf2845cb9e1e4dce734e4525ed5"
+  },
+  {
+    "path": "neighborhood_probability_of_echo_top_above_12192",
+    "cadence_hours": 1,
+    "metadata_sha256": "02119ed2cc3da6da973601f8d4af6978110561860a4c20d8955e76c538aa93b6"
+  },
+  {
+    "path": "neighborhood_probability_of_echo_top_above_15240",
+    "cadence_hours": 1,
+    "metadata_sha256": "22a65761a6125aa0139f507a9c273c6a993d4e00969bcd8faf0e36415522fb0d"
+  },
+  {
+    "path": "neighborhood_probability_of_echo_top_above_6096",
+    "cadence_hours": 1,
+    "metadata_sha256": "83fef8ed446d65efaaab17e7c60b1d70ba212dfa1879123ae754c68ee87bb4d7"
+  },
+  {
+    "path": "neighborhood_probability_of_echo_top_above_9144",
+    "cadence_hours": 1,
+    "metadata_sha256": "3c99c59151a7096e793e6d22e54c28ea60588997a81a10c381693b256a5e5cfb"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "9bb3f79e474e60d3c7c10751a89a57656a6a850ae9efd600bc70be89cc3888a5"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "f2a9b7fb740c4ed4089fdc7baba0237a887c192d6eda3084b1b795dd2bf1e0e3"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "a1ab12bb2dc1c685cc0f8511ee6987c2c50029eaae797fc68d180903a62a7d44"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "4b1cec2aacd8e3222ba15cac659730c28456fe5fa8a1e8fcf68495ff07f2ea1a"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254",
+    "cadence_hours": 1,
+    "metadata_sha256": "33305da05a13661ecfc6f0c42a2bbec92d8d36b0ad9ca868b269c3ab84180967"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54",
+    "cadence_hours": 1,
+    "metadata_sha256": "9de9589dabeff346ea38fcc1ee9963dd8977c0929359e5a757eca59d83bf1ac2"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35",
+    "cadence_hours": 1,
+    "metadata_sha256": "b2da5a10c2b38cfad1e661e47fb45e248ea9a913037da94769518ef65c8b33c1"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "e5038ab6c509502a53128a9a054417d668cb78902d1b73b5c0387575e0f97ae3"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "bc38c85ad475a1b2927d4404f74d2a0cc2be4470cd9b1b2ca738323dae4a3c5d"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "26f99ecd823579a6fabb8a9de19a26d371bc1849158962affcf1ea583a3acd5b"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "9d5f1f84c326ee2fb20ed6e62a0451a8ca2448da756a379b3012236918929938"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "cae499e39028b29491de05cb07406a24804d7576eb80254f51bbaf7d1f8264f1"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "23e7b7c81eb2163223858ec01f6c7cf153ce1fb313d8830d6e76edb0f7d82948"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "509a952652ac4a0d7c1aff7f655616c89b0fd74638708f63f2432fbdf7c32d0c"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "99fe85038d84868dfe683dbc5d7e085cfefae1e78d1ca4e8f495b177f9963e53"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254",
+    "cadence_hours": 3,
+    "metadata_sha256": "090bf7d4c9a79f8d49fed407568117654739ae750d55ea5e9d61f81757f92692"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "d422e807526aaf60110b0241e3b2c32044b696747c7c61bc3c6ec090e4a36e32"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54",
+    "cadence_hours": 3,
+    "metadata_sha256": "914e08e0f26899c689980359362d57b8b11f6802c6a9cc2f7461445ce3cb7671"
+  },
+  {
+    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35",
+    "cadence_hours": 3,
+    "metadata_sha256": "1161ebba1a7b83cd51e52ae89b12b892e657ff31a67cf5756dd65ede7d71a7a5"
+  },
+  {
+    "path": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_40",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7bb3140764cef63bff7121b6ce8776a9dcc7aa9a9dc7a1dd4b418317ed24a42"
+  },
+  {
+    "path": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_50",
+    "cadence_hours": 1,
+    "metadata_sha256": "d49d60c4b6373ccb3a1688f60053e951b17ae1e5ab90c8840e764f4dba1bc4cb"
+  },
+  {
+    "path": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_150",
+    "cadence_hours": 1,
+    "metadata_sha256": "8cba45c5c112f16a80433e834227410699e7ff90d490a6414825a881e8f9c9c2"
+  },
+  {
+    "path": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_25",
+    "cadence_hours": 1,
+    "metadata_sha256": "ef20c6bfc2e0448df486cfc5081617c35cebfe0207fc0aed773252a09c37e0ae"
+  },
+  {
+    "path": "neighborhood_probability_of_maximum_updraft_helicity_5000_2000m_above_75",
+    "cadence_hours": 1,
+    "metadata_sha256": "65402257cf96419e10dba2f0e3a352cc9c36283845fb66990c2a567c505d07e3"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_100_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "e56ebe5ecf74aa2c491844269ae22c7e95d05c5c7e7d7ef67cbf9d2509440846"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_100_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "be636b77e989d676565622b56963917fe05ff3ce5ae09457e868a7cde24ad0ee"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_10_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "f82a64b015e96f61a16f128ec1c88209d5a715e1abb45de7e6f10cb6b4981321"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_10_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "cf232ceadd91a654b99b9a2c3f9b62da27a7f4b2a3e19638b07542206e192917"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_1_hour_flash_flood_guidance_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "339c8607092b9accf797a86df605845866c30ce6e62837b85581f6ed6fe26f64"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_1_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "aa89318944440607fc7ac1e1c1fe095c269fbd8aae81647ca2d05e5eaf6572fa"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_1_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "b9a0e242748584ff66847d3caf6ce492bde739d04a495d5cc2d26591f81182f0"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_25_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "c0a2fa589616f1dbaf83206a88984126a837f9daf1a69c0660421e81d85f0cdf"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_25_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "2cf5b4bcd64639c35e6b10d9ba12677394d6c02518c3d383463e7c81a7c04584"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_2_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "fe15a05c06774ab3bc483943ec52c939458fe3643547cc68d12f18be690a3159"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_2_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "ea14649e55e45814ebe6e229a9a127cfef030e1ce177d98844093cbd28ee1ea9"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_3_hour_flash_flood_guidance_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "6834bdf168cef76b26e7276ff6f2c05ddb882614ace4496e25332537bb8dce8c"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_50_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "6f6f6fd5a2e376948f1f3fc697f016b524a16bd3dd21c63e2d1c86b8a5994977"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_50_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "e7cac8fae0371e222f522a3adb060ff8014b1dcb2564cace624713eb40e67f4b"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_5_year_average_recurrence_interval_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "589b585b5b54f839fea58081272b983aec271e44c71918cf76cd98b7fc74c5ff"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_5_year_average_recurrence_interval_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "7aa40519456282f2591c7ed4de663dc562c811eac66c776254f06292b42cc07b"
+  },
+  {
+    "path": "neighborhood_probability_of_precipitation_exceeding_6_hour_flash_flood_guidance_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "6f44da8ffc95c86320f3e6cc67ca77e88661fa60fbda30421fbc2358926440fc"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "dff812dd0ec0b1aae4dfd6d41930dcd5b383ad3923fd52e5c9ae425877a58d3a"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "91ec981bc008e336ee00862baae9882f2e1768f7911074a03b610fb0dc86f179"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_203p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "334b9e43a5db465570e7082cc9f03cae5343e1d101f18a458a4b3c32a920864b"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "9591da5a0d81b848158ead16933aa4ba61e976ca44e8fede3fff9e5372321e55"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "470607e1503b80d3c9709826b20957db59cc2f352563c23542d698b3d588c03b"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_12_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "5bb87c2c29166fde021ef55bddf5d35a79ec9b009d03b8000cbaf113acb55dd2"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_1_hour_surface_above_12p7",
+    "cadence_hours": 1,
+    "metadata_sha256": "997f8fec38b9cb9a991b4d89e7341e2be7e201d66181776cfe35d6b0fa2ae27a"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_1_hour_surface_above_25p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "70a5b6dbfa38741bda989b0f813ab046dacc88f4ebc3a8d30e0b810c105a10d2"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_1_hour_surface_above_50p8",
+    "cadence_hours": 1,
+    "metadata_sha256": "e6bcabace9f6549633bbc7cda7f7218b01ceb8127956efe3551f68a51d118c8f"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_1_hour_surface_above_76p2",
+    "cadence_hours": 1,
+    "metadata_sha256": "564bd62738b864c71e646b77bdc707d67746758a0055b68e6764aa1bd202cdb1"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "67e3187920a38cfd8f897889b7824a4a76007336b6a4ad037dc7a520b34c3081"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "9f5fdf0afaf71e5b39727df79eeb634abbebed8d8f48ae0abe358b82d2043477"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_203p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "37940efd6069e26eb5807f1400326cba5de9015a0257c07ba1eca894fb525ebb"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "e3932bfe004846f254da73c51f8c27bd6193f85bf38a1aed685495b47061153c"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "f32d1a39659bce85bcb9194e2d03b81d29a52b9638248b6efa18ebf307a29378"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_24_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "d8685b54023e565156e43b62c4e2592c26639d41818a8cf571e120af9e446cdb"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_3_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "d8c6d4d53480b9f95c31d3c2225aba08ad8ac8f650d5e18dd9189504918e87c2"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_3_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "83289d1a66029a530723e09d08d07f75ef70b537ecaee16fa23b380be59c66c1"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_3_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "8797f4d7215d94d31c6d74ceb025ba697f065f618daf7a211fca6e8bf671218b"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_3_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "d9a3aaec51e424c49ab6dbde29e29a2294b505bf6604b38019dd9098594178ca"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_3_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "da500306c2c809139eca179485a77463f24255e51d17e1aab048daf7b94b8e32"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_6_hour_surface_above_127",
+    "cadence_hours": 3,
+    "metadata_sha256": "881574fd0f5a282674e356c8209d8b45ca88bd90afd7e814c78277ebc378a313"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_6_hour_surface_above_12p7",
+    "cadence_hours": 3,
+    "metadata_sha256": "4cc5eb0180a85f0ac5753bd86d639bc2583711bb8d96feb20819fb8b6db539a2"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_6_hour_surface_above_25p4",
+    "cadence_hours": 3,
+    "metadata_sha256": "5edc090008214717d1c1f429494a25c049ac8b03d6270c964ed6e3709d0f1b2b"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_6_hour_surface_above_50p8",
+    "cadence_hours": 3,
+    "metadata_sha256": "ad5ba783777c97b93a54ee025fab478b67d712eabe9a5e9a4c25458dd47991f5"
+  },
+  {
+    "path": "neighborhood_probability_of_total_precipitation_6_hour_surface_above_76p2",
+    "cadence_hours": 3,
+    "metadata_sha256": "fafc0b0a7b5e3977e52b28c95b37a139b1332efa0901fd50f17328fb6be3484d"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "5d3603cae511908b3f3d3e9bbf82c5547ffb66ba5023b72ea85111fd78bf1620"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "61332e6e67da18f30ddd94696cc2d5b9735c4e6cddb47fe66cce0dc749921c2c"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p152",
+    "cadence_hours": 3,
+    "metadata_sha256": "98f0b64121e908c9d37d37cd09936df73cf6d36be5794bbd5b66a342520b7fea"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p304",
+    "cadence_hours": 3,
+    "metadata_sha256": "595e58d6a7cfafecd947c5ed6dade8dc0930be35b76c2f1384c1a0c95e777ce1"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_12_hour_surface_above_0p457",
+    "cadence_hours": 3,
+    "metadata_sha256": "55f47548bf21b096eef4d6906ebedd5da7d48b88b688c07f73bf12eae3ca4f50"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p025",
+    "cadence_hours": 1,
+    "metadata_sha256": "c922a1bb0052dfebfe85e4ce0539cbeec3ebd761ccb6e351fffc5aeb372b2bf4"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076",
+    "cadence_hours": 1,
+    "metadata_sha256": "ad383a4236af630e18d7c3181a6a08e314619553544d09f5aa11b56338cafe36"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "60649af2272268bfb3e21aa95ed358e09d610ac98889a41fb58f4757131fb722"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "cf26881617247021575ea6ed9575e2a7f15208bed001758d5b71378de3938c0f"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p152",
+    "cadence_hours": 3,
+    "metadata_sha256": "b9b48f4c176d8bb7f7172d542e545d100107165685b9b84ccc00ac903ac601dc"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p304",
+    "cadence_hours": 3,
+    "metadata_sha256": "6623356c0381bd222d9198d42b1b84ee2abc2c58b57e1430778cee422a5046b3"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_24_hour_surface_above_0p457",
+    "cadence_hours": 3,
+    "metadata_sha256": "243c671f8335925f2c14c8a0e4582a8c7a2f5ec3a4422ac989f66c0ba3b8eeee"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "a951c58a3197f0c5dacec24360717b62d224ffa260595814d54474d45795aa33"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "2dd83736580d2d1741b6c64f2434a91d97b623af3edb08788e28e4b452324f98"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_3_hour_surface_above_0p152",
+    "cadence_hours": 3,
+    "metadata_sha256": "eaafdfa184a377870cc0793ac652cf34f8e5f00fffb4b75781094fc22948b64c"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p025",
+    "cadence_hours": 3,
+    "metadata_sha256": "3ee32fd44e4edef77236020b626f6345e796b12db9617a8eb88f40f653fe48ac"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p076",
+    "cadence_hours": 3,
+    "metadata_sha256": "c87f1c8e41c62c6b54914a88ecab4e09aacd8a7eeda319f448ec53ab2ceb4ec5"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p152",
+    "cadence_hours": 3,
+    "metadata_sha256": "446df67122950072cb59faa00d206dd63a1e3967111b307723c52af40ac2de5e"
+  },
+  {
+    "path": "neighborhood_probability_of_total_snowfall_6_hour_surface_above_0p304",
+    "cadence_hours": 3,
+    "metadata_sha256": "16a22ed5978a24899176d6bd2e6fcd13fbb91648ef4230affd400cdeedc27ba0"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "8a6a7c74c3516885ef73efcb616604d4629857521431dc9328573072ce26c91c"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_15p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "aafdf53217c2ddafda4e3259413595be23e0ec52e7607db9cb9dd066b6669ab6"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_18p01",
+    "cadence_hours": 1,
+    "metadata_sha256": "7e26d7a128392da5a9641b32bc8c4fe4b2dcee209994ec53035be6f777a8b3f0"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "73a7e5c3efa0854ed1c07b2d75e501f8aedcdf8347a10fd9ba0d10467a94cf00"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_25p72",
+    "cadence_hours": 1,
+    "metadata_sha256": "d356fb6e0eea21d307fbb51c1fa9def7db72d5c392049e31b6061a1398674c05"
+  },
+  {
+    "path": "neighborhood_probability_of_wind_speed_10m_above_30p9",
+    "cadence_hours": 1,
+    "metadata_sha256": "1a7dbe8cf80d7d9ac3ba3db47545e65d096f21cb81e5dd1dea730b19ef4a2dfd"
+  },
+  {
+    "path": "precipitable_water_atmosphere",
+    "cadence_hours": 1,
+    "metadata_sha256": "405c890e3f5ea5e7da31b85c29eae00756a1ea0237643245d857f5a104a5c27e"
+  },
+  {
+    "path": "pressure_reduced_to_mean_sea_level",
+    "cadence_hours": 1,
+    "metadata_sha256": "74fdce1213852fddde894011ecdebbe08295e8d36e5d8e6a98b8f15f07e11cb3"
+  },
+  {
+    "path": "probability_matched_mean_composite_reflectivity",
+    "cadence_hours": 1,
+    "metadata_sha256": "ad78f0b27bd058c8e5e63cdcd9bdc8bcfba16ce4761489c60b63c14ffa76c5ad"
+  },
+  {
+    "path": "probability_matched_mean_derived_radar_reflectivity_1000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "011ddcb769499936336ce4288881d6b2cfbbc23c2b6aca2225ba0cba6ce0f04a"
+  },
+  {
+    "path": "probability_matched_mean_echo_top",
+    "cadence_hours": 1,
+    "metadata_sha256": "e11b887514e36c843cc248c7b7b122d648bbddd3c572cc0bd88d393c8fa54483"
+  },
+  {
+    "path": "probability_matched_mean_geopotential_height_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "597515dd8ff7d4fdfb891bdf9966c8522d1676ed405994d5622ada5dd57904b6"
+  },
+  {
+    "path": "probability_matched_mean_hourly_maximum_radar_reflectivity_1000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "8300f0746af2bc413f7ac81ff827aea748f4960c03aeba57f42abe17c63106e0"
+  },
+  {
+    "path": "probability_matched_mean_maximum_updraft_helicity_5000_2000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "3d4eb97f865ba041953431779b43577cb4c55bab66060ca364170299013a923b"
+  },
+  {
+    "path": "probability_matched_mean_total_precipitation_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "5215d2e94f5c48fa922920ce0941751e70da2eb75f81ac8331fdf46bd3bfd5eb"
+  },
+  {
+    "path": "probability_matched_mean_total_precipitation_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "2c93e34284b249fc17005df0bd2c8fe021e7dd70353e8d16073cc4d3d1e09299"
+  },
+  {
+    "path": "probability_of_categorical_freezing_rain_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "8ef0c8e14d8d7ce501897a34feed8d9372eca0edf34178e3d64e113fe8dd1c14"
+  },
+  {
+    "path": "probability_of_categorical_ice_pellets_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "d84f12d693d1d83face90a4f7b903e2aefe0cbeeb3f7dbec3108406168cefeec"
+  },
+  {
+    "path": "probability_of_categorical_rain_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "e19526004dcb8ae40f45dd09c68ef933a2707ad7cb6800c27967c917779bac8e"
+  },
+  {
+    "path": "probability_of_categorical_snow_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "147b44557339a08f29153c15535a1ad61a33fe6d339e5d6cd96fdd6fa5e28181"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_175hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "1d69d0291374d6c9f89b5df7646b1cbdbab1613acf564276423b49ccf9fdf335"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_175hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "1225890976ca46472e33a68ce4f3eb55426dd8008d0b21e40a44414081cfbc62"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_175hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "9e1bf11ffc6cd9254b6086ea74639592bb82d8ee87cca2de511f9958aa7a7342"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_200hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "2e589836658561005d69a9fde5fc45a46ba152b00bbf0298807a8ac76478c7ee"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_200hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "3ac1a780a2a9a4d7d970a24f0776cb5047b523db24bed576533fa20e2aafc461"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_200hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "e482a410f6c55b7e6ce9e4ed43ae635945d8338b93da23dcd42f1d65c7ba96d4"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_225hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "d11081333311ac1fe74134efc0394fa4959bf3f6e28fadc2f4947c4035f30cdd"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_225hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "673bd2a5f862c5180d1cde879a4a45d34c6dcf611380fcf442b77ecbcb29698d"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_225hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "22e81bf865b301519aeb295b639a833489ebf4445960b5a10b4aa45fcde24aee"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_275hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "641789c7ce5ba2b194350fbf150ac66a4db5651557f5e974573a560a733f54be"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_275hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "4975ad78fabd65f5c61a7933a0fb56a6117c4140f2ca9cad6946a346bd245463"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_275hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "9b3c1abce83fb0c80631f23cf9de59ec9612aa4e0eb7db41964058144d255c4c"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_300hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "4701a5f9cd4342fc15a6499627bff665c24f338b3bb9bec4d584ec383ebcf5aa"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_300hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "2f6c5f853d7835a115ca8ec44e8987ccb4a0190d7a127fe0b64a5b69832c5871"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_300hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "968f0b9125f5ac21737873d6da4bb4deee83b285f8da4af7f99ef1e3ba2e2368"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_350hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "f304dcf03272e10d7a40938a1a94fabd2faac352aa64c5ad32431691ab58a024"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_350hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "d844234f61ef787580e1d1e63ac1ce45f4fa7a2113c46462390f8ed178a5ed2f"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_350hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "fd98d44503e5048dcc3177a3bcc4fe6912763bfad7fa120367536fdf11f9f8b4"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_425hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "9f1a82564b6769b70c66217cfe450465cd89cbbc47e0f8dd936bafadf8e35d24"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_425hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "7a9417d34ee23ce3bb58702995324a40be3ee3c65e62f1a962365279c83fc4ea"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_425hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "5c63c5a6e7a55a6e3567c68b4b6db4bc0008dd34fe2d495198c841b97b25844b"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_450hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "31d4a43282db732d87507c997140f981ed5259c090067368c5713ff0d9f0b2a5"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_450hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "6b9c4b1291788e0617538ed7e62203dfbb675e221ca612a9806cf6ee8a2d716c"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_450hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "4ca62aa0590e4f8fee5a40a99c32daf11281482aa01d26bdfe05352ddac8331b"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_525hpa_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "cddc172105e6fba8b1caa72c98087181ea9543dbf4319540e78a0ef8bd370277"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_525hpa_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "fa328ea97e3c610c03c610abdb2060f040ae6f67e118241ae8348aef299d74d7"
+  },
+  {
+    "path": "probability_of_clear_air_turbulence_525hpa_at_least_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "10dee3cd9c5377d048af8b8a430f3bda476109ea6cd9600c3495a71ef1c6791e"
+  },
+  {
+    "path": "probability_of_convective_available_potential_energy_90_0mb_above_1000",
+    "cadence_hours": 1,
+    "metadata_sha256": "4ede9ec0d957b01c5ca0a64c7a65b2bf43e5f0b53bb66a3cdbd988b97974cf72"
+  },
+  {
+    "path": "probability_of_convective_available_potential_energy_90_0mb_above_1500",
+    "cadence_hours": 1,
+    "metadata_sha256": "123f74ee8d6bbd22182d61a6cb0f8a65ca1c1d4780e96f88e2538b1a3f93f395"
+  },
+  {
+    "path": "probability_of_convective_available_potential_energy_90_0mb_above_2000",
+    "cadence_hours": 1,
+    "metadata_sha256": "5dab238a2b01d716c48d9747a8760ec6e33aef8f3330f7a2789b29e22faa4652"
+  },
+  {
+    "path": "probability_of_convective_available_potential_energy_90_0mb_above_3000",
+    "cadence_hours": 1,
+    "metadata_sha256": "c6ac1ed317f41fef9664a7d412f862862884706b0fb01c111c5e0e6e352b48c6"
+  },
+  {
+    "path": "probability_of_convective_available_potential_energy_90_0mb_above_500",
+    "cadence_hours": 1,
+    "metadata_sha256": "85b09e35530e49d14ea3fa4cdc9dc8fab78225ac5c79b2708ba9fd4b89e28aa8"
+  },
+  {
+    "path": "probability_of_convective_inhibition_90_0mb_below_0",
+    "cadence_hours": 1,
+    "metadata_sha256": "5a86290adaa508b5b9a466ebe4d28cd742ea022f908bd72eb5805e0276497095"
+  },
+  {
+    "path": "probability_of_convective_inhibition_90_0mb_below_minus_100",
+    "cadence_hours": 1,
+    "metadata_sha256": "68c2bc4ff9930ccdb566f5475f9f2c636d9ee5e5ea64d578652fbe1fdd4d98d7"
+  },
+  {
+    "path": "probability_of_convective_inhibition_90_0mb_below_minus_400",
+    "cadence_hours": 1,
+    "metadata_sha256": "f7e133afb37576d832a9ebdf7f505f4db4a03e0414525edc9936d59c41a23bc6"
+  },
+  {
+    "path": "probability_of_convective_inhibition_90_0mb_below_minus_50",
+    "cadence_hours": 1,
+    "metadata_sha256": "b639141fc3ba1bdb423685be7b8887fffcd6e5f6d71e9fc7d573b1f9314a0d02"
+  },
+  {
+    "path": "probability_of_dew_point_temperature_2m_above_283p15",
+    "cadence_hours": 1,
+    "metadata_sha256": "40827701f1bbaf6b2ec8f388927946fc32e24ca76a9dae8367d4cd450a6f5f5b"
+  },
+  {
+    "path": "probability_of_dew_point_temperature_2m_above_285p93",
+    "cadence_hours": 1,
+    "metadata_sha256": "669c9d05466b82debc8bd9ebf7105073dd20789ef3b3c70857f8b41a38383b2f"
+  },
+  {
+    "path": "probability_of_dew_point_temperature_2m_above_288p71",
+    "cadence_hours": 1,
+    "metadata_sha256": "5e471f1fad1247b3fe3402982a0a997d2be90aef348d9458fa9d56e46ff4b593"
+  },
+  {
+    "path": "probability_of_dew_point_temperature_2m_above_291p48",
+    "cadence_hours": 1,
+    "metadata_sha256": "cdacc3ac87b960c14eda3b30bbd122533ef1799c7f633dbe027c8a639cbb0c57"
+  },
+  {
+    "path": "probability_of_dew_point_temperature_2m_above_294p26",
+    "cadence_hours": 1,
+    "metadata_sha256": "6dda681d0eee5f75cb61928c38413f4b0ffc9164a6e953b6a455dbe214097ff5"
+  },
+  {
+    "path": "probability_of_flight_category_surface_at_least_1_below_2",
+    "cadence_hours": 1,
+    "metadata_sha256": "5af52441a249b6bd97ea578a31999da5fe8da060a03390d326dbcb413450c210"
+  },
+  {
+    "path": "probability_of_flight_category_surface_at_least_2_below_3",
+    "cadence_hours": 1,
+    "metadata_sha256": "9d6175c2f7ff4babc4500d42992e07f56c51a6d7ec1ca61529ac8913541d7793"
+  },
+  {
+    "path": "probability_of_flight_category_surface_at_least_3_below_4",
+    "cadence_hours": 1,
+    "metadata_sha256": "5caed233f94e589831adadbcd27299526f0529db5ae7f97d71c8128a5e3bf6c0"
+  },
+  {
+    "path": "probability_of_flight_category_surface_at_least_4",
+    "cadence_hours": 1,
+    "metadata_sha256": "a81db577b605b73bacb933b3f8f82085fd116416e8cff5e31d6b1cff86c89c44"
+  },
+  {
+    "path": "probability_of_fog_liquid_water_content_0m_above_0p016",
+    "cadence_hours": 1,
+    "metadata_sha256": "899a445e51eaa68cd9e2ce8b23e498971d37ccbecf64b48ed21bcfd804544f40"
+  },
+  {
+    "path": "probability_of_fog_liquid_water_content_0m_above_0p036",
+    "cadence_hours": 1,
+    "metadata_sha256": "05751a8422edf6017649edb12ce29c519572e6305f1008de555c11a7f27e53c4"
+  },
+  {
+    "path": "probability_of_fog_liquid_water_content_0m_above_0p103",
+    "cadence_hours": 1,
+    "metadata_sha256": "e13c6337c34a816c03a31596b80498827339bb83a0cd331678246da3a3325dd3"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_1372",
+    "cadence_hours": 1,
+    "metadata_sha256": "de9e750256390b9e6bcdacca9dee63f18fed83ccd0aeb905f2f17c934827a9a7"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_152p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "8a051231957d84a67d1861c6a5aa1e86c12ba141344f3e716dac3cb4feb4efbb"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_1830",
+    "cadence_hours": 1,
+    "metadata_sha256": "dac1202bdc4e664f0f566ed9a09fad2c13d4b874cedcc6904893595ebac16c13"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_305",
+    "cadence_hours": 1,
+    "metadata_sha256": "b2b6e2b5c50a56acf59753363b15dddf9aa61a8571a2b1d2f4c55b3c6e63cac2"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_3050",
+    "cadence_hours": 1,
+    "metadata_sha256": "cc1f737d16bae11d6f9d7c2ded672e15725bd257b8974f2fa912e87ffb510957"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_610",
+    "cadence_hours": 1,
+    "metadata_sha256": "b0b37efb06a6213da0076c32c439369c71f13c1bf2fee86050816cdbd6093494"
+  },
+  {
+    "path": "probability_of_geopotential_height_cloud_ceiling_below_915",
+    "cadence_hours": 1,
+    "metadata_sha256": "d73b9fefe012d949f699c77f687dc14dce392965e3ac1ae8fb1277a2efc8fa01"
+  },
+  {
+    "path": "probability_of_icing_1000hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "ad5d7b73eace0d662208b786ff303b2701bad6b2ff1cf42baf538e754b2a6379"
+  },
+  {
+    "path": "probability_of_icing_400hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "e324a2964bcf59bad710c26c3f637b97b12ea7d23323c7bc898102105449772a"
+  },
+  {
+    "path": "probability_of_icing_500hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "87a8238f9aefbd31c56fb86a93bfbb256eeb79650cbcd7d9243241bc7af1cf6c"
+  },
+  {
+    "path": "probability_of_icing_575hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "64bdd00e732f7e2746825b11dcae3fc24df49bb35cfa3e0f8739dd061ee70f37"
+  },
+  {
+    "path": "probability_of_icing_650hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "bcc69c5559a3abd28aaf8dd603a675b615affedbe090dcee5a0c35edaab7f35e"
+  },
+  {
+    "path": "probability_of_icing_725hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "ca767ab67281eef7eaa9ab73216ea2baf2780af42138e9c968ed630ae79dda69"
+  },
+  {
+    "path": "probability_of_icing_800hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "5353459b7428515b91453503e20641f4b36fdb7c2cf57c0c0931d8044fa842ab"
+  },
+  {
+    "path": "probability_of_icing_900hpa_at_least_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "d563ce9826d49ba0832ed2e457085b7fb8727d1195ac4757141cb7a50f98a3c3"
+  },
+  {
+    "path": "probability_of_lightning_atmosphere_above_0p08",
+    "cadence_hours": 1,
+    "metadata_sha256": "a64bc618e8a6f49061c1f610606618d479b572bef5302cb28d1c5b7726cdbd59"
+  },
+  {
+    "path": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_1",
+    "cadence_hours": 1,
+    "metadata_sha256": "55ea90e5fb9d6209e87d4fa6b7228fe7df8a0acee8212ca095eb0c2bd8518dc1"
+  },
+  {
+    "path": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_10",
+    "cadence_hours": 1,
+    "metadata_sha256": "45885eabf9dcab0cfbdecea9f01304b83d07e3891d78fdbf58d8e033c43ea2ff"
+  },
+  {
+    "path": "probability_of_maximum_upward_vertical_velocity_100_1000mb_above_20",
+    "cadence_hours": 1,
+    "metadata_sha256": "0d16df73f3805edc7e7f274f345c400bcd2e6b5c4ddf0ac974e0afd006cda421"
+  },
+  {
+    "path": "probability_of_precipitable_water_atmosphere_above_25",
+    "cadence_hours": 1,
+    "metadata_sha256": "f5e6ec7cd5a4b5a8835390f835bef49344f0a1894a8c55e78a6102f819014557"
+  },
+  {
+    "path": "probability_of_precipitable_water_atmosphere_above_37p5",
+    "cadence_hours": 1,
+    "metadata_sha256": "62b4c376cf6ca0b99d5276978661b8bea49ef31002c0894f17be928d170d4c35"
+  },
+  {
+    "path": "probability_of_precipitable_water_atmosphere_above_50",
+    "cadence_hours": 1,
+    "metadata_sha256": "81bca6e6d8ced5c7e6a1f1c078a2ade2107fad22364c36edc350076a3abcb9ab"
+  },
+  {
+    "path": "probability_of_storm_relative_helicity_3000_0m_above_100",
+    "cadence_hours": 1,
+    "metadata_sha256": "d9300ad2573178be6d55460bdd99cdd9d9cc79b2ba592d027cfca978c6d31719"
+  },
+  {
+    "path": "probability_of_storm_relative_helicity_3000_0m_above_200",
+    "cadence_hours": 1,
+    "metadata_sha256": "2ed3bfbd32feaf48cb973f0076277d14bf9c0f6839b083e2f32eb901259a99e7"
+  },
+  {
+    "path": "probability_of_storm_relative_helicity_3000_0m_above_400",
+    "cadence_hours": 1,
+    "metadata_sha256": "5d56b362129aebc38d7e5c090bae8c03b2cb5a974af5d09aab36f00405ed7766"
+  },
+  {
+    "path": "probability_of_temperature_2m_below_273p15",
+    "cadence_hours": 1,
+    "metadata_sha256": "466848a0f657b97dbe6774c98fe452a6f5e8e4c59c4a2a611b86443a85080f47"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_6000m_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "aae317c1abcde994987bd655e78b82758abbd9649429a735ea4a45dd239e7f93"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_6000m_above_15p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "1ceb27222b6270c7dbbf60cf32a8616845f582cd6a1c2a104151e8f7c4a5f60a"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_6000m_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "1debcfb382ee3f9fe2fce6d253079df3f66b66b344fc9d43409865129d90eab5"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_6000m_above_25p7",
+    "cadence_hours": 1,
+    "metadata_sha256": "d09d57c646c110ac7a4c1e77eb8c5387819fa5c160c170226b2b01159bdabd21"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_609m_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "22b986856f213685e5b4621b55ec97216406702c647a5f7a405fb249c5e6f3d7"
+  },
+  {
+    "path": "probability_of_vertical_wind_shear_0_609m_above_20",
+    "cadence_hours": 1,
+    "metadata_sha256": "dcdfc6904449877294bc93dca3c4517f3b416265826e66d58ebb077fa5f18946"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_1600",
+    "cadence_hours": 1,
+    "metadata_sha256": "dc93560394fd3ee8028f9e0fcf702a06ec86ace6a51bdb86e5ee4ad5933ed8d7"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_3200",
+    "cadence_hours": 1,
+    "metadata_sha256": "30717f5f5e1baf3207ed968ac70fff62264bd6b89f5bae3793227e5deee05cce"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_400",
+    "cadence_hours": 1,
+    "metadata_sha256": "cf834e17d18c4746f0baac4703d7350a90280c99dd7a215932585f9d721d35d8"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_4829",
+    "cadence_hours": 1,
+    "metadata_sha256": "9d60c01b3590f570f09f587f554da24a9063905d949d7f9a2524ca8cd70b704e"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_6400",
+    "cadence_hours": 1,
+    "metadata_sha256": "066c6f66b7b6a63aeb5c17190d049e32ba35d740a387f9d9f5f0a23bf41a347c"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_800",
+    "cadence_hours": 1,
+    "metadata_sha256": "208676ef87529354f86c82211119720a099999a8967d6ee9820279a5efdaf504"
+  },
+  {
+    "path": "probability_of_visibility_surface_below_8049",
+    "cadence_hours": 1,
+    "metadata_sha256": "43f3da20a48c4538404e20b5339ab1c8a009249fde5a4edfc32fce132d443f8a"
+  },
+  {
+    "path": "probability_of_wind_speed_10m_at_least_9_and_relative_humidity_2m_at_most_20",
+    "cadence_hours": 1,
+    "metadata_sha256": "76b159dd759ad51f81bf549e56c2d72a34af7f05732c7de32af5c09381239826"
+  },
+  {
+    "path": "probability_of_wind_speed_250hpa_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "0a40593cd313fd536c6b477f08485155f41b97bf9f36208e7885a0ccb3018724"
+  },
+  {
+    "path": "probability_of_wind_speed_250hpa_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "0b2ab7c5717c832c6b6e40fcc1723b338fd5404b08eaf87de45cad91b30a2e44"
+  },
+  {
+    "path": "probability_of_wind_speed_250hpa_above_30p9",
+    "cadence_hours": 1,
+    "metadata_sha256": "8426dfc8e4918e13800d04db3635bf8c0edc1f32dc78b4d08b86a913fe75489b"
+  },
+  {
+    "path": "probability_of_wind_speed_250hpa_above_41p2",
+    "cadence_hours": 1,
+    "metadata_sha256": "3f8163675167eb084c403d616cc7e9ad1ae55f407d1c095844b08e1a66f84217"
+  },
+  {
+    "path": "probability_of_wind_speed_250hpa_above_51p5",
+    "cadence_hours": 1,
+    "metadata_sha256": "a22f45290cdefa4b021adefddcccc604e9308c3c1687a9722b839445e19e35c6"
+  },
+  {
+    "path": "probability_of_wind_speed_550hpa_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "4cde112551b305da88ad7bd207500b4fa0f23fcf00d591e6deb8e4ed366068f0"
+  },
+  {
+    "path": "probability_of_wind_speed_550hpa_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "f1de5da1b98120b22f133ff50fcce8180ff56d5de9695c25978d39a5e24f378d"
+  },
+  {
+    "path": "probability_of_wind_speed_550hpa_above_30p9",
+    "cadence_hours": 1,
+    "metadata_sha256": "5ebc6f7535e6cccc3b9c2420263642d3a7cf4f07abbd1cae89dfe2edfc6e7b07"
+  },
+  {
+    "path": "probability_of_wind_speed_550hpa_above_41p2",
+    "cadence_hours": 1,
+    "metadata_sha256": "e821ac8f05ef5d512fa5a14ff76a10d55ee87753532eacad15dba2515307b61f"
+  },
+  {
+    "path": "probability_of_wind_speed_550hpa_above_51p5",
+    "cadence_hours": 1,
+    "metadata_sha256": "9017716ae91a7491e0a3f51bb4d1b25fd0cd687c87fe25ef119cbfead0bc8641"
+  },
+  {
+    "path": "probability_of_wind_speed_80m_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "a3053c8fdc3cb23c83603e4fce861319e3f129a47e8442547c1706ac65ef6717"
+  },
+  {
+    "path": "probability_of_wind_speed_80m_above_15p4",
+    "cadence_hours": 1,
+    "metadata_sha256": "8d0c2e3602210a292f252fb47d1c9188e0ab504ceef055ff85997303a76046c0"
+  },
+  {
+    "path": "probability_of_wind_speed_80m_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "4e2ad9c05dc71e8806065fcd16783ed95a860613a2d2d64192a607831fe5b4fa"
+  },
+  {
+    "path": "probability_of_wind_speed_850_300mb_below_5",
+    "cadence_hours": 1,
+    "metadata_sha256": "ea3865ff5babb324e1ed6276a27349977b727a61c52acbc8a85b3f54211f221c"
+  },
+  {
+    "path": "probability_of_wind_speed_850hpa_above_10p3",
+    "cadence_hours": 1,
+    "metadata_sha256": "808110968a9c44280e06608e54b7caa6b79364e2afb6829d78e9257e62bb0756"
+  },
+  {
+    "path": "probability_of_wind_speed_850hpa_above_20p6",
+    "cadence_hours": 1,
+    "metadata_sha256": "ca1019c88d815e2970f3f9e575fbc541474a27b17fae61aabaf12be95f794919"
+  },
+  {
+    "path": "probability_of_wind_speed_850hpa_above_30p9",
+    "cadence_hours": 1,
+    "metadata_sha256": "8029a6b769123d43e65e50e6368c31c0a67f5d7af16d16f329666e1ff4f379c6"
+  },
+  {
+    "path": "probability_of_wind_speed_850hpa_above_41p2",
+    "cadence_hours": 1,
+    "metadata_sha256": "59c7283f581c0b5be272bb2433a918a85c8f672cb3420aa65a5b3b7dc72c7866"
+  },
+  {
+    "path": "probability_of_wind_speed_850hpa_above_51p5",
+    "cadence_hours": 1,
+    "metadata_sha256": "0c81b07b2b63941bd3a9ec25b894d9175474a6fd78654d241b77d19317fd0990"
+  },
+  {
+    "path": "rain_fraction_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "a27690f77c465d7b45cd697f29e139b1afb3ca5fc5f94e5d2a18bfc425e72999"
+  },
+  {
+    "path": "relative_humidity_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "bbf62fc95e943bcdf1952cdaf69e4993399baf0fcc62eb1b4099a56c0ebf34ef"
+  },
+  {
+    "path": "snow_fraction_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "7617051f37c60a0a89db03c8361cbf13980d2bf008a0fe827fee6ef9c2823725"
+  },
+  {
+    "path": "snowfall_water_equivalent_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "5c2cb9a48f3cd178e414d91548e6dcb45c049b74bb0b03800e17ca85b28391e0"
+  },
+  {
+    "path": "snowfall_water_equivalent_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "9df5f734374a00e4816647a725b958293afcc0dc1460da0b3b3269ec340aaf0e"
+  },
+  {
+    "path": "soil_temperature_0m",
+    "cadence_hours": 1,
+    "metadata_sha256": "87e1ed2dd0b4b3dc268462996fa889d874008efafdda3ffdd4bea78790927b51"
+  },
+  {
+    "path": "soil_temperature_0m_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "c60741da3558a1362ea999300d7235370bb730868a3f16e2ee40d1f7c64614c7"
+  },
+  {
+    "path": "storm_relative_helicity_3000_0m",
+    "cadence_hours": 1,
+    "metadata_sha256": "9e94bb79063e403f48c5b7ecdcb33d16f1b752744ca923d2d0ab2d2206b4f9e7"
+  },
+  {
+    "path": "temperature_250hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "6122180e762fb4d0edad0565ab904ac09ed328007e43e33a03999698f5f0c545"
+  },
+  {
+    "path": "temperature_250hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "1844d269719f9970c04f881b286d3cb75a7969ee83fb7d046167f52dce92fc05"
+  },
+  {
+    "path": "temperature_2m",
+    "cadence_hours": 1,
+    "metadata_sha256": "8eb76a2d7419093ad1600753d94694bbc544788a8cd24ed0e2ef72c6fae610f1"
+  },
+  {
+    "path": "temperature_2m_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "f402ad0cd90168c5f5b449f0d03253747021e75dde9e747e8de2d5acd5173b70"
+  },
+  {
+    "path": "temperature_500hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "edcf32429aeb48b40f50cd9ff73e46c304ab9d7df180020aa2f68be8e82963ea"
+  },
+  {
+    "path": "temperature_500hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "adc284053722bc7a79cc80d5cc28a8b30957c533048f458cb4396e2c3b5a0b13"
+  },
+  {
+    "path": "temperature_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "d93155ee11536affcf455a471713ed88e35ed12c5bfed36218e122c9ae894dab"
+  },
+  {
+    "path": "temperature_700hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "28c7082a533b1fd829326bc8525a794430baf9e1c4f5363a712784db5939500c"
+  },
+  {
+    "path": "temperature_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "7f1ed26db1fd76f79c703dc2521667a16b7fc6895721a68886803a929890ddb2"
+  },
+  {
+    "path": "temperature_850hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "a3ee6f7df5566cdcb4085bd05a54839945ff7239466b08d533ad42350cfada20"
+  },
+  {
+    "path": "temperature_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "004baab9136ee3d0ac06d4a77477432c097a64e33091ea6df3421a7696c989d0"
+  },
+  {
+    "path": "temperature_925hpa_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "977149fc4e4613aeb44f1bffd32337a646f78c012d8530454bd4aa2b67a027e1"
+  },
+  {
+    "path": "temperature_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "fac81b158f761f02d510906172e50416dbd571c161864f92a1848308b42b318b"
+  },
+  {
+    "path": "temperature_surface_standard_deviation",
+    "cadence_hours": 1,
+    "metadata_sha256": "2e92d11cc696aa3dbb9531164aad674fcc00605ecca4dacfb860c345a6c013d5"
+  },
+  {
+    "path": "total_cloud_cover_atmosphere",
+    "cadence_hours": 1,
+    "metadata_sha256": "c585b8500d3967072388244026db984e6e9cc2674475fa82b2665e411b24001e"
+  },
+  {
+    "path": "total_precipitation_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "a82af1d076e0de62c04ad23d212fcae57096b0dc8d6fdbfd9581f5f66f00a572"
+  },
+  {
+    "path": "total_precipitation_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "becf0dc1f680a8c49a87e425f89bcc23351f70b682ff18a2d5ea50547f8c8196"
+  },
+  {
+    "path": "total_precipitation_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "3a8fadb1f605e4d63d73fa80410d90e740385110fdc1e2fa96884eb580d3a935"
+  },
+  {
+    "path": "total_snowfall_12_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "e5931d4f5071eeb2e53517227c9e6231942367a1971882b4bb7ebf449e2fc11b"
+  },
+  {
+    "path": "total_snowfall_1_hour_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "7efc1846665f259307cd8f4194d0b4b45e32e4eb64e45441455c8bceb009adbe"
+  },
+  {
+    "path": "total_snowfall_24_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "c7257f28b167fe1cc129983484c71b84c6b1498beba6dd7356967a0e5ed9fc74"
+  },
+  {
+    "path": "total_snowfall_3_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "5ec1afcc0a8237775a56160b093fd372733fac38fef21beb4549f08ae41c5dd8"
+  },
+  {
+    "path": "total_snowfall_6_hour_surface",
+    "cadence_hours": 3,
+    "metadata_sha256": "458885b7cd0cdf005b53f47c5bfd78dbdb769aba7c3f679180633d6168e86736"
+  },
+  {
+    "path": "vertical_velocity_geometric_700_500mb",
+    "cadence_hours": 1,
+    "metadata_sha256": "afcb47925d00cc445973431871f04edc222e9aea69d7e774b750a5b0a632bb52"
+  },
+  {
+    "path": "vertical_velocity_geometric_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "77966b5049c1d0bd0e2b8f0ff2ca61fdc3f4ed3e5565b2d0e9d7df6ba97333d2"
+  },
+  {
+    "path": "vertical_wind_shear_0_6000m",
+    "cadence_hours": 1,
+    "metadata_sha256": "5bf7847ca65e11b654c895d9a907582c096336a0a95a5501b3d6e832e3547397"
+  },
+  {
+    "path": "vertical_wind_shear_0_609m",
+    "cadence_hours": 1,
+    "metadata_sha256": "5bf7847ca65e11b654c895d9a907582c096336a0a95a5501b3d6e832e3547397"
+  },
+  {
+    "path": "visibility_surface",
+    "cadence_hours": 1,
+    "metadata_sha256": "3ad0f64d82f8e0dfc0ba06894afff5503050f8908ff6b80cfde90accc847faba"
+  },
+  {
+    "path": "volumetric_soil_moisture_0m",
+    "cadence_hours": 1,
+    "metadata_sha256": "606092768f353663cfa190ffb5d7b37473f003b36ba0a75915cc68845329ccb4"
+  },
+  {
+    "path": "wind_speed_10m",
+    "cadence_hours": 1,
+    "metadata_sha256": "03825562b25085aba689d55e14501a540adb7ac1568cdf5992f30350468c0dcc"
+  },
+  {
+    "path": "wind_speed_250hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "000d12bb498551128450f515f050acb04c2f6c3d28381fc3a38daa00bd9dfa65"
+  },
+  {
+    "path": "wind_speed_550hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "000d12bb498551128450f515f050acb04c2f6c3d28381fc3a38daa00bd9dfa65"
+  },
+  {
+    "path": "wind_speed_80m",
+    "cadence_hours": 1,
+    "metadata_sha256": "d03f3acc3aae2f254d04e1c8dd3cd9655268e235071f798d33757072a4c70838"
+  },
+  {
+    "path": "wind_speed_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "000d12bb498551128450f515f050acb04c2f6c3d28381fc3a38daa00bd9dfa65"
+  },
+  {
+    "path": "wind_speed_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "000d12bb498551128450f515f050acb04c2f6c3d28381fc3a38daa00bd9dfa65"
+  },
+  {
+    "path": "wind_u_10m",
+    "cadence_hours": 1,
+    "metadata_sha256": "be5ea33a1d92d61a2026fe3d486fa2d31181563bab6652ef98bf745118ab4e10"
+  },
+  {
+    "path": "wind_u_250hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_u_500hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_u_550hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_u_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_u_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_u_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "38c6dc2602083f0183e42592b0fa641d0eb25cba2e637e574a6dcf99afab5481"
+  },
+  {
+    "path": "wind_v_10m",
+    "cadence_hours": 1,
+    "metadata_sha256": "04335cb86093b30f3df795bd79640bd309582c2c4ce3dca06471da70b9323f42"
+  },
+  {
+    "path": "wind_v_250hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  },
+  {
+    "path": "wind_v_500hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  },
+  {
+    "path": "wind_v_550hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  },
+  {
+    "path": "wind_v_700hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  },
+  {
+    "path": "wind_v_850hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  },
+  {
+    "path": "wind_v_925hpa",
+    "cadence_hours": 1,
+    "metadata_sha256": "56e62d3485d4fbadb4b1cc4296db876665f3aa6fde6b01032a8629b7c93a1d00"
+  }
+]

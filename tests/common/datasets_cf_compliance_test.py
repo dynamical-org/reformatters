@@ -1754,13 +1754,17 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
 }
 
 
-_REFS_PRODUCTS_DATASET = next(
-    d for d in IMPLEMENTED_DATASETS if d.dataset_id == "noaa-refs-forecast-virtual"
+_REFS_PRODUCTS_DATASET_IDS = (
+    "noaa-refs-forecast-hourly-virtual",
+    "noaa-refs-forecast-3-hourly-virtual",
 )
-_REFS_PRODUCTS_VARS = _REFS_PRODUCTS_DATASET.template_config.data_vars
+_REFS_PRODUCTS_DATASETS = tuple(
+    d for d in IMPLEMENTED_DATASETS if d.dataset_id in _REFS_PRODUCTS_DATASET_IDS
+)
 _REFS_TEMPERATURE_STANDARD_DEVIATIONS = {
     var.name
-    for var in _REFS_PRODUCTS_VARS
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
     if not var.has_statistic
     and var.internal_attrs.source_families == ("sprd",)
     and var.name.endswith("_standard_deviation")
@@ -1776,23 +1780,26 @@ _REFS_LOCAL_QUANTITIES = {
 }
 # Threshold probabilities and product-specific statistics lack ECMWF parameters.
 DATASET_ECMWF_SHORTNAME_EXEMPT = {
-    (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.short_name)
-    for var in _REFS_PRODUCTS_VARS
+    (dataset.dataset_id, var.attrs.short_name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
     if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
     or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
 }
 DATASET_ECMWF_LONGNAME_EXEMPT = {
-    (_REFS_PRODUCTS_DATASET.dataset_id, var.attrs.long_name)
-    for var in _REFS_PRODUCTS_VARS
+    (dataset.dataset_id, var.attrs.long_name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
     if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
     or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
 }
 # These derived ensemble quantities have no matching CF standard name.
 DATASET_MISSING_STANDARD_NAME_EXEMPT = {
-    (_REFS_PRODUCTS_DATASET.dataset_id, var.name)
-    for var in _REFS_PRODUCTS_VARS
+    (dataset.dataset_id, var.name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
     if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
     or var.internal_attrs.source_families[0] in {"prob", "eas", "ffri"}
     or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
@@ -1803,10 +1810,21 @@ DATASET_MISSING_STANDARD_NAME_EXEMPT = {
 }
 # Grid-relative component winds retain the projected-grid quantity.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
-    (key, "standard_name", _REFS_PRODUCTS_DATASET.dataset_id)
-    for var in _REFS_PRODUCTS_VARS
+    (key, "standard_name", dataset.dataset_id)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
     if var.attrs.standard_name in {"x_wind", "y_wind"}
     for key in (var.name, var.attrs.short_name, var.attrs.long_name)
+}
+
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (long_name, "short_name", dataset_id)
+    for long_name in (
+        "Probability-matched mean of total precipitation",
+        "Localized probability-matched mean of total precipitation",
+        "Average of the ensemble mean and probability-matched mean of total precipitation",
+    )
+    for dataset_id in _REFS_PRODUCTS_DATASET_IDS
 }
 
 

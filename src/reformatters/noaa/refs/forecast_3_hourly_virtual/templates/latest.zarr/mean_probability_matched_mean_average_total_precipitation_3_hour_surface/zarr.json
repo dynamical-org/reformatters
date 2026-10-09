@@ -1,0 +1,56 @@
+{
+  "shape": [
+    1,
+    20,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "APCP",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Average of the ensemble mean and probability-matched mean of total precipitation",
+    "short_name": "mean_probability_matched_mean_average_total_precipitation_3_hour_surface",
+    "standard_name": "precipitation_amount",
+    "units": "kg m-2",
+    "comment": "Accumulated over the preceding 3 hours. Published every 3 forecast hours from lead 3 hours.",
+    "step_type": "accum",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

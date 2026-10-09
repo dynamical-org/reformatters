@@ -100,8 +100,11 @@ from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
-from reformatters.noaa.refs.forecast_virtual import (
-    NoaaRefsForecastVirtualDataset,
+from reformatters.noaa.refs.forecast_3_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecast3HourlyVirtualDataset,
+)
+from reformatters.noaa.refs.forecast_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecastHourlyVirtualDataset,
 )
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaRrfsForecast18HourVirtualDataset,
@@ -328,7 +331,10 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaRrfsEnsForecastVirtualDataset(
         primary_storage_config=NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
-    NoaaRefsForecastVirtualDataset(
+    NoaaRefsForecastHourlyVirtualDataset(
+        primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRefsForecast3HourlyVirtualDataset(
         primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
