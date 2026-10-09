@@ -42,6 +42,9 @@ class NoaaRefsSourceFileCoord(NoaaVirtualSourceFileCoord[NoaaRefsDataVar]):
         if self.source_family in ("mean", "sprd"):
             tag = "wt ens mean" if self.source_family == "mean" else "ens spread"
             assert selectors.count(tag) == 1, (self.get_url(), selectors)
+            assert self.source_family != "mean" or "process=193" not in selectors, (
+                f"{self.get_url()}: PMM process cannot supply an arithmetic mean"
+            )
             return tuple(s for s in selectors if s != tag)
         if self.source_family in ("prob", "eas", "ffri"):
             counts = [s for s in selectors if re.fullmatch(r"prob fcst \d+/\d+", s)]

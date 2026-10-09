@@ -333,3 +333,11 @@ def test_surface_height_spread_accepts_either_copy(
     assert height.offset == int(originals[0].split(":")[1])
     assert height.out_loc["statistic"] == "standard_deviation"
     assert len(refs) == len(coord.data_vars)
+
+
+def test_pmm_process_cannot_supply_arithmetic_mean() -> None:
+    coord = file_coord(pd.Timestamp("2026-08-13T00"), "mean", pd.Timedelta("1h"))
+    with pytest.raises(
+        AssertionError, match="PMM process cannot supply an arithmetic mean"
+    ):
+        coord.index_selectors(("wt ens mean", "process=193"))
