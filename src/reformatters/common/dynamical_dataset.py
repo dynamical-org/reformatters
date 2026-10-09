@@ -3,6 +3,7 @@ import json
 import math
 import os
 import subprocess
+import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -33,12 +34,15 @@ from reformatters.common.kubernetes import (
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.operational import OperationalResources
+from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.region_job import (
     RegionJob,
     SourceFileCoord,
     SourceFileResult,
 )
+from reformatters.common.source_availability import SourceAvailability, Summary
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -57,6 +61,12 @@ SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
 log = get_logger(__name__)
 
 
+class _MaterializedUpdatePlan(FrozenBaseModel):
+    append_dim_end: datetime | None = None
+    init_times: tuple[datetime, ...] = ()
+    skip_reason: str | None = None
+
+
 class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD]):
     """Top level class managing a dataset configuration and processing."""
 
@@ -66,6 +76,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
+    materialized_source_availability: SourceAvailability | None = None
+    reprocess_materialized_frontier: bool = False
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
@@ -155,27 +167,40 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         ):
             tmp_store = self._tmp_store()
 
-            all_jobs, template_ds = self._operational_update_jobs(
-                reformat_job_name, tmp_store
-            )
-
-            if issubclass(self.region_job_class, VirtualRegionJob):
-                # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
-                if is_first:
-                    self._assert_no_structural_drift(template_ds)
-                self._run_virtual_operational_update(
-                    all_jobs, worker_index, workers_total
+            if (
+                self.materialized_source_availability is not None
+                and Config.is_prod
+                and issubclass(self.region_job_class, MaterializedRegionJob)
+                and os.getenv("CRON_JOB_NAME")
+                == self._operational_cron_job(ReformatCronJob).name
+            ):
+                update_jobs = self._planned_materialized_update_jobs(
+                    reformat_job_name, tmp_store, worker_index
                 )
             else:
-                self._process_region_jobs(
-                    all_jobs=all_jobs,
-                    worker_index=worker_index,
-                    workers_total=workers_total,
-                    reformat_job_name=reformat_job_name,
-                    template_ds=template_ds,
-                    tmp_store=tmp_store,
-                    update_template_with_results=True,
+                update_jobs = self._operational_update_jobs(
+                    reformat_job_name, tmp_store
                 )
+
+            if update_jobs is not None:
+                all_jobs, template_ds = update_jobs
+                if issubclass(self.region_job_class, VirtualRegionJob):
+                    # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                    if is_first:
+                        self._assert_no_structural_drift(template_ds)
+                    self._run_virtual_operational_update(
+                        all_jobs, worker_index, workers_total
+                    )
+                else:
+                    self._process_region_jobs(
+                        all_jobs=all_jobs,
+                        worker_index=worker_index,
+                        workers_total=workers_total,
+                        reformat_job_name=reformat_job_name,
+                        template_ds=template_ds,
+                        tmp_store=tmp_store,
+                        update_template_with_results=True,
+                    )
 
         if is_last:
             self._validate_after_update(reformat_job_name)
@@ -688,6 +713,98 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             reformat_job_name=reformat_job_name,
             **fire_time_kwarg,
         )
+
+    def _planned_materialized_update_jobs(
+        self, reformat_job_name: str, tmp_store: Path, worker_index: int
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree] | None:
+        plan_files = self.store_factory.read_all_coordination_files(
+            reformat_job_name, "plan"
+        )
+        if worker_index == 0 and not plan_files:
+            if kubernetes.has_running_cronjob_job(
+                os.environ["CRON_JOB_NAME"], reformat_job_name
+            ):
+                plan = _MaterializedUpdatePlan(skip_reason="older unfinished sibling")
+            else:
+                jobs, template_ds = self._operational_update_jobs(
+                    reformat_job_name, tmp_store
+                )
+                assert self.template_config.append_dim == "init_time", (
+                    "Source-gated materialized updates require init_time"
+                )
+                assert all(
+                    job.append_dim == "init_time"
+                    and job.region.stop - job.region.start == 1
+                    for job in jobs
+                ), "Source-gated materialized updates require single-init regions"
+                frontier = pd.Timestamp(
+                    self.store_factory.open_primary_datatree()["init_time"].max().item()
+                )
+                candidate_inits = {
+                    pd.Timestamp(
+                        template_ds.coords["init_time"].values[job.region.start]
+                    )
+                    for job in jobs
+                }
+                new_inits = {init for init in candidate_inits if init > frontier}
+                if new_inits:
+                    assert self.materialized_source_availability is not None
+                    available = self.materialized_source_availability.available_inits(
+                        Summary.fetch()
+                    )
+                    latest_ready = max(new_inits & available, default=None)
+                    new_inits = (
+                        {init for init in new_inits if init <= latest_ready}
+                        if latest_ready is not None
+                        else set()
+                    )
+                is_retry = not kubernetes.retry_job_name(reformat_job_name)[0]
+                if (
+                    self.reprocess_materialized_frontier or is_retry
+                ) and frontier in candidate_inits:
+                    new_inits.add(frontier)
+                selected_inits = sorted(new_inits)
+                plan = (
+                    _MaterializedUpdatePlan(
+                        append_dim_end=(
+                            selected_inits[-1]
+                            + self.template_config.append_dim_frequency
+                        ).to_pydatetime(),
+                        init_times=tuple(
+                            init.to_pydatetime() for init in selected_inits
+                        ),
+                    )
+                    if selected_inits
+                    else _MaterializedUpdatePlan(
+                        skip_reason="no source-ready or repair init times"
+                    )
+                )
+            self.store_factory.write_coordination_file(
+                reformat_job_name, "plan/ready.json", plan.model_dump_json().encode()
+            )
+        else:
+            while not plan_files:
+                log.info("Waiting for worker 0 to plan materialized update...")
+                time.sleep(5)
+                plan_files = self.store_factory.read_all_coordination_files(
+                    reformat_job_name, "plan"
+                )
+            plan = _MaterializedUpdatePlan.model_validate_json(item(plan_files))
+
+        if not plan.init_times:
+            log.info(f"Skipping {reformat_job_name}: {plan.skip_reason}")
+            return None
+        assert plan.append_dim_end is not None
+        template_ds = self._get_template(plan.append_dim_end)
+        jobs = self.region_job_class.get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=self.template_config.append_dim,
+            all_data_vars=self.template_config.data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_contains=[pd.Timestamp(init) for init in plan.init_times],
+        )
+        return jobs, template_ds
 
     def _virtual_validation_region_job(
         self,

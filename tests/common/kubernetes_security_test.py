@@ -14,9 +14,40 @@ from reformatters.common.kubernetes_security import (
     create_trigger_bindings,
     trigger_admission_binding,
     trigger_admission_resources,
+    trigger_deployment_resources,
     trigger_role_targets,
     verify_trigger_admission,
 )
+
+
+@pytest.mark.parametrize("targets", [[], ["weather-update"]])
+def test_trigger_role_can_list_namespace_jobs_without_expanding_cronjob_targets(
+    targets: list[str],
+) -> None:
+    _, permissions = trigger_deployment_resources([], targets)
+    role, binding = permissions
+    assert role["rules"] == [
+        *(
+            [
+                {
+                    "apiGroups": ["batch"],
+                    "resources": ["cronjobs"],
+                    "resourceNames": targets,
+                    "verbs": ["get", "trigger"],
+                }
+            ]
+            if targets
+            else []
+        ),
+        {
+            "apiGroups": ["batch"],
+            "resources": ["jobs"],
+            "verbs": ["create", "get", "list"],
+        },
+    ]
+    assert role["kind"] == "Role"
+    assert binding["kind"] == "RoleBinding"
+    assert binding["roleRef"]["name"] == role["metadata"]["name"]
 
 
 def test_empty_targets_generate_bound_deny_all_guard() -> None:
