@@ -41,6 +41,26 @@ _FRESHNESS_DEADLINES = [
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "4h02m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "5h"),
     ("google-weathernext2-forecast-operational-virtual", "2026-09-26 12:00", "12h"),
+    (
+        "google-weathernext3-forecast-15-day-0-1-degree-virtual",
+        "2026-09-26 12:00",
+        "12h",
+    ),
+    (
+        "google-weathernext3-forecast-48-hour-0-1-degree-virtual",
+        "2026-09-26 13:00",
+        "12h",
+    ),
+    (
+        "google-weathernext3-forecast-15-day-0-05-degree-virtual",
+        "2026-09-26 12:00",
+        "12h",
+    ),
+    (
+        "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
+        "2026-09-26 13:00",
+        "12h",
+    ),
     ("nasa-imerg-analysis-early", "2026-09-26 16:30", "8h"),
     ("nasa-imerg-analysis-late", "2026-09-26 06:30", "18h"),
     ("ucsb-chc-chirps-analysis-final", "2026-07-30 00:00", "60D"),

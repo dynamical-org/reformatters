@@ -24,7 +24,7 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
-from reformatters.google.weathernext2.forecast_virtual.region_job import (
+from reformatters.google.weathernext_virtual.listing import (
     PROXY_LOCATION_PREFIX,
 )
 

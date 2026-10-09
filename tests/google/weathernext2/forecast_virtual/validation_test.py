@@ -13,7 +13,7 @@ from reformatters.google.weathernext2.forecast_operational_virtual.template_conf
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
 )
-from reformatters.google.weathernext2.forecast_virtual.validation import (
+from reformatters.google.weathernext_virtual.validation import (
     CheckNoRefsInsideHoldback,
 )
 

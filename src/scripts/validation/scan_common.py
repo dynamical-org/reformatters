@@ -56,6 +56,8 @@ def build_virtual_jobs(
     end: datetime | None,
     start: datetime | None,
     variables: list[str] | None,
+    reference_time: pd.Timestamp | None = None,
+    filter_contains: list[pd.Timestamp] | None = None,
 ) -> list[RegionJob[Any, Any]]:
     """Every region job covering [start, end) — the same partitioning a backfill uses."""
     append_dim_end = pd.Timestamp(end) if end is not None else pd.Timestamp.now()
@@ -69,6 +71,9 @@ def build_virtual_jobs(
             reformat_job_name="validation-scan",
             filter_start=pd.Timestamp(start) if start is not None else None,
             filter_variable_names=variables,
+            reference_time=reference_time,
+            append_dim_end=append_dim_end,
+            filter_contains=filter_contains,
         )
     )
 

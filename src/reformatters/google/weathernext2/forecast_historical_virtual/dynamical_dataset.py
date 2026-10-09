@@ -11,10 +11,12 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
     HISTORICAL_MANIFEST_INIT_SPLIT,
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
-    weathernext2_virtual_chunk_containers,
 )
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
+)
+from reformatters.google.weathernext_virtual.listing import (
+    weathernext_virtual_chunk_containers,
 )
 
 from .template_config import (
@@ -36,7 +38,7 @@ class GoogleWeathernext2ForecastHistoricalVirtualDataset(
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
-            containers=weathernext2_virtual_chunk_containers(),
+            containers=weathernext_virtual_chunk_containers(),
             manifest_split=manifest_append_dim_split(
                 split_size=HISTORICAL_MANIFEST_INIT_SPLIT,
                 dim="init_time",

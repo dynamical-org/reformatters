@@ -172,7 +172,7 @@ class Encoding(pydantic.BaseModel):
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
     # It's fine to add any valid dtype string to this literal.
-    dtype: Literal["float32", "float64", "uint16", "int16", "int64", "bool"]
+    dtype: Literal["float32", "float64", "uint16", "int16", "int64", "bool", "str"]
     chunks: tuple[int, ...] | int
     shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 
@@ -199,7 +199,13 @@ class Encoding(pydantic.BaseModel):
                 )
         return self
 
-    fill_value: float | int | bool
+    fill_value: float | int | bool | str
+
+    @pydantic.model_validator(mode="after")
+    def validate_string_fill_value(self) -> Encoding:
+        if (self.dtype == "str") != isinstance(self.fill_value, str):
+            raise ValueError("String dtype and string fill_value must be used together")
+        return self
 
     filters: Annotated[
         Sequence[CodecConfig] | None,
@@ -207,7 +213,7 @@ class Encoding(pydantic.BaseModel):
     ] = None
     compressors: Sequence[CodecConfig] | None = None
     # zarr v3 ArrayBytesCodec serializer (the single slot between filters and
-    # compressors). None means zarr's default BytesCodec. Virtual datasets set
+    # compressors). None uses zarr's default for the dtype. Virtual datasets set
     # this to a per-variable GribberishCodec dict.
     serializer: CodecConfig | None = None
 
@@ -243,6 +249,12 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
     encoding: Encoding
     attrs: DataVarAttrs
     internal_attrs: INTERNAL_ATTRS_co
+
+    @pydantic.model_validator(mode="after")
+    def validate_numeric_dtype(self) -> DataVar[INTERNAL_ATTRS_co]:
+        if self.encoding.dtype == "str":
+            raise ValueError("String dtype is supported only for coordinates")
+        return self
 
     @property
     def path(self) -> str:
