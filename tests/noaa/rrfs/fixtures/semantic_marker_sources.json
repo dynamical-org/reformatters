@@ -1,0 +1,16 @@
+{
+  "percent-frozen-marker.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfsens.20260910/00/m001/rrfs.t00z.m001.2dfldnomads.3km.f006.conus.grib2",
+    "start": 24592454,
+    "end": 24746905,
+    "sha256": "db6c49918cdbd6793b67a30bdfe01158ab4673949d87140753897153438d0a6d",
+    "index_line": "24:24592454:d=2026091000:CPOFP:surface:6 hour fcst:ENS=+1"
+  },
+  "cloud-top-marker.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/14/rrfs.t14z.2dfld.3km.subh.f018.conus.grib2",
+    "start": 133434203,
+    "end": 134870930,
+    "sha256": "a9d21492be4f30a95ff560ac39631fe08c16e5dc8f4b198cd0b4a7ccf65be978",
+    "index_line": "146:133434203:d=2026100814:HGT:cloud top:18 hour fcst:"
+  }
+}

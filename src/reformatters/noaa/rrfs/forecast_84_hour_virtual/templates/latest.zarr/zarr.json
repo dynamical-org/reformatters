@@ -5490,10 +5490,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Ice pellets",
-          "short_name": "frozr",
+          "long_name": "Graupel (snow pellets) precipitation",
+          "short_name": "tgrp",
           "units": "kg m-2",
-          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_run_total_surface by percent_frozen_precipitation_surface / 100. Accumulated from the forecast initialization time to this step.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5545,10 +5545,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Ice pellets",
-          "short_name": "frozr",
+          "long_name": "Graupel (snow pellets) precipitation",
+          "short_name": "tgrp",
           "units": "kg m-2",
-          "comment": "Ice pellet (sleet) accumulation from the source's FROZR element, despite this variable's name. For all frozen precipitation, multiply total_precipitation_surface by percent_frozen_precipitation_surface / 100. Accumulated over the preceding hour.",
+          "comment": "Accumulated over the preceding hour.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5867,7 +5867,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -5000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -5886,7 +5886,7 @@
           "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAACIs8A="
         },
         "dimension_names": [
           "init_time",
@@ -8038,61 +8038,6 @@
           "long_name": "Surface upward long-wave radiation flux",
           "short_name": "sulwrf",
           "standard_name": "surface_upwelling_longwave_flux_in_air",
-          "units": "W m-2",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "instantaneous_upward_long_wave_radiation_flux_top_of_atmosphere": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "ULWRF",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Upward long-wave radiation flux",
-          "short_name": "ulwrf",
-          "standard_name": "toa_outgoing_longwave_flux",
           "units": "W m-2",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -10583,7 +10528,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -50.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -10598,10 +10543,10 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "NaN where there is no precipitation.",
+          "comment": "NaN where precipitation is absent or too light to diagnose a frozen fraction.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAScA="
         },
         "dimension_names": [
           "init_time",
@@ -17946,61 +17891,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "vertical_u_component_shear_0_1000m": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "VUCSH",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Vertical u-component shear",
-          "short_name": "vucsh",
-          "units": "m s-1",
-          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "vertical_u_component_shear_0_6000m": {
         "shape": [
           1,
@@ -18042,61 +17932,6 @@
           "short_name": "vucsh",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "vertical_v_component_shear_0_1000m": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "VVCSH",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Vertical v-component shear",
-          "short_name": "vvcsh",
-          "units": "m s-1",
-          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18315,7 +18150,7 @@
           "long_name": "Visible Beam Downward Solar Flux",
           "short_name": "vbdsf",
           "units": "W m-2",
-          "comment": "Broadband and direct-normal despite this variable's name: not visible-band, and measured perpendicular to the sun's rays rather than on a horizontal surface.",
+          "comment": "Downward direct-beam solar flux in the ultraviolet and visible bands at the surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18370,7 +18205,7 @@
           "long_name": "Visible Diffuse Downward Solar Flux",
           "short_name": "vddsf",
           "units": "W m-2",
-          "comment": "Broadband despite this variable's name, not visible-band.",
+          "comment": "Downward diffuse solar flux in the ultraviolet and visible bands at the surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

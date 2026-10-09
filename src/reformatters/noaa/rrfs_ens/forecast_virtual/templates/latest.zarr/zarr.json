@@ -2093,7 +2093,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -50.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -2108,10 +2108,10 @@
           "long_name": "Percent frozen precipitation",
           "short_name": "cpofp",
           "units": "percent",
-          "comment": "NaN where there is no precipitation.",
+          "comment": "NaN where precipitation is absent or too light to diagnose a frozen fraction.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAScA="
         },
         "dimension_names": [
           "init_time",
@@ -4087,64 +4087,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "vertical_u_component_shear_0_1000m": {
-        "shape": [
-          1,
-          6,
-          61,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "VUCSH",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Vertical u-component shear",
-          "short_name": "vucsh",
-          "units": "m s-1",
-          "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "ensemble_member",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "vertical_u_component_shear_0_6000m": {
         "shape": [
           1,
@@ -4188,64 +4130,6 @@
           "short_name": "vucsh",
           "units": "m s-1",
           "comment": "Velocity along the model grid's x dimension, not eastward velocity.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "ensemble_member",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "vertical_v_component_shear_0_1000m": {
-        "shape": [
-          1,
-          6,
-          61,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "VVCSH",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Vertical v-component shear",
-          "short_name": "vvcsh",
-          "units": "m s-1",
-          "comment": "Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

@@ -23,10 +23,10 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 323),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 323),
-        (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 39),
-        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 64),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 320),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 320),
+        (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 38),
+        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 62),
     ],
     ids=lambda value: (
         value.dataset_id
@@ -54,6 +54,22 @@ def test_configured_field_inventory(
     configured_paths = {v.path for v in config.data_vars}
     assert len(config.data_vars) == len(configured_paths) == count
     assert configured_paths.isdisjoint(removed_fields)
+    # These fields are not usable as of 2026-10-09; RRFS is not yet operational,
+    # so this may change.
+    assert configured_paths.isdisjoint(
+        {
+            "instantaneous_upward_long_wave_radiation_flux_top_of_atmosphere",
+            "vertical_u_component_shear_0_1000m",
+            "vertical_v_component_shear_0_1000m",
+        }
+    )
+    if not config.sub_hourly:
+        assert {
+            "vertical_u_component_shear_0_6000m",
+            "vertical_v_component_shear_0_6000m",
+        } <= configured_paths
+    if not config.sub_hourly and not config.members:
+        assert "upward_long_wave_radiation_flux_top_of_atmosphere" in configured_paths
     assert config.append_dim_start == config.append_dim_start.normalize()
     if config.sub_hourly or config.members:
         # The ensemble fields are effectively empty in NOAA's source as of

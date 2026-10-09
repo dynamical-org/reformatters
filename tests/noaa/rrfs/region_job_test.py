@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import numpy as np
@@ -181,11 +182,24 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                         ("WFIREPOT", "surface"),
                     }
                 )
+                # These fields are not usable as of 2026-10-09; RRFS is not yet
+                # operational, so this may change.
+                excluded_radiation_or_shear = (
+                    element == "ULWRF"
+                    and level == "top of atmosphere"
+                    and (
+                        window == "anl"
+                        or re.fullmatch(r"\d+ (?:hour|min) fcst", window) is not None
+                    )
+                ) or (
+                    element in {"VUCSH", "VVCSH"} and level == "0-1000 m above ground"
+                )
                 assert (
                     duplicate
                     or zero_placeholder
                     or excluded_surface_product
                     or excluded_member_product
+                    or excluded_radiation_or_shear
                 ), (path, identity)
             seen.add(identity)
 

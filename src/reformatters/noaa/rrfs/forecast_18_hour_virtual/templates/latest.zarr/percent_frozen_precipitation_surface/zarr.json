@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": -50.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -38,10 +38,10 @@
     "long_name": "Percent frozen precipitation",
     "short_name": "cpofp",
     "units": "percent",
-    "comment": "NaN where there is no precipitation.",
+    "comment": "NaN where precipitation is absent or too light to diagnose a frozen fraction.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAScA="
   },
   "dimension_names": [
     "init_time",

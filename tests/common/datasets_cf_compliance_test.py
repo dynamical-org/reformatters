@@ -1094,6 +1094,49 @@ def test_ecmwf_parameter_compliance(
 # Format: (variable_or_coord_name, attribute_name, dataset_id)
 # These are intentional exceptions where source data conventions differ.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # RRFS FROZR represents accumulated graupel.
+    ("frozen_precipitation_surface", "long_name", "noaa-rrfs-forecast-18-hour-virtual"),
+    (
+        "frozen_precipitation_surface",
+        "short_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    ("frozen_precipitation_surface", "long_name", "noaa-rrfs-forecast-84-hour-virtual"),
+    (
+        "frozen_precipitation_surface",
+        "short_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-sub-hourly-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-sub-hourly-virtual",
+    ),
     # GRIB's TCDC, and so ECMWF's tcc, names both the column total and the fraction
     # within a single layer. GFS publishes both, at "entire atmosphere" and at
     # "boundary layer cloud layer", so one dataset carries the two meanings.
