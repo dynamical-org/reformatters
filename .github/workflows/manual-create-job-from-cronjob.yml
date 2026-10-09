@@ -43,6 +43,10 @@ name: 'Manual: Create Job from CronJob'
         - noaa-hrrr-nomads-mirror-gribs
         - noaa-mrms-conus-analysis-hourly-update
         - noaa-ndvi-cdr-analysis-update
+        - noaa-rrfs-ens-forecast-virtual-update
+        - noaa-rrfs-forecast-18-hour-virtual-update
+        - noaa-rrfs-forecast-84-hour-virtual-update
+        - noaa-rrfs-forecast-sub-hourly-virtual-update
         - u-arizona-swann-analysis-update
         - ucsb-chc-chirps-analysis-final-update
         - ucsb-chc-chirps-analysis-preliminary-update
