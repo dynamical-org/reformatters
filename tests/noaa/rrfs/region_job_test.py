@@ -159,7 +159,34 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                     and "-" in window
                     and len(set(window.split()[0].split("-"))) == 1
                 )
-                assert duplicate or zero_placeholder, (path, identity)
+                # These surface fields are effectively empty in NOAA's source as
+                # of 2026-10-09; RRFS is not yet operational, so this may change.
+                # specific_humidity_2m is present and remains in the dataset.
+                excluded_surface_product = (
+                    not config.members
+                    and not config.sub_hourly
+                    and level == "surface"
+                    and element in {"SPFH", "VEGMIN", "VEGMAX", "PEVAP", "PEVPR"}
+                )
+                # These ensemble fields are effectively empty in NOAA's source
+                # as of 2026-10-09; RRFS is not yet operational, so this may change.
+                excluded_member_product = config.members and (
+                    (element, level)
+                    in {
+                        ("AOTK", "entire atmosphere (considered as a single layer)"),
+                        (
+                            "var discipline=2 master_table=2 parmcat=4 parm=26",
+                            "surface",
+                        ),
+                        ("WFIREPOT", "surface"),
+                    }
+                )
+                assert (
+                    duplicate
+                    or zero_placeholder
+                    or excluded_surface_product
+                    or excluded_member_product
+                ), (path, identity)
             seen.add(identity)
 
 
@@ -290,8 +317,8 @@ def test_hourly_source_generation_respects_families_availability_and_horizon(
         if v.path
         in {
             "temperature_2m",
-            "minimum_vegetation_surface",
-            "potential_evaporation_surface",
+            "total_precipitation_surface",
+            "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
             "pressure_level/temperature",
         }
     ]
@@ -310,9 +337,15 @@ def test_hourly_source_generation_respects_families_availability_and_horizon(
         assert names == (
             {"pressure_level/temperature"}
             if coord.source_family == "prslev"
-            else {"temperature_2m", "minimum_vegetation_surface"}
+            else {"temperature_2m"}
             if coord.lead_time == pd.Timedelta(0)
-            else {"temperature_2m", "potential_evaporation_surface"}
+            else {
+                "temperature_2m",
+                "total_precipitation_surface",
+                "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
+            }
+            if coord.lead_time == pd.Timedelta("1h")
+            else {"temperature_2m", "total_precipitation_surface"}
         )
         assert coord.get_url().endswith(
             f"f{int(coord.lead_time / pd.Timedelta('1h')):03}.conus.grib2"
