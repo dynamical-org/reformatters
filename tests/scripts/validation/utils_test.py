@@ -11,6 +11,7 @@ from scripts.validation.utils import (
     choose_level,
     get_random_spatial_indices,
     get_two_random_points,
+    lead_time_label,
     load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
@@ -197,3 +198,9 @@ def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) 
     credentials = _anonymous_virtual_credentials(storage)
     assert credentials is not None
     icechunk.Repository.open(storage, authorize_virtual_chunk_access=credentials)
+
+
+def test_lead_time_label() -> None:
+    assert lead_time_label(pd.Timedelta("0h")) == "0h"
+    assert lead_time_label(pd.Timedelta("48h")) == "48h"
+    assert lead_time_label(pd.Timedelta("135min")) == "2h15m"

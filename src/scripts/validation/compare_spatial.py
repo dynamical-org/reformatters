@@ -7,7 +7,6 @@ import xarray as xr
 from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
-from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
@@ -17,6 +16,7 @@ from scripts.validation.utils import (
     init_time_option,
     is_forecast_dataset,
     is_virtual_store,
+    lead_time_label,
     lead_time_option,
     level_label,
     level_option,
@@ -79,7 +79,7 @@ def align_to_valid_time_forecast(
         ]
         selected_lead_time = rng.choice(covered or candidate_leads, 1)[0]
     else:
-        selected_lead_time = pd.Timedelta(hours=int(lead_time))
+        selected_lead_time = pd.Timedelta(hours=float(lead_time))
 
     ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
     valid_time = pd.Timestamp(ds.valid_time.item())
@@ -117,8 +117,8 @@ def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset
 def _format_spatial_time_label(ds: xr.Dataset, is_forecast: bool) -> str:
     if is_forecast:
         init_str = pd.Timestamp(ds.init_time.item()).strftime("%Y-%m-%dT%H:%M")
-        lead_hours = whole_hours(pd.Timedelta(ds.lead_time.item()))
-        return f"init={init_str}, lead={lead_hours:g}h"
+        lead = lead_time_label(pd.Timedelta(ds.lead_time.item()))
+        return f"init={init_str}, lead={lead}"
     return pd.Timestamp(ds.time.item()).strftime("%Y-%m-%dT%H:%M")
 
 

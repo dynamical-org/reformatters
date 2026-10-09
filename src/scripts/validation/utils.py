@@ -76,7 +76,7 @@ init_time_option = typer.Option(
 lead_time_option = typer.Option(
     None,
     "--lead-time",
-    help="Forecast lead_time in hours for the spatial snapshot (default: random)",
+    help="Forecast lead_time in hours for the spatial snapshot, fractional for sub-hourly leads (e.g. 2.25). Default: random",
 )
 
 time_option = typer.Option(
@@ -315,6 +315,12 @@ def scope_time_period(
     if start_date or end_date:
         ds = ds.sel({append_dim: slice(start_date, end_date)})
     return ds
+
+
+def lead_time_label(lead_time: pd.Timedelta) -> str:
+    hours, minutes = divmod(int(lead_time.total_seconds()) // 60, 60)
+    assert lead_time == pd.Timedelta(hours=hours, minutes=minutes), lead_time
+    return f"{hours}h{minutes}m" if minutes else f"{hours}h"
 
 
 def var_slug(var: str) -> str:

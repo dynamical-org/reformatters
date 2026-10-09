@@ -60,9 +60,12 @@ def test_compute_value_series_forecast_has_nonzero_band() -> None:
     assert (std_series.values > 0).all()
 
 
-def _grouped_forecast_dataset() -> xr.Dataset:
+def _grouped_forecast_dataset(
+    lead_time: pd.TimedeltaIndex | None = None,
+) -> xr.Dataset:
     init_time = pd.date_range("2020-01-01", periods=4, freq="D")
-    lead_time = pd.to_timedelta([0, 6, 12], unit="h")
+    if lead_time is None:
+        lead_time = pd.to_timedelta([0, 6, 12], unit="h")
     lat = np.array([10.0, 20.0])
     lon = np.array([30.0, 40.0])
     pressure_level = np.array([1000, 500, 100])
@@ -161,6 +164,18 @@ def test_run_value_timeseries_virtual_samples_one_message_per_position(
     # One message per position: a single value per timestep, so std is n/a.
     assert stats.value_std_p1 is None
     assert (tmp_path / "value_timeseries_pressure_level__temperature.png").exists()
+
+
+def test_sample_virtual_points_pins_first_sub_hourly_lead() -> None:
+    ds = _grouped_forecast_dataset(pd.to_timedelta([15, 30, 45], unit="min"))
+    ctx = _ctx(ds, Path("/unused"), variables=["pressure_level/temperature"])
+    ctx.is_virtual = True
+    stats = ctx.stats_for("pressure_level/temperature")
+
+    da = _sample_virtual_points(ctx, "pressure_level/temperature", stats)
+
+    assert da.lead_time.item() == pd.Timedelta("15min")
+    assert ctx.value_ts_lead_label == "0h15m"
 
 
 def test_sample_virtual_points_pins_representative_slice() -> None:
