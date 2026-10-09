@@ -47,14 +47,13 @@ def _http_error_detail(url: str, status: str = "404 Not Found") -> str:
 
 @pytest.mark.parametrize("source", ["gcs", "s3"])
 @pytest.mark.parametrize("suffix", ["index", "grib2"])
-def test_404_warning_is_concise(
+def test_404_fallback_is_quiet(
     source: EcmwfOpenDataSource,
     suffix: str,
     missing_object_server: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     path = f"20261007000000-360h-enfo-ef.{suffix}"
-    url = f"{missing_object_server}/{path}"
     store = HTTPStore(missing_object_server, client_options={"allow_http": True})
     alternate: EcmwfOpenDataSource = "s3" if source == "gcs" else "gcs"
 
@@ -72,13 +71,7 @@ def test_404_warning_is_concise(
 
     assert result == Path("downloaded.grib2")
     assert download.call_args_list == [call(source), call(alternate)]
-    assert [record.getMessage() for record in caplog.records] == [
-        (
-            f"ECMWF download from {source!r} failed, will fall back:"
-            f" FileNotFoundError: 404 Not Found for {url}"
-        )
-    ]
-    assert caplog.records[0].levelname == "WARNING"
+    assert not caplog.records
 
 
 @pytest.mark.parametrize(
@@ -97,7 +90,7 @@ def test_404_warning_is_concise(
         FileNotFoundError(_http_error_detail("https://example.com", "403 Forbidden")),
     ],
 )
-def test_other_warnings_keep_full_detail(
+def test_other_fallbacks_are_quiet(
     error: Exception, caplog: pytest.LogCaptureFixture
 ) -> None:
     download = Mock(side_effect=[error, Path("downloaded.grib2")])
@@ -106,29 +99,7 @@ def test_other_warnings_keep_full_detail(
         "downloaded.grib2"
     )
 
-    assert [record.getMessage() for record in caplog.records] == [
-        f"ECMWF download from 'gcs' failed, will fall back: {error}"
-    ]
-
-
-@pytest.mark.parametrize("exception_type", [FileNotFoundError, GenericError])
-@pytest.mark.parametrize("url", ["https://example.com/forecast.index", None])
-def test_404_substring_shortens_unfamiliar_formats(
-    exception_type: type[Exception],
-    url: str | None,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    error = exception_type(f"404 Not Found: {url or 'missing object'}\nfull detail")
-    download = Mock(side_effect=[error, Path("downloaded.grib2")])
-
-    ecmwf_download_with_fallback(("gcs", "s3"), download)
-
-    detail = f"{exception_type.__name__}: 404 Not Found"
-    if url:
-        detail += f" for {url}"
-    assert [record.getMessage() for record in caplog.records] == [
-        f"ECMWF download from 'gcs' failed, will fall back: {detail}"
-    ]
+    assert not caplog.records
 
 
 def test_exhausted_sources_raise_original_final_exception(
@@ -149,8 +120,7 @@ def test_exhausted_sources_raise_original_final_exception(
     assert caught.value is errors[-1]
     assert [str(error) for error in errors] == original_details
     assert download.call_args_list == [call("gcs"), call("s3")]
-    assert len(caplog.records) == 2
-    assert all(record.levelname == "WARNING" for record in caplog.records)
+    assert not caplog.records
 
 
 def test_success_does_not_warn_or_try_another_source(

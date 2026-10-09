@@ -12,7 +12,6 @@ from zarr.abc.store import Store
 
 from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.download import get_local_path
-from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -30,8 +29,6 @@ from reformatters.common.types import (
 from reformatters.nasa.imerg.imerg_config_models import ImergRun, NasaImergDataVar
 from reformatters.nasa.imerg.template_config import GRID_LAT_SIZE, GRID_LON_SIZE
 from reformatters.nasa.nasa_auth import get_earthdata_session, get_pps_session
-
-log = get_logger(__name__)
 
 # Leading bytes of every HDF5 file; used to reject non-granule response bodies.
 _HDF5_MAGIC = b"\x89HDF\r\n\x1a\n"
@@ -138,6 +135,7 @@ class NasaImergAnalysisMaterializedRegionJob(
 
     def download_file(self, coord: NasaImergAnalysisSourceFileCoord) -> Path:
         def _download() -> Path:
+            last_failure = "no candidates"
             for source, url in coord.candidate_urls():
                 session = (
                     get_pps_session()
@@ -149,7 +147,7 @@ class NasaImergAnalysisMaterializedRegionJob(
                         url, timeout=30, stream=True, allow_redirects=True
                     )
                     if response.status_code == 404:
-                        log.warning(f"File not found at {url}, trying next candidate")
+                        last_failure = f"404 Not Found at {url}"
                         continue
                     response.raise_for_status()
                     local_path = get_local_path(
@@ -158,11 +156,11 @@ class NasaImergAnalysisMaterializedRegionJob(
                     local_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(local_path, "wb") as f:
                         f.writelines(response.iter_content(chunk_size=8192))
-                except requests.ConnectionError:
+                except requests.ConnectionError as e:
                     # jsimpson resets the connection for a not-yet-published
                     # granule rather than returning 404; fall through to the
                     # next candidate (e.g. the GES DISC archive).
-                    log.warning(f"Connection failed for {url}, trying next candidate")
+                    last_failure = f"Connection failed for {url}: {e}"
                     continue
                 with open(local_path, "rb") as f:
                     is_hdf5 = f.read(len(_HDF5_MAGIC)) == _HDF5_MAGIC
@@ -170,11 +168,11 @@ class NasaImergAnalysisMaterializedRegionJob(
                     # GES DISC serves an HTML/JSON error body (not a 404) for a
                     # not-yet-published granule; skip it rather than handing a
                     # non-HDF5 file to the reader.
-                    log.warning(f"Non-HDF5 body from {url}, trying next candidate")
+                    last_failure = f"Non-HDF5 body from {url}"
                     continue
                 return local_path
             raise FileNotFoundError(
-                f"No IMERG granule found for {coord.run} {coord.time}"
+                f"No IMERG granule found for {coord.run} {coord.time}: {last_failure}"
             )
 
         return retry(_download, max_attempts=6)
