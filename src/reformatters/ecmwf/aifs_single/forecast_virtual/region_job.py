@@ -14,6 +14,7 @@ from reformatters.common.download import (
     s3_store,
 )
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.region_job import (
     CoordinateValue,
     InitLeadSourceFileCoord,
@@ -23,6 +24,9 @@ from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.common.virtual_source_listing import (
     discover_available_by_obstore_listing,
+)
+from reformatters.ecmwf.aifs_single.forecast.dynamical_dataset import (
+    SOURCE_AVAILABILITY,
 )
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
@@ -112,6 +116,13 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
     # the two prior cycles sit 5h20m/11h20m/17h20m back; 20h covers all three so a
     # couple of missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("20h")
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(
+            source_cronjob="ecmwf-aifs-single-forecast-virtual-update",
+            target_cronjob="ecmwf-aifs-single-forecast-update",
+            availability=SOURCE_AVAILABILITY,
+        ),
+    )
 
     def generate_source_file_coords(
         self,
