@@ -34,7 +34,7 @@ CLASSES = (
 
 
 @pytest.mark.parametrize("cls", CLASSES)
-def test_operational_jobs_are_suspended_and_use_the_source_container(
+def test_operational_jobs_are_enabled_and_use_the_source_container(
     cls: DatasetClass, tmp_path: Path
 ) -> None:
     dataset = cls(
@@ -44,9 +44,9 @@ def test_operational_jobs_are_suspended_and_use_the_source_container(
     )
     jobs = dataset.operational_kubernetes_resources("test")
     assert len(jobs) == 1
-    assert all(job.suspend for job in jobs)
+    assert all(not job.suspend for job in jobs)
     assert all(job.dataset_id == dataset.dataset_id for job in jobs)
-    assert all(job.as_kubernetes_object()["spec"]["suspend"] is True for job in jobs)
+    assert all(job.as_kubernetes_object()["spec"]["suspend"] is False for job in jobs)
     assert dataset.icechunk_virtual_config is not None
     assert (
         dataset.icechunk_virtual_config.containers[0].url_prefix
