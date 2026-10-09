@@ -61,7 +61,6 @@ class NoaaRrfsDataset(DynamicalDataset[NoaaRrfsDataVar, NoaaRrfsSourceFileCoord]
                 cpu="1.5",
                 memory="3.7G",
                 secret_names=self.store_factory.k8s_secret_names(),
-                suspend=True,
             ),
         )
 
