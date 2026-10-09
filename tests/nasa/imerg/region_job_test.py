@@ -161,7 +161,7 @@ def _patch_sessions(
 
 
 def test_download_file_falls_through_connection_error_to_archive(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # jsimpson resets the connection for a not-yet-published granule; the GES DISC
     # archive candidate must still be tried rather than the whole attempt aborting.
@@ -176,19 +176,25 @@ def test_download_file_falls_through_connection_error_to_archive(
     assert path.read_bytes().startswith(_HDF5_MAGIC)
     assert jsimpson.get.called
     assert gesdisc.get.called
+    assert not caplog.records
 
 
+@pytest.mark.parametrize("status", [200, 404])
 def test_download_file_rejects_non_hdf5_body(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status: int
 ) -> None:
     # GES DISC returns an HTML/JSON error body (not a 404) for a not-yet-published
     # granule; a non-HDF5 body must never be handed to the reader as a granule.
     session = MagicMock()
     session.get.return_value = _fake_response(b"<html>not found</html>")
+    session.get.return_value.status_code = status
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
 
-    with pytest.raises(FileNotFoundError):
-        _job().download_file(_recent_coord())
+    coord = _recent_coord()
+    with pytest.raises(FileNotFoundError) as caught:
+        _job().download_file(coord)
+    assert coord.candidate_urls()[-1][1] in str(caught.value)
+    assert ("404 Not Found" if status == 404 else "Non-HDF5 body") in str(caught.value)
 
 
 def test_download_file_all_sources_connection_error_raises_file_not_found(
@@ -200,8 +206,11 @@ def test_download_file_all_sources_connection_error_raises_file_not_found(
     session.get.side_effect = requests.ConnectionError("Connection reset by peer")
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
 
-    with pytest.raises(FileNotFoundError):
-        _job().download_file(_recent_coord())
+    coord = _recent_coord()
+    with pytest.raises(FileNotFoundError) as caught:
+        _job().download_file(coord)
+    assert coord.candidate_urls()[-1][1] in str(caught.value)
+    assert "Connection reset by peer" in str(caught.value)
 
 
 def test_read_data_masks_exact_sentinel_and_scales(
