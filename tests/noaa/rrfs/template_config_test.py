@@ -23,10 +23,10 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 328),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 328),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 323),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 323),
         (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 39),
-        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 66),
+        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 64),
     ],
     ids=lambda value: (
         value.dataset_id
@@ -34,30 +34,32 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
         else str(value)
     ),
 )
-def test_source_available_fields_are_in_config(
+def test_configured_field_inventory(
     config: NoaaRrfsForecastTemplateConfig, count: int
 ) -> None:
-    deterministic_fields = {
+    removed_fields = {
         "minimum_vegetation_surface",
         "maximum_vegetation_surface",
         "specific_humidity_surface",
         "potential_evaporation_rate_surface",
         "potential_evaporation_surface",
     }
-    member_fields = {
+    deterministic_fields = {
         "aerosol_optical_thickness_atmosphere",
         "wildfire_potential_surface",
     }
     configured_paths = {v.path for v in config.data_vars}
     assert len(config.data_vars) == len(configured_paths) == count
+    assert configured_paths.isdisjoint(removed_fields)
     assert config.append_dim_start == config.append_dim_start.normalize()
-    if config.sub_hourly:
-        assert configured_paths.isdisjoint(deterministic_fields | member_fields)
-    elif config.members:
-        assert member_fields <= configured_paths
+    if config.sub_hourly or config.members:
         assert configured_paths.isdisjoint(deterministic_fields)
     else:
-        assert deterministic_fields | member_fields <= configured_paths
+        assert deterministic_fields <= configured_paths
+    if not config.members:
+        assert "specific_humidity_2m" in configured_paths
+    if not config.sub_hourly:
+        assert "pressure_level/specific_humidity" in configured_paths
 
 
 @pytest.mark.parametrize(
@@ -73,22 +75,12 @@ def test_source_lead_availability(
     config: NoaaRrfsForecastTemplateConfig,
 ) -> None:
     hours = int(config.forecast_length / pd.Timedelta("1h")) + 1
-    expected = (
-        {
+    expected = {"total_precipitation_surface": range(1, hours)}
+    if not config.members:
+        expected |= {
             "aerosol_optical_thickness_atmosphere": range(hours),
             "wildfire_potential_surface": range(hours),
         }
-        if config.members
-        else {
-            "minimum_vegetation_surface": range(1),
-            "maximum_vegetation_surface": range(1),
-            "specific_humidity_surface": range(hours),
-            "potential_evaporation_rate_surface": range(hours),
-            "potential_evaporation_surface": range(1, hours),
-            "aerosol_optical_thickness_atmosphere": range(hours),
-            "wildfire_potential_surface": range(hours),
-        }
-    )
     variables = {v.path: v for v in config.data_vars}
     for name, available_hours in expected.items():
         var = variables[name]
