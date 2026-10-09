@@ -69,7 +69,7 @@ class NoaaRefsForecastTemplateConfig(
             dataset_id=self.dataset_id,
             dataset_version="0.1.0",
             name=self.dataset_name,
-            description="Derived weather forecast products from NOAA's RRFS Ensemble Forecast System (REFS).",
+            description="Ensemble weather forecast products from NOAA's RRFS Ensemble Forecast System (REFS).",
             attribution="NOAA NWS NCEP REFS data processed by dynamical.org from NOAA Open Data Dissemination archives.",
             license="CC-BY-4.0",
             spatial_domain="Continental United States",

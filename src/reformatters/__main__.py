@@ -142,14 +142,14 @@ class NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
-class NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
-    base_path: str = "s3://dynamical-noaa-refs"
+class NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-rrfs-ens"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
-class NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
-    base_path: str = "s3://dynamical-noaa-rrfs-ens"
+class NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-refs"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
