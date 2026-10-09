@@ -265,7 +265,7 @@ VARIABLE_DEFINITIONS = (
             short_name="hgtmd",
             units="m",
             step_type="instant",
-            comment="Highest level at which aerosol mass density exceeds 1e-9 kg m-3.",
+            comment="Highest level at which aerosol mass density exceeds 1e-9 kg m-3. NaN where no level exceeds that threshold.",
         ),
     ),
     VariableDefinition(
@@ -277,7 +277,7 @@ VARIABLE_DEFINITIONS = (
             short_name="hgtmd",
             units="m",
             step_type="instant",
-            comment="Lowest level at which aerosol mass density exceeds 1e-9 kg m-3.",
+            comment="Lowest level at which aerosol mass density exceeds 1e-9 kg m-3. NaN where no level exceeds that threshold.",
         ),
     ),
     VariableDefinition(
@@ -413,6 +413,7 @@ VARIABLE_DEFINITIONS = (
         element="SDEN",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN does not imply absence of snow. Use snow_thickness_surface or snow_water_equivalent_surface to determine snow presence.",
             long_name="Snow density",
             short_name="rsn",
             units="kg m-3",
@@ -761,6 +762,7 @@ VARIABLE_DEFINITIONS = (
         element="CNWAT",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Plant canopy surface water",
             short_name="cnwat",
             standard_name="canopy_water_amount",
@@ -774,6 +776,7 @@ VARIABLE_DEFINITIONS = (
         level="surface",
         filters=({"name": "scale_offset", "configuration": {"scale": 1000.0}},),
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Snow depth water equivalent",
             short_name="sd",
             standard_name="lwe_thickness_of_surface_snow_amount",
@@ -787,6 +790,7 @@ VARIABLE_DEFINITIONS = (
         level="surface",
         filters=({"name": "scale_offset", "configuration": {"scale": 100.0}},),
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Snow cover",
             short_name="snowc",
             standard_name="surface_snow_area_fraction",
@@ -799,6 +803,7 @@ VARIABLE_DEFINITIONS = (
         element="SNOD",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Snow depth",
             short_name="sde",
             standard_name="surface_snow_thickness",
@@ -821,7 +826,9 @@ VARIABLE_DEFINITIONS = (
         name="direct_evaporation_cease_soil_moisture_surface",
         element="SMDRY",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Direct evaporation cease (soil moisture)",
             short_name="smdry",
             units="1",
@@ -832,7 +839,9 @@ VARIABLE_DEFINITIONS = (
         name="soil_porosity_surface",
         element="POROS",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Soil porosity",
             short_name="poros",
             units="1",
@@ -1237,6 +1246,7 @@ VARIABLE_DEFINITIONS = (
         window="acc",
         hour_0=False,
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Storm surface runoff",
             short_name="ssrun",
             standard_name="surface_runoff_amount",
@@ -1474,6 +1484,7 @@ VARIABLE_DEFINITIONS = (
         element="SFEXC",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Exchange coefficient",
             short_name="sfexc",
             units="kg m-2 s-1",
@@ -1485,6 +1496,7 @@ VARIABLE_DEFINITIONS = (
         element="VEG",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Vegetation fraction",
             short_name="veg",
             standard_name="vegetation_area_fraction",
@@ -1509,6 +1521,7 @@ VARIABLE_DEFINITIONS = (
         element="GFLUX",
         level="surface",
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Ground heat flux",
             short_name="gflux",
             standard_name="upward_heat_flux_at_ground_level_in_soil",
@@ -1549,8 +1562,8 @@ VARIABLE_DEFINITIONS = (
                 20,
                 21,
             ),
-            flag_meanings="undefined evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
-            comment="Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+            flag_meanings="water_point evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
+            comment="Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
         ),
     ),
     VariableDefinition(
@@ -1585,15 +1598,17 @@ VARIABLE_DEFINITIONS = (
                 18,
                 19,
             ),
-            flag_meanings="undefined sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
-            comment="STATSGO soil classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+            flag_meanings="water_point sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
+            comment="STATSGO soil classes used by the RUC land surface model. Code 0 denotes a water point.",
         ),
     ),
     VariableDefinition(
         name="minimal_stomatal_resistance_surface",
         element="RSMIN",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
+            comment="NaN over water, including inland water bodies.",
             long_name="Minimal stomatal resistance",
             short_name="rsmin",
             units="s m-1",
@@ -1605,6 +1620,7 @@ VARIABLE_DEFINITIONS = (
         element="RLYRS",
         level="surface",
         attrs=DataVarAttrs(
+            comment="Zero over water, including inland water bodies, where this count does not apply. Zero may also be a valid layer count and is not masked.",
             long_name="Number of soil layers in root zone",
             short_name="rlyrs",
             units="1",
@@ -1615,12 +1631,13 @@ VARIABLE_DEFINITIONS = (
         name="wilting_point_surface",
         element="WILT",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
             long_name="Wilting point",
             short_name="wilt",
             standard_name="volume_fraction_of_condensed_water_in_soil_at_wilting_point",
             units="1",
-            comment="NaN over water.",
+            comment="NaN over water, including inland water bodies.",
             step_type="instant",
         ),
     ),
@@ -1628,7 +1645,9 @@ VARIABLE_DEFINITIONS = (
         name="transpiration_stress_onset_soil_moisture_surface",
         element="SMREF",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
+            comment="NaN over water, including inland water bodies.",
             long_name="Transpiration stress-onset (soil moisture)",
             standard_name="volume_fraction_of_condensed_water_in_soil_at_critical_point",
             short_name="smref",
@@ -1766,6 +1785,7 @@ VARIABLE_DEFINITIONS = (
         element="HGTMD",
         level="entire atmosphere (considered as a single layer)",
         attrs=DataVarAttrs(
+            comment="NaN where no aerosol layer was diagnosed.",
             long_name="Height of aerosol mass density",
             short_name="hgtmd",
             units="m",
@@ -1790,9 +1810,10 @@ VARIABLE_DEFINITIONS = (
         element="MCONV",
         level="entire atmosphere (considered as a single layer)",
         attrs=DataVarAttrs(
+            comment="Column-integrated horizontal moisture convergence.",
             long_name="Horizontal moisture convergence",
             short_name="mconv",
-            units="s-1",
+            units="kg m-2 s-1",
             step_type="instant",
         ),
     ),
@@ -1800,7 +1821,9 @@ VARIABLE_DEFINITIONS = (
         name="geopotential_height_supercooled_liquid_water_base",
         element="HGT",
         level="lowest bottom level of supercooled liquid water layer",
+        fill_value=-5000.0,
         attrs=DataVarAttrs(
+            comment="NaN where no supercooled liquid water layer was detected.",
             long_name="Geopotential height",
             short_name="gh",
             standard_name="geopotential_height",
@@ -1812,7 +1835,9 @@ VARIABLE_DEFINITIONS = (
         name="geopotential_height_supercooled_liquid_water_top",
         element="HGT",
         level="highest top level of supercooled liquid water layer",
+        fill_value=-5000.0,
         attrs=DataVarAttrs(
+            comment="NaN where no supercooled liquid water layer was detected.",
             long_name="Geopotential height",
             short_name="gh",
             standard_name="geopotential_height",
@@ -1942,14 +1967,16 @@ VARIABLE_DEFINITIONS = (
             short_name="ceil",
             units="m",
             step_type="instant",
-            comment="NaN where no cloud ceiling was detected.",
+            comment="Height above mean sea level, not above ground. NaN where no cloud ceiling was detected.",
         ),
     ),
     VariableDefinition(
         name="pressure_grid_scale_cloud_bottom_level",
         element="PRES",
         level="grid scale cloud bottom level",
+        fill_value=-50000.0,
         attrs=DataVarAttrs(
+            comment="NaN where no cloud bottom was detected.",
             long_name="Pressure",
             short_name="pres",
             units="Pa",
@@ -1961,6 +1988,7 @@ VARIABLE_DEFINITIONS = (
         name="pressure_cloud_top",
         element="PRES",
         level="cloud top",
+        fill_value=-50000.0,
         attrs=DataVarAttrs(
             long_name="Pressure",
             short_name="pres",
@@ -1989,7 +2017,9 @@ VARIABLE_DEFINITIONS = (
         element="TMP",
         level="cloud top",
         filters=({"name": "scale_offset", "configuration": {"offset": -273.15}},),
+        fill_value=-500.0 + -273.15,
         attrs=DataVarAttrs(
+            comment="NaN where no cloud top was detected.",
             long_name="Temperature",
             short_name="t",
             standard_name="air_temperature",
@@ -2013,7 +2043,9 @@ VARIABLE_DEFINITIONS = (
         name="pressure_grid_scale_cloud_top_level",
         element="PRES",
         level="grid scale cloud top level",
+        fill_value=-50000.0,
         attrs=DataVarAttrs(
+            comment="NaN where no cloud top was detected.",
             long_name="Pressure",
             short_name="pres",
             units="Pa",
@@ -2232,7 +2264,7 @@ VARIABLE_DEFINITIONS = (
             long_name="U-component storm motion",
             short_name="ustm",
             units="m s-1",
-            comment="The Bunkers right-moving supercell motion.",
+            comment="The Bunkers right-moving supercell motion. Velocity along the model grid's x dimension, not eastward velocity.",
             step_type="instant",
         ),
     ),
@@ -2244,7 +2276,7 @@ VARIABLE_DEFINITIONS = (
             long_name="V-component storm motion",
             short_name="vstm",
             units="m s-1",
-            comment="The Bunkers right-moving supercell motion.",
+            comment="The Bunkers right-moving supercell motion. Velocity along the model grid's y dimension, not northward velocity.",
             step_type="instant",
         ),
     ),
@@ -2661,6 +2693,7 @@ VARIABLE_DEFINITIONS = (
         element="SPFH",
         level="305 m above mean sea level",
         attrs=DataVarAttrs(
+            comment="NaN where this height is below the terrain.",
             long_name="Specific humidity",
             short_name="q",
             standard_name="specific_humidity",
@@ -2820,7 +2853,6 @@ VARIABLE_DEFINITIONS = (
             short_name="gh",
             standard_name="geopotential_height",
             units="m",
-            comment="NaN where the 253 K level is at or below ground.",
             step_type="instant",
         ),
     ),
@@ -2859,7 +2891,7 @@ VARIABLE_DEFINITIONS = (
             short_name="cin",
             standard_name="atmosphere_convective_inhibition",
             units="J kg-1",
-            comment="The 180-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+            comment="The 180-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
             step_type="instant",
         ),
     ),
@@ -2921,7 +2953,7 @@ VARIABLE_DEFINITIONS = (
             short_name="cin",
             standard_name="atmosphere_convective_inhibition",
             units="J kg-1",
-            comment="The 90-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+            comment="The 90-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
             step_type="instant",
         ),
     ),
@@ -2934,7 +2966,7 @@ VARIABLE_DEFINITIONS = (
             short_name="cape",
             standard_name="atmosphere_convective_available_potential_energy",
             units="J kg-1",
-            comment="The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+            comment="Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
             step_type="instant",
         ),
     ),
@@ -2947,7 +2979,7 @@ VARIABLE_DEFINITIONS = (
             short_name="cin",
             standard_name="atmosphere_convective_inhibition",
             units="J kg-1",
-            comment="The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+            comment="Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
             step_type="instant",
         ),
     ),
@@ -2975,6 +3007,7 @@ VARIABLE_DEFINITIONS = (
             },
         ),
         attrs=DataVarAttrs(
+            comment="Where no equilibrium level exists the source reports near-surface temperature rather than a missing value. Mask where convective_available_potential_energy_255_0mb is 0.",
             long_name="Equilibrium level temperature",
             short_name="elmelt",
             units="degree_Celsius",
@@ -2992,7 +3025,7 @@ VARIABLE_DEFINITIONS = (
             standard_name="original_air_pressure_of_lifted_parcel",
             units="Pa",
             step_type="instant",
-            comment="The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+            comment="Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels. Values are capped at 99999 Pa.",
         ),
     ),
     VariableDefinition(
@@ -3023,6 +3056,7 @@ VARIABLE_DEFINITIONS = (
         element="UESH",
         level="level of free convection",
         attrs=DataVarAttrs(
+            comment="Shear along the model grid's x dimension, not eastward shear. Zero may mean no effective inflow layer or valid zero shear.",
             long_name="Effective layer U shear",
             short_name="uesh",
             units="m s-1",
@@ -3034,6 +3068,7 @@ VARIABLE_DEFINITIONS = (
         element="VESH",
         level="level of free convection",
         attrs=DataVarAttrs(
+            comment="Shear along the model grid's y dimension, not northward shear. Zero may mean no effective inflow layer or valid zero shear.",
             long_name="Effective layer V shear",
             short_name="vesh",
             units="m s-1",
@@ -3045,6 +3080,7 @@ VARIABLE_DEFINITIONS = (
         element="UEID",
         level="level of free convection",
         attrs=DataVarAttrs(
+            comment="The Bunkers right-moving supercell motion for the effective inflow layer. Velocity along the model grid's x dimension, not eastward velocity.",
             long_name="Effective layer U storm motion",
             short_name="ueid",
             units="m s-1",
@@ -3056,6 +3092,7 @@ VARIABLE_DEFINITIONS = (
         element="VEID",
         level="level of free convection",
         attrs=DataVarAttrs(
+            comment="The Bunkers right-moving supercell motion for the effective inflow layer. Velocity along the model grid's y dimension, not northward velocity.",
             long_name="Effective layer V storm motion",
             short_name="veid",
             units="m s-1",
@@ -3150,13 +3187,11 @@ VARIABLE_DEFINITIONS = (
         element="ICEC",
         level="surface",
         attrs=DataVarAttrs(
-            long_name="Ice cover (1=ice, 0=no ice)",
+            long_name="Ice concentration",
             short_name="icec",
             standard_name="sea_ice_area_fraction",
             units="1",
             step_type="instant",
-            flag_values=(0, 1),
-            flag_meanings="no_ice ice",
         ),
     ),
     VariableDefinition(
@@ -3185,12 +3220,13 @@ VARIABLE_DEFINITIONS = (
         name="albedo_surface",
         element="ALBDO",
         level="surface",
+        fill_value=0.0,
         attrs=DataVarAttrs(
             long_name="Forecast albedo",
             short_name="fal",
             standard_name="surface_albedo",
             units="percent",
-            comment="Exactly 0 wherever there is no sunlight; exclude those zeros from a time mean albedo.",
+            comment="NaN over water.",
             step_type="instant",
         ),
     ),
@@ -3198,7 +3234,9 @@ VARIABLE_DEFINITIONS = (
         name="maximum_snow_albedo_surface",
         element="MXSALB",
         level="surface",
+        fill_value=6.0,
         attrs=DataVarAttrs(
+            comment="NaN over water.",
             long_name="Maximum snow albedo",
             short_name="mxsalb",
             units="percent",
@@ -3216,6 +3254,7 @@ VARIABLE_DEFINITIONS = (
             },
         ),
         attrs=DataVarAttrs(
+            comment="NaN over land.",
             long_name="Water temperature",
             short_name="wtmp",
             units="degree_Celsius",
@@ -3348,6 +3387,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA188",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 8",
             short_name="sbta188",
             units="K",
@@ -3361,6 +3401,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA189",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 9",
             short_name="sbta189",
             units="K",
@@ -3374,6 +3415,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1810",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 10",
             short_name="sbta1810",
             units="K",
@@ -3387,6 +3429,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1811",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 11",
             short_name="sbta1811",
             units="K",
@@ -3400,6 +3443,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1812",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 12",
             short_name="sbta1812",
             units="K",
@@ -3413,6 +3457,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1813",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 13",
             short_name="sbta1813",
             units="K",
@@ -3426,6 +3471,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1814",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 14",
             short_name="sbta1814",
             units="K",
@@ -3439,6 +3485,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1815",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 15",
             short_name="sbta1815",
             units="K",
@@ -3452,6 +3499,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1816",),
         attrs=DataVarAttrs(
+            comment="NaN where the point lies beyond GOES-18's view limit.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 16",
             short_name="sbta1816",
             units="K",

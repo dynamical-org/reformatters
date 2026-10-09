@@ -39,7 +39,7 @@
     "short_name": "plpl",
     "standard_name": "original_air_pressure_of_lifted_parcel",
     "units": "Pa",
-    "comment": "The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+    "comment": "Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels. Values are capped at 99999 Pa.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

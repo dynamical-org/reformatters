@@ -38,7 +38,7 @@
     "long_name": "Vegetation Type",
     "short_name": "vgtyp",
     "units": "1",
-    "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+    "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
     "step_type": "instant",
     "flag_values": [
       0,
@@ -64,7 +64,7 @@
       20,
       21
     ],
-    "flag_meanings": "undefined evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
+    "flag_meanings": "water_point evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

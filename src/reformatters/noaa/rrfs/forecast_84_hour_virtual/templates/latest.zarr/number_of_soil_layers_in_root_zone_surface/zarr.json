@@ -38,6 +38,7 @@
     "long_name": "Number of soil layers in root zone",
     "short_name": "rlyrs",
     "units": "1",
+    "comment": "Zero over water, including inland water bodies, where this count does not apply. Zero may also be a valid layer count and is not masked.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -120,6 +120,39 @@ def test_effective_layer_storm_motion_metadata(
     [
         NoaaRrfsForecast84HourVirtualTemplateConfig(),
         NoaaRrfsForecast18HourVirtualTemplateConfig(),
+    ],
+    ids=lambda c: c.dataset_id,
+)
+def test_fractional_ice_and_inapplicable_count_metadata(
+    config: NoaaRrfsForecastTemplateConfig,
+) -> None:
+    variables = {v.name: v for v in config.data_vars}
+    ice = variables["ice_cover_surface"]
+    assert ice.attrs.long_name == "Ice concentration"
+    assert ice.attrs.standard_name == "sea_ice_area_fraction"
+    assert ice.attrs.units == "1"
+    assert ice.attrs.flag_values is None
+    assert ice.attrs.flag_meanings is None
+    assert np.isnan(
+        variables["number_of_soil_layers_in_root_zone_surface"].encoding.fill_value
+    )
+    assert np.isnan(
+        variables[
+            "effective_layer_shear_u_level_of_free_convection"
+        ].encoding.fill_value
+    )
+    assert np.isnan(
+        variables[
+            "effective_layer_shear_v_level_of_free_convection"
+        ].encoding.fill_value
+    )
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        NoaaRrfsForecast84HourVirtualTemplateConfig(),
+        NoaaRrfsForecast18HourVirtualTemplateConfig(),
         NoaaRrfsEnsForecastVirtualTemplateConfig(),
     ],
     ids=lambda c: c.dataset_id,

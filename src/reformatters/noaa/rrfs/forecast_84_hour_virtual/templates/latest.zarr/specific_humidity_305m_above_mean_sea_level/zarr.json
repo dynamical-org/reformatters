@@ -39,6 +39,7 @@
     "short_name": "q",
     "standard_name": "specific_humidity",
     "units": "1",
+    "comment": "NaN where this height is below the terrain.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

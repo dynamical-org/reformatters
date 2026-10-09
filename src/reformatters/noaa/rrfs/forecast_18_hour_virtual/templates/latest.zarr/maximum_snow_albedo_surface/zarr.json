@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": 6.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -38,9 +38,10 @@
     "long_name": "Maximum snow albedo",
     "short_name": "mxsalb",
     "units": "percent",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAGEA="
   },
   "dimension_names": [
     "init_time",

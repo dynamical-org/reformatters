@@ -37,7 +37,8 @@
   "attributes": {
     "long_name": "Horizontal moisture convergence",
     "short_name": "mconv",
-    "units": "s-1",
+    "units": "kg m-2 s-1",
+    "comment": "Column-integrated horizontal moisture convergence.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

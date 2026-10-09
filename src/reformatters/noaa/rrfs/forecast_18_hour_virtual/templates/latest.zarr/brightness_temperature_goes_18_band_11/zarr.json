@@ -39,6 +39,7 @@
     "short_name": "sbta1811",
     "standard_name": "brightness_temperature",
     "units": "K",
+    "comment": "NaN where the point lies beyond GOES-18's view limit.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

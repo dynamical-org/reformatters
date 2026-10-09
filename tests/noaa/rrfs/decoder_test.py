@@ -16,6 +16,7 @@ from reformatters.noaa.rrfs.forecast_18_hour_virtual.template_config import (
 from reformatters.noaa.rrfs.forecast_84_hour_virtual.template_config import (
     NoaaRrfsForecast84HourVirtualTemplateConfig,
 )
+from tests.noaa.rrfs.decoder_helpers import write_single_grib_chunk
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CASES = (
@@ -26,6 +27,22 @@ CASES = (
     ("vegmax", "VEGMAX"),
     ("aotk", "AOTK"),
     ("wildfire", "var discipline=2 master_table=2 parmcat=4 parm=26"),
+)
+
+SEMANTIC_MARKERS = (
+    ("pressure_cloud_top", -50000.0),
+    ("pressure_grid_scale_cloud_top_level", -50000.0),
+    ("pressure_grid_scale_cloud_bottom_level", -50000.0),
+    ("temperature_cloud_top", -500.0),
+    ("geopotential_height_supercooled_liquid_water_base", -5000.0),
+    ("geopotential_height_supercooled_liquid_water_top", -5000.0),
+    ("soil_porosity_surface", 0.0),
+    ("maximum_snow_albedo_surface", 6.0),
+    ("direct_evaporation_cease_soil_moisture_surface", 0.0),
+    ("albedo_surface", 0.0),
+    ("wilting_point_surface", 0.0),
+    ("transpiration_stress_onset_soil_moisture_surface", 0.0),
+    ("minimal_stomatal_resistance_surface", 0.0),
 )
 
 
@@ -39,12 +56,17 @@ CASES = (
             -50.0,
         ),
         ("cloud-top-marker.grib2", "geopotential_height_cloud_top", "HGT", -5000.0),
+    ]
+    + [
+        (f"semantic-markers/{sample}-{variable}.grib2", variable, None, marker)
+        for sample in ("A", "C")
+        for variable, marker in SEMANTIC_MARKERS
     ],
 )
 def test_semantic_markers_read_as_nan(
     fixture_name: str,
     variable_name: str,
-    element: str,
+    element: str | None,
     marker: float,
     tmp_path: Path,
 ) -> None:
@@ -53,42 +75,126 @@ def test_semantic_markers_read_as_nan(
         fixture_name
     ]
     assert hashlib.sha256(content).hexdigest() == provenance["sha256"]
-    with rasterio.MemoryFile(content) as file, file.open() as source:
-        expected = source.read(1).astype(np.float64)
+    with (
+        rasterio.Env(GRIB_NORMALIZE_UNITS="NO"),
+        rasterio.MemoryFile(content) as file,
+        file.open() as source,
+    ):
+        expected = source.read(1, out_dtype="float64")
     missing = expected == marker
     assert missing.any()
     assert not missing.all()
-    expected[missing] = np.nan
     config = NoaaRrfsForecast84HourVirtualTemplateConfig()
     variable = next(v for v in config.data_vars if v.name == variable_name)
-    assert variable.encoding.fill_value == marker
+    assert variable.internal_attrs.grib_element == (element or provenance["element"])
+    temperature_offset = -273.15 if variable_name == "temperature_cloud_top" else 0
+    assert variable.encoding.fill_value == marker + temperature_offset
     metadata = json.loads(
         (config.template_path() / variable_name / "zarr.json").read_text()
     )
     store = tmp_path / "decoded.zarr"
-    group = zarr.create_group(store)
-    group.create_array(
-        variable_name,
-        shape=expected.shape,
-        chunks=expected.shape,
-        dtype="float64",
-        fill_value=variable.encoding.fill_value,
-        serializer=GribberishCodec(
-            var=element, adjust_longitude_range=True, north_up=True
-        ),
-        compressors=None,
-        dimension_names=("y", "x"),
-        attributes={"_FillValue": metadata["attributes"]["_FillValue"]},
-    )
-    chunk_path = store / variable_name / "c/0/0"
-    chunk_path.parent.mkdir(parents=True)
-    chunk_path.write_bytes(content)
+    write_single_grib_chunk(store, variable_name, metadata, content)
+    with xr.open_zarr(store, consolidated=False, chunks=None, decode_cf=False) as ds:
+        raw = ds[variable_name].values.squeeze()
+    np.testing.assert_array_equal(raw[missing], variable.encoding.fill_value)
+    if temperature_offset:
+        assert metadata["codecs"][0] == {
+            "name": "scale_offset",
+            "configuration": {"offset": -273.15},
+        }
     with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
-        actual = np.asarray(dataset[variable_name].values)
+        actual = dataset[variable_name].values.squeeze()
+    expected += temperature_offset
+    expected[missing] = np.nan
     np.testing.assert_array_equal(np.isnan(actual), missing)
     np.testing.assert_allclose(
-        actual, expected, rtol=float(np.finfo(np.float32).eps), atol=0
+        actual,
+        expected,
+        rtol=float(np.finfo(np.float32).eps),
+        atol=3e-5 if temperature_offset else 0,
     )
+
+
+@pytest.mark.parametrize("sample", ["A", "C"])
+def test_semantic_marker_physical_controls(sample: str, tmp_path: Path) -> None:
+    config = NoaaRrfsForecast84HourVirtualTemplateConfig()
+    variables = {v.name: v for v in config.data_vars}
+    provenance = json.loads((FIXTURES / "semantic_marker_sources.json").read_text())
+
+    def content(name: str) -> bytes:
+        filename = f"semantic-markers/{sample}-{name}.grib2"
+        value = (FIXTURES / filename).read_bytes()
+        assert hashlib.sha256(value).hexdigest() == provenance[filename]["sha256"]
+        return value
+
+    def read_gdal(name: str) -> np.ndarray:
+        with (
+            rasterio.Env(GRIB_NORMALIZE_UNITS="NO"),
+            rasterio.MemoryFile(content(name)) as file,
+            file.open() as source,
+        ):
+            return source.read(1)
+
+    water = read_gdal("land_mask") == 0
+    vegetation_type = read_gdal("vegetation_type")
+    water_point = vegetation_type == 0
+    assert water_point.any()
+    assert np.all(water[water_point])
+    inland_water = vegetation_type == 17
+    assert water.any()
+    assert (~water).any()
+    assert (inland_water & ~water).any()
+    layer_name = "number_of_soil_layers_in_root_zone_surface"
+    layer_metadata = json.loads(
+        (config.template_path() / layer_name / "zarr.json").read_text()
+    )
+    count_store = tmp_path / "root-zone-layers.zarr"
+    write_single_grib_chunk(
+        count_store, layer_name, layer_metadata, content(layer_name)
+    )
+    with xr.open_zarr(count_store, consolidated=False, chunks=None) as dataset:
+        actual = dataset[layer_name].values.squeeze()
+    np.testing.assert_array_equal(actual, read_gdal(layer_name))
+    assert np.all(actual[water | inland_water] == 0)
+    assert np.isnan(variables[layer_name].encoding.fill_value)
+    for variable_name, marker in SEMANTIC_MARKERS[6:]:
+        missing = read_gdal(variable_name) == marker
+        expected = (
+            water | inland_water
+            if variable_name
+            in {
+                "wilting_point_surface",
+                "transpiration_stress_onset_soil_moisture_surface",
+                "minimal_stomatal_resistance_surface",
+            }
+            else water
+        )
+        np.testing.assert_array_equal(missing, expected)
+
+    with rasterio.MemoryFile(content("cloud_base")) as file, file.open() as source:
+        missing_base = source.read_masks(1) == 0
+    base_metadata = json.loads(
+        (
+            config.template_path() / "geopotential_height_cloud_base/zarr.json"
+        ).read_text()
+    )
+    store = tmp_path / "cloud-base.zarr"
+    write_single_grib_chunk(
+        store, "geopotential_height_cloud_base", base_metadata, content("cloud_base")
+    )
+    with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
+        np.testing.assert_array_equal(
+            np.isnan(dataset.geopotential_height_cloud_base.values.squeeze()),
+            missing_base,
+        )
+    for variable_name, marker in SEMANTIC_MARKERS[:4]:
+        np.testing.assert_array_equal(read_gdal(variable_name) == marker, missing_base)
+    for variable_name, marker in SEMANTIC_MARKERS[4:6]:
+        layer = read_gdal(variable_name)
+        valid = layer != marker
+        assert np.all(layer[valid] > 0)
+        assert (valid & missing_base).any()
+        assert variables[variable_name].encoding.fill_value == marker
 
 
 @pytest.mark.parametrize("fixture_name", [name for name, _ in CASES])

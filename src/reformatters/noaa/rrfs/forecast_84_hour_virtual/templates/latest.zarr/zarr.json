@@ -208,7 +208,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -224,10 +224,10 @@
           "short_name": "fal",
           "standard_name": "surface_albedo",
           "units": "percent",
-          "comment": "Exactly 0 wherever there is no sunlight; exclude those zeros from a time mean albedo.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -996,6 +996,7 @@
           "short_name": "sbta1810",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1051,6 +1052,7 @@
           "short_name": "sbta1811",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1106,6 +1108,7 @@
           "short_name": "sbta1812",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1161,6 +1164,7 @@
           "short_name": "sbta1813",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1216,6 +1220,7 @@
           "short_name": "sbta1814",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1271,6 +1276,7 @@
           "short_name": "sbta1815",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1326,6 +1332,7 @@
           "short_name": "sbta1816",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1381,6 +1388,7 @@
           "short_name": "sbta188",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1436,6 +1444,7 @@
           "short_name": "sbta189",
           "standard_name": "brightness_temperature",
           "units": "K",
+          "comment": "NaN where the point lies beyond GOES-18's view limit.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2320,7 +2329,7 @@
           "long_name": "Ceiling",
           "short_name": "ceil",
           "units": "m",
-          "comment": "NaN where no cloud ceiling was detected.",
+          "comment": "Height above mean sea level, not above ground. NaN where no cloud ceiling was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2818,7 +2827,7 @@
           "short_name": "cape",
           "standard_name": "atmosphere_convective_available_potential_energy",
           "units": "J kg-1",
-          "comment": "The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+          "comment": "Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2985,7 +2994,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "The 180-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+          "comment": "The 180-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3041,7 +3050,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+          "comment": "Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3097,7 +3106,7 @@
           "short_name": "cin",
           "standard_name": "atmosphere_convective_inhibition",
           "units": "J kg-1",
-          "comment": "The 90-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+          "comment": "The 90-0 mb in the name are pressure differences from the surface, not isobaric levels. Negative where there is inhibition and at or near zero where there is none.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4365,7 +4374,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -4380,9 +4389,10 @@
           "long_name": "Direct evaporation cease (soil moisture)",
           "short_name": "smdry",
           "units": "1",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -4765,6 +4775,7 @@
           "long_name": "Effective layer U shear",
           "short_name": "uesh",
           "units": "m s-1",
+          "comment": "Shear along the model grid's x dimension, not eastward shear. Zero may mean no effective inflow layer or valid zero shear.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4819,6 +4830,7 @@
           "long_name": "Effective layer V shear",
           "short_name": "vesh",
           "units": "m s-1",
+          "comment": "Shear along the model grid's y dimension, not northward shear. Zero may mean no effective inflow layer or valid zero shear.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4873,6 +4885,7 @@
           "long_name": "Effective layer U storm motion",
           "short_name": "ueid",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion for the effective inflow layer. Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4927,6 +4940,7 @@
           "long_name": "Effective layer V storm motion",
           "short_name": "veid",
           "units": "m s-1",
+          "comment": "The Bunkers right-moving supercell motion for the effective inflow layer. Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4988,6 +5002,7 @@
           "short_name": "elmelt",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "Where no equilibrium level exists the source reports near-surface temperature rather than a missing value. Mask where convective_available_potential_energy_255_0mb is 0.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5042,6 +5057,7 @@
           "long_name": "Exchange coefficient",
           "short_name": "sfexc",
           "units": "kg m-2 s-1",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5538,7 +5554,6 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the 253 K level is at or below ground.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5969,7 +5984,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -5000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -5985,9 +6000,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no supercooled liquid water layer was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAACIs8A="
         },
         "dimension_names": [
           "init_time",
@@ -6024,7 +6040,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -5000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -6040,9 +6056,10 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
+          "comment": "NaN where no supercooled liquid water layer was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAACIs8A="
         },
         "dimension_names": [
           "init_time",
@@ -7305,7 +7322,8 @@
         "attributes": {
           "long_name": "Horizontal moisture convergence",
           "short_name": "mconv",
-          "units": "s-1",
+          "units": "kg m-2 s-1",
+          "comment": "Column-integrated horizontal moisture convergence.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7413,16 +7431,11 @@
           }
         ],
         "attributes": {
-          "long_name": "Ice cover (1=ice, 0=no ice)",
+          "long_name": "Ice concentration",
           "short_name": "icec",
           "standard_name": "sea_ice_area_fraction",
           "units": "1",
           "step_type": "instant",
-          "flag_values": [
-            0,
-            1
-          ],
-          "flag_meanings": "no_ice ice",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -7697,6 +7710,7 @@
           "short_name": "gflux",
           "standard_name": "upward_heat_flux_at_ground_level_in_soil",
           "units": "W m-2",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8643,6 +8657,7 @@
           "long_name": "Height of aerosol mass density",
           "short_name": "hgtmd",
           "units": "m",
+          "comment": "NaN where no aerosol layer was diagnosed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8697,7 +8712,7 @@
           "long_name": "Height of aerosol mass density",
           "short_name": "hgtmd",
           "units": "m",
-          "comment": "Lowest level at which aerosol mass density exceeds 1e-9 kg m-3.",
+          "comment": "Lowest level at which aerosol mass density exceeds 1e-9 kg m-3. NaN where no level exceeds that threshold.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8752,7 +8767,7 @@
           "long_name": "Height of aerosol mass density",
           "short_name": "hgtmd",
           "units": "m",
-          "comment": "Highest level at which aerosol mass density exceeds 1e-9 kg m-3.",
+          "comment": "Highest level at which aerosol mass density exceeds 1e-9 kg m-3. NaN where no level exceeds that threshold.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9457,7 +9472,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 6.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -9472,9 +9487,10 @@
           "long_name": "Maximum snow albedo",
           "short_name": "mxsalb",
           "units": "percent",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAGEA="
         },
         "dimension_names": [
           "init_time",
@@ -9960,7 +9976,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -9975,9 +9991,10 @@
           "long_name": "Minimal stomatal resistance",
           "short_name": "rsmin",
           "units": "s m-1",
+          "comment": "NaN over water, including inland water bodies.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -10311,6 +10328,7 @@
           "long_name": "Number of soil layers in root zone",
           "short_name": "rlyrs",
           "units": "1",
+          "comment": "Zero over water, including inland water bodies, where this count does not apply. Zero may also be a valid layer count and is not masked.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10532,6 +10550,7 @@
           "short_name": "cnwat",
           "standard_name": "canopy_water_amount",
           "units": "kg m-2",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11406,7 +11425,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -50000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -11425,7 +11444,7 @@
           "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAABq6MA="
         },
         "dimension_names": [
           "init_time",
@@ -11462,7 +11481,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -50000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -11478,9 +11497,10 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "NaN where no cloud bottom was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAABq6MA="
         },
         "dimension_names": [
           "init_time",
@@ -11517,7 +11537,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -50000.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -11533,9 +11553,10 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
+          "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAABq6MA="
         },
         "dimension_names": [
           "init_time",
@@ -13168,7 +13189,7 @@
           "short_name": "plpl",
           "standard_name": "original_air_pressure_of_lifted_parcel",
           "units": "Pa",
-          "comment": "The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+          "comment": "Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels. Values are capped at 99999 Pa.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14061,6 +14082,7 @@
           "short_name": "snowc",
           "standard_name": "surface_snow_area_fraction",
           "units": "1",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14115,6 +14137,7 @@
           "long_name": "Snow density",
           "short_name": "rsn",
           "units": "kg m-3",
+          "comment": "NaN does not imply absence of snow. Use snow_thickness_surface or snow_water_equivalent_surface to determine snow presence.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14281,6 +14304,7 @@
           "short_name": "sde",
           "standard_name": "surface_snow_thickness",
           "units": "m",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14342,6 +14366,7 @@
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14381,7 +14406,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -14397,9 +14422,10 @@
           "short_name": "poros",
           "standard_name": "soil_porosity",
           "units": "1",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -14452,7 +14478,7 @@
           "short_name": "slt",
           "standard_name": "soil_type",
           "units": "1",
-          "comment": "STATSGO soil classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+          "comment": "STATSGO soil classes used by the RUC land surface model. Code 0 denotes a water point.",
           "step_type": "instant",
           "flag_values": [
             0,
@@ -14476,7 +14502,7 @@
             18,
             19
           ],
-          "flag_meanings": "undefined sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
+          "flag_meanings": "water_point sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -14922,6 +14948,7 @@
           "short_name": "q",
           "standard_name": "specific_humidity",
           "units": "1",
+          "comment": "NaN where this height is below the terrain.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -15308,7 +15335,7 @@
           "short_name": "ssrun",
           "standard_name": "surface_runoff_amount",
           "units": "kg m-2",
-          "comment": "Accumulated over the preceding hour.",
+          "comment": "NaN over water. Accumulated over the preceding hour.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16421,7 +16448,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": -773.15,
         "codecs": [
           {
             "name": "scale_offset",
@@ -16443,9 +16470,10 @@
           "short_name": "t",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
+          "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "MzMzMzMpiMA="
         },
         "dimension_names": [
           "init_time",
@@ -16995,7 +17023,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -17011,9 +17039,10 @@
           "short_name": "smref",
           "standard_name": "volume_fraction_of_condensed_water_in_soil_at_critical_point",
           "units": "1",
+          "comment": "NaN over water, including inland water bodies.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",
@@ -17065,7 +17094,7 @@
           "long_name": "U-component storm motion",
           "short_name": "ustm",
           "units": "m s-1",
-          "comment": "The Bunkers right-moving supercell motion.",
+          "comment": "The Bunkers right-moving supercell motion. Velocity along the model grid's x dimension, not eastward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17398,7 +17427,7 @@
           "long_name": "V-component storm motion",
           "short_name": "vstm",
           "units": "m s-1",
-          "comment": "The Bunkers right-moving supercell motion.",
+          "comment": "The Bunkers right-moving supercell motion. Velocity along the model grid's y dimension, not northward velocity.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17512,6 +17541,7 @@
           "short_name": "veg",
           "standard_name": "vegetation_area_fraction",
           "units": "percent",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -17566,7 +17596,7 @@
           "long_name": "Vegetation Type",
           "short_name": "vgtyp",
           "units": "1",
-          "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes an undefined source class.",
+          "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
           "step_type": "instant",
           "flag_values": [
             0,
@@ -17592,7 +17622,7 @@
             20,
             21
           ],
-          "flag_meanings": "undefined evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
+          "flag_meanings": "water_point evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -18144,6 +18174,7 @@
           "long_name": "Water temperature",
           "short_name": "wtmp",
           "units": "degree_Celsius",
+          "comment": "NaN over land.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -18238,7 +18269,7 @@
             "separator": "/"
           }
         },
-        "fill_value": "NaN",
+        "fill_value": 0.0,
         "codecs": [
           {
             "name": "gribberish",
@@ -18254,10 +18285,10 @@
           "short_name": "wilt",
           "standard_name": "volume_fraction_of_condensed_water_in_soil_at_wilting_point",
           "units": "1",
-          "comment": "NaN over water.",
+          "comment": "NaN over water, including inland water bodies.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
+          "_FillValue": "AAAAAAAAAAA="
         },
         "dimension_names": [
           "init_time",

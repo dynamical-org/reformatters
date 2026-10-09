@@ -1760,6 +1760,26 @@ _RRFS_DATASETS = [
     if isinstance(d.template_config, NoaaRrfsForecastTemplateConfig)
 ]
 
+# RRFS ice is fractional, and atmospheric MCONV is a column integral.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, attribute, dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    if dataset.dataset_id
+    in {
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    }
+    for key, attribute in {
+        ("ice_cover_surface", "long_name"),
+        ("icec", "long_name"),
+        ("ice_cover_surface", "flag_values"),
+        ("ice_cover_surface", "flag_meanings"),
+        ("horizontal_moisture_convergence_atmosphere", "units"),
+        ("mconv", "units"),
+        ("Horizontal moisture convergence", "units"),
+    }
+}
+
 # Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.
 # Coded RUC soil types support CF soil_type, unlike interpolated GFS classes.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {

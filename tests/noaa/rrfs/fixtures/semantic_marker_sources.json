@@ -12,5 +12,287 @@
     "end": 134870930,
     "sha256": "a9d21492be4f30a95ff560ac39631fe08c16e5dc8f4b198cd0b4a7ccf65be978",
     "index_line": "146:133434203:d=2026100814:HGT:cloud top:18 hour fcst:"
+  },
+  "semantic-markers/A-pressure_cloud_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "7477277c4d0fd1455b113160bb2517c0c59d609183cec9f326124ce2ca6aa3a9",
+    "element": "PRES",
+    "level": "cloud top",
+    "start": 160500015,
+    "end": 162368701,
+    "index_line": "168:160500015:d=2026081400:PRES:cloud top:6 hour fcst:"
+  },
+  "semantic-markers/A-pressure_grid_scale_cloud_top_level.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "64c56971bc15734f5aa1c91a9041352d0141334e5e15123cd08c8dcd457b05e5",
+    "element": "PRES",
+    "level": "grid scale cloud top level",
+    "start": 166868293,
+    "end": 168736979,
+    "index_line": "172:166868293:d=2026081400:PRES:grid scale cloud top level:6 hour fcst:"
+  },
+  "semantic-markers/A-pressure_grid_scale_cloud_bottom_level.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "041bbce5964c1ba6e4f1f503a32e141e6bd88ba66519599a83adc3fba6d57126",
+    "element": "PRES",
+    "level": "grid scale cloud bottom level",
+    "start": 158133852,
+    "end": 160500014,
+    "index_line": "167:158133852:d=2026081400:PRES:grid scale cloud bottom level:6 hour fcst:"
+  },
+  "semantic-markers/A-temperature_cloud_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "540ecb672c6fe5ec5eea644c545bfae4fe415b9d7d460089581dc075265dbe80",
+    "element": "TMP",
+    "level": "cloud top",
+    "start": 164399083,
+    "end": 166270641,
+    "index_line": "170:164399083:d=2026081400:TMP:cloud top:6 hour fcst:"
+  },
+  "semantic-markers/A-geopotential_height_supercooled_liquid_water_base.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "5ebb81c3ad8aa571dd4830f0eabcf5dd7d7a4b5b4b3b8d54e07795a9d8d6f0ee",
+    "element": "HGT",
+    "level": "lowest bottom level of supercooled liquid water layer",
+    "start": 145550202,
+    "end": 145942039,
+    "index_line": "155:145550202:d=2026081400:HGT:lowest bottom level of supercooled liquid water layer:6 hour fcst:"
+  },
+  "semantic-markers/A-geopotential_height_supercooled_liquid_water_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "a3ef49bcf56e7b690d12d9dc852cd095fe2e7edb6e58cf8ba3219b9f87517601",
+    "element": "HGT",
+    "level": "highest top level of supercooled liquid water layer",
+    "start": 145942040,
+    "end": 146312262,
+    "index_line": "156:145942040:d=2026081400:HGT:highest top level of supercooled liquid water layer:6 hour fcst:"
+  },
+  "semantic-markers/A-soil_porosity_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "27bb60b8cf53af1b470ae3a94d99b4045d1863f118dcac343f9d7f3263da09e8",
+    "element": "POROS",
+    "level": "surface",
+    "start": 79019510,
+    "end": 79872185,
+    "index_line": "73:79019510:d=2026081400:POROS:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-maximum_snow_albedo_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "7c2b3690a083231a37d353b52cebc663347e84b81ab60c621bd4a868c7015bc2",
+    "element": "MXSALB",
+    "level": "surface",
+    "start": 332049229,
+    "end": 333248052,
+    "index_line": "298:332049229:d=2026081400:MXSALB:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-direct_evaporation_cease_soil_moisture_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "2f193e67e95053113e58b40a331febd55e4de5829b6b7602ec314ea830200b39",
+    "element": "SMDRY",
+    "level": "surface",
+    "start": 78155444,
+    "end": 79019509,
+    "index_line": "72:78155444:d=2026081400:SMDRY:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-albedo_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "0206fbbd3084fc5e54c0e5b189f3757ffa3a2bcec206a94ae44a31fdec3126ee",
+    "element": "ALBDO",
+    "level": "surface",
+    "start": 331071222,
+    "end": 332049228,
+    "index_line": "297:331071222:d=2026081400:ALBDO:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-wilting_point_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "8ce310e63239e32325e75f8579a00d5aeb667f5ad26e913fce2647247de44d8a",
+    "element": "WILT",
+    "level": "surface",
+    "start": 129041440,
+    "end": 129889956,
+    "index_line": "140:129041440:d=2026081400:WILT:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-transpiration_stress_onset_soil_moisture_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "f043687308be872a64330f4c015a1b6d0089a279378a6ccbf4d434e61fe76506",
+    "element": "SMREF",
+    "level": "surface",
+    "start": 129889957,
+    "end": 130804584,
+    "index_line": "141:129889957:d=2026081400:SMREF:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-minimal_stomatal_resistance_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "7d90dfecf667fd632943fb7e8a64b65bd63156883c4dbdfbcd9cf4e5015391a2",
+    "element": "RSMIN",
+    "level": "surface",
+    "start": 127926219,
+    "end": 128573833,
+    "index_line": "138:127926219:d=2026081400:RSMIN:surface:6 hour fcst:"
+  },
+  "semantic-markers/A-land_mask.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "6587a1a22c3bf4861b42bfe17d944571eeb82a8abe3a1a76b22f58add92b4e6f",
+    "element": "LAND",
+    "level": "surface"
+  },
+  "semantic-markers/A-vegetation_type.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "a1b3981d83cbe06bd61183263bc057228815933ef3bf3b211d74124a94916ff5",
+    "element": "VGTYP",
+    "level": "surface"
+  },
+  "semantic-markers/A-cloud_base.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "49f910d3199b4db20a3fd611827009696cd3835c91cda4059e9e2814e8b37d95",
+    "element": "HGT",
+    "level": "cloud base"
+  },
+  "semantic-markers/C-pressure_cloud_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "34dfd3b940d7e29568b354fffbae9950b658cfc9141add60e216b0187ce25fa0",
+    "element": "PRES",
+    "level": "cloud top",
+    "start": 155136734,
+    "end": 156926374,
+    "index_line": "168:155136734:d=2026100812:PRES:cloud top:60 hour fcst:"
+  },
+  "semantic-markers/C-pressure_grid_scale_cloud_top_level.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "fdbec3cb79231188b518b6480de15c063b1bf4f48fccb6624ae4807445a5c6a8",
+    "element": "PRES",
+    "level": "grid scale cloud top level",
+    "start": 161438566,
+    "end": 163228206,
+    "index_line": "172:161438566:d=2026100812:PRES:grid scale cloud top level:60 hour fcst:"
+  },
+  "semantic-markers/C-pressure_grid_scale_cloud_bottom_level.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "a632517550fececc4cab866b624bab80c2f17171837dbae10d8e204613d0c2c2",
+    "element": "PRES",
+    "level": "grid scale cloud bottom level",
+    "start": 152897596,
+    "end": 155136733,
+    "index_line": "167:152897596:d=2026100812:PRES:grid scale cloud bottom level:60 hour fcst:"
+  },
+  "semantic-markers/C-temperature_cloud_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "44d2faa04c0bb1d8ed831e97c6e124003bdfeeda7de7ea217c4b1bca0f178268",
+    "element": "TMP",
+    "level": "cloud top",
+    "start": 158879843,
+    "end": 160623870,
+    "index_line": "170:158879843:d=2026100812:TMP:cloud top:60 hour fcst:"
+  },
+  "semantic-markers/C-geopotential_height_supercooled_liquid_water_base.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "8ebf0fc20ca893c2a9a0d7254d950cd2c8f7d07f6f1ca6d57a389b9d4975b579",
+    "element": "HGT",
+    "level": "lowest bottom level of supercooled liquid water layer",
+    "start": 140280948,
+    "end": 141015437,
+    "index_line": "155:140280948:d=2026100812:HGT:lowest bottom level of supercooled liquid water layer:60 hour fcst:"
+  },
+  "semantic-markers/C-geopotential_height_supercooled_liquid_water_top.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "c719b4b7c3252d3fe143db68ec5095fbd4235126b7518b0583beb819ea247ec0",
+    "element": "HGT",
+    "level": "highest top level of supercooled liquid water layer",
+    "start": 141015438,
+    "end": 141693284,
+    "index_line": "156:141015438:d=2026100812:HGT:highest top level of supercooled liquid water layer:60 hour fcst:"
+  },
+  "semantic-markers/C-soil_porosity_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "d282c50fd023f5fc185d138e5a46c102b1bb0970fb8da688bc4e1f41b3886ea9",
+    "element": "POROS",
+    "level": "surface",
+    "start": 77969340,
+    "end": 78822015,
+    "index_line": "73:77969340:d=2026100812:POROS:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-maximum_snow_albedo_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "6ccbad571a71c031b65ea24f2e89c8993c2d8a4cea3cf9da69bc9eb753d36bdb",
+    "element": "MXSALB",
+    "level": "surface",
+    "start": 327144360,
+    "end": 328343183,
+    "index_line": "298:327144360:d=2026100812:MXSALB:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-direct_evaporation_cease_soil_moisture_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "f7fb64ac9fd758c3b45d625bb62eac5051f1ba7cf9618b2811622c8d4cd8b416",
+    "element": "SMDRY",
+    "level": "surface",
+    "start": 77105274,
+    "end": 77969339,
+    "index_line": "72:77105274:d=2026100812:SMDRY:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-albedo_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "edb3a1d330ccf73c70007df9d3da7ae937ad1afb15c12269a9c1cc82e9be0de1",
+    "element": "ALBDO",
+    "level": "surface",
+    "start": 326102252,
+    "end": 327144359,
+    "index_line": "297:326102252:d=2026100812:ALBDO:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-wilting_point_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "8ce043f869e08f21f5ff60989e9454915dc6f1f8779e6ad3bc4a7c898d4d70a7",
+    "element": "WILT",
+    "level": "surface",
+    "start": 127364212,
+    "end": 128212728,
+    "index_line": "140:127364212:d=2026100812:WILT:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-transpiration_stress_onset_soil_moisture_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "921fc2ae8f7a6d09e6e79780cf7068acc63ce6f6e7f590587765191d98079424",
+    "element": "SMREF",
+    "level": "surface",
+    "start": 128212729,
+    "end": 129127356,
+    "index_line": "141:128212729:d=2026100812:SMREF:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-minimal_stomatal_resistance_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "533a7b65ecb3148d468bcc34762190c69ba739a86d6c239390329d0edb9cecfd",
+    "element": "RSMIN",
+    "level": "surface",
+    "start": 126248991,
+    "end": 126896605,
+    "index_line": "138:126248991:d=2026100812:RSMIN:surface:60 hour fcst:"
+  },
+  "semantic-markers/C-land_mask.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "8ca5da620fdd2f2e052c8ab92ccaaba7f01acb002ab5832e1f454293883677c9",
+    "element": "LAND",
+    "level": "surface"
+  },
+  "semantic-markers/C-vegetation_type.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "675828b7dfcfc884c71d40d66fb9087297ee4da4d529b9325a8c25d5d7b6c2d3",
+    "element": "VGTYP",
+    "level": "surface"
+  },
+  "semantic-markers/C-cloud_base.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "21513ef83d3b67df9f3f975d1243f7b12f34d6b6bd74f0eda5bbb1bab34fd641",
+    "element": "HGT",
+    "level": "cloud base"
+  },
+  "semantic-markers/A-number_of_soil_layers_in_root_zone_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "25249d33d5cc51989586d9b0db226c0832a2620709d77a2be41017401dd496b2",
+    "element": "RLYRS",
+    "level": "surface"
+  },
+  "semantic-markers/C-number_of_soil_layers_in_root_zone_surface.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "45aaab04a57ecc44dc1de2c9f77e3ce4809f49dfa6a5683904bcb4c5e43eb2f5",
+    "element": "RLYRS",
+    "level": "surface"
   }
 }

@@ -38,7 +38,7 @@
     "long_name": "V-component storm motion",
     "short_name": "vstm",
     "units": "m s-1",
-    "comment": "The Bunkers right-moving supercell motion.",
+    "comment": "The Bunkers right-moving supercell motion. Velocity along the model grid's y dimension, not northward velocity.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
