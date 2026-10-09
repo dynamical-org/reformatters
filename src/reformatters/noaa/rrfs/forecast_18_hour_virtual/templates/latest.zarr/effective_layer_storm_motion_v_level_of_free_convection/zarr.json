@@ -1,7 +1,7 @@
 {
   "shape": [
     1,
-    85,
+    19,
     1059,
     1799
   ],
@@ -28,23 +28,17 @@
     {
       "name": "gribberish",
       "configuration": {
-        "var": "var discipline=1 center=7 local_table=1 parmcat=1 parm=197",
+        "var": "VEID",
         "adjust_longitude_range": true,
         "north_up": true
       }
     }
   ],
   "attributes": {
-    "long_name": "Precipitation exceeding flash flood guidance",
-    "short_name": "qpfffg",
-    "units": "1",
-    "comment": "Binary exceedance of the forecast initialization to the selected lead precipitation against the corresponding grid-cell threshold. Zero also means guidance is unavailable; it cannot be distinguished from no exceedance. Computed only at forecast leads 1, 3, 6 and 12 hours.",
-    "step_type": "accum",
-    "flag_values": [
-      0,
-      1
-    ],
-    "flag_meanings": "no yes",
+    "long_name": "Effective layer V storm motion",
+    "short_name": "veid",
+    "units": "m s-1",
+    "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

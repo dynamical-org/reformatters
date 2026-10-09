@@ -1,7 +1,7 @@
 {
   "shape": [
     1,
-    19,
+    85,
     1059,
     1799
   ],
@@ -35,9 +35,8 @@
     }
   ],
   "attributes": {
-    "long_name": "Effective inflow layer V wind component",
+    "long_name": "Effective layer V storm motion",
     "short_name": "veid",
-    "standard_name": "y_wind",
     "units": "m s-1",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

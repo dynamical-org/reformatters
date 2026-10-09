@@ -194,12 +194,29 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                 ) or (
                     element in {"VUCSH", "VVCSH"} and level == "0-1000 m above ground"
                 )
+                # These FFG flags are constant zero in NOAA's source as of
+                # 2026-10-09; RRFS is not yet operational, so this may change.
+                excluded_ffg = (
+                    not config.members
+                    and not config.sub_hourly
+                    and family == "2dfld"
+                    and element
+                    in {
+                        "var discipline=1 center=7 local_table=1 parmcat=1 parm=197",
+                        "QPFFFG",
+                    }
+                    and level == "surface"
+                    and selectors == ("prob >1", "prob fcst 0/1")
+                    and re.fullmatch(r"\d+-\d+ (?:hour|day) acc fcst", window)
+                    is not None
+                )
                 assert (
                     duplicate
                     or zero_placeholder
                     or excluded_surface_product
                     or excluded_member_product
                     or excluded_radiation_or_shear
+                    or excluded_ffg
                 ), (path, identity)
             seen.add(identity)
 
@@ -255,24 +272,12 @@ def test_missing_required_messages_fail_loudly() -> None:
 
 def test_supported_leads_are_explicit_for_binary_run_totals() -> None:
     variables = CONFIGS[0].data_vars
-    ffg = next(
-        v
-        for v in variables
-        if v.name
-        == "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface"
-    )
     ari = next(
         v
         for v in variables
         if v.name
         == "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface"
     )
-    assert [h for h in range(85) if ffg.available_at(pd.Timedelta(hours=h))] == [
-        1,
-        3,
-        6,
-        12,
-    ]
     assert [h for h in range(85) if ari.available_at(pd.Timedelta(hours=h))] == [
         1,
         3,
@@ -280,10 +285,10 @@ def test_supported_leads_are_explicit_for_binary_run_totals() -> None:
         12,
         24,
     ]
-    assert ffg.attrs.flag_values == (0, 1)
-    assert ffg.attrs.flag_meanings == "no yes"
-    assert ffg.attrs.units == "1"
-    assert "guidance is unavailable" in (ffg.attrs.comment or "")
+    assert ari.attrs.flag_values == (0, 1)
+    assert ari.attrs.flag_meanings == "no yes"
+    assert ari.attrs.units == "1"
+    assert "guidance is unavailable" in (ari.attrs.comment or "")
 
 
 def test_exact_selector_absence_and_wildcard_have_distinct_lookup_keys() -> None:
@@ -332,7 +337,7 @@ def test_hourly_source_generation_respects_families_availability_and_horizon(
         in {
             "temperature_2m",
             "total_precipitation_surface",
-            "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
+            "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface",
             "pressure_level/temperature",
         }
     ]
@@ -356,7 +361,7 @@ def test_hourly_source_generation_respects_families_availability_and_horizon(
             else {
                 "temperature_2m",
                 "total_precipitation_surface",
-                "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
+                "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface",
             }
             if coord.lead_time == pd.Timedelta("1h")
             else {"temperature_2m", "total_precipitation_surface"}

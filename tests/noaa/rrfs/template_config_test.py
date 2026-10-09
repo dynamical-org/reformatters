@@ -23,8 +23,8 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 320),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 320),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 318),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 318),
         (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 38),
         (NoaaRrfsEnsForecastVirtualTemplateConfig(), 62),
     ],
@@ -61,6 +61,8 @@ def test_configured_field_inventory(
             "instantaneous_upward_long_wave_radiation_flux_top_of_atmosphere",
             "vertical_u_component_shear_0_1000m",
             "vertical_v_component_shear_0_1000m",
+            "categorical_precipitation_exceeding_flash_flood_guidance_surface",
+            "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
         }
     )
     if not config.sub_hourly:
@@ -81,6 +83,36 @@ def test_configured_field_inventory(
         assert "specific_humidity_2m" in configured_paths
     if not config.sub_hourly:
         assert "pressure_level/specific_humidity" in configured_paths
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        NoaaRrfsForecast84HourVirtualTemplateConfig(),
+        NoaaRrfsForecast18HourVirtualTemplateConfig(),
+    ],
+    ids=lambda c: c.dataset_id,
+)
+@pytest.mark.parametrize(("component", "element"), [("u", "UEID"), ("v", "VEID")])
+def test_effective_layer_storm_motion_metadata(
+    config: NoaaRrfsForecastTemplateConfig, component: str, element: str
+) -> None:
+    variables = {v.path: v for v in config.data_vars}
+    assert (
+        f"effective_inflow_layer_wind_{component}_level_of_free_convection"
+        not in variables
+    )
+    variable = variables[
+        f"effective_layer_storm_motion_{component}_level_of_free_convection"
+    ]
+    assert (
+        variable.attrs.long_name == f"Effective layer {component.upper()} storm motion"
+    )
+    assert variable.attrs.standard_name is None
+    assert variable.attrs.short_name == element.lower()
+    assert variable.attrs.units == "m s-1"
+    assert variable.internal_attrs.grib_element == element
+    assert variable.internal_attrs.grib_index_level == "level of free convection"
 
 
 @pytest.mark.parametrize(
