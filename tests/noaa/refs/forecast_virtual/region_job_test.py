@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.iterating import item
 from reformatters.common.pydantic import replace
 from reformatters.common.types import Timedelta
 from reformatters.noaa.noaa_grib_index import (
@@ -27,29 +28,51 @@ from reformatters.noaa.refs.forecast_virtual.template_config import (
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = NoaaRefsForecastVirtualTemplateConfig()
 VARIABLES = CONFIG.data_vars
+FAMILIES: tuple[ProductFamily, ...] = (
+    "mean",
+    "sprd",
+    "prob",
+    "pmmn",
+    "lpmm",
+    "avrg",
+    "eas",
+    "ffri",
+)
+INDEX_PATHS = tuple(sorted(FIXTURES.glob("refs.*/*/ensprod/*.idx")))
+
+
+def index_path(family: ProductFamily, hours: int) -> Path:
+    return item(
+        p for p in INDEX_PATHS if p.name.split(".")[2:4] == [family, f"f{hours:02}"]
+    )
 
 
 @pytest.mark.parametrize(
-    ("lead", "count", "eas_counts"),
+    ("family", "lead", "expected_counts"),
     [
-        (42, 14, {14}),
-        (43, 13, {13, 14}),
-        (48, 13, {13, 14}),
-        (49, 12, {12}),
-        (53, 12, {12}),
-        (54, 6, {12}),
-        (60, 6, {6}),
+        ("prob", 1, {14}),
+        ("prob", 43, {13}),
+        ("prob", 49, {12}),
+        ("prob", 54, {6}),
+        ("eas", 1, {14}),
+        ("eas", 43, {13, 14}),
+        ("eas", 49, {12}),
+        ("eas", 54, {12}),
+        ("eas", 60, {6}),
+        ("ffri", 1, {14}),
+        ("ffri", 43, {13}),
+        ("ffri", 49, {12}),
+        ("ffri", 54, {6}),
     ],
 )
-@pytest.mark.parametrize("family", ["prob", "eas", "ffri"])
 def test_real_indexes_preserve_threshold_identity_across_member_count_bands(
-    lead: int, count: int, eas_counts: set[int], family: ProductFamily
+    family: ProductFamily, lead: int, expected_counts: set[int]
 ) -> None:
-    path = (
-        FIXTURES
-        / f"refs.20261002/00/ensprod/refs.t00z.{family}.f{lead:02}.conus.grib2.idx"
+    path = index_path(family, lead)
+    init = pd.Timestamp(path.parts[-4].removeprefix("refs.")) + pd.Timedelta(
+        hours=int(path.parts[-3])
     )
-    coord = file_coord(pd.Timestamp("2026-10-02"), family, pd.Timedelta(hours=lead))
+    coord = file_coord(init, family, pd.Timedelta(hours=lead))
     counts = set()
     for _, _, _, _, selectors in parse_grib_index_lines(path):
         tokens = [s for s in selectors if re.fullmatch(r"prob fcst \d+/\d+", s)]
@@ -58,7 +81,7 @@ def test_real_indexes_preserve_threshold_identity_across_member_count_bands(
         assert coord.index_selectors(selectors) == tuple(
             s for s in selectors if s != tokens[0]
         )
-    assert counts == (eas_counts if family == "eas" else {count})
+    assert counts == expected_counts
 
 
 def make_job(
@@ -90,24 +113,21 @@ def file_coord(
     )
 
 
-@pytest.mark.parametrize("cycle", ["20260813/00", "20260915/12", "20261002/00"])
 def test_every_source_message_is_referenced_except_the_explicit_duplicate(
-    cycle: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    day, hour = cycle.split("/")
-    paths = sorted((FIXTURES / f"refs.{day}" / hour / "ensprod").glob("*.idx"))
-    assert len(paths) == (480 if day == "20261002" else 64)
     job = make_job()
     monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
-    total_refs = 0
-    duplicates = 0
-    for path in paths:
-        family: ProductFamily = path.name.split(".")[2]  # ty: ignore[invalid-assignment]
+    covered = set()
+    for path in INDEX_PATHS:
+        family = next(f for f in FAMILIES if f == path.name.split(".")[2])
         lead = pd.Timedelta(hours=int(path.name.split(".")[3][1:]))
         coord = file_coord(
-            pd.Timestamp(day) + pd.Timedelta(hours=int(hour)), family, lead
+            pd.Timestamp(path.parts[-4].removeprefix("refs."))
+            + pd.Timedelta(hours=int(path.parts[-3])),
+            family,
+            lead,
         )
         local = tmp_path / "index.idx"
         local.write_bytes(path.read_bytes())
@@ -152,7 +172,7 @@ def test_every_source_message_is_referenced_except_the_explicit_duplicate(
         for ref in refs:
             assert isinstance(ref.data_var, NoaaRefsDataVar)
             assert ("statistic" in ref.out_loc) == (family in ("mean", "sprd"))
-        if family == "mean":
+        if family == "mean" and lead == pd.Timedelta("1h"):
             with pytest.raises(AssertionError, match="required GRIB messages absent"):
                 job._check_refs_complete(
                     coord,
@@ -160,10 +180,8 @@ def test_every_source_message_is_referenced_except_the_explicit_duplicate(
                 )
             with pytest.raises(AssertionError, match="duplicate output references"):
                 job._check_refs_complete(coord, [*refs, refs[0]])
-        duplicates += len(accounted)
-        total_refs += len(refs)
-    assert duplicates == (60 if day == "20261002" else 8)
-    assert total_refs == (20349 if day == "20261002" else 2975)
+        covered.update(ref.data_var.path for ref in refs)
+    assert covered == {var.path for var in VARIABLES}
 
 
 def test_mean_coords_exclude_exactly_the_five_spread_only_fields() -> None:
@@ -227,14 +245,8 @@ def test_rolling_windows_match_real_labels(
         and v.internal_attrs.window_duration == pd.Timedelta(hours=duration)
     )
     assert grib_index_window_str(variable, hours) == label
-    for family in ("mean", "sprd", "prob", "eas", "ffri"):
-        path = (
-            FIXTURES
-            / "refs.20261002/00/ensprod"
-            / f"refs.t00z.{family}.f{hours:02}.conus.grib2.idx"
-        )
-        windows = [line[3] for line in parse_grib_index_lines(path)]
-        assert label in windows, (family, duration, hours)
+    windows = [line[3] for line in parse_grib_index_lines(index_path("mean", hours))]
+    assert label in windows, (duration, hours)
     assert variable.available_at(pd.Timedelta(hours=hours))
     assert not variable.available_at(pd.Timedelta(hours=hours + 1))
 

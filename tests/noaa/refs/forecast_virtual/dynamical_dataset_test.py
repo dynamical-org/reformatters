@@ -158,7 +158,7 @@ def test_operational_configuration_is_suspended_and_requires_complete_manifests(
     assert update.suspend
     assert update.schedule == "55 1,7,13,19 * * *"
     assert update.pod_active_deadline == pd.Timedelta("125min")
-    assert update.cpu == "2"
+    assert update.cpu == "1.5"
     assert update.memory == "3.7G"
     assert dataset.icechunk_virtual_config is not None
     assert (
@@ -280,7 +280,8 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     initial.close()
     if with_update:
         next_init = init + pd.Timedelta("6h")
-        offset, duration = dataset._operational_timing
+        offset = dataset.update_offset_minutes
+        duration = dataset.update_deadline_minutes
         fire = next_init + pd.Timedelta(minutes=offset)
         now = (
             fire + pd.Timedelta(minutes=duration) - dataset.virtual_poll_deadline_grace

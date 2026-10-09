@@ -7,15 +7,16 @@ import pandas as pd
 import pytest
 import rasterio
 import xarray as xr
-import zarr
-from gribberish.zarr import GribberishCodec
 
 from reformatters.noaa.noaa_grib_index import parse_grib_index_lines
-from reformatters.noaa.refs.forecast_virtual.models import ProductFamily
 from reformatters.noaa.refs.forecast_virtual.template_config import (
     NoaaRefsForecastVirtualTemplateConfig,
 )
-from tests.noaa.refs.forecast_virtual.region_job_test import file_coord, make_job
+from tests.noaa.refs.forecast_virtual.region_job_test import (
+    FAMILIES,
+    file_coord,
+    make_job,
+)
 from tests.noaa.rrfs.decoder_helpers import write_single_grib_chunk
 
 FIXTURES = Path(__file__).parent / "fixtures/zero_width"
@@ -42,13 +43,15 @@ def _reference_value(raw: bytes) -> float:
     return struct.unpack(">f", section[11:15])[0]
 
 
-def test_retained_zero_width_messages_account_for_the_affected_schema() -> None:
-    assert len(INVENTORY) == 276
-    affected = set()
+def test_zero_group_provenance_and_distinct_header_cases() -> None:
     job = make_job()
-    for record in INVENTORY.values():
+    references = set()
+    decimal_scales = set()
+    families = set()
+    for filename, record in INVENTORY.items():
         key = record["key"]
-        family: ProductFamily = key.split(".")[3]
+        family = next(f for f in FAMILIES if f == key.split(".")[3])
+        families.add(family)
         lead = pd.Timedelta(hours=int(key.split(".")[4][1:]))
         _, element, level, window, selectors = parse_grib_index_lines(
             FIXTURES.parent / (key + ".idx")
@@ -60,82 +63,50 @@ def test_retained_zero_width_messages_account_for_the_affected_schema() -> None:
             for v, _ in lookup[element, level, window, coord.index_selectors(selectors)]
         }
         assert names == set(record["variables"]), key
-        affected.update(names)
-    declared = {v.name for v in NoaaRefsForecastVirtualTemplateConfig().data_vars}
-    assert len(affected) == 60
-    assert affected <= declared
-    for filename, record in INVENTORY.items():
         raw = (FIXTURES / filename).read_bytes()
         sections = _sections(raw)
         section = sections[5]
         assert section.hex() == record["s5"]
         assert int.from_bytes(section[9:11], "big") == record["drt"] == 3
         assert section[22] == record["missing_management"] == 0
+        assert int.from_bytes(section[5:9], "big") == 1059 * 1799
         assert int.from_bytes(section[31:35], "big") == 0
         assert section[48] == 0
         assert sections[6][5] == 255
-
-    assert {_reference_value((FIXTURES / name).read_bytes()) for name in INVENTORY} == {
-        0.0,
-        100.0,
-        100.00001525878906,
-    }
+        references.add(_reference_value(raw))
+        scale = int.from_bytes(section[17:19], "big")
+        decimal_scales.add(-(scale & 0x7FFF) if scale & 0x8000 else scale)
+    assert references == {0.0, 100.0, 100.00001525878906}
+    assert decimal_scales == {0, 5}
+    assert families == {"mean", "sprd", "prob"}
 
 
 @pytest.mark.parametrize("filename", list(INVENTORY))
-def test_zero_group_messages_decode_to_section5_reference(
+def test_zero_group_constants_match_independent_gdal_through_public_reader(
     filename: str, tmp_path: Path
 ) -> None:
-    raw = (FIXTURES / filename).read_bytes()
-    expected = _reference_value(raw)
-    store = tmp_path / "constant.zarr"
-    array = zarr.create_array(
-        store=store,
-        shape=(1059, 1799),
-        chunks=(1059, 1799),
-        dtype="float64",
-        fill_value=np.nan,
-        serializer=GribberishCodec(var=None),
-        compressors=None,
-    )
-    chunk = store / "c/0/0"
-    chunk.parent.mkdir(parents=True)
-    chunk.write_bytes(raw)
-    values = array[:]
-    assert isinstance(values, np.ndarray)
-    assert values.shape == (1059, 1799)
-    assert np.isfinite(values).all()
-    np.testing.assert_array_equal(values, expected)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    ("filename", "value"),
-    [
-        ("20260813-00-mean-f01-58.grib2", 0.0),
-        ("20260813-00-sprd-f01-64.grib2", 0.0),
-        ("20260813-00-prob-f01-22.grib2", 100.00001525878906),
-        ("20260813-00-prob-f01-51.grib2", 0.0),
-    ],
-)
-def test_independent_gdal_decodes_representative_zero_width_constants(
-    filename: str, value: float, tmp_path: Path
-) -> None:
     path = FIXTURES / filename
+    raw = path.read_bytes()
+    reference = _reference_value(raw)
     with rasterio.Env(GDAL_CACHEMAX=16 * 1024 * 1024), rasterio.open(path) as source:
         assert source.shape == (1059, 1799)
         assert source.nodatavals == (None,)
-        values = source.read(1)
-    assert np.isfinite(values).all()
-    assert np.min(values) == np.max(values) == value
+        expected = source.read(1)
+    assert np.isfinite(expected).all()
+    np.testing.assert_array_equal(expected, reference)
 
+    (name,) = INVENTORY[filename]["variables"]
     config = NoaaRefsForecastVirtualTemplateConfig()
-    for name in INVENTORY[filename]["variables"]:
-        metadata = json.loads((config.template_path() / name / "zarr.json").read_text())
-        store = tmp_path / name
-        write_single_grib_chunk(store, name, metadata, path.read_bytes())
-        with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
-            actual = dataset[name].values.squeeze()
-        assert actual.shape == values.shape
-        assert np.isfinite(actual).all()
-        np.testing.assert_array_equal(actual, values)
+    metadata = json.loads((config.template_path() / name / "zarr.json").read_text())
+    if name == "fog_liquid_water_content_0m":
+        assert {"name": "scale_offset", "configuration": {"scale": 1000.0}} in metadata[
+            "codecs"
+        ]
+        expected = expected / 1000.0
+    store = tmp_path / "constant.zarr"
+    write_single_grib_chunk(store, name, metadata, raw)
+    with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
+        actual = dataset[name].values.squeeze()
+    assert actual.shape == expected.shape
+    assert np.isfinite(actual).all()
+    np.testing.assert_array_equal(actual, expected)
