@@ -82,6 +82,19 @@ class NoaaRefsRegionJob(NoaaVirtualRegionJob[NoaaRefsDataVar, NoaaRefsSourceFile
             )
         ]
 
+    def _message_lookup(
+        self, data_vars: Sequence[NoaaRefsDataVar], lead_hours: float
+    ) -> dict[
+        tuple[str, str, str, tuple[str, ...] | None],
+        list[tuple[NoaaRefsDataVar, dict[Dim, CoordinateValue]]],
+    ]:
+        lookup = super()._message_lookup(data_vars, lead_hours)
+        for (element, level, window, selectors), matches in tuple(lookup.items()):
+            if (element, level, selectors) == ("HGT", "surface", ()):
+                # Surface-height spread accepts either identical process 4/193 copy.
+                lookup[element, level, window, ("process=193",)] = matches
+        return lookup
+
     def _check_refs_complete(
         self, coord: NoaaRefsSourceFileCoord, refs: list[VirtualRef]
     ) -> None:

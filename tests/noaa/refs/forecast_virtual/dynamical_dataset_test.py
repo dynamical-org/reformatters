@@ -156,6 +156,7 @@ def test_operational_configuration_is_suspended_and_requires_complete_manifests(
     )
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.suspend
+    assert update.as_kubernetes_object()["spec"]["suspend"] is True
     assert update.schedule == "55 1,7,13,19 * * *"
     assert update.pod_active_deadline == pd.Timedelta("125min")
     assert update.cpu == "1.5"

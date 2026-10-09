@@ -293,3 +293,43 @@ def test_identical_sparse_selectors_still_have_different_source_files() -> None:
         == avrg_var.internal_attrs.grib_index_selectors
     )
     assert pmmn_var.name != avrg_var.name
+
+
+@pytest.mark.parametrize("processes", [(4, 193), (193, 4), (4,), (193,), ()])
+def test_surface_height_spread_accepts_either_copy(
+    processes: tuple[int, ...], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = index_path("sprd", 1)
+    lines = path.read_text().splitlines()
+    originals = [line for line in lines if ":HGT:surface:" in line]
+    assert len(originals) == 2
+    replacements = {
+        old: old.removesuffix(":process=193")
+        + (":process=193" if process == 193 else "")
+        for old, process in zip(originals, processes, strict=False)
+    }
+    local = tmp_path / "index.idx"
+    local.write_text(
+        "\n".join(
+            replacements.get(line, line)
+            for line in lines
+            if line not in originals or line in replacements
+        )
+        + "\n"
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
+    coord = file_coord(pd.Timestamp("2026-08-13T00"), "sprd", pd.Timedelta("1h"))
+    file_size = int(lines[-1].split(":")[1]) + 1000
+    if not processes:
+        with pytest.raises(AssertionError, match="required GRIB messages absent"):
+            make_job().file_refs(coord, file_size)
+        return
+    refs = make_job().file_refs(coord, file_size)
+    height = item(r for r in refs if r.data_var.name == "geopotential_height_surface")
+    assert height.offset == int(originals[0].split(":")[1])
+    assert height.out_loc["statistic"] == "standard_deviation"
+    assert len(refs) == len(coord.data_vars)
