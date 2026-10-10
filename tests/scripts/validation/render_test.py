@@ -117,6 +117,21 @@ def test_render_report_writes_file(tmp_path: Path) -> None:
     assert "var-temperature_2m" in body
 
 
+def test_render_html_keeps_statistic_labels_and_variable_identity() -> None:
+    label = " [pressure_level=500] [statistic=standard_deviation]"
+    md = f"## Per-variable details\n\n### `pressure_level/wind_u`{label}\n\nMetadata\n"
+    html = render_html(md, "noaa-test")
+    assert (
+        f'<h3 class="var-heading"><code>pressure_level/wind_u</code>{label}</h3>'
+        in html
+    )
+    assert '<section class="variable" id="var-pressure_level__wind_u"' in html
+    assert '<input type="checkbox"' in html
+    assert 'data-var="pressure_level__wind_u"' in html
+    for plot_type in ("availability", "value_timeseries", "spatial", "temporal"):
+        assert f'<img src="{plot_type}_pressure_level__wind_u.png"' in html
+
+
 def test_render_report_cache_busts_pngs(tmp_path: Path) -> None:
     run_dir = tmp_path / "noaa-test" / "v9.9.9_2026-01-01T00-00"
     run_dir.mkdir(parents=True)

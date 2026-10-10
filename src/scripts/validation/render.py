@@ -11,6 +11,7 @@ from scripts.validation.utils import var_slug
 log = get_logger(__name__)
 
 REPORT_FILENAME = "validation_report.html"
+_VARIABLE_HEADING = r"<h3><code>(?P<var>[^<]+)</code>(?P<label>[^<]*)</h3>"
 
 
 def _slugify(text: str) -> str:
@@ -18,8 +19,8 @@ def _slugify(text: str) -> str:
 
 
 def _extract_per_var_html(html: str) -> list[str]:
-    # Per-variable headings render as <h3><code>name</code></h3>; other ### don't.
-    return re.findall(r"<h3><code>([^<]+)</code></h3>", html)
+    # Per-variable headings start with <code>name</code>; other ### don't.
+    return [m.group("var") for m in re.finditer(_VARIABLE_HEADING, html)]
 
 
 # Order mirrors the per-variable text/table sections: value time series, spatial,
@@ -34,7 +35,7 @@ _PLOT_TYPES = (
 
 def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
     pattern = re.compile(
-        r"<h3><code>(?P<var>[^<]+)</code></h3>(?P<body>.*?)(?=<h[23][\s>]|\Z)",
+        _VARIABLE_HEADING + r"(?P<body>.*?)(?=<h[23][\s>]|\Z)",
         re.DOTALL,
     )
 
@@ -53,7 +54,7 @@ def _wrap_variable_sections(html: str, available_files: set[str] | None) -> str:
         )
         return (
             f'<section class="variable" id="var-{slug}" data-var="{slug}">'
-            f'<h3 class="var-heading"><code>{var}</code></h3>'
+            f'<h3 class="var-heading"><code>{var}</code>{m.group("label")}</h3>'
             f'{body}<div class="plots">{plots}</div></section>'
         )
 

@@ -18,6 +18,7 @@ from zarr.storage import ObjectStore, StoreLike
 from reformatters.common.retry import retry
 from reformatters.common.storage import anonymous_virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
+from reformatters.noaa.refs.models import NoaaRefsDataVar
 
 # Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
 # concurrency once here; every validation entry point imports this module.
@@ -183,6 +184,8 @@ class VariableStats:
     # Vertical level sampled for this variable (None for single-level variables)
     level_dim: str | None = None
     level_value: float | None = None
+    label_dim: str | None = None
+    label_value: str | None = None
 
     # Availability over the append dim (manifest-probed on virtual stores,
     # value-scanned on materialized stores).
@@ -607,13 +610,49 @@ _NON_VERTICAL_DIMS = (
 
 
 def vertical_dims(ds: xr.Dataset, var: str) -> list[str]:
-    """Vertical (level) dims of a variable — anything that isn't time/lead/member/spatial.
+    """Numeric vertical dims, excluding time/lead/member/spatial and categorical axes.
 
     A var in a vertical group (e.g. ``pressure_level/temperature``) keeps its level dim
     after flattening; single-level vars (``temperature_2m``) have none. Generic across
     level types (pressure_level, model_level, …) — no level name is hard-coded.
     """
-    return [str(d) for d in ds[var].dims if d not in _NON_VERTICAL_DIMS]
+    return [
+        str(d)
+        for d in ds[var].dims
+        if d not in _NON_VERTICAL_DIMS and np.issubdtype(ds[d].dtype, np.number)
+    ]
+
+
+def choose_statistic(ds: xr.Dataset, var: str) -> dict[str, str]:
+    from scripts.validation.scan_common import find_registered_dataset  # noqa: PLC0415
+
+    label_dims = [
+        str(d)
+        for d in ds[var].dims
+        if d not in _NON_VERTICAL_DIMS and not np.issubdtype(ds[d].dtype, np.number)
+    ]
+    if not label_dims:
+        return {}
+    if label_dims != ["statistic"]:
+        raise ValueError(f"{var}: unsupported categorical axes {label_dims}")
+    labels = set(ds["statistic"].values.tolist())
+    if not labels <= {"mean", "standard_deviation"}:
+        raise ValueError(f"{var}: unknown statistic labels {labels}")
+    dataset = find_registered_dataset(ds.attrs.get("dataset_id", ""))
+    data_var = (
+        next((v for v in dataset.template_config.data_vars if v.path == var), None)
+        if dataset is not None
+        else None
+    )
+    if not isinstance(data_var, NoaaRefsDataVar) or not data_var.has_statistic:
+        raise ValueError(f"{var}: statistic axis has no registered source declaration")
+    families = data_var.internal_attrs.source_families
+    if not families or not set(families) <= {"mean", "sprd"}:
+        raise ValueError(f"{var}: unsupported statistic source families {families}")
+    label = "mean" if "mean" in families else "standard_deviation"
+    if label not in labels:
+        raise ValueError(f"{var}: declared statistic {label!r} missing from {labels}")
+    return {"statistic": label}
 
 
 def choose_level(ds: xr.Dataset, var: str, override: float | None) -> dict[str, Any]:
@@ -648,10 +687,27 @@ def select_var_level(ctx: RunContext, var: str, stats: VariableStats) -> dict[st
 
 
 def level_label(stats: VariableStats) -> str:
-    """Display suffix for the sampled level, or empty string for single-level vars."""
-    if stats.level_dim is None:
-        return ""
-    return f" [{stats.level_dim}={stats.level_value:g}]"
+    """Display suffix for the sampled numeric level and categorical statistic."""
+    suffix = ""
+    if stats.level_dim is not None:
+        suffix += f" [{stats.level_dim}={stats.level_value:g}]"
+    if stats.label_dim is not None:
+        suffix += f" [{stats.label_dim}={stats.label_value}]"
+    return suffix
+
+
+def select_var_slice(ctx: RunContext, var: str, stats: VariableStats) -> dict[str, Any]:
+    level_sel = select_var_level(ctx, var, stats)
+    label_sel = choose_statistic(ctx.validation_ds, var)
+    if label_sel:
+        [(stats.label_dim, stats.label_value)] = label_sel.items()
+    return {**level_sel, **label_sel}
+
+
+def deterministic_reference_allowed(stats: VariableStats) -> bool:
+    return stats.label_value in (None, "mean") and not stats.name.endswith(
+        "_standard_deviation"
+    )
 
 
 def is_virtual_store(url: str) -> bool:

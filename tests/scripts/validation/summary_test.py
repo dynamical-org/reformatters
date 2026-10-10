@@ -8,6 +8,7 @@ from scripts.validation.summary import (
     _availability_line,
     _metadata_table,
     _run_parameters_table,
+    _variable_section,
 )
 from scripts.validation.utils import RunContext, VariableStats
 
@@ -87,3 +88,29 @@ def test_metadata_table_puts_comment_last() -> None:
         )
     )
     assert [line for line in table if line][-1] == "| comment | Mask values < -0.1. |"
+
+
+def test_summary_labels_numeric_level_and_statistic_separately(tmp_path: Path) -> None:
+    stats = VariableStats(
+        name="pressure_level/wind_u",
+        level_dim="pressure_level",
+        level_value=500,
+        label_dim="statistic",
+        label_value="standard_deviation",
+    )
+    section = _variable_section(stats, _ctx(_dataset(with_vertical_dim=True), tmp_path))
+    assert section.startswith(
+        "### `pressure_level/wind_u` [pressure_level=500] [statistic=standard_deviation]"
+    )
+    assert "| sampled level | pressure_level=500 |" in section
+    assert "| sampled statistic | statistic=standard_deviation |" in section
+    assert "validation only; deterministic reference not comparable" in section
+
+
+def test_summary_omits_statistic_for_numeric_only_variable(tmp_path: Path) -> None:
+    stats = VariableStats(
+        name="temperature", level_dim="pressure_level", level_value=500
+    )
+    section = _variable_section(stats, _ctx(_dataset(with_vertical_dim=True), tmp_path))
+    assert "statistic" not in section
+    assert section.startswith("### `temperature` [pressure_level=500]")

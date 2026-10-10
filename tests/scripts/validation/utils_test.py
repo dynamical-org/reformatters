@@ -3,17 +3,22 @@ from pathlib import Path
 import icechunk
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from scripts.validation.utils import (
+    RunContext,
     _anonymous_virtual_credentials,
     _icechunk_storage,
     choose_level,
+    choose_statistic,
     get_random_spatial_indices,
     get_two_random_points,
+    level_label,
     load_zarr_dataset,
     nearest_point_index,
     parse_point_options,
+    select_var_slice,
     to_reference_longitude,
     var_slug,
     vertical_dims,
@@ -94,6 +99,88 @@ def test_choose_level_override_selects_nearest() -> None:
         "pressure_level": 700
     }
     assert choose_level(ds, "pressure_level/temperature", 50) == {"pressure_level": 100}
+
+
+@pytest.mark.parametrize("dtype", [object, str])
+def test_statistic_and_numeric_levels_are_independent(
+    statistic_context: RunContext,
+    dtype: type,
+) -> None:
+    ctx = statistic_context
+    ctx.validation_ds = ctx.validation_ds.assign_coords(
+        statistic=np.asarray(["mean", "standard_deviation"], dtype=dtype)
+    )
+    assert vertical_dims(ctx.validation_ds, "wind_u_10m") == []
+    assert choose_level(ctx.validation_ds, "wind_u_10m", 720) == {}
+    var = "pressure_level/wind_u"
+    assert vertical_dims(ctx.validation_ds, var) == ["pressure_level"]
+    stats = ctx.stats_for(var)
+    assert select_var_slice(ctx, var, stats) == {
+        "pressure_level": 500,
+        "statistic": "mean",
+    }
+    assert stats.level_dim == "pressure_level"
+    assert stats.level_value == 500
+    assert level_label(stats) == " [pressure_level=500] [statistic=mean]"
+
+
+@pytest.mark.parametrize(
+    ("var", "expected"),
+    [
+        ("wind_u_10m", "mean"),
+        ("temperature_2m", "mean"),
+        ("composite_reflectivity", "standard_deviation"),
+    ],
+)
+@pytest.mark.parametrize("all_nan", [False, True])
+def test_statistic_selection_uses_declarations_without_reading_values(
+    statistic_context: RunContext,
+    var: str,
+    expected: str,
+    all_nan: bool,
+) -> None:
+    ds = statistic_context.validation_ds
+    if all_nan:
+        ds[var].loc[{"statistic": expected}] = np.nan
+    assert choose_statistic(ds, var) == {"statistic": expected}
+    assert choose_statistic(ds, "temperature_2m_standard_deviation") == {}
+
+
+@pytest.mark.parametrize("labels", [["mean", "median"], ["standard_deviation"]])
+def test_unknown_or_missing_statistic_labels_fail(
+    statistic_context: RunContext,
+    labels: list[str],
+) -> None:
+    ds = statistic_context.validation_ds.isel(statistic=slice(0, len(labels)))
+    ds = ds.assign_coords(statistic=labels)
+    with pytest.raises(ValueError, match=r"wind_u_10m: .*statistic"):
+        choose_statistic(ds, "wind_u_10m")
+
+
+def test_undeclared_categorical_axes_fail(statistic_context: RunContext) -> None:
+    ds = statistic_context.validation_ds
+    ds["undeclared"] = ds["wind_u_10m"]
+    with pytest.raises(ValueError, match=r"undeclared: statistic axis.*declaration"):
+        choose_statistic(ds, "undeclared")
+    ds = ds.rename({"statistic": "category"})
+    with pytest.raises(
+        ValueError, match=r"wind_u_10m: unsupported categorical axes.*category"
+    ):
+        choose_statistic(ds, "wind_u_10m")
+
+
+def test_standalone_product_dimensions_are_preserved(
+    statistic_context: RunContext,
+) -> None:
+    ds = statistic_context.validation_ds
+    standalone = [str(var) for var in ds.data_vars if "statistic" not in ds[var].dims]
+    assert len(standalone) == 4
+    for var in standalone:
+        stats = statistic_context.stats_for(var)
+        dims = ds[var].dims
+        assert select_var_slice(statistic_context, var, stats) == {}
+        assert ds[var].dims == dims
+        assert stats.label_dim is None
 
 
 def test_parse_point_options() -> None:

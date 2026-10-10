@@ -86,6 +86,8 @@ A dataset with vertical groups (e.g. `pressure_level`, `model_level`) exposes gr
 
 Group variables are addressed by their store path: `-v pressure_level/temperature`, not `-v temperature`.
 
+Categorical `statistic` axes are selected independently of numeric levels. Plots use the registered variable's declared source families: `mean` when declared, otherwise `standard_deviation` for spread-only fields. The selection stays fixed when the slice is all NaN. Plot titles and per-variable summary headings and metadata record the statistic; standard deviations receive validation-only plots without deterministic reference comparisons. Unknown categorical axes or undeclared labels raise an error. Manifest and decode scans still cover every declared source family and retain their structural-hole checks.
+
 ## 2. Output layout
 
 Each run writes to a fresh directory under `data/output/`:
