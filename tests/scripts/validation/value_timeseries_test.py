@@ -1,12 +1,15 @@
 from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from scripts.validation.utils import RunContext
 from scripts.validation.value_timeseries import (
     _compute_value_series,
+    _point_arrays,
     _sample_virtual_points,
     run_value_timeseries,
 )
@@ -194,3 +197,48 @@ def test_sample_virtual_points_pins_nonzero_lead_for_accum() -> None:
     da = _sample_virtual_points(ctx, "temperature_2m", stats)
 
     assert da.lead_time.item() > pd.Timedelta(0)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_point_arrays_select_statistic_without_averaging_slices(
+    statistic_context: RunContext,
+    cached: bool,
+) -> None:
+    ctx = statistic_context
+    var = "pressure_level/wind_u"
+    if cached:
+        da = ctx.validation_ds[var].sel(pressure_level=500)
+        ctx.loaded_point_data[var] = (da.isel(ctx.point1_sel), da.isel(ctx.point2_sel))
+    stats = ctx.stats_for(var)
+    p1, p2 = _point_arrays(ctx, var, stats)
+    assert p1.dims == p2.dims == ("init_time", "lead_time")
+    assert float(p1.mean()) == float(p2.mean()) == 2.0
+    assert stats.level_value == 500
+    assert stats.label_value == "mean"
+
+
+@pytest.mark.parametrize("var", ["pressure_level/wind_u", "composite_reflectivity"])
+def test_virtual_sample_and_value_plot_record_statistic(
+    statistic_context: RunContext,
+    monkeypatch: pytest.MonkeyPatch,
+    var: str,
+) -> None:
+    ctx = statistic_context
+    ctx.is_virtual = True
+    ctx.variables = [var]
+    stats = ctx.stats_for(var)
+    sampled = _sample_virtual_points(ctx, var, stats)
+    assert sampled.dims == ("init_time", "point")
+    assert sampled.statistic.item() == stats.label_value
+    expected = "mean" if var.startswith("pressure_level/") else "standard_deviation"
+    assert stats.label_value == expected
+    figure = Mock()
+    monkeypatch.setattr(
+        "scripts.validation.value_timeseries.plt.subplots",
+        Mock(return_value=(figure, np.full((1, 2), Mock()))),
+    )
+    monkeypatch.setattr("scripts.validation.value_timeseries.plt.close", Mock())
+    monkeypatch.setattr("scripts.validation.value_timeseries._draw_value_trace", Mock())
+    run_value_timeseries(ctx)
+    assert f"[statistic={expected}]" in figure.suptitle.call_args.args[0]
+    assert stats.value_std_p1 is None

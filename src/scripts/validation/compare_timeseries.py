@@ -10,6 +10,7 @@ from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
+    deterministic_reference_allowed,
     end_date_option,
     get_two_random_points,
     init_time_option,
@@ -27,7 +28,7 @@ from scripts.validation.utils import (
     resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
-    select_var_level,
+    select_var_slice,
     select_variables_for_plotting,
     start_date_option,
     time_option,
@@ -161,17 +162,23 @@ def _load_timeseries_for_var(
     ctx: RunContext,
     validation_subset: xr.Dataset,
     reference_subset: xr.Dataset,
-    level_sel: dict[str, object],
+    slice_sel: dict[str, object],
 ) -> tuple[xr.DataArray, xr.DataArray | None, xr.DataArray, xr.DataArray | None]:
     val = validation_subset[var]
-    if level_sel:
-        val = val.sel(level_sel)
+    if slice_sel:
+        val = val.sel(slice_sel)
     val_p1 = load_retried(val.isel(ctx.point1_sel))
     val_p2 = load_retried(val.isel(ctx.point2_sel))
     ref_p1: xr.DataArray | None = None
     ref_p2: xr.DataArray | None = None
-    if var in reference_subset.data_vars and (
-        not level_sel or next(iter(level_sel)) in reference_subset[var].dims
+    stats = ctx.stats_for(var)
+    level_sel = {
+        dim: value for dim, value in slice_sel.items() if dim != stats.label_dim
+    }
+    if (
+        deterministic_reference_allowed(stats)
+        and var in reference_subset.data_vars
+        and (not level_sel or next(iter(level_sel)) in reference_subset[var].dims)
     ):
         assert "latitude" in reference_subset.dims
         assert "longitude" in reference_subset.dims
@@ -272,10 +279,10 @@ def run_compare_timeseries(ctx: RunContext) -> None:
 
     for var in ctx.variables:
         stats = ctx.stats_for(var)
-        level_sel = select_var_level(ctx, var, stats)
+        slice_sel = select_var_slice(ctx, var, stats)
         level_note = level_label(stats)
         val_p1, ref_p1, val_p2, ref_p2 = _load_timeseries_for_var(
-            var, ctx, validation_subset, reference_subset, level_sel
+            var, ctx, validation_subset, reference_subset, slice_sel
         )
         _store_temporal_stats(stats, val_p1, val_p2, ref_p1, ref_p2)
         units = stats.units or ""
@@ -306,8 +313,13 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             units,
             f"{var}{level_note} — {p2_title_suffix}",
         )
+        comparison_label = (
+            f"{val_label} vs {ref_label}"
+            if ref_p1 is not None or ref_p2 is not None
+            else f"{val_label} (validation only)"
+        )
         fig_v.suptitle(
-            f"{var}{level_note}\n{val_label} vs {ref_label}\n{title_suffix}",
+            f"{var}{level_note}\n{comparison_label}\n{title_suffix}",
             fontsize=11,
         )
         out_path = ctx.output_dir / f"temporal_{var_slug(var)}.png"

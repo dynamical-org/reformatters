@@ -1,8 +1,15 @@
+from unittest.mock import Mock
+
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
-from scripts.validation.compare_timeseries import select_time_period_for_comparison
+from scripts.validation.compare_timeseries import (
+    run_compare_timeseries,
+    select_time_period_for_comparison,
+)
+from scripts.validation.utils import RunContext
 
 
 def _reference_dataset() -> xr.Dataset:
@@ -78,3 +85,44 @@ def test_unpinned_selection_stays_within_the_archive() -> None:
     start, end = (pd.Timestamp(part) for part in title_suffix.split(" - "))
     assert pd.Timestamp(ds.time.min().item()) <= start
     assert end <= pd.Timestamp(ds.time.max().item())
+
+
+@pytest.mark.parametrize(
+    ("var", "label", "comparable"),
+    [
+        ("pressure_level/wind_u", "mean", True),
+        ("composite_reflectivity", "standard_deviation", False),
+        ("temperature_2m_standard_deviation", None, False),
+    ],
+)
+def test_temporal_statistic_selection_labels_and_reference(
+    statistic_context: RunContext,
+    monkeypatch: pytest.MonkeyPatch,
+    var: str,
+    label: str | None,
+    comparable: bool,
+) -> None:
+    ctx = statistic_context
+    ctx.variables = [var]
+    figure, draw = Mock(), Mock()
+    monkeypatch.setattr(
+        "scripts.validation.compare_timeseries.plt.subplots",
+        Mock(return_value=(figure, np.full((1, 2), Mock()))),
+    )
+    monkeypatch.setattr("scripts.validation.compare_timeseries.plt.close", Mock())
+    monkeypatch.setattr(
+        "scripts.validation.compare_timeseries._draw_timeseries_at_point", draw
+    )
+    run_compare_timeseries(ctx)
+    for call in draw.call_args_list:
+        assert call.args[1].dims == ("lead_time",)
+        assert (call.args[2] is not None) == comparable
+    stats = ctx.stats[var]
+    assert stats.ref_available_temporal == comparable
+    assert stats.label_value == label
+    title = figure.suptitle.call_args.args[0]
+    assert (" vs " in title) == comparable
+    if label is not None:
+        assert f"[statistic={label}]" in title
+    if not comparable:
+        assert "validation only" in title

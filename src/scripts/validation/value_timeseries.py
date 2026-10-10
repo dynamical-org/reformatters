@@ -25,7 +25,7 @@ from scripts.validation.utils import (
     point_option,
     resolve_output_dir,
     scope_time_period,
-    select_var_level,
+    select_var_slice,
     select_variables_for_plotting,
     start_date_option,
     var_slug,
@@ -140,7 +140,7 @@ def _sample_virtual_points(
         dim: xr.DataArray([ctx.point1_sel[dim], ctx.point2_sel[dim]], dims="point")
         for dim in ctx.point1_sel
     }
-    for dim, label in select_var_level(ctx, var, stats).items():
+    for dim, label in select_var_slice(ctx, var, stats).items():
         loc = da.get_index(dim).get_loc(label)
         assert isinstance(loc, int)
         indexers[dim] = loc
@@ -167,7 +167,16 @@ def _point_arrays(
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """Reuse arrays loaded by run_value_availability, else load them (standalone / virtual)."""
     if var in ctx.loaded_point_data:
-        return ctx.loaded_point_data[var]
+        slice_sel = select_var_slice(ctx, var, stats)
+        da_p1, da_p2 = ctx.loaded_point_data[var]
+        return (
+            da_p1.sel(
+                {dim: value for dim, value in slice_sel.items() if dim in da_p1.dims}
+            ),
+            da_p2.sel(
+                {dim: value for dim, value in slice_sel.items() if dim in da_p2.dims}
+            ),
+        )
     if ctx.is_virtual:
         da = _sample_virtual_points(ctx, var, stats)
         append_dim = "init_time" if "init_time" in da.dims else "time"
@@ -177,12 +186,12 @@ def _point_arrays(
         )
         points = load_retried(da)
         return points.isel(point=0), points.isel(point=1)
-    level_sel = select_var_level(ctx, var, stats)
+    slice_sel = select_var_slice(ctx, var, stats)
     da_p1 = ctx.validation_ds.isel(ctx.point1_sel)[var]
     da_p2 = ctx.validation_ds.isel(ctx.point2_sel)[var]
-    if level_sel:
-        da_p1 = da_p1.sel(level_sel)
-        da_p2 = da_p2.sel(level_sel)
+    if slice_sel:
+        da_p1 = da_p1.sel(slice_sel)
+        da_p2 = da_p2.sel(slice_sel)
     return load_retried(da_p1), load_retried(da_p2)
 
 

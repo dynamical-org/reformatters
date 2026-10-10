@@ -11,6 +11,7 @@ from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
+    deterministic_reference_allowed,
     end_date_option,
     get_two_random_points,
     has_geographic_xy,
@@ -28,7 +29,7 @@ from scripts.validation.utils import (
     resolve_reference_url,
     scope_time_period,
     select_random_ensemble_member,
-    select_var_level,
+    select_var_slice,
     select_variables_for_plotting,
     start_date_option,
     time_option,
@@ -152,32 +153,21 @@ def _compute_spatial_stats(
 
 def _spatial_color_range(
     var: str,
-    data: xr.DataArray,
-    ref_data: xr.DataArray | None,
     data_clean: np.ndarray,
     ref_clean: np.ndarray,
 ) -> tuple[float, float]:
     """Shared (vmin, vmax) for the reference and validation maps."""
-    if ref_data is not None:
-        vmin = min(float(data.min()), float(ref_data.min()))
-        vmax = max(float(data.max()), float(ref_data.max()))
-    else:
-        vmin = float(data.min()) if data_clean.size else 0.0
-        vmax = float(data.max()) if data_clean.size else 1.0
+    combined_clean = np.concatenate([data_clean, ref_clean])
+    vmin = float(combined_clean.min()) if combined_clean.size else 0.0
+    vmax = float(combined_clean.max()) if combined_clean.size else 1.0
 
-    if var == "precipitation_surface":
+    if var == "precipitation_surface" and combined_clean.size:
         # Precip's heavy right tail lets a few extreme cells wash out all spatial detail
         # under a raw-max scale; clip vmax to the 99th percentile, falling back to the
         # raw max for a near-constant field to avoid a degenerate vmin == vmax range.
-        combined_clean = (
-            np.concatenate([data_clean, ref_clean])
-            if ref_data is not None
-            else data_clean
-        )
-        if combined_clean.size:
-            p99 = float(np.quantile(combined_clean, 0.99))
-            if p99 > vmin:
-                vmax = p99
+        p99 = float(np.quantile(combined_clean, 0.99))
+        if p99 > vmin:
+            vmax = p99
     return vmin, vmax
 
 
@@ -201,7 +191,7 @@ def _draw_spatial_triplet(
     the two maps cover one window. Pass False when the two label the same globe
     differently, which would otherwise squeeze each map into part of its axis.
     """
-    vmin, vmax = _spatial_color_range(var, data, ref_data, data_clean, ref_clean)
+    vmin, vmax = _spatial_color_range(var, data_clean, ref_clean)
 
     lon_min = float(data.longitude.min())
     lon_max = float(data.longitude.max())
@@ -223,7 +213,7 @@ def _draw_spatial_triplet(
         ax_ref.text(
             0.5,
             0.5,
-            "Variable not\navailable in\nreference dataset",
+            "No comparable\nreference field",
             ha="center",
             va="center",
             transform=ax_ref.transAxes,
@@ -298,11 +288,14 @@ def _draw_spatial_triplet(
 
 
 def _reference_data(
-    ref_ds: xr.Dataset, var: str, level_sel: dict[str, object]
+    ref_ds: xr.Dataset, var: str, slice_sel: dict[str, object], stats: VariableStats
 ) -> xr.DataArray | None:
     """Reference field for `var` at the sampled level, or None if not comparable."""
-    if var not in ref_ds.data_vars:
+    if not deterministic_reference_allowed(stats) or var not in ref_ds.data_vars:
         return None
+    level_sel = {
+        dim: value for dim, value in slice_sel.items() if dim != stats.label_dim
+    }
     ref_data = ref_ds[var]
     if level_sel:
         dim = next(iter(level_sel))
@@ -356,14 +349,14 @@ def run_compare_spatial(ctx: RunContext) -> None:
 
     for var in ctx.variables:
         stats = ctx.stats_for(var)
-        level_sel = select_var_level(ctx, var, stats)
+        slice_sel = select_var_slice(ctx, var, stats)
         level_note = level_label(stats)
 
         data = ds[var]
-        if level_sel:
-            data = data.sel(level_sel)
+        if slice_sel:
+            data = data.sel(slice_sel)
         data = load_retried(data)
-        ref_data = _reference_data(ref_ds, var, level_sel)
+        ref_data = _reference_data(ref_ds, var, slice_sel, stats)
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 
         stats.spatial_time_label = val_time_label
@@ -376,7 +369,7 @@ def run_compare_spatial(ctx: RunContext) -> None:
         ref_title = (
             f"{ref_label}\n{var}{level_note} @ {ref_time_label}"
             if ref_data is not None
-            else f"{ref_label}\n{var}{level_note} (not available)"
+            else "Validation only\nNo comparable reference"
         )
 
         # Per-variable figure
