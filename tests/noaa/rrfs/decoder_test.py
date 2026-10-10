@@ -143,9 +143,7 @@ def test_column_soil_water_scaled_to_mass_per_area(
     assert variable.internal_attrs.grib_index_level == provenance["level"]
     assert variable.attrs.units == "kg m-2"
     assert variable.attrs.standard_name is None
-    assert (
-        variable.attrs.comment == "Integration depth is not specified. NaN over water."
-    )
+    assert variable.attrs.comment == "NaN over water."
     assert np.isnan(variable.encoding.fill_value)
     with (
         rasterio.Env(GRIB_NORMALIZE_UNITS="NO"),

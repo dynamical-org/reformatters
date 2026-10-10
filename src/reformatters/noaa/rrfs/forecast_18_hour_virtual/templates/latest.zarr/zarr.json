@@ -996,7 +996,7 @@
           "short_name": "sbta1810",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1052,7 +1052,7 @@
           "short_name": "sbta1811",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1108,7 +1108,7 @@
           "short_name": "sbta1812",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1164,7 +1164,7 @@
           "short_name": "sbta1813",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1220,7 +1220,7 @@
           "short_name": "sbta1814",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1276,7 +1276,7 @@
           "short_name": "sbta1815",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1332,7 +1332,7 @@
           "short_name": "sbta1816",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1388,7 +1388,7 @@
           "short_name": "sbta188",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1444,7 +1444,7 @@
           "short_name": "sbta189",
           "standard_name": "brightness_temperature",
           "units": "K",
-          "comment": "NaN where the point lies beyond GOES-18's view limit.",
+          "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2610,7 +2610,7 @@
           "long_name": "Column-integrated soil water",
           "short_name": "cisoilw",
           "units": "kg m-2",
-          "comment": "Integration depth is not specified. NaN over water.",
+          "comment": "NaN over water.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14484,7 +14484,7 @@
           "short_name": "slt",
           "standard_name": "soil_type",
           "units": "1",
-          "comment": "STATSGO soil classes used by the RUC land surface model. Code 0 denotes a water point.",
+          "comment": "STATSGO soil classes used by the RUC land surface model.",
           "step_type": "instant",
           "flag_values": [
             0,
@@ -17547,7 +17547,7 @@
           "long_name": "Vegetation Type",
           "short_name": "vgtyp",
           "units": "1",
-          "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
+          "comment": "Modified IGBP vegetation classes used by the RUC land surface model.",
           "step_type": "instant",
           "flag_values": [
             0,

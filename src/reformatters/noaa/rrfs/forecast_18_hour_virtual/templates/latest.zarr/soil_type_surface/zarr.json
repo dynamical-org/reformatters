@@ -39,7 +39,7 @@
     "short_name": "slt",
     "standard_name": "soil_type",
     "units": "1",
-    "comment": "STATSGO soil classes used by the RUC land surface model. Code 0 denotes a water point.",
+    "comment": "STATSGO soil classes used by the RUC land surface model.",
     "step_type": "instant",
     "flag_values": [
       0,

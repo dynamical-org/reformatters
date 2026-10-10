@@ -38,7 +38,7 @@
     "long_name": "Vegetation Type",
     "short_name": "vgtyp",
     "units": "1",
-    "comment": "Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
+    "comment": "Modified IGBP vegetation classes used by the RUC land surface model.",
     "step_type": "instant",
     "flag_values": [
       0,

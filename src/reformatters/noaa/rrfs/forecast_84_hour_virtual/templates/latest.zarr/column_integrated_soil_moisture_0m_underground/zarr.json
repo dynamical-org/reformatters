@@ -44,7 +44,7 @@
     "long_name": "Column-integrated soil water",
     "short_name": "cisoilw",
     "units": "kg m-2",
-    "comment": "Integration depth is not specified. NaN over water.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

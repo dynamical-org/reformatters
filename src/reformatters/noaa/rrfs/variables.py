@@ -755,7 +755,7 @@ VARIABLE_DEFINITIONS = (
             short_name="cisoilw",
             units="kg m-2",
             step_type="instant",
-            comment="Integration depth is not specified. NaN over water.",
+            comment="NaN over water.",
         ),
     ),
     VariableDefinition(
@@ -1564,7 +1564,7 @@ VARIABLE_DEFINITIONS = (
                 21,
             ),
             flag_meanings="water_point evergreen_needleleaf_forest evergreen_broadleaf_forest deciduous_needleleaf_forest deciduous_broadleaf_forest mixed_forests closed_shrublands open_shrublands woody_savannas savannas grasslands permanent_wetlands croplands urban_and_built_up cropland_natural_vegetation_mosaic snow_and_ice barren_or_sparsely_vegetated water wooded_tundra mixed_tundra barren_tundra lakes",
-            comment="Modified IGBP vegetation classes used by the RUC land surface model. Code 0 denotes a water point.",
+            comment="Modified IGBP vegetation classes used by the RUC land surface model.",
         ),
     ),
     VariableDefinition(
@@ -1600,7 +1600,7 @@ VARIABLE_DEFINITIONS = (
                 19,
             ),
             flag_meanings="water_point sand loamy_sand sandy_loam silt_loam silt loam sandy_clay_loam silty_clay_loam clay_loam sandy_clay silty_clay clay organic_material water bedrock other_land_ice playa lava white_sand",
-            comment="STATSGO soil classes used by the RUC land surface model. Code 0 denotes a water point.",
+            comment="STATSGO soil classes used by the RUC land surface model.",
         ),
     ),
     VariableDefinition(
@@ -3376,7 +3376,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA188",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 8",
             short_name="sbta188",
             units="K",
@@ -3390,7 +3390,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA189",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 9",
             short_name="sbta189",
             units="K",
@@ -3404,7 +3404,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1810",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 10",
             short_name="sbta1810",
             units="K",
@@ -3418,7 +3418,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1811",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 11",
             short_name="sbta1811",
             units="K",
@@ -3432,7 +3432,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1812",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 12",
             short_name="sbta1812",
             units="K",
@@ -3446,7 +3446,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1813",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 13",
             short_name="sbta1813",
             units="K",
@@ -3460,7 +3460,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1814",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 14",
             short_name="sbta1814",
             units="K",
@@ -3474,7 +3474,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1815",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 15",
             short_name="sbta1815",
             units="K",
@@ -3488,7 +3488,7 @@ VARIABLE_DEFINITIONS = (
         level="top of atmosphere",
         alternatives=("SBTA1816",),
         attrs=DataVarAttrs(
-            comment="NaN where the point lies beyond GOES-18's view limit.",
+            comment="NaN outside GOES-West's coverage.",
             long_name="Simulated brightness temperature for ABI GOES-18, band 16",
             short_name="sbta1816",
             units="K",
