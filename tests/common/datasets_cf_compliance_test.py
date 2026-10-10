@@ -672,7 +672,7 @@ def test_cf_standard_name_and_units(
 ) -> None:
     """
     For each data variable:
-    1. standard_name must be set (or the variable must be in ALLOWED_MISSING_STANDARD_NAME)
+    1. standard_name must be set unless covered by a missing-name allowlist
     2. If standard_name is set, it must exist in the CF Standard Name Table
     3. If standard_name is set, units must match CF canonical units (with allowlist)
     4. standard_name must be properly written to and recognized in the zarr template
@@ -1868,6 +1868,17 @@ DATASET_MISSING_STANDARD_NAME_EXEMPT = {
         var.internal_attrs.source_families[0] == "pmmn"
         and var.internal_attrs.grib_element in {"MXUPHL", "RETOP"}
     )
+}
+# RRFS column soil water lacks a specified integration depth.
+DATASET_MISSING_STANDARD_NAME_EXEMPT |= {
+    (
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
+    (
+        "noaa-rrfs-forecast-84-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
 }
 # Grid-relative component winds retain the projected-grid quantity.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {

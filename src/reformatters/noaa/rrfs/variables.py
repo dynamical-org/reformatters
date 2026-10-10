@@ -749,12 +749,13 @@ VARIABLE_DEFINITIONS = (
         name="column_integrated_soil_moisture_0m_underground",
         element="CISOILM",
         level="0 m underground",
+        filters=({"name": "scale_offset", "configuration": {"scale": 0.001}},),
         attrs=DataVarAttrs(
             long_name="Column-integrated soil water",
             short_name="cisoilw",
             units="kg m-2",
             step_type="instant",
-            standard_name="mass_content_of_water_in_soil",
+            comment="Integration depth is not specified. NaN over water.",
         ),
     ),
     VariableDefinition(
@@ -1664,18 +1665,6 @@ VARIABLE_DEFINITIONS = (
             short_name="pres",
             units="Pa",
             standard_name="air_pressure",
-            step_type="instant",
-        ),
-    ),
-    VariableDefinition(
-        name="surface_lifted_index_500_1000mb",
-        element="LFTX",
-        level="500-1000 mb",
-        attrs=DataVarAttrs(
-            long_name="Surface lifted index",
-            short_name="lftx",
-            standard_name="temperature_difference_between_ambient_air_and_air_lifted_adiabatically_from_the_surface",
-            units="K",
             step_type="instant",
         ),
     ),

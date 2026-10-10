@@ -294,5 +294,23 @@
     "sha256": "45aaab04a57ecc44dc1de2c9f77e3ce4809f49dfa6a5683904bcb4c5e43eb2f5",
     "element": "RLYRS",
     "level": "surface"
+  },
+  "semantic-markers/A-column_integrated_soil_moisture_0m_underground.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
+    "sha256": "4203adb321ba4fbf61b09eace517e1934897fc9449f0e1dfb881076ff081eee1",
+    "element": "CISOILM",
+    "level": "0 m underground",
+    "start": 76032410,
+    "end": 77038811,
+    "index_line": "65:76032410:d=2026081400:CISOILM:0 m underground:6 hour fcst:"
+  },
+  "semantic-markers/C-column_integrated_soil_moisture_0m_underground.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+    "sha256": "026c68ba7f20f1a891e42a1001675adea85f65f4e62b5af179c7a2935f5814ee",
+    "element": "CISOILM",
+    "level": "0 m underground",
+    "start": 75001350,
+    "end": 75996786,
+    "index_line": "65:75001350:d=2026100812:CISOILM:0 m underground:60 hour fcst:"
   }
 }

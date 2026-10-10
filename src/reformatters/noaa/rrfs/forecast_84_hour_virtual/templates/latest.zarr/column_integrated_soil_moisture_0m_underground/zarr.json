@@ -26,6 +26,12 @@
   "fill_value": "NaN",
   "codecs": [
     {
+      "name": "scale_offset",
+      "configuration": {
+        "scale": 0.001
+      }
+    },
+    {
       "name": "gribberish",
       "configuration": {
         "var": "CISOILM",
@@ -37,8 +43,8 @@
   "attributes": {
     "long_name": "Column-integrated soil water",
     "short_name": "cisoilw",
-    "standard_name": "mass_content_of_water_in_soil",
     "units": "kg m-2",
+    "comment": "Integration depth is not specified. NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

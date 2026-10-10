@@ -23,8 +23,8 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 318),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 318),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 317),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 317),
         (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 38),
         (NoaaRrfsEnsForecastVirtualTemplateConfig(), 62),
     ],
@@ -63,6 +63,7 @@ def test_configured_field_inventory(
             "vertical_v_component_shear_0_1000m",
             "categorical_precipitation_exceeding_flash_flood_guidance_surface",
             "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
+            "surface_lifted_index_500_1000mb",
         }
     )
     if not config.sub_hourly:

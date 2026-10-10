@@ -115,6 +115,71 @@ def test_semantic_markers_read_as_nan(
     )
 
 
+@pytest.mark.parametrize(
+    "config",
+    [
+        NoaaRrfsForecast84HourVirtualTemplateConfig(),
+        NoaaRrfsForecast18HourVirtualTemplateConfig(),
+    ],
+    ids=lambda c: c.dataset_id,
+)
+@pytest.mark.parametrize("sample", ["A", "C"])
+def test_column_soil_water_scaled_to_mass_per_area(
+    config: NoaaRrfsForecast84HourVirtualTemplateConfig
+    | NoaaRrfsForecast18HourVirtualTemplateConfig,
+    sample: str,
+    tmp_path: Path,
+) -> None:
+    name = "column_integrated_soil_moisture_0m_underground"
+    filename = f"semantic-markers/{sample}-{name}.grib2"
+    content = (FIXTURES / filename).read_bytes()
+    provenance = json.loads((FIXTURES / "semantic_marker_sources.json").read_text())[
+        filename
+    ]
+    assert hashlib.sha256(content).hexdigest() == provenance["sha256"]
+    assert len(content) == provenance["end"] - provenance["start"] + 1
+    variable = next(v for v in config.data_vars if v.name == name)
+    assert variable.internal_attrs.grib_element == provenance["element"] == "CISOILM"
+    assert variable.internal_attrs.grib_index_level == provenance["level"]
+    assert variable.attrs.units == "kg m-2"
+    assert variable.attrs.standard_name is None
+    assert (
+        variable.attrs.comment == "Integration depth is not specified. NaN over water."
+    )
+    assert np.isnan(variable.encoding.fill_value)
+    with (
+        rasterio.Env(GRIB_NORMALIZE_UNITS="NO"),
+        rasterio.MemoryFile(content) as file,
+        file.open() as source,
+    ):
+        missing = source.read_masks(1) == 0
+        expected = source.read(1, out_dtype="float64") * 1000
+    assert missing.any()
+    assert not missing.all()
+    expected[missing] = np.nan
+    metadata = json.loads((config.template_path() / name / "zarr.json").read_text())
+    assert metadata["codecs"][0] == {
+        "name": "scale_offset",
+        "configuration": {"scale": 0.001},
+    }
+    store = tmp_path / "soil-water.zarr"
+    write_single_grib_chunk(store, name, metadata, content)
+    with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
+        actual = dataset[name].values.squeeze()
+    np.testing.assert_array_equal(np.isnan(actual), missing)
+    np.testing.assert_allclose(
+        actual, expected, rtol=float(np.finfo(np.float32).eps), atol=0
+    )
+    unscaled_metadata = json.loads(json.dumps(metadata))
+    unscaled_metadata["codecs"].pop(0)
+    unscaled_store = tmp_path / "unscaled-soil-water.zarr"
+    write_single_grib_chunk(unscaled_store, name, unscaled_metadata, content)
+    with xr.open_zarr(unscaled_store, consolidated=False, chunks=None) as dataset:
+        unscaled = dataset[name].values.squeeze()
+    np.testing.assert_array_equal(np.isnan(actual), np.isnan(unscaled))
+    np.testing.assert_allclose(actual, unscaled / 0.001, rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("sample", ["A", "C"])
 def test_semantic_marker_physical_controls(sample: str, tmp_path: Path) -> None:
     config = NoaaRrfsForecast84HourVirtualTemplateConfig()
