@@ -38,6 +38,7 @@
     "long_name": "Snow density",
     "short_name": "rsn",
     "units": "kg m-3",
+    "comment": "NaN does not imply absence of snow. Use snow_thickness_surface or snow_water_equivalent_surface to determine snow presence.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

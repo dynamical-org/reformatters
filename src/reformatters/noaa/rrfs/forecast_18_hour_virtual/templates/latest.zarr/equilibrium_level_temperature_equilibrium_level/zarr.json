@@ -45,6 +45,7 @@
     "short_name": "elmelt",
     "standard_name": "air_temperature",
     "units": "degree_Celsius",
+    "comment": "Where no equilibrium level exists the source reports near-surface temperature rather than a missing value. Mask where convective_available_potential_energy_255_0mb is 0.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

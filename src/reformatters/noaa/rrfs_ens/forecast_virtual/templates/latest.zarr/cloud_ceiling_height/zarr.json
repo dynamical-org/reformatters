@@ -40,7 +40,7 @@
     "long_name": "Ceiling",
     "short_name": "ceil",
     "units": "m",
-    "comment": "NaN where no cloud ceiling was detected.",
+    "comment": "Height above mean sea level, not above ground. NaN where no cloud ceiling was detected.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

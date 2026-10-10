@@ -39,7 +39,7 @@
     "short_name": "cape",
     "standard_name": "atmosphere_convective_available_potential_energy",
     "units": "J kg-1",
-    "comment": "The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
+    "comment": "Most unstable parcel searched in the lowest 300 hPa. The 255-0 mb in the name are pressure differences from the surface, not isobaric levels.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

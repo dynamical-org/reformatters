@@ -39,7 +39,6 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "NaN where the 253 K level is at or below ground.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

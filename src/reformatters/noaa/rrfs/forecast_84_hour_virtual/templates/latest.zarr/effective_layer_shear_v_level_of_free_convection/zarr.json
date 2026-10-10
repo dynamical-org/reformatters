@@ -38,6 +38,7 @@
     "long_name": "Effective layer V shear",
     "short_name": "vesh",
     "units": "m s-1",
+    "comment": "Shear along the model grid's y dimension, not northward shear. Zero may mean no effective inflow layer or valid zero shear.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

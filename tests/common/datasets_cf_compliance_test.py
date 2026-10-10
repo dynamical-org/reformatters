@@ -461,8 +461,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "categorical_precipitation_exceeding_2_year_average_recurrence_interval_surface",
     "categorical_precipitation_exceeding_5_year_average_recurrence_interval_run_total_surface",
     "categorical_precipitation_exceeding_5_year_average_recurrence_interval_surface",
-    "categorical_precipitation_exceeding_flash_flood_guidance_run_total_surface",
-    "categorical_precipitation_exceeding_flash_flood_guidance_surface",
     "cloud_ceiling_height",
     "column_integrated_mass_density_atmosphere_dust_dry_below_10um",
     "column_integrated_mass_density_atmosphere_dust_dry_below_2p5um",
@@ -472,6 +470,8 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "downdraft_convective_available_potential_energy_400_0mb",
     "effective_layer_shear_u_level_of_free_convection",
     "effective_layer_shear_v_level_of_free_convection",
+    "effective_layer_storm_motion_u_level_of_free_convection",
+    "effective_layer_storm_motion_v_level_of_free_convection",
     "exchange_coefficient_surface",
     "freezing_rain_surface",
     "horizontal_moisture_convergence_30_0mb",
@@ -672,7 +672,7 @@ def test_cf_standard_name_and_units(
 ) -> None:
     """
     For each data variable:
-    1. standard_name must be set (or the variable must be in ALLOWED_MISSING_STANDARD_NAME)
+    1. standard_name must be set unless covered by a missing-name allowlist
     2. If standard_name is set, it must exist in the CF Standard Name Table
     3. If standard_name is set, units must match CF canonical units (with allowlist)
     4. standard_name must be properly written to and recognized in the zarr template
@@ -782,7 +782,6 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
     "elmelt",
     "hgtmd",
     "qpfari",
-    "qpfffg",
     "sbta1610",
     "sbta1611",
     "sbta1612",
@@ -867,8 +866,8 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     # NOAA local table products without an ECMWF equivalent.
     "Aerosol emission flux",
     "Downdraft convective available potential energy",
-    "Effective inflow layer U wind component",
-    "Effective inflow layer V wind component",
+    "Effective layer U storm motion",
+    "Effective layer V storm motion",
     "Effective layer U shear",
     "Effective layer V shear",
     "Equilibrium level temperature",
@@ -879,7 +878,6 @@ ECMWF_LONGNAME_EXEMPT: set[str] = {
     "Precipitation exceeding 100-year average recurrence interval",
     "Precipitation exceeding 2-year average recurrence interval",
     "Precipitation exceeding 5-year average recurrence interval",
-    "Precipitation exceeding flash flood guidance",
     "Simulated brightness temperature for ABI GOES-16, band 10",
     "Simulated brightness temperature for ABI GOES-16, band 11",
     "Simulated brightness temperature for ABI GOES-16, band 12",
@@ -1094,6 +1092,49 @@ def test_ecmwf_parameter_compliance(
 # Format: (variable_or_coord_name, attribute_name, dataset_id)
 # These are intentional exceptions where source data conventions differ.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
+    # RRFS FROZR represents accumulated graupel.
+    ("frozen_precipitation_surface", "long_name", "noaa-rrfs-forecast-18-hour-virtual"),
+    (
+        "frozen_precipitation_surface",
+        "short_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    ("frozen_precipitation_surface", "long_name", "noaa-rrfs-forecast-84-hour-virtual"),
+    (
+        "frozen_precipitation_surface",
+        "short_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-18-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "long_name",
+        "noaa-rrfs-forecast-sub-hourly-virtual",
+    ),
+    (
+        "frozen_precipitation_run_total_surface",
+        "short_name",
+        "noaa-rrfs-forecast-sub-hourly-virtual",
+    ),
     # GRIB's TCDC, and so ECMWF's tcc, names both the column total and the fraction
     # within a single layer. GFS publishes both, at "entire atmosphere" and at
     # "boundary layer cloud layer", so one dataset carries the two meanings.
@@ -1719,6 +1760,26 @@ _RRFS_DATASETS = [
     if isinstance(d.template_config, NoaaRrfsForecastTemplateConfig)
 ]
 
+# RRFS ice is fractional, and atmospheric MCONV is a column integral.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, attribute, dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    if dataset.dataset_id
+    in {
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    }
+    for key, attribute in {
+        ("ice_cover_surface", "long_name"),
+        ("icec", "long_name"),
+        ("ice_cover_surface", "flag_values"),
+        ("ice_cover_surface", "flag_meanings"),
+        ("horizontal_moisture_convergence_atmosphere", "units"),
+        ("mconv", "units"),
+        ("Horizontal moisture convergence", "units"),
+    }
+}
+
 # Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.
 # Coded RUC soil types support CF soil_type, unlike interpolated GFS classes.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
@@ -1807,6 +1868,17 @@ DATASET_MISSING_STANDARD_NAME_EXEMPT = {
         var.internal_attrs.source_families[0] == "pmmn"
         and var.internal_attrs.grib_element in {"MXUPHL", "RETOP"}
     )
+}
+# RRFS column soil water lacks a specified integration depth.
+DATASET_MISSING_STANDARD_NAME_EXEMPT |= {
+    (
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
+    (
+        "noaa-rrfs-forecast-84-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
 }
 # Grid-relative component winds retain the projected-grid quantity.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {

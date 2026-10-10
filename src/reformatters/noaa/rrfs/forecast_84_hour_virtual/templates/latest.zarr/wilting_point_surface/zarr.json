@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": 0.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -39,10 +39,10 @@
     "short_name": "wilt",
     "standard_name": "volume_fraction_of_condensed_water_in_soil_at_wilting_point",
     "units": "1",
-    "comment": "NaN over water.",
+    "comment": "NaN over water, including inland water bodies.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAAAA="
   },
   "dimension_names": [
     "init_time",

@@ -38,7 +38,7 @@
     "long_name": "Height of aerosol mass density",
     "short_name": "hgtmd",
     "units": "m",
-    "comment": "Highest level at which aerosol mass density exceeds 1e-9 kg m-3.",
+    "comment": "Highest level at which aerosol mass density exceeds 1e-9 kg m-3. NaN where no level exceeds that threshold.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

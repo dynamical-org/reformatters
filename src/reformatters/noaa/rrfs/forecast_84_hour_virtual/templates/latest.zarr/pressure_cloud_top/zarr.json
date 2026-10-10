@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": -50000.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -42,7 +42,7 @@
     "comment": "NaN where no cloud top was detected.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAABq6MA="
   },
   "dimension_names": [
     "init_time",

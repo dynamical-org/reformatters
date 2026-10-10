@@ -38,6 +38,7 @@
     "long_name": "Exchange coefficient",
     "short_name": "sfexc",
     "units": "kg m-2 s-1",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

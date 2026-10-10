@@ -1997,6 +1997,7 @@ def test_refresh_metadata_applies_to_replica_repos(
 
     fixed = _create_template_ds(2)
     fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    fixed["temperature_2m"].encoding.update(fill_value=-9999.0, _FillValue=-9999.0)
     job = _make_region_job(fixed, region=slice(0, 2), processing_mode="update")
     replica_snapshots_before = _snapshot_count(replica_repo)
     job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
@@ -2005,6 +2006,8 @@ def test_refresh_metadata_applies_to_replica_repos(
     for repo in (primary_repo, replica_repo):
         ds = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
         assert ds["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+        assert ds["temperature_2m"].encoding["fill_value"] == -9999.0
+        assert ds["temperature_2m"].encoding["_FillValue"] == -9999.0
 
 
 def test_refresh_metadata_empty_store_returns_without_commit(tmp_path: Path) -> None:

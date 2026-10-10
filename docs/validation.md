@@ -199,6 +199,8 @@ Don't group for its own sake — two unrelated notes forced under one heading is
 
 **Verification gate on `### Review notes`.** Any entry that attributes a gap or sentinel to an **upstream cause** (source outage, upstream archive gap, source-GRIB precision) must be backed by direct evidence: a fetched source file (per the unavailable-timestamp tactic in [3d](#3d-dig-into-each-follow-up-item)) or an inspection of the reference dataset at the same timestamps. If you cannot produce that evidence, the item stays in `### For further review`, not `### Review notes` — "looks like an outage" without verification is exactly the failure mode this gate prevents. The evidence backs the claim but does not go in the note: the published entry states the fact, not how it was established.
 
+Variable metadata corrections may be applied directly to a draft or approved published report alongside a matching metadata PR, with the report leading the production store by a few hours until the PR merges and the next operational update applies it.
+
 **Phrasing gate on `### For further review`.** Bullets in this section must describe an **open question with the evidence already gathered**, not a proposed verification that has not been performed. If a bullet contains "worth re-running", "should re-confirm", "warrants checking", "would be nice to verify", or any other phrasing that names a verification you could run, you have not finished §3d — go run it, then either resolve the item or rewrite the bullet around what the verification revealed.
 
 ### 3f. Batched review for many-variable datasets (AI assistants)

@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": 0.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -39,10 +39,10 @@
     "short_name": "fal",
     "standard_name": "surface_albedo",
     "units": "percent",
-    "comment": "Exactly 0 wherever there is no sunlight; exclude those zeros from a time mean albedo.",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAAAA="
   },
   "dimension_names": [
     "init_time",

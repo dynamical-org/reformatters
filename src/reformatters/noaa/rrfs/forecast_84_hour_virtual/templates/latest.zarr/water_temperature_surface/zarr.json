@@ -44,6 +44,7 @@
     "long_name": "Water temperature",
     "short_name": "wtmp",
     "units": "degree_Celsius",
+    "comment": "NaN over land.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

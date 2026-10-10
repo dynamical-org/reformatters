@@ -39,6 +39,7 @@
     "short_name": "sde",
     "standard_name": "surface_snow_thickness",
     "units": "m",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

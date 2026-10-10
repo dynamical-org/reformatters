@@ -45,6 +45,7 @@
     "short_name": "snowc",
     "standard_name": "surface_snow_area_fraction",
     "units": "1",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

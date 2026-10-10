@@ -23,7 +23,7 @@
       "separator": "/"
     }
   },
-  "fill_value": "NaN",
+  "fill_value": 0.0,
   "codecs": [
     {
       "name": "gribberish",
@@ -38,9 +38,10 @@
     "long_name": "Direct evaporation cease (soil moisture)",
     "short_name": "smdry",
     "units": "1",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-    "_FillValue": "AAAAAAAA+H8="
+    "_FillValue": "AAAAAAAAAAA="
   },
   "dimension_names": [
     "init_time",

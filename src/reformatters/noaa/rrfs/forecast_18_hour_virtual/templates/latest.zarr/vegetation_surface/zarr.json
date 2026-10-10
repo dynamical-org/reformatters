@@ -39,6 +39,7 @@
     "short_name": "veg",
     "standard_name": "vegetation_area_fraction",
     "units": "percent",
+    "comment": "NaN over water.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
