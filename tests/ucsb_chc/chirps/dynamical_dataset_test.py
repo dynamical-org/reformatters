@@ -74,6 +74,9 @@ def _open_store(dataset: UcsbChcChirpsAnalysisMaterializedDataset) -> xr.Dataset
     return xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
 
 
+@pytest.mark.skip(
+    reason="Upstream CHC server outage (2026-10-09); live CHIRPS downloads time out."
+)
 @pytest.mark.slow
 @pytest.mark.parametrize(
     ("make_dataset", "first_day", "source_mm_per_day"),

@@ -100,6 +100,12 @@ from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
+from reformatters.noaa.refs.forecast_3_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecast3HourlyVirtualDataset,
+)
+from reformatters.noaa.refs.forecast_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecastHourlyVirtualDataset,
+)
 from reformatters.noaa.rrfs.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaRrfsForecast18HourVirtualDataset,
 )
@@ -138,6 +144,12 @@ class NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
 
 class NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     base_path: str = "s3://dynamical-noaa-rrfs-ens"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-refs"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -318,6 +330,12 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     NoaaRrfsEnsForecastVirtualDataset(
         primary_storage_config=NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRefsForecastHourlyVirtualDataset(
+        primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRefsForecast3HourlyVirtualDataset(
+        primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
         primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),

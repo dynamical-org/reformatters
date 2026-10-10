@@ -31,6 +31,8 @@ _FRESHNESS_DEADLINES = [
     ("noaa-rrfs-forecast-18-hour-virtual", "2026-09-27 00:00", "155m"),
     ("noaa-rrfs-forecast-sub-hourly-virtual", "2026-09-27 00:00", "125m"),
     ("noaa-rrfs-ens-forecast-virtual", "2026-09-27 00:00", "230m"),
+    ("noaa-refs-forecast-hourly-virtual", "2026-09-27 00:00", "235m"),
+    ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "235m"),
     ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "4D"),
@@ -159,9 +161,13 @@ def test_virtual_polling_starts_before_freshness_deadline() -> None:
 
 @pytest.mark.parametrize(
     "dataset_id",
-    [case[0] for case in _FRESHNESS_DEADLINES if case[0].startswith("noaa-rrfs-")],
+    [
+        case[0]
+        for case in _FRESHNESS_DEADLINES
+        if case[0].startswith(("noaa-rrfs-", "noaa-refs-"))
+    ],
 )
-def test_rrfs_current_init_is_due_at_poll_deadline(
+def test_rrfs_and_refs_current_init_is_due_at_poll_deadline(
     dataset_id: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)

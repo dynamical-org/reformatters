@@ -1,0 +1,62 @@
+{
+  "20260813-00-mean-f01-58.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.mean.f01.conus.grib2",
+    "message": 58,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "freezing_rain_fraction_surface"
+    ]
+  },
+  "20260813-00-sprd-f60-72.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f60.conus.grib2",
+    "message": 72,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "fog_liquid_water_content_0m"
+    ]
+  },
+  "20260813-00-prob-f01-22.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.prob.f01.conus.grib2",
+    "message": 22,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f5000342c8000280010000000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "probability_of_convective_inhibition_90_0mb_below_0"
+    ]
+  },
+  "20260813-00-prob-f60-12.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.prob.f60.conus.grib2",
+    "message": 12,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f5000342c8000080010000000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "probability_of_convective_inhibition_90_0mb_below_0"
+    ]
+  },
+  "20260813-00-mean-f60-59.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.mean.f60.conus.grib2",
+    "message": 59,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f500030000000000000005000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "snowfall_water_equivalent_1_hour_surface"
+    ]
+  },
+  "20260813-00-prob-f01-51.grib2": {
+    "key": "refs.20260813/00/ensprod/refs.t00z.prob.f01.conus.grib2",
+    "message": 51,
+    "drt": 3,
+    "missing_management": 0,
+    "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
+    "variables": [
+      "neighborhood_probability_of_total_snowfall_1_hour_surface_above_0p076"
+    ]
+  }
+}
