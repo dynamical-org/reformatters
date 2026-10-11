@@ -38,6 +38,9 @@ build-backend = "hatchling.build"
 exclude-newer = "5 days"
 exclude-newer-package = { gribberish = "2026-10-07T00:00:00Z" }
 
+[tool.uv.sources]
+gribberish = { git = "https://github.com/aldenks/gribberish", subdirectory = "python", rev = "ed65329ef3589aad8f9ea722adadc100b96fc67a" }
+
 
 [project.scripts]
 main = "reformatters.__main__:app"
