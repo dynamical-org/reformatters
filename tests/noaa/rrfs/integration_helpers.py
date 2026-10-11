@@ -120,11 +120,7 @@ def backfill_and_update_in_isolated_store(
 
     next_init = init + config.append_dim_frequency
     fire = next_init + pd.Timedelta(minutes=dataset.update_offset_minutes)
-    now = (
-        fire
-        + pd.Timedelta(minutes=dataset.update_deadline_minutes)
-        - dataset.virtual_poll_deadline_grace
-    )
+    now = fire + dataset.update_deadline - dataset.virtual_poll_deadline_grace
     monkeypatch.setattr(
         pd.Timestamp,
         "now",

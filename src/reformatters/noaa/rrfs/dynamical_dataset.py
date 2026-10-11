@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any, ClassVar, Generic, TypeVar
 
-from pydantic import Field, NonNegativeInt, PositiveInt
+from pydantic import Field, NonNegativeInt
 
 from reformatters.common import validation
 from reformatters.common.config_models import DataVar
@@ -26,7 +26,9 @@ class NoaaRrfsDataset(
 ):
     template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     update_offset_minutes: NonNegativeInt
-    update_deadline_minutes: PositiveInt
+    update_deadline: timedelta
+    update_job_deadline: timedelta | None = None
+    min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -62,7 +64,8 @@ class NoaaRrfsDataset(
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
-                pod_active_deadline=timedelta(minutes=self.update_deadline_minutes),
+                pod_active_deadline=self.update_deadline,
+                active_deadline=self.update_job_deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.5",
@@ -74,11 +77,12 @@ class NoaaRrfsDataset(
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(
-                max_delay=timedelta(
-                    minutes=self.update_offset_minutes + self.update_deadline_minutes
-                )
+                max_delay=timedelta(minutes=self.update_offset_minutes)
+                + self.update_deadline
                 - self.virtual_poll_deadline_grace
             ),
-            validation.CheckVirtualManifestCompleteness(),
+            validation.CheckVirtualManifestCompleteness(
+                min_present_fraction=self.min_present_fraction
+            ),
             validation.CheckVirtualDecodeHealth(max_workers=2),
         )

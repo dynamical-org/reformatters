@@ -351,11 +351,9 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     if with_update:
         next_init = init + pd.Timedelta("6h")
         offset = dataset.update_offset_minutes
-        duration = dataset.update_deadline_minutes
+        duration = dataset.update_deadline
         fire = next_init + pd.Timedelta(minutes=offset)
-        now = (
-            fire + pd.Timedelta(minutes=duration) - dataset.virtual_poll_deadline_grace
-        )
+        now = fire + duration - dataset.virtual_poll_deadline_grace
         monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **k: now))
         monkeypatch.setattr(
             NoaaRefsRegionJob,

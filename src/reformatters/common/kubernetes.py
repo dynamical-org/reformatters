@@ -46,6 +46,7 @@ class Job(pydantic.BaseModel):
     parallelism: Annotated[int, pydantic.Field(ge=1)]
 
     pod_active_deadline: timedelta = timedelta(hours=6)
+    active_deadline: timedelta | None = None
     ttl: timedelta = timedelta(days=1)
 
     # Opt out of consolidation. Quick jobs have minimal impact and we'd rather not interrupt and restart longer jobs.
@@ -76,6 +77,11 @@ class Job(pydantic.BaseModel):
             "kind": "Job",
             "metadata": {"name": self.job_name},
             "spec": {
+                **(
+                    {"activeDeadlineSeconds": int(self.active_deadline.total_seconds())}
+                    if self.active_deadline is not None
+                    else {}
+                ),
                 "backoffLimitPerIndex": 5,
                 "completionMode": "Indexed",
                 "completions": self.workers_total,

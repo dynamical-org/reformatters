@@ -1,4 +1,6 @@
-from pydantic import NonNegativeInt, PositiveInt
+from datetime import timedelta
+
+from pydantic import NonNegativeInt
 
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
@@ -9,7 +11,7 @@ from .template_config import NoaaRrfsForecast18HourVirtualTemplateConfig
 class NoaaRrfsForecast18HourVirtualDataset(NoaaRrfsDataset):
     # Files publish near init +110-140 min; polling starts before the first lead.
     update_offset_minutes: NonNegativeInt = 100
-    update_deadline_minutes: PositiveInt = 60
+    update_deadline: timedelta = timedelta(minutes=60)
     template_config: NoaaRrfsForecast18HourVirtualTemplateConfig = (
         NoaaRrfsForecast18HourVirtualTemplateConfig()
     )

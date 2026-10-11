@@ -1,4 +1,7 @@
-from pydantic import NonNegativeInt, PositiveInt
+from datetime import timedelta
+from typing import ClassVar
+
+from pydantic import NonNegativeInt
 
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
@@ -7,9 +10,13 @@ from .template_config import NoaaRrfsForecastSubHourlyVirtualTemplateConfig
 
 
 class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
-    # Files publish near init +80-106 min; polling ends before the next cycle publishes.
+    # Polling leaves time to validate and exit before the next hourly update.
     update_offset_minutes: NonNegativeInt = 75
-    update_deadline_minutes: PositiveInt = 55
+    update_deadline: timedelta = timedelta(minutes=59)
+    update_job_deadline: timedelta | None = timedelta(minutes=59)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=60)
+    # October 7-11, 2026: at least 11/18 source files were published by init +133m.
+    min_present_fraction: ClassVar[tuple[float, ...]] = (11 / 18, 1.0)
     template_config: NoaaRrfsForecastSubHourlyVirtualTemplateConfig = (
         NoaaRrfsForecastSubHourlyVirtualTemplateConfig()
     )
