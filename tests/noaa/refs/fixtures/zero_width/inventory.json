@@ -6,7 +6,7 @@
     "missing_management": 0,
     "s5": "0000003105001d11f500030000000080010000000001000000000000000000000000000000000000000100000000000200",
     "variables": [
-      "freezing_rain_fraction_surface"
+      "categorical_freezing_rain_surface"
     ]
   },
   "20260813-00-sprd-f60-72.grib2": {

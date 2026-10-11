@@ -280,9 +280,9 @@
     "metadata_sha256": "b520b0f28a7b5297bba9b486da39814d357c6144f33a0d0c8704c607991ba68f"
   },
   {
-    "path": "freezing_rain_fraction_surface",
+    "path": "categorical_freezing_rain_surface",
     "cadence_hours": 1,
-    "metadata_sha256": "815844c576bbd73126ae2a73c9154c1b1fc430004b5feec2d8beeb8444ddf17c"
+    "metadata_sha256": "890536640f2335fa1ee1313d6cdf15f9c90874b1a657fc0c67dfa6d265d49e0e"
   },
   {
     "path": "geopotential_height_0c_isotherm",
@@ -340,9 +340,9 @@
     "metadata_sha256": "0597cfcebee4ea038f7304ec040cd955f7d8cd4063d03c5065197408396ca51d"
   },
   {
-    "path": "ice_pellets_fraction_surface",
+    "path": "categorical_ice_pellets_surface",
     "cadence_hours": 1,
-    "metadata_sha256": "1f94663a7a8c79640fdb181433a99a353623423238392295a8ebdcbbd0f12fa3"
+    "metadata_sha256": "d360564f81a0609fc32f54253434d2bce5ae37326d56197c650b8fc90bd38f76"
   },
   {
     "path": "localized_probability_matched_mean_total_precipitation_1_hour_surface",
@@ -1140,11 +1140,6 @@
     "metadata_sha256": "85b09e35530e49d14ea3fa4cdc9dc8fab78225ac5c79b2708ba9fd4b89e28aa8"
   },
   {
-    "path": "probability_of_convective_inhibition_90_0mb_below_0",
-    "cadence_hours": 1,
-    "metadata_sha256": "5a86290adaa508b5b9a466ebe4d28cd742ea022f908bd72eb5805e0276497095"
-  },
-  {
     "path": "probability_of_convective_inhibition_90_0mb_below_minus_100",
     "cadence_hours": 1,
     "metadata_sha256": "68c2bc4ff9930ccdb566f5475f9f2c636d9ee5e5ea64d578652fbe1fdd4d98d7"
@@ -1515,9 +1510,9 @@
     "metadata_sha256": "0c81b07b2b63941bd3a9ec25b894d9175474a6fd78654d241b77d19317fd0990"
   },
   {
-    "path": "rain_fraction_surface",
+    "path": "categorical_rain_surface",
     "cadence_hours": 1,
-    "metadata_sha256": "a27690f77c465d7b45cd697f29e139b1afb3ca5fc5f94e5d2a18bfc425e72999"
+    "metadata_sha256": "470e38d07b9b761ee1fedd05a45476a7f546a4679b98c4973641133f4b2b034a"
   },
   {
     "path": "relative_humidity_700hpa",
@@ -1525,9 +1520,9 @@
     "metadata_sha256": "bbf62fc95e943bcdf1952cdaf69e4993399baf0fcc62eb1b4099a56c0ebf34ef"
   },
   {
-    "path": "snow_fraction_surface",
+    "path": "categorical_snow_surface",
     "cadence_hours": 1,
-    "metadata_sha256": "7617051f37c60a0a89db03c8361cbf13980d2bf008a0fe827fee6ef9c2823725"
+    "metadata_sha256": "d4b98b9acd2c79b7d1c8a13b063fc70c0e1c9adf60eb52d9226851d4fbc2564c"
   },
   {
     "path": "snowfall_water_equivalent_1_hour_surface",

@@ -18,6 +18,246 @@
     "kind": "inline",
     "must_understand": false,
     "metadata": {
+      "categorical_freezing_rain_surface": {
+        "shape": [
+          1,
+          60,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "CFRZR",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Categorical freezing rain",
+          "short_name": "cfrzr",
+          "units": "1",
+          "comment": "Indicates whether freezing rain is the dominant precipitation type.",
+          "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "categorical_ice_pellets_surface": {
+        "shape": [
+          1,
+          60,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "CICEP",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Categorical ice pellets",
+          "short_name": "cicep",
+          "units": "1",
+          "comment": "Indicates whether ice pellets is the dominant precipitation type.",
+          "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "categorical_rain_surface": {
+        "shape": [
+          1,
+          60,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "CRAIN",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Categorical rain",
+          "short_name": "crain",
+          "units": "1",
+          "comment": "Indicates whether rain is the dominant precipitation type.",
+          "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "categorical_snow_surface": {
+        "shape": [
+          1,
+          60,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "CSNOW",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Categorical snow",
+          "short_name": "csnow",
+          "units": "1",
+          "comment": "Indicates whether snow is the dominant precipitation type.",
+          "step_type": "instant",
+          "flag_values": [
+            0,
+            1
+          ],
+          "flag_meanings": "no yes",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "composite_reflectivity": {
         "shape": [
           1,
@@ -1596,64 +1836,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "freezing_rain_fraction_surface": {
-        "shape": [
-          1,
-          2,
-          60,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CFRZR",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Freezing rain occurrence fraction",
-          "short_name": "cfrzr_fraction",
-          "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing freezing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "statistic",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "geopotential_height_0c_isotherm": {
         "shape": [
           1,
@@ -2282,64 +2464,6 @@
           "units": "dBZ",
           "comment": "Maximum value over the preceding hour. The mean slice is always missing; the probability-matched mean is provided as a separate variable. Standard deviation includes members' no-echo markers. Differences in echo presence or in the markers contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height.",
           "step_type": "max",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "statistic",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "ice_pellets_fraction_surface": {
-        "shape": [
-          1,
-          2,
-          60,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CICEP",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Ice pellets occurrence fraction",
-          "short_name": "cicep_fraction",
-          "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing ice pellets by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
-          "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -7222,61 +7346,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "probability_of_convective_inhibition_90_0mb_below_0": {
-        "shape": [
-          1,
-          60,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CIN",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Probability of convective inhibition (90-0 mb above ground) below 0 J kg-1",
-          "short_name": "probability_of_convective_inhibition_90_0mb_below_0",
-          "units": "percent",
-          "comment": "Probability of convective inhibition (90-0 mb above ground) below 0 J kg-1. The 90-0 mb in the name are pressure differences from the surface, not isobaric levels. Convective inhibition is negative where there is inhibition and at or near zero where there is none.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "probability_of_convective_inhibition_90_0mb_below_minus_100": {
         "shape": [
           1,
@@ -11347,64 +11416,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "rain_fraction_surface": {
-        "shape": [
-          1,
-          2,
-          60,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CRAIN",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Rain occurrence fraction",
-          "short_name": "crain_fraction",
-          "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "statistic",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "relative_humidity_700hpa": {
         "shape": [
           1,
@@ -11448,64 +11459,6 @@
           "short_name": "r",
           "standard_name": "relative_humidity",
           "units": "percent",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "statistic",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "snow_fraction_surface": {
-        "shape": [
-          1,
-          2,
-          60,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "CSNOW",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Snow occurrence fraction",
-          "short_name": "csnow_fraction",
-          "units": "1",
-          "comment": "Mean divides the sum of weights of members diagnosing snow by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

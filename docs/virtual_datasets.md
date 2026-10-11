@@ -125,6 +125,8 @@ What is already ingested is derived from ref existence in the icechunk manifest 
 
 Arrays may use different ordered subsets of their group's dimensions through `TemplateConfig.data_var_dims`. Emit coordinate labels for the axes each referenced array actually has. Source-file coordinates must carry only the variables available for that file's family, statistic, lead and window; completeness and decode checks use this list to exclude structural holes such as a standard-deviation-only variable's absent mean.
 
+A source family can supply both statistic-bearing arrays and arrays without `statistic`: the chunk-key resolver ignores source-coordinate labels for dimensions an array does not have.
+
 A source message may supply multiple arrays. Declare each output in the source coordinate and retain completeness checks for each array. Deliberately empty statistic slices receive no references.
 
 ## Replicas

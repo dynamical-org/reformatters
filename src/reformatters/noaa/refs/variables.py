@@ -205,31 +205,15 @@ _FIELDS = {
         ),
         filters=(),
     ),
-    ("CFRZR", "surface"): ProductField(
-        name="freezing_rain_fraction_surface",
-        element="CFRZR",
+    ("CFRZR", "surface"): _rrfs_field(
+        "categorical_freezing_rain_surface",
+        name="categorical_freezing_rain_surface",
         level="surface",
-        attrs=DataVarAttrs(
-            short_name="cfrzr_fraction",
-            long_name="Freezing rain occurrence fraction",
-            units="1",
-            standard_name=None,
-            step_type="instant",
-        ),
-        filters=(),
     ),
-    ("CICEP", "surface"): ProductField(
-        name="ice_pellets_fraction_surface",
-        element="CICEP",
+    ("CICEP", "surface"): _rrfs_field(
+        "categorical_ice_pellets_surface",
+        name="categorical_ice_pellets_surface",
         level="surface",
-        attrs=DataVarAttrs(
-            short_name="cicep_fraction",
-            long_name="Ice pellets occurrence fraction",
-            units="1",
-            standard_name=None,
-            step_type="instant",
-        ),
-        filters=(),
     ),
     ("CIN", "180-0 mb above ground"): _rrfs_field(
         "convective_inhibition_180_0mb",
@@ -246,31 +230,15 @@ _FIELDS = {
         name="convective_inhibition_surface",
         level="surface",
     ),
-    ("CRAIN", "surface"): ProductField(
-        name="rain_fraction_surface",
-        element="CRAIN",
+    ("CRAIN", "surface"): _rrfs_field(
+        "categorical_rain_surface",
+        name="categorical_rain_surface",
         level="surface",
-        attrs=DataVarAttrs(
-            short_name="crain_fraction",
-            long_name="Rain occurrence fraction",
-            units="1",
-            standard_name=None,
-            step_type="instant",
-        ),
-        filters=(),
     ),
-    ("CSNOW", "surface"): ProductField(
-        name="snow_fraction_surface",
-        element="CSNOW",
+    ("CSNOW", "surface"): _rrfs_field(
+        "categorical_snow_surface",
+        name="categorical_snow_surface",
         level="surface",
-        attrs=DataVarAttrs(
-            short_name="csnow_fraction",
-            long_name="Snow occurrence fraction",
-            units="1",
-            standard_name=None,
-            step_type="instant",
-        ),
-        filters=(),
     ),
     ("DPT", "2 m above ground"): _rrfs_field(
         "dew_point_temperature_2m",
@@ -868,13 +836,9 @@ _STATISTICS: tuple[tuple[str, str, int, tuple[str, ...]], ...] = (
     ("CAPE", "180-0 mb above ground", 0, ()),
     ("CAPE", "90-0 mb above ground", 0, ()),
     ("CAPE", "surface", 0, ()),
-    ("CFRZR", "surface", 0, ()),
-    ("CICEP", "surface", 0, ()),
     ("CIN", "180-0 mb above ground", 0, ()),
     ("CIN", "90-0 mb above ground", 0, ()),
     ("CIN", "surface", 0, ()),
-    ("CRAIN", "surface", 0, ()),
-    ("CSNOW", "surface", 0, ()),
     ("DPT", "2 m above ground", 0, ()),
     ("DPT", "500 mb", 0, ()),
     ("DPT", "700 mb", 0, ()),
@@ -1201,7 +1165,7 @@ _PROBABILITIES: tuple[
         "CIN",
         "90-0 mb above ground",
         0,
-        ("prob <-100", "prob <-400", "prob <-50", "prob <0"),
+        ("prob <-100", "prob <-400", "prob <-50"),
         (),
     ),
     ("prob", "CRAIN", "surface", 0, ("prob >=1 <0",), ()),
@@ -1604,12 +1568,6 @@ def _statistic_attrs(field: ProductField, *, spread_only: bool) -> DataVarAttrs:
                 )
             ),
         )
-    elif element in _OCCURRENCE_CATEGORIES:
-        category = _OCCURRENCE_CATEGORIES[element]
-        attrs = replace(
-            attrs,
-            comment=f"Mean divides the sum of weights of members diagnosing {category} by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
-        )
     elif (element, level) == ("HGT", "surface"):
         attrs = replace(
             attrs,
@@ -1680,6 +1638,22 @@ def _probability_attrs(
 
 def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
     result = []
+    for element, category in _OCCURRENCE_CATEGORIES.items():
+        field = _FIELDS[element, "surface"]
+        result.append(
+            _variable(
+                dims,
+                field,
+                name=field.name,
+                attrs=replace(
+                    field.attrs,
+                    comment=f"Indicates whether {category} is the dominant precipitation type.",
+                ),
+                families=("mean",),
+                duration=0,
+                selectors=(),
+            )
+        )
     for element, level, duration, selectors in _STATISTICS:
         field = _FIELDS[element, level]
         families: tuple[ProductFamily, ...] = (

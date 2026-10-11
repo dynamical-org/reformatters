@@ -1,3 +1,4 @@
+import hashlib
 import json
 import struct
 from pathlib import Path
@@ -19,6 +20,10 @@ from tests.noaa.rrfs.decoder_helpers import write_single_grib_chunk
 
 FIXTURES = Path(__file__).parent / "fixtures/zero_width"
 INVENTORY = json.loads((FIXTURES / "inventory.json").read_text())
+DOMINANT_TYPE_FIXTURES = FIXTURES.parent / "dominant_type"
+DOMINANT_TYPE_INVENTORY = json.loads(
+    (DOMINANT_TYPE_FIXTURES / "inventory.json").read_text()
+)
 
 
 def _sections(raw: bytes) -> dict[int, bytes]:
@@ -56,11 +61,14 @@ def test_zero_group_provenance_and_distinct_header_cases() -> None:
         )[record["message"] - 1]
         coord = file_coord(pd.Timestamp("2026-08-13"), family, lead)
         lookup = job._message_lookup(coord.data_vars, lead.total_seconds() / 3600)
-        names = {
-            v.name
-            for v, _ in lookup[element, level, window, coord.index_selectors(selectors)]
-        }
-        assert names == set(record["variables"]), key
+        identity = element, level, window, coord.index_selectors(selectors)
+        if record["variables"] == [
+            "probability_of_convective_inhibition_90_0mb_below_0"
+        ]:
+            assert identity not in lookup
+        else:
+            names = {v.name for v, _ in lookup[identity]}
+            assert names == set(record["variables"]), key
         raw = (FIXTURES / filename).read_bytes()
         sections = _sections(raw)
         section = sections[5]
@@ -94,10 +102,14 @@ def test_zero_group_constants_match_independent_gdal_through_public_reader(
     np.testing.assert_array_equal(expected, reference)
 
     (name,) = INVENTORY[filename]["variables"]
-    config = next(
-        config for config in CONFIGS if name in {v.name for v in config.data_vars}
-    )
-    metadata = json.loads((config.template_path() / name / "zarr.json").read_text())
+    if name == "probability_of_convective_inhibition_90_0mb_below_0":
+        metadata_path = FIXTURES / "cin_below_zero.zarr.json"
+    else:
+        config = next(
+            config for config in CONFIGS if name in {v.name for v in config.data_vars}
+        )
+        metadata_path = config.template_path() / name / "zarr.json"
+    metadata = json.loads(metadata_path.read_text())
     if name == "fog_liquid_water_content_0m":
         assert {"name": "scale_offset", "configuration": {"scale": 1000.0}} in metadata[
             "codecs"
@@ -109,4 +121,39 @@ def test_zero_group_constants_match_independent_gdal_through_public_reader(
         actual = dataset[name].values.squeeze()
     assert actual.shape == expected.shape
     assert np.isfinite(actual).all()
+    np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize(
+    "record", DOMINANT_TYPE_INVENTORY, ids=lambda record: record["name"]
+)
+def test_dominant_type_flags_match_independent_gdal_through_public_reader(
+    record: dict[str, str | int | list[float]], tmp_path: Path
+) -> None:
+    filename = str(record["filename"])
+    raw = (DOMINANT_TYPE_FIXTURES / filename).read_bytes()
+    assert len(raw) == record["length"]
+    assert hashlib.sha256(raw).hexdigest() == record["sha256"]
+    sections = _sections(raw)
+    assert sections[4][7:9] == b"\x00\x02"
+    assert sections[4][34] == 1
+    with (
+        rasterio.Env(GDAL_CACHEMAX=16 * 1024 * 1024),
+        rasterio.MemoryFile(raw) as file,
+        file.open() as source,
+    ):
+        assert source.shape == (1059, 1799)
+        assert source.nodatavals == (None,)
+        expected = source.read(1)
+    np.testing.assert_array_equal(np.unique(expected), record["unique_values"])
+    name = str(record["name"])
+    config = CONFIGS[0]
+    metadata = json.loads((config.template_path() / name / "zarr.json").read_text())
+    assert metadata["dimension_names"] == ["init_time", "lead_time", "y", "x"]
+    assert metadata["attributes"]["flag_values"] == [0, 1]
+    assert metadata["attributes"]["flag_meanings"] == "no yes"
+    store = tmp_path / "dominant_type.zarr"
+    write_single_grib_chunk(store, name, metadata, raw)
+    with xr.open_zarr(store, consolidated=False, chunks=None) as dataset:
+        actual = dataset[name].values.squeeze()
     np.testing.assert_array_equal(actual, expected)

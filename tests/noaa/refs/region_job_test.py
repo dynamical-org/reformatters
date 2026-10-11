@@ -120,7 +120,7 @@ def file_coord(
     )
 
 
-def test_every_source_message_is_referenced_except_the_explicit_duplicate(
+def test_every_source_message_is_referenced_except_explicit_exclusions(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -160,10 +160,23 @@ def test_every_source_message_is_referenced_except_the_explicit_duplicate(
         accounted = {
             start
             for start, element, level, _, selectors in lines
-            if family == "sprd"
-            and element == "HGT"
-            and level == "surface"
-            and selectors == ("ens spread", "process=193")
+            if (
+                family == "sprd"
+                and level == "surface"
+                and (
+                    (element, selectors) == ("HGT", ("ens spread", "process=193"))
+                    or (
+                        element in ("CRAIN", "CFRZR", "CICEP", "CSNOW")
+                        and selectors == ("ens spread",)
+                    )
+                )
+            )
+            or (
+                family == "prob"
+                and element == "CIN"
+                and level == "90-0 mb above ground"
+                and coord.index_selectors(selectors) == ("prob <0",)
+            )
         }
         assert {ref.offset for ref in refs} == {
             line[0] for line in lines
@@ -231,6 +244,51 @@ def test_mean_coords_exclude_exactly_the_five_spread_only_fields() -> None:
         for c in coords
         if c.source_family not in ("mean", "sprd")
     )
+
+
+@pytest.mark.parametrize("hours", [1, 60])
+def test_dominant_type_flags_reference_only_exact_mean_messages(
+    hours: int, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    variables = [v for v in CONFIG.data_vars if v.attrs.flag_values is not None]
+    assert {v.name for v in variables} == {
+        "categorical_rain_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_snow_surface",
+    }
+    lead = pd.Timedelta(hours=hours)
+    init = pd.Timestamp("2026-08-13")
+    coords = make_job(variables).generate_source_file_coords(
+        xr.Dataset(coords={"init_time": [init], "lead_time": [lead]}), variables
+    )
+    (coord,) = coords
+    assert coord.source_family == "mean"
+    assert {v.name for v in coord.data_vars} == {v.name for v in variables}
+    assert not file_coord(init, "sprd", lead, variables).data_vars
+    path = index_path("mean", hours)
+    local = tmp_path / "index.idx"
+    local.write_bytes(path.read_bytes())
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
+    lines = parse_grib_index_lines(path)
+    refs = make_job(variables).file_refs(coord, lines[-1][0] + 1000)
+    expected = {
+        element: offset
+        for offset, element, level, window, selectors in lines
+        if element in ("CRAIN", "CFRZR", "CICEP", "CSNOW")
+        and level == "surface"
+        and window == f"{hours} hour fcst"
+        and selectors == ("wt ens mean",)
+    }
+    assert len(refs) == len(expected) == 4
+    for ref in refs:
+        assert ref.location == coord.get_url()
+        assert ref.offset == expected[ref.data_var.internal_attrs.grib_element]
+        assert ref.out_loc == coord.out_loc()
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=["hourly", "3-hourly"])
