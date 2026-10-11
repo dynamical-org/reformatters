@@ -12,11 +12,13 @@ from scripts.validation.utils import (
     _icechunk_storage,
     choose_level,
     choose_statistic,
+    format_lead_time,
     get_random_spatial_indices,
     get_two_random_points,
     level_label,
     load_zarr_dataset,
     nearest_point_index,
+    parse_lead_time,
     parse_point_options,
     select_var_slice,
     to_reference_longitude,
@@ -72,6 +74,19 @@ def _grouped_ds() -> xr.Dataset:
 def test_var_slug() -> None:
     assert var_slug("temperature_2m") == "temperature_2m"
     assert var_slug("pressure_level/temperature") == "pressure_level__temperature"
+
+
+@pytest.mark.parametrize(
+    ("lead_time", "label"),
+    [("0h", "0h"), ("6h", "6h"), ("30min", "30min"), ("2h15min", "2h15min")],
+)
+def test_format_lead_time(lead_time: str, label: str) -> None:
+    assert format_lead_time(pd.Timedelta(lead_time)) == label
+
+
+def test_parse_lead_time() -> None:
+    assert parse_lead_time("6") == pd.Timedelta("6h")
+    assert parse_lead_time("2h15min") == pd.Timedelta("2h15min")
 
 
 def test_vertical_dims() -> None:

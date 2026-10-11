@@ -77,7 +77,8 @@ init_time_option = typer.Option(
 lead_time_option = typer.Option(
     None,
     "--lead-time",
-    help="Forecast lead_time in hours for the spatial snapshot (default: random)",
+    help="Forecast lead_time for the spatial snapshot: whole hours (e.g. 6) or a "
+    "pandas timedelta string (e.g. 2h15min) (default: random)",
 )
 
 time_option = typer.Option(
@@ -318,6 +319,22 @@ def scope_time_period(
     if start_date or end_date:
         ds = ds.sel({append_dim: slice(start_date, end_date)})
     return ds
+
+
+def parse_lead_time(lead_time: str) -> pd.Timedelta:
+    return (
+        pd.Timedelta(hours=int(lead_time))
+        if lead_time.isdigit()
+        else pd.Timedelta(lead_time)
+    )
+
+
+def format_lead_time(lead_time: pd.Timedelta) -> str:
+    hours, remainder = divmod(lead_time, pd.Timedelta("1h"))
+    minutes = remainder / pd.Timedelta("1min")
+    if not minutes:
+        return f"{hours}h"
+    return f"{hours}h{minutes:g}min" if hours else f"{minutes:g}min"
 
 
 def var_slug(var: str) -> str:

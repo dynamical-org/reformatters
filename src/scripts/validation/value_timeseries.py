@@ -8,12 +8,12 @@ import xarray as xr
 from matplotlib.axes import Axes
 
 from reformatters.common.logging import get_logger
-from reformatters.common.time_utils import whole_hours
 from scripts.validation.utils import (
     SPATIAL_DIMS,
     RunContext,
     VariableStats,
     end_date_option,
+    format_lead_time,
     get_two_random_points,
     is_virtual_store,
     level_label,
@@ -154,7 +154,7 @@ def _sample_virtual_points(
             lead_index = 1 if da.sizes[dim] > 1 else 0
             indexers[dim] = lead_index
             lead_value = da[dim].values[lead_index]
-            ctx.value_ts_lead_label = f"{whole_hours(pd.Timedelta(lead_value))}h"
+            ctx.value_ts_lead_label = format_lead_time(pd.Timedelta(lead_value))
         else:
             indexers[dim] = 0
             if dim == "ensemble_member":
