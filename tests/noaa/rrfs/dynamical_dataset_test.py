@@ -123,7 +123,9 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert isinstance(current, validation.CheckCurrentData)
     assert current.max_delay == (pd.Timedelta(minutes=offset) + duration - grace)
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
-    assert completeness.min_present_fraction == (1.0,)
+    assert completeness.min_present_fraction == (
+        (11 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
+    )
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.max_workers == 2
     assert decode.allow_all_nan_vars == ()
