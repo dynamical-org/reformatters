@@ -72,7 +72,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
 ):
     product: ChirpsProduct
 
-    download_parallelism: int = 8
+    download_parallelism: int = 3
 
     def generate_source_file_coords(
         self,
