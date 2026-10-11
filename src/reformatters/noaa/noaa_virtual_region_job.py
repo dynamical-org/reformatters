@@ -159,8 +159,8 @@ class NoaaVirtualRegionJob(
                 continue
             for var, level_label in matches:
                 out_loc = {**out_loc_base, **level_label}
-                # A source may publish the same field twice (byte-distinct, identical
-                # values); the first message wins, as it does when reading materialized.
+                # A source may publish byte-distinct copies of a field; the first
+                # message wins, as it does when reading materialized.
                 # One message filling several variables is a different case and stands.
                 cell = (var.path, tuple(sorted(out_loc.items())))
                 if cell in filled:
