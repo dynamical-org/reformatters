@@ -39,7 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "In some deep convective columns the source reports invalid heights, such as 0 m, up to 100000 m, or below geopotential_height_0c_isotherm; no single value or range masks them all.",
+    "comment": "The source can report invalid heights, including 0 m, 100000 m and heights at or below geopotential_height_0c_isotherm. Some invalid heights fall within the usual range, so no single value or threshold masks them all.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
