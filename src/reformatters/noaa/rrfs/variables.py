@@ -1463,7 +1463,7 @@ VARIABLE_DEFINITIONS = (
             standard_name="surface_drag_coefficient_in_air",
             short_name="cd",
             units="1",
-            comment="Zero where the 10 m wind speed is 1 m s-1 or less.",
+            comment="Zero where the 10 m wind speed used to compute it is 1 m s-1 or less; zero does not imply zero surface friction.",
             step_type="instant",
         ),
     ),
