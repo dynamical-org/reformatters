@@ -39,7 +39,7 @@
     "short_name": "gh",
     "standard_name": "geopotential_height",
     "units": "m",
-    "comment": "NaN where the freezing level is at or below ground.",
+    "comment": "Where the freezing level is below ground, values are below the surface height rather than NaN.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
