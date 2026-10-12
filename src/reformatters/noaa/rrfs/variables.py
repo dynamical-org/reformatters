@@ -482,7 +482,7 @@ VARIABLE_DEFINITIONS = (
             short_name="refd",
             standard_name="equivalent_reflectivity_factor",
             units="dBZ",
-            comment="-35 dBZ where the hourly maximum did not exceed about -20 dBZ or the column has no 263 K level.",
+            comment="-35 dBZ where the hourly maximum did not exceed about -20 dBZ, including where the column had no 263 K level throughout the hour.",
             step_type="max",
         ),
     ),
