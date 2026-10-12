@@ -39,7 +39,7 @@
     "short_name": "refc",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "No echo is stored as -20 dBZ. A value of 0 dBZ can also be valid reflectivity.",
+    "comment": "No echo is stored as -20 dBZ.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

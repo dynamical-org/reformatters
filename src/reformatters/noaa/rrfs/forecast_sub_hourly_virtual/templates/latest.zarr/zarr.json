@@ -299,7 +299,7 @@
           "short_name": "refc",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "No echo is stored as -20 dBZ. A value of 0 dBZ can also be valid reflectivity.",
+          "comment": "No echo is stored as -20 dBZ.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -637,7 +637,7 @@
           "long_name": "Freezing Rain",
           "short_name": "frzr",
           "units": "kg m-2",
-          "comment": "Accumulated from the forecast initialization time to this step. Source values may exceed total_precipitation_run_total_surface at the same step.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -692,7 +692,7 @@
           "long_name": "Graupel (snow pellets) precipitation",
           "short_name": "tgrp",
           "units": "kg m-2",
-          "comment": "Accumulated from the forecast initialization time to this step. Source values may exceed total_precipitation_run_total_surface at the same step.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -748,7 +748,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where no cloud was detected. In some source messages, heights beyond the packing range are reduced by multiples of 8192 m and cannot be distinguished from true heights.",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1868,7 +1868,7 @@
           "short_name": "tsnowp",
           "standard_name": "snowfall_amount",
           "units": "kg m-2",
-          "comment": "Accumulated from the forecast initialization time to this step. Source values may exceed total_precipitation_run_total_surface at the same step.",
+          "comment": "Accumulated from the forecast initialization time to this step.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

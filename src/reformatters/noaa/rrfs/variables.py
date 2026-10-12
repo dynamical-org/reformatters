@@ -64,12 +64,12 @@ def data_vars(
         if sub_hourly and definition.name == "geopotential_height_cloud_base":
             attrs = replace(
                 attrs,
-                comment="NaN where no cloud was detected. In some source messages, heights beyond the packing range are reduced by multiples of 8192 m and cannot be distinguished from true heights.",
+                comment="NaN where no cloud was detected.",
             )
         if not members and definition.name == "composite_reflectivity":
             attrs = replace(
                 attrs,
-                comment="No echo is stored as -20 dBZ. A value of 0 dBZ can also be valid reflectivity.",
+                comment="No echo is stored as -20 dBZ.",
             )
         comment = attrs.comment or ""
         if window != "instant" and attrs.flag_values is None:
@@ -84,15 +84,6 @@ def data_vars(
                 }[window]
             )
             attrs = replace(attrs, comment=" ".join(filter(None, (comment, sentence))))
-        if sub_hourly and definition.name in {
-            "total_snow_precipitation_run_total_surface",
-            "frozen_precipitation_run_total_surface",
-            "freezing_rain_run_total_surface",
-        }:
-            attrs = replace(
-                attrs,
-                comment=f"{attrs.comment} Source values may exceed total_precipitation_run_total_surface at the same step.",
-            )
         result.append(
             NoaaRrfsDataVar(
                 name=definition.name,
