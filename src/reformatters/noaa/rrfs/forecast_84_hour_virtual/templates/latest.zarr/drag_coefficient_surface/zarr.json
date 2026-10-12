@@ -39,6 +39,7 @@
     "short_name": "cd",
     "standard_name": "surface_drag_coefficient_in_air",
     "units": "1",
+    "comment": "Zero where the 10 m wind speed is 1 m s-1 or less.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

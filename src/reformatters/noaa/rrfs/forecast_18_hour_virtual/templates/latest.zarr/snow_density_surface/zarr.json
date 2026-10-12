@@ -38,7 +38,7 @@
     "long_name": "Snow density",
     "short_name": "rsn",
     "units": "kg m-3",
-    "comment": "NaN does not imply absence of snow. Use snow_thickness_surface or snow_water_equivalent_surface to determine snow presence.",
+    "comment": "Diagnosed density of newly falling snow from a snow-to-liquid ratio, independent of snow on the ground. NaN where the air 300 m above ground is 5 \u00b0C or warmer.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
