@@ -61,6 +61,16 @@ def data_vars(
         )
         window = definition.window
         attrs = definition.attrs
+        if sub_hourly and definition.name == "geopotential_height_cloud_base":
+            attrs = replace(
+                attrs,
+                comment="NaN where no cloud was detected.",
+            )
+        if not members and definition.name == "composite_reflectivity":
+            attrs = replace(
+                attrs,
+                comment="No echo is stored as -20 dBZ.",
+            )
         comment = attrs.comment or ""
         if window != "instant" and attrs.flag_values is None:
             sentence = (
