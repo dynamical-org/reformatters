@@ -48,15 +48,15 @@ class TinyProductsConfig(NoaaRefsForecastHourlyVirtualTemplateConfig):
 def test_complete_schema_dimensions_and_encoding() -> None:
     config = CombinedProductsConfig()
     variables = config.data_vars
-    assert len(variables) == len({v.path for v in variables}) == 360
-    assert sum(v.has_statistic for v in variables) == 82
+    assert len(variables) == len({v.path for v in variables}) == 359
+    assert sum(v.has_statistic for v in variables) == 78
     assert {
         families: sum(
             v.has_statistic and v.internal_attrs.source_families == families
             for v in variables
         )
         for families in (("mean", "sprd"), ("mean",), ("sprd",))
-    } == {("mean", "sprd"): 64, ("mean",): 13, ("sprd",): 5}
+    } == {("mean", "sprd"): 60, ("mean",): 13, ("sprd",): 5}
     assert (
         sum(
             v.internal_attrs.source_families[0] in ("pmmn", "lpmm", "avrg")
@@ -69,11 +69,18 @@ def test_complete_schema_dimensions_and_encoding() -> None:
             v.internal_attrs.source_families[0] in ("prob", "eas", "ffri")
             for v in variables
         )
-        == 252
+        == 251
     )
-    assert all(
-        v.has_statistic for v in variables if "mean" in v.internal_attrs.source_families
-    )
+    assert {
+        v.name
+        for v in variables
+        if "mean" in v.internal_attrs.source_families and not v.has_statistic
+    } == {
+        "categorical_rain_surface",
+        "categorical_freezing_rain_surface",
+        "categorical_ice_pellets_surface",
+        "categorical_snow_surface",
+    }
     assert all(v.group is ROOT for v in variables)
     assert set(config.dimension_coordinates()) == set(config.all_dims)
     assert config.groups == (ROOT,)
@@ -203,7 +210,66 @@ def test_categorical_probabilities_describe_member_indicators(
     assert var.internal_attrs.grib_index_selectors == ("prob >=1 <0",)
     assert "statistic" not in config.data_var_dims(var)
     assert f"probability_of_{category}_fraction_surface_at_least_1" not in variables
-    assert variables[f"{category}_fraction_surface"].has_statistic
+    assert f"{category}_fraction_surface" not in variables
+
+
+@pytest.mark.parametrize(
+    ("element", "category"),
+    [
+        ("CRAIN", "rain"),
+        ("CSNOW", "snow"),
+        ("CICEP", "ice_pellets"),
+        ("CFRZR", "freezing_rain"),
+    ],
+)
+def test_categorical_flags_describe_dominant_type_without_statistic(
+    element: str, category: str
+) -> None:
+    config = NoaaRefsForecastHourlyVirtualTemplateConfig()
+    variables = {v.name: v for v in config.data_vars}
+    var = variables[f"categorical_{category}_surface"]
+    label = category.replace("_", " ")
+    assert var.attrs.long_name == f"Categorical {label}"
+    assert var.attrs.short_name == element.lower()
+    assert var.attrs.standard_name is None
+    assert var.attrs.units == "1"
+    assert var.attrs.flag_values == (0, 1)
+    assert var.attrs.flag_meanings == "no yes"
+    assert var.attrs.comment == (
+        f"Indicates whether {label} is the dominant precipitation type."
+    )
+    assert not var.has_statistic
+    assert config.data_var_dims(var) == ("init_time", "lead_time", "y", "x")
+    assert var.encoding.chunks == (1, 1, 1059, 1799)
+    assert not var.encoding.filters
+    assert var.internal_attrs.source_families == ("mean",)
+    assert var.internal_attrs.grib_element == element
+    assert var.internal_attrs.grib_index_level == "surface"
+    assert var.internal_attrs.grib_index_selectors == ()
+    assert var.internal_attrs.supported_lead_times == tuple(
+        pd.timedelta_range("1h", "60h", freq="1h")
+    )
+    assert f"{category}_fraction_surface" not in variables
+    assert not any(
+        v.internal_attrs.grib_element == element
+        for v in NoaaRefsForecast3HourlyVirtualTemplateConfig().data_vars
+    )
+
+
+def test_cin_probabilities_exclude_only_the_below_zero_threshold() -> None:
+    variables = [
+        v
+        for v in NoaaRefsForecastHourlyVirtualTemplateConfig().data_vars
+        if v.internal_attrs.grib_element == "CIN"
+        and v.internal_attrs.source_families == ("prob",)
+    ]
+    assert {v.name for v in variables} == {
+        f"probability_of_convective_inhibition_90_0mb_below_minus_{threshold}"
+        for threshold in (50, 100, 400)
+    }
+    assert {v.internal_attrs.grib_index_selectors for v in variables} == {
+        (f"prob <-{threshold}",) for threshold in (50, 100, 400)
+    }
 
 
 def test_probability_level_display_keeps_exact_source_level() -> None:
@@ -281,6 +347,7 @@ def test_mixed_axes_and_utf8_labels_roundtrip_and_resolve_chunk_keys(
     sparse_name = "probability_matched_mean_total_precipitation_1_hour_surface"
     assert ds[sparse_name].dims == ("init_time", "lead_time", "y", "x")
     assert ds.temperature_500hpa.dims == ds.temperature_2m.dims
+    assert ds.categorical_rain_surface.dims == ("init_time", "lead_time", "y", "x")
     assert ds.init_time.size == 2
     job = NoaaRefsRegionJob(
         tmp_store=tmp_path,
@@ -304,8 +371,9 @@ def test_mixed_axes_and_utf8_labels_roundtrip_and_resolve_chunk_keys(
                 vars_by_name["temperature_2m"],
             ),
             (loc, vars_by_name[sparse_name]),
+            ({**loc, "statistic": "mean"}, vars_by_name["categorical_rain_surface"]),
         ]
-    ) == [(0, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 0, 0)]
+    ) == [(0, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 0, 0), (0, 0, 0, 0)]
     roundtrip_path = tmp_path / "roundtrip.zarr"
     template_utils.write_metadata(tree, roundtrip_path)
     with xr.open_datatree(
@@ -319,6 +387,16 @@ def test_mixed_axes_and_utf8_labels_roundtrip_and_resolve_chunk_keys(
             "x",
         )
         assert reopened[sparse_name].dims == ("init_time", "lead_time", "y", "x")
+        assert reopened.categorical_rain_surface.dims == (
+            "init_time",
+            "lead_time",
+            "y",
+            "x",
+        )
+        np.testing.assert_array_equal(
+            reopened.categorical_rain_surface.attrs["flag_values"], [0, 1]
+        )
+        assert reopened.categorical_rain_surface.attrs["flag_meanings"] == "no yes"
         assert reopened.init_time.size == 2
 
 
@@ -375,7 +453,7 @@ def test_product_caps_and_vector_spread_have_no_inherited_fill() -> None:
     assert all((v.attrs.comment or "").endswith("Mask values < -0.1.") for v in ffri)
 
 
-def test_statistic_comments_describe_layers_signs_indicators_and_terrain() -> None:
+def test_statistic_comments_describe_layers_signs_and_terrain() -> None:
     variables = {v.name: v for v in CombinedProductsConfig().data_vars}
     for layer in ("180_0mb", "90_0mb"):
         for quantity in (
@@ -403,11 +481,6 @@ def test_statistic_comments_describe_layers_signs_indicators_and_terrain() -> No
         ):
             comment = variables[f"wind_{component}_{level}"].attrs.comment or ""
             assert f"grid's {axis} dimension, not {direction} velocity" in comment
-    for category in ("freezing_rain", "ice_pellets", "rain", "snow"):
-        comment = variables[f"{category}_fraction_surface"].attrs.comment or ""
-        assert f"members diagnosing {category.replace('_', ' ')}" in comment
-        assert "total weight of contributing members" in comment
-        assert "weighted population standard deviation of the same 0/1" in comment
     assert "differences in terrain height between member grids" in (
         variables["geopotential_height_surface"].attrs.comment or ""
     )
@@ -561,7 +634,7 @@ def test_hourly_maximum_probabilities_keep_instantaneous_source_selection(
 @pytest.mark.parametrize(
     ("config_class", "cadence", "count"),
     [
-        (NoaaRefsForecastHourlyVirtualTemplateConfig, 1, 248),
+        (NoaaRefsForecastHourlyVirtualTemplateConfig, 1, 247),
         (NoaaRefsForecast3HourlyVirtualTemplateConfig, 3, 112),
     ],
 )

@@ -1,7 +1,6 @@
 {
   "shape": [
     1,
-    2,
     60,
     1059,
     1799
@@ -11,7 +10,6 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        1,
         1,
         1,
         1059,
@@ -37,17 +35,21 @@
     }
   ],
   "attributes": {
-    "long_name": "Freezing rain occurrence fraction",
-    "short_name": "cfrzr_fraction",
+    "long_name": "Categorical freezing rain",
+    "short_name": "cfrzr",
     "units": "1",
-    "comment": "Mean divides the sum of weights of members diagnosing freezing rain by the total weight of contributing members. Standard deviation is the weighted population standard deviation of the same 0/1 occurrence indicator.",
+    "comment": "Indicates whether freezing rain is the dominant precipitation type.",
     "step_type": "instant",
+    "flag_values": [
+      0,
+      1
+    ],
+    "flag_meanings": "no yes",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
     "init_time",
-    "statistic",
     "lead_time",
     "y",
     "x"
