@@ -1,12 +1,16 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common import download
+from reformatters.common.download import RateLimiter
 from reformatters.common.pydantic import replace
+from reformatters.ucsb_chc.chirps import region_job
 from reformatters.ucsb_chc.chirps.analysis_final.region_job import (
     UcsbChcChirpsAnalysisFinalRegionJob,
 )
@@ -90,14 +94,14 @@ def test_download_file_never_falls_back_to_the_other_product(
 ) -> None:
     requested: list[str] = []
 
-    def fake_download(url: str, dataset_id: str) -> Path:
+    def fake_download(url: str, dataset_id: str, *, rate_limiter: RateLimiter) -> Path:
         requested.append(url)
         if "/prelim/sat/" in url:
             raise FileNotFoundError(url)
         return Path(url)
 
     monkeypatch.setattr(
-        "reformatters.ucsb_chc.chirps.region_job.http_download_to_disk", fake_download
+        "reformatters.ucsb_chc.chirps.region_job.httpx_download_to_disk", fake_download
     )
     coord = UcsbChcChirpsAnalysisSourceFileCoord(
         product="preliminary", time=pd.Timestamp("2025-06-15")
@@ -113,11 +117,11 @@ def test_download_file_never_falls_back_to_the_other_product(
 def test_download_file_propagates_missing_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download(url: str, dataset_id: str) -> Path:
+    def fake_download(url: str, dataset_id: str, *, rate_limiter: RateLimiter) -> Path:
         raise FileNotFoundError(url)
 
     monkeypatch.setattr(
-        "reformatters.ucsb_chc.chirps.region_job.http_download_to_disk", fake_download
+        "reformatters.ucsb_chc.chirps.region_job.httpx_download_to_disk", fake_download
     )
     coord = UcsbChcChirpsAnalysisSourceFileCoord(
         product="final", time=pd.Timestamp("2030-01-01")
@@ -169,3 +173,47 @@ def test_read_data_masks_fill_value_and_converts_to_rate(
     other_data = job.read_data(coord, replace(precip, name="other"))
     assert np.isnan(other_data[0, 0])
     np.testing.assert_allclose(other_data[0, 1], 36.0, rtol=1e-6)
+
+
+def test_downloads_share_one_per_second_limit_including_retries(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    now = 0.0
+    starts: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        nonlocal now
+        now += seconds
+
+    def get(url: str, headers: dict[str, str] | None = None) -> httpx.Response:
+        starts.append(now)
+        return httpx.Response(
+            503 if len(starts) == 1 else 200,
+            request=httpx.Request("GET", url),
+            content=b"tiff",
+        )
+
+    monkeypatch.setattr(download.time, "monotonic", lambda: now)
+    monkeypatch.setattr(download.time, "sleep", sleep)
+    monkeypatch.setattr(download, "exponential_backoff_time", lambda _: 0.0)
+    monkeypatch.setattr(download, "DOWNLOAD_DIR", tmp_path)
+    monkeypatch.setattr(download, "_httpx_client", lambda: MagicMock(get=get))
+    assert region_job.chirps_rate_limiter._rate == 1.0
+    assert region_job.chirps_rate_limiter._burst == 1
+    monkeypatch.setattr(
+        region_job, "chirps_rate_limiter", RateLimiter(max_per_minute=60)
+    )
+
+    for product in ("final", "preliminary"):
+        job = _job(product)
+        assert job.download_parallelism == 1
+        coord = UcsbChcChirpsAnalysisSourceFileCoord(
+            product=product, time=pd.Timestamp("2025-06-15")
+        )
+        assert job.download_file(coord).read_bytes() == b"tiff"
+
+    assert starts == [0.0, 1.0, 2.0]
+    now += 60.0
+    job.download_file(coord)
+    job.download_file(coord)
+    assert starts[-2:] == [62.0, 63.0]

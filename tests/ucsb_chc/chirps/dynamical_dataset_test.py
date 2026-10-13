@@ -11,6 +11,7 @@ import zarr.storage
 from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.download import RateLimiter
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.ucsb_chc.chirps import region_job as chirps_region_job
 from reformatters.ucsb_chc.chirps.analysis_final import (
@@ -151,7 +152,7 @@ def _patch_source(
     monkeypatch.setattr(chirps_region_job, "GRID_LAT_SIZE", _MOCK_GRID_SHAPE[0])
     monkeypatch.setattr(chirps_region_job, "GRID_LON_SIZE", _MOCK_GRID_SHAPE[1])
 
-    def fake_download(url: str, dataset_id: str) -> Path:
+    def fake_download(url: str, dataset_id: str, *, rate_limiter: RateLimiter) -> Path:
         requested_urls.append(url)
         day = pd.Timestamp(url.removesuffix(".tif")[-10:].replace(".", "-"))
         if not available(day):
@@ -168,7 +169,7 @@ def _patch_source(
     reader.__exit__ = lambda self, *args: None
 
     monkeypatch.setattr(
-        "reformatters.ucsb_chc.chirps.region_job.http_download_to_disk", fake_download
+        "reformatters.ucsb_chc.chirps.region_job.httpx_download_to_disk", fake_download
     )
     monkeypatch.setattr("rasterio.open", lambda _path: reader)
 

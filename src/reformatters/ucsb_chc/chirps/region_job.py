@@ -13,7 +13,7 @@ from reformatters.common.config_models import (
     DataVar,
     mask_source_fill_value_inplace,
 )
-from reformatters.common.download import http_download_to_disk
+from reformatters.common.download import RateLimiter, httpx_download_to_disk
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -33,6 +33,8 @@ from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LON_SIZE,
     MM_PER_DAY_TO_KG_M2_S,
 )
+
+chirps_rate_limiter = RateLimiter(max_per_minute=60)
 
 _BASE_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily"
 
@@ -72,7 +74,7 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
 ):
     product: ChirpsProduct
 
-    download_parallelism: int = 3
+    download_parallelism: int = 1
 
     def generate_source_file_coords(
         self,
@@ -87,7 +89,9 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         ]
 
     def download_file(self, coord: UcsbChcChirpsAnalysisSourceFileCoord) -> Path:
-        return http_download_to_disk(coord.get_url(), self.dataset_id)
+        return httpx_download_to_disk(
+            coord.get_url(), self.dataset_id, rate_limiter=chirps_rate_limiter
+        )
 
     def read_data(
         self,
