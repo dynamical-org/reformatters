@@ -317,7 +317,7 @@
   {
     "path": "geopotential_height_cloud_base",
     "cadence_hours": 1,
-    "metadata_sha256": "5cf694699a599be02b9b67510ed16dadad8fab853fc19ac02724db14606db36e"
+    "metadata_sha256": "7b92e3d42f0e9403f51339144041eab8e686a57e45624d16227f6fb2fed7e600"
   },
   {
     "path": "geopotential_height_cloud_ceiling",

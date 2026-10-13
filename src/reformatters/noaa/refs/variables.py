@@ -783,7 +783,7 @@ _FIELD_COMMENTS = {
     (
         "HGT",
         "cloud base",
-    ): "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty. In some source messages, mean heights beyond the packing range of about 8192 m above the minimum are reduced by multiples of 8192 m. The no-cloud height then appears near 3616 m; wrapped values cannot be distinguished from true heights.",
+    ): "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty.",
     (
         "TSOIL",
         "0-0 m below ground",

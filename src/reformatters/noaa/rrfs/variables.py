@@ -61,11 +61,6 @@ def data_vars(
         )
         window = definition.window
         attrs = definition.attrs
-        if sub_hourly and definition.name == "geopotential_height_cloud_base":
-            attrs = replace(
-                attrs,
-                comment="NaN where no cloud was detected.",
-            )
         if not members and definition.name == "composite_reflectivity":
             attrs = replace(
                 attrs,
@@ -419,7 +414,7 @@ VARIABLE_DEFINITIONS = (
         ),
     ),
     VariableDefinition(
-        name="snow_density_surface",
+        name="new_snow_density_surface",
         element="SDEN",
         level="surface",
         attrs=DataVarAttrs(
@@ -1941,7 +1936,7 @@ VARIABLE_DEFINITIONS = (
             short_name="gh",
             standard_name="geopotential_height",
             units="m",
-            comment="NaN where no cloud was detected. In some source messages, heights beyond the packing range are reduced by multiples of 8192 m and cannot be distinguished from true heights; use pressure_cloud_base instead.",
+            comment="NaN where no cloud was detected.",
             step_type="instant",
         ),
     ),
@@ -2036,20 +2031,6 @@ VARIABLE_DEFINITIONS = (
             short_name="btmp",
             units="K",
             standard_name="toa_brightness_temperature",
-            step_type="instant",
-        ),
-    ),
-    VariableDefinition(
-        name="pressure_grid_scale_cloud_top_level",
-        element="PRES",
-        level="grid scale cloud top level",
-        fill_value=-50000.0,
-        attrs=DataVarAttrs(
-            comment="NaN where no cloud top was detected.",
-            long_name="Pressure",
-            short_name="pres",
-            units="Pa",
-            standard_name="air_pressure",
             step_type="instant",
         ),
     ),
@@ -2908,7 +2889,7 @@ VARIABLE_DEFINITIONS = (
         ),
     ),
     VariableDefinition(
-        name="geopotential_height_adiabatic_condensation_level",
+        name="height_above_ground_adiabatic_condensation_level",
         element="HGT",
         level="level of adiabatic condensation from sfc",
         attrs=DataVarAttrs(
@@ -2920,7 +2901,7 @@ VARIABLE_DEFINITIONS = (
         ),
     ),
     VariableDefinition(
-        name="pressure_level_of_adiabatic_condensation_from_sfc",
+        name="pressure_adiabatic_condensation_level",
         element="PRES",
         level="level of adiabatic condensation from sfc",
         attrs=DataVarAttrs(

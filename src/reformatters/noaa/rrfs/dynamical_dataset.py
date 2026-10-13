@@ -29,6 +29,7 @@ class NoaaRrfsDataset(
     update_deadline: timedelta
     update_job_deadline: timedelta | None = None
     min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
+    allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -84,5 +85,7 @@ class NoaaRrfsDataset(
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=self.min_present_fraction
             ),
-            validation.CheckVirtualDecodeHealth(max_workers=2),
+            validation.CheckVirtualDecodeHealth(
+                max_workers=2, allow_all_nan_vars=self.allow_all_nan_vars
+            ),
         )

@@ -448,6 +448,7 @@ CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # RRFS ceiling requires cloud-cover criteria; CF cloud_base_altitude does not.
     # CF condensed soil water includes ice; WTMP includes inland water as well as sea water.
+    # CF surface_snow_density is snow cover; RRFS SDEN is the density of falling snow.
     # Remaining local diagnostics and size-restricted aerosol species lack exact CF quantities.
     "aerosol_emission_flux_atmosphere_dust_dry_below_10um",
     "aerosol_emission_flux_atmosphere_particulate_organic_matter_dry_below_2p5um",
@@ -491,6 +492,7 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "maximum_lightning_threat_2m",
     "maximum_snow_albedo_surface",
     "minimal_stomatal_resistance_surface",
+    "new_snow_density_surface",
     "number_of_soil_layers_in_root_zone_surface",
     "sublimation_evaporation_from_snow_surface",
     "updraft_helicity_5000_2000m",
@@ -1781,16 +1783,6 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     }
 }
 
-# RRFS labels its adiabatic condensation level height as height above ground.
-CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
-    ("geopotential_height_adiabatic_condensation_level", attribute, dataset_id)
-    for attribute in ("long_name", "short_name", "standard_name")
-    for dataset_id in (
-        "noaa-rrfs-forecast-18-hour-virtual",
-        "noaa-rrfs-forecast-84-hour-virtual",
-    )
-}
-
 # Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.
 # Coded RUC soil types support CF soil_type, unlike interpolated GFS classes.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
@@ -1808,13 +1800,12 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     }
     for key in (var.name, var.attrs.short_name, var.attrs.long_name)
 }
-# Source averages, instantaneous density and instantaneous albedo differ from other windows.
+# Source averages and instantaneous albedo differ from other windows.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     (var.name, "step_type", dataset.dataset_id)
     for dataset in _RRFS_DATASETS
     for var in dataset.template_config.data_vars
-    if var.attrs.step_type == "avg"
-    or var.name in {"snow_density_surface", "albedo_surface"}
+    if var.attrs.step_type == "avg" or var.name == "albedo_surface"
 }
 # RUC's STATSGO and modified IGBP tables have their own category sets.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
