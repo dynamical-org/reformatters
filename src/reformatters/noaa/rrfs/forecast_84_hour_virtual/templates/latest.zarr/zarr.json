@@ -444,7 +444,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 10",
           "short_name": "sbta1610",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -499,7 +499,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 11",
           "short_name": "sbta1611",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -554,7 +554,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 12",
           "short_name": "sbta1612",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -609,7 +609,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 13",
           "short_name": "sbta1613",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -664,7 +664,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 14",
           "short_name": "sbta1614",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -719,7 +719,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 15",
           "short_name": "sbta1615",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -774,7 +774,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 16",
           "short_name": "sbta1616",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -829,7 +829,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 7",
           "short_name": "sbta167",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -884,7 +884,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 8",
           "short_name": "sbta168",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -939,7 +939,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-16, band 9",
           "short_name": "sbta169",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -994,7 +994,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 10",
           "short_name": "sbta1810",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1050,7 +1050,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 11",
           "short_name": "sbta1811",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1106,7 +1106,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 12",
           "short_name": "sbta1812",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1162,7 +1162,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 13",
           "short_name": "sbta1813",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1218,7 +1218,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 14",
           "short_name": "sbta1814",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1274,7 +1274,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 15",
           "short_name": "sbta1815",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1330,7 +1330,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 16",
           "short_name": "sbta1816",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1386,7 +1386,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 8",
           "short_name": "sbta188",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -1442,7 +1442,7 @@
         "attributes": {
           "long_name": "Simulated brightness temperature for ABI GOES-18, band 9",
           "short_name": "sbta189",
-          "standard_name": "brightness_temperature",
+          "standard_name": "toa_brightness_temperature",
           "units": "K",
           "comment": "NaN outside GOES-West's coverage.",
           "step_type": "instant",
@@ -4618,6 +4618,7 @@
           "short_name": "cd",
           "standard_name": "surface_drag_coefficient_in_air",
           "units": "1",
+          "comment": "Zero where the 10 m wind speed used to compute it is 1 m s-1 or less; zero does not imply zero surface friction.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5504,7 +5505,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Where the freezing level is below ground, values are below the surface height rather than NaN.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -5611,9 +5612,9 @@
           }
         ],
         "attributes": {
-          "long_name": "Geopotential height",
-          "short_name": "gh",
-          "standard_name": "geopotential_height",
+          "long_name": "Geometric height of adiabatic condensation level above ground",
+          "short_name": "hacg",
+          "standard_name": "atmosphere_lifting_condensation_level_wrt_surface",
           "units": "m",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
@@ -5894,7 +5895,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where the freezing level is at or below ground.",
+          "comment": "Where the freezing level is below ground, values are below the surface height rather than NaN.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -7385,7 +7386,7 @@
           "short_name": "maxref",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "-35 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value. Maximum value over the preceding hour.",
+          "comment": "-35 dBZ where the hourly maximum did not exceed about -20 dBZ. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8220,6 +8221,7 @@
           "long_name": "Layer Thickness",
           "short_name": "layth",
           "units": "m",
+          "comment": "Depth between the model levels where the temperature first reaches -12 \u00b0C and -17 \u00b0C, so values step by model layer depth. Zero where either level is not found.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -8883,7 +8885,7 @@
           "short_name": "refd",
           "standard_name": "equivalent_reflectivity_factor",
           "units": "dBZ",
-          "comment": "-35 dBZ is the source's no-echo floor: those cells mean no echo was detected, not a measured value. Maximum value over the preceding hour.",
+          "comment": "-35 dBZ where the hourly maximum did not exceed about -20 dBZ, including where the column had no 263 K level throughout the hour. Maximum value over the preceding hour.",
           "step_type": "max",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -10944,7 +10946,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_0c_isotherm is NaN in the same locations.",
+          "comment": "Where the freezing level is below ground, values can exceed surface pressure.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -11615,7 +11617,7 @@
           "short_name": "pres",
           "standard_name": "air_pressure",
           "units": "Pa",
-          "comment": "Where the freezing level is at or below ground this reports the surface pressure; geopotential_height_highest_tropospheric_freezing_level is NaN in the same locations.",
+          "comment": "Where the freezing level is below ground, values can exceed surface pressure.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -14143,7 +14145,7 @@
           "long_name": "Snow density",
           "short_name": "rsn",
           "units": "kg m-3",
-          "comment": "NaN does not imply absence of snow. Use snow_thickness_surface or snow_water_equivalent_surface to determine snow presence.",
+          "comment": "Diagnosed density of newly falling snow from a snow-to-liquid ratio, independent of snow on the ground. NaN where the air 300 m above ground is 5 \u00b0C or warmer.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -16419,7 +16421,7 @@
         "attributes": {
           "long_name": "Temperature",
           "short_name": "t",
-          "standard_name": "air_temperature",
+          "standard_name": "air_temperature_at_cloud_top",
           "units": "degree_Celsius",
           "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",

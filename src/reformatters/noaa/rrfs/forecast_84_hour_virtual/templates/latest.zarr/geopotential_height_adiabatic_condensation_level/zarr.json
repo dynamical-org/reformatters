@@ -35,9 +35,9 @@
     }
   ],
   "attributes": {
-    "long_name": "Geopotential height",
-    "short_name": "gh",
-    "standard_name": "geopotential_height",
+    "long_name": "Geometric height of adiabatic condensation level above ground",
+    "short_name": "hacg",
+    "standard_name": "atmosphere_lifting_condensation_level_wrt_surface",
     "units": "m",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",

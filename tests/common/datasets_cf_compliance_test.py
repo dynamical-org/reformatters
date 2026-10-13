@@ -634,6 +634,7 @@ CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
     # Numeric CF soil classes carry dimensionless codes and flag labels.
     ("soil_type", "1"),
     ("air_temperature", "degree_Celsius"),
+    ("air_temperature_at_cloud_top", "degree_Celsius"),
     ("tropopause_air_temperature", "degree_Celsius"),
     ("dew_point_temperature", "degree_Celsius"),
     ("surface_temperature", "degree_Celsius"),
@@ -1778,6 +1779,16 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
         ("mconv", "units"),
         ("Horizontal moisture convergence", "units"),
     }
+}
+
+# RRFS labels its adiabatic condensation level height as height above ground.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    ("geopotential_height_adiabatic_condensation_level", attribute, dataset_id)
+    for attribute in ("long_name", "short_name", "standard_name")
+    for dataset_id in (
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    )
 }
 
 # Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.
