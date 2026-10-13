@@ -39,7 +39,7 @@
     "short_name": "localized_probability_matched_mean_total_precipitation_3_hour_surface",
     "standard_name": "precipitation_amount",
     "units": "kg m-2",
-    "comment": "Accumulated over the preceding 3 hours. Published every 3 forecast hours from lead 3 hours.",
+    "comment": "Accumulated over the preceding 3 hours. Published every 3 forecast hours from lead 3 hours. Small negative values are source artifacts; set values < 0 to zero.",
     "step_type": "accum",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

@@ -1482,15 +1482,18 @@ def _variable(
 ) -> NoaaRefsDataVar:
     var_dims = tuple(dim for dim in dims[ROOT] if has_statistic or dim != "statistic")
     if duration:
+        is_probability = families[0] in ("prob", "eas", "ffri")
         window_comment = (
             f"Threshold applies to the preceding {duration} hour{'s' if duration != 1 else ''} of accumulation."
-            if families[0] in ("prob", "eas", "ffri")
+            if is_probability
             else f"Accumulated over the preceding {duration} hour{'s' if duration != 1 else ''}."
         )
         if duration >= 3:
             window_comment += (
                 f" Published every 3 forecast hours from lead {duration} hours."
             )
+            if not is_probability and field.element in ("APCP", "ASNOW"):
+                window_comment += " Small negative values are source artifacts; set values < 0 to zero."
         attrs = replace(
             attrs,
             step_type="accum",
