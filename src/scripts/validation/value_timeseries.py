@@ -1,13 +1,18 @@
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
+from itertools import product
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
+import zarr
 from matplotlib.axes import Axes
+from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.logging import get_logger
+from reformatters.common.virtual_region_job import _exists_many
 from scripts.validation.utils import (
     SPATIAL_DIMS,
     RunContext,
@@ -146,20 +151,51 @@ def _sample_virtual_points(
         indexers[dim] = loc
 
     for dim in map(str, da.dims):
-        if dim == append_dim or dim in SPATIAL_DIMS or dim in indexers:
+        if dim in (append_dim, "lead_time") or dim in SPATIAL_DIMS or dim in indexers:
             continue
-        if dim == "lead_time":
-            # Smallest nonzero lead: skips the lead-0 structural NaN of accumulated
-            # vars, uniform for all vars.
-            lead_index = 1 if da.sizes[dim] > 1 else 0
-            indexers[dim] = lead_index
-            lead_value = da[dim].values[lead_index]
-            ctx.value_ts_lead_label = format_lead_time(pd.Timedelta(lead_value))
-        else:
-            indexers[dim] = 0
-            if dim == "ensemble_member":
-                ctx.value_ts_member = int(da[dim].values[0])
+        indexers[dim] = 0
+        if dim == "ensemble_member":
+            ctx.value_ts_member = int(da[dim].values[0])
+    if "lead_time" in da.dims:
+        lead_index = _first_referenced_lead_index(ctx, var, indexers)
+        indexers["lead_time"] = lead_index
+        stats.value_ts_lead_label = format_lead_time(
+            pd.Timedelta(da.lead_time.values[lead_index])
+        )
     return da.isel(indexers)
+
+
+def _first_referenced_lead_index(
+    ctx: RunContext, var: str, indexers: Mapping[str, xr.DataArray | int]
+) -> int:
+    """Index of the smallest nonzero lead (lead 0 last) with a chunk reference anywhere
+    along the append dim, at the slice `indexers` pins. Probes the manifest, no decode:
+    accumulations have no lead 0 and a window variable starts at its window length."""
+    da = ctx.validation_ds[var]
+    array = zarr.open_array(ctx.store(), path=var, mode="r")
+    assert isinstance(array.metadata, ArrayV3Metadata)
+    leads = pd.to_timedelta(da.lead_time.values)
+    for lead_index in sorted(
+        range(leads.size), key=lambda i: (leads[i] == pd.Timedelta(0), leads[i])
+    ):
+        chunk_ranges = []
+        for dim, chunk_size, n_chunks in zip(
+            map(str, da.dims), array.chunks, array.cdata_shape, strict=True
+        ):
+            if dim == "lead_time":
+                chunk_ranges.append([lead_index // chunk_size])
+            elif dim in indexers:
+                positions = np.atleast_1d(np.asarray(indexers[dim]))
+                chunk_ranges.append(sorted({int(p) // chunk_size for p in positions}))
+            else:
+                chunk_ranges.append(range(n_chunks))
+        keys = [
+            f"{var}/{array.metadata.chunk_key_encoding.encode_chunk_key(index)}"
+            for index in product(*chunk_ranges)
+        ]
+        if any(_exists_many(ctx.store(), keys).values()):
+            return lead_index
+    raise AssertionError(f"{var} has no chunk references at any lead")
 
 
 def _point_arrays(

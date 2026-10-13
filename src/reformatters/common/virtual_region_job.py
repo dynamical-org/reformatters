@@ -722,7 +722,7 @@ def _chunk_key_encoder(
 
 
 def _exists_many(
-    store: IcechunkStore,
+    store: Store,
     keys: Sequence[str],
     *,
     max_attempts: int = 8,

@@ -5,8 +5,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import zarr
+from zarr.storage import MemoryStore
 
-from scripts.validation.utils import RunContext
+from scripts.validation.utils import SPATIAL_DIMS, RunContext
 from scripts.validation.value_timeseries import (
     _compute_value_series,
     _point_arrays,
@@ -88,6 +90,35 @@ def _grouped_forecast_dataset() -> xr.Dataset:
     )
 
 
+def _chunk_store(ds: xr.Dataset) -> MemoryStore:
+    """One chunk per non-spatial index, as a virtual store has; all-NaN chunks are not
+    written, like source messages that were never referenced."""
+    store = MemoryStore()
+    for name, da in ds.data_vars.items():
+        array = zarr.create_array(
+            store,
+            name=str(name),
+            shape=da.shape,
+            chunks=tuple(
+                size if dim in SPATIAL_DIMS else 1 for dim, size in da.sizes.items()
+            ),
+            dtype=da.dtype,
+            fill_value=np.nan,
+            dimension_names=tuple(map(str, da.dims)),
+        )
+        array[...] = da.values
+    return store
+
+
+def _virtual_ctx(
+    ds: xr.Dataset, output_dir: Path, variables: list[str] | None = None
+) -> RunContext:
+    ctx = _ctx(ds, output_dir, variables)
+    ctx.is_virtual = True
+    ctx.validation_store = _chunk_store(ds)
+    return ctx
+
+
 def _ctx(
     ds: xr.Dataset, output_dir: Path, variables: list[str] | None = None
 ) -> RunContext:
@@ -153,8 +184,7 @@ def test_run_value_timeseries_virtual_samples_one_message_per_position(
     tmp_path: Path,
 ) -> None:
     ds = _grouped_forecast_dataset()
-    ctx = _ctx(ds, tmp_path, variables=["pressure_level/temperature"])
-    ctx.is_virtual = True
+    ctx = _virtual_ctx(ds, tmp_path, variables=["pressure_level/temperature"])
     run_value_timeseries(ctx)
 
     stats = ctx.stats["pressure_level/temperature"]
@@ -168,8 +198,7 @@ def test_run_value_timeseries_virtual_samples_one_message_per_position(
 
 def test_sample_virtual_points_pins_representative_slice() -> None:
     ds = _grouped_forecast_dataset()
-    ctx = _ctx(ds, Path("/unused"), variables=["pressure_level/temperature"])
-    ctx.is_virtual = True
+    ctx = _virtual_ctx(ds, Path("/unused"), variables=["pressure_level/temperature"])
     stats = ctx.stats_for("pressure_level/temperature")
 
     da = _sample_virtual_points(ctx, "pressure_level/temperature", stats)
@@ -179,7 +208,7 @@ def test_sample_virtual_points_pins_representative_slice() -> None:
     # Smallest nonzero lead (index 1) and middle level (index 1 of [1000, 500, 100]).
     assert da.lead_time.item() == ds.lead_time.values[1]
     assert da.pressure_level.item() == ds.pressure_level.values[1]
-    assert ctx.value_ts_lead_label == "6h"
+    assert stats.value_ts_lead_label == "6h"
     assert stats.level_dim == "pressure_level"
     assert stats.level_value == 500
     # Both points come from the same message; values match direct selection.
@@ -190,13 +219,37 @@ def test_sample_virtual_points_pins_representative_slice() -> None:
 def test_sample_virtual_points_pins_nonzero_lead_for_accum() -> None:
     ds = _forecast_dataset()
     ds["temperature_2m"].attrs["step_type"] = "accum"
-    ctx = _ctx(ds, Path("/unused"))
-    ctx.is_virtual = True
+    ctx = _virtual_ctx(ds, Path("/unused"))
     stats = ctx.stats_for("temperature_2m")
 
     da = _sample_virtual_points(ctx, "temperature_2m", stats)
 
     assert da.lead_time.item() > pd.Timedelta(0)
+
+
+def test_sample_virtual_points_pins_first_referenced_lead() -> None:
+    ds = _forecast_dataset()
+    # A 12 hour window variable: no references before lead 12h at any position.
+    ds["temperature_2m"][:, :2] = np.nan
+    ctx = _virtual_ctx(ds, Path("/unused"))
+    stats = ctx.stats_for("temperature_2m")
+
+    da = _sample_virtual_points(ctx, "temperature_2m", stats)
+
+    assert da.lead_time.item() == pd.Timedelta("12h")
+    assert stats.value_ts_lead_label == "12h"
+    assert not np.isnan(da.values).any()
+
+
+def test_sample_virtual_points_pins_lead_0_without_later_references() -> None:
+    ds = _forecast_dataset()
+    ds["temperature_2m"][:, 1:] = np.nan
+    ctx = _virtual_ctx(ds, Path("/unused"))
+    stats = ctx.stats_for("temperature_2m")
+
+    da = _sample_virtual_points(ctx, "temperature_2m", stats)
+
+    assert da.lead_time.item() == pd.Timedelta(0)
 
 
 @pytest.mark.parametrize("cached", [False, True])
@@ -225,6 +278,7 @@ def test_virtual_sample_and_value_plot_record_statistic(
 ) -> None:
     ctx = statistic_context
     ctx.is_virtual = True
+    ctx.validation_store = _chunk_store(ctx.validation_ds)
     ctx.variables = [var]
     stats = ctx.stats_for(var)
     sampled = _sample_virtual_points(ctx, var, stats)

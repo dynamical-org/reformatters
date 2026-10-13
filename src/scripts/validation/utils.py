@@ -13,6 +13,7 @@ import pandas as pd
 import typer
 import xarray as xr
 import zarr
+from zarr.abc.store import Store
 from zarr.storage import ObjectStore, StoreLike
 
 from reformatters.common.retry import retry
@@ -187,6 +188,8 @@ class VariableStats:
     level_value: float | None = None
     label_dim: str | None = None
     label_value: str | None = None
+    # Lead pinned by the virtual value-timeseries sample, for the summary header.
+    value_ts_lead_label: str | None = None
 
     # Availability over the append dim (manifest-probed on virtual stores,
     # value-scanned on materialized stores).
@@ -281,8 +284,7 @@ class RunContext:
     spatial_time_label: str | None = None
     ref_spatial_time_label: str | None = None
     temporal_period_label: str | None = None
-    # Pinned lead/member of the virtual value-timeseries sample, for the summary header.
-    value_ts_lead_label: str | None = None
+    # Pinned member of the virtual value-timeseries sample, for the summary header.
     value_ts_member: int | None = None
     unavailable_timestamps_file: str | None = None
     # One-sentence description of how availability was measured, for the report.
@@ -298,6 +300,13 @@ class RunContext:
         default_factory=dict
     )
     stats: dict[str, VariableStats] = field(default_factory=dict)
+    # Opened on first use and shared, so each manifest is fetched once per run.
+    validation_store: Store | None = None
+
+    def store(self) -> Store:
+        if self.validation_store is None:
+            self.validation_store = open_icechunk_readonly(self.validation_url)
+        return self.validation_store
 
     def stats_for(self, var: str) -> VariableStats:
         if var not in self.stats:
