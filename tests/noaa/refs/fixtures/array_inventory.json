@@ -352,12 +352,12 @@
   {
     "path": "localized_probability_matched_mean_total_precipitation_3_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "5fadd6c61dee3872d3546fe2fa185f28f361eb01210abd147d8e41c6e7aca4dd"
+    "metadata_sha256": "5fcd05ec7badd4808d3780b4051bff1501c198b8d583137256bb31cb87f98473"
   },
   {
     "path": "localized_probability_matched_mean_total_precipitation_6_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "7184849b91f695760c7d29a13149de77d73a312b1383c7773edd3a3e7b3b728a"
+    "metadata_sha256": "1ba97f27da55ee73ed08341a698da7130da59770eda8ba9152ffdc2e6c41ff61"
   },
   {
     "path": "low_cloud_cover",
@@ -377,7 +377,7 @@
   {
     "path": "mean_probability_matched_mean_average_total_precipitation_3_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "3aebf67eb04a8381140b91dcfc119bc31caf2a1e9ca0b5c45dbe7616e32df79c"
+    "metadata_sha256": "b9360888b4c9141b8d889de03e1dce232a3a5054ba5fb5077c6bbe1df9289768"
   },
   {
     "path": "medium_cloud_cover",
@@ -957,7 +957,7 @@
   {
     "path": "probability_matched_mean_total_precipitation_3_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "2c93e34284b249fc17005df0bd2c8fe021e7dd70353e8d16073cc4d3d1e09299"
+    "metadata_sha256": "f80c0d482832bab21eaefc44a546b8b643eaf87a24b665fd0f26fef708f33fa3"
   },
   {
     "path": "probability_of_categorical_freezing_rain_surface",
@@ -1632,17 +1632,17 @@
   {
     "path": "total_precipitation_3_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "becf0dc1f680a8c49a87e425f89bcc23351f70b682ff18a2d5ea50547f8c8196"
+    "metadata_sha256": "98980672e744bd8fca1c4c40b02f855d9b7609bf5afae2ea043987e6565db543"
   },
   {
     "path": "total_precipitation_6_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "3a8fadb1f605e4d63d73fa80410d90e740385110fdc1e2fa96884eb580d3a935"
+    "metadata_sha256": "75dd87e0baacf0a7bd8e85837e31d35ca70cb2edd5d34cf03a7b93543c715f18"
   },
   {
     "path": "total_snowfall_12_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "e5931d4f5071eeb2e53517227c9e6231942367a1971882b4bb7ebf449e2fc11b"
+    "metadata_sha256": "57c0b656b837ee950d0ec685a714434b7fb98e1fdeaaf63a3c03b9e30cb5857b"
   },
   {
     "path": "total_snowfall_1_hour_surface",
@@ -1652,17 +1652,17 @@
   {
     "path": "total_snowfall_24_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "c7257f28b167fe1cc129983484c71b84c6b1498beba6dd7356967a0e5ed9fc74"
+    "metadata_sha256": "c2608b503403b6b57040b58af2874d6dbcfbcd1a803a54ddfb2765f3d0b69a9c"
   },
   {
     "path": "total_snowfall_3_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "5ec1afcc0a8237775a56160b093fd372733fac38fef21beb4549f08ae41c5dd8"
+    "metadata_sha256": "4126881fcced2e82a61e0f9e1c828ebb6012b5d3ffb3e2cb9091f5d9c30f37ca"
   },
   {
     "path": "total_snowfall_6_hour_surface",
     "cadence_hours": 3,
-    "metadata_sha256": "458885b7cd0cdf005b53f47c5bfd78dbdb769aba7c3f679180633d6168e86736"
+    "metadata_sha256": "b1e1cc17ce9904ab54873a2ae16509eebd0237f85f5c60e53fc77560e43edcd4"
   },
   {
     "path": "vertical_velocity_geometric_700_500mb",
