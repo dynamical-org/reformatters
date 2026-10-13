@@ -4,8 +4,10 @@ from typing import ClassVar
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta
+from reformatters.noaa.gfs.forecast.dynamical_dataset import SOURCE_AVAILABILITY
 from reformatters.noaa.gfs.virtual_region_job import (
     GFS_FILE_TYPES,
     NoaaGfsVirtualRegionJob,
@@ -26,6 +28,13 @@ class NoaaGfsForecastVirtualRegionJob(
     # The two 6h cycles before the one a run is firing for, plus its own, so a couple
     # of missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18h")
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(
+            source_cronjob="noaa-gfs-forecast-virtual-update",
+            target_cronjob="noaa-gfs-forecast-update",
+            availability=SOURCE_AVAILABILITY,
+        ),
+    )
 
     def generate_source_file_coords(
         self,
