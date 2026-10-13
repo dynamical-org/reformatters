@@ -21,6 +21,7 @@ from reformatters.common.kubernetes import (
     ReformatCronJob,
     _load_secret_from_kubernetes_api,
     create_job_from_cronjob,
+    has_running_cronjob_job,
     load_secret,
     retry_job_name,
 )
@@ -617,6 +618,566 @@ def test_update_cronjob_has_service_account_and_validation_failure_policy() -> N
     )
 
 
+@pytest.fixture
+def running_cronjob_api(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = Mock(
+        metadata=client.V1ObjectMeta(name="weather-update", uid="current-uid")
+    )
+    batch.list_namespaced_job.return_value = client.V1JobList(
+        items=[
+            client.V1Job(
+                metadata=client.V1ObjectMeta(
+                    name="self-job",
+                    creation_timestamp=datetime(2025, 1, 1, 1, tzinfo=UTC),
+                )
+            )
+        ]
+    )
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+    return batch
+
+
+@pytest.mark.parametrize("owned", [False, True])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(None, id="no-status"),
+        pytest.param(client.V1JobStatus(), id="pending"),
+        pytest.param(client.V1JobStatus(active=1), id="active"),
+        pytest.param(client.V1JobStatus(active=0, failed=3), id="retrying"),
+    ],
+)
+def test_has_running_cronjob_job_without_name_detects_any_unfinished_target(
+    running_cronjob_api: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    owned: bool,
+    status: client.V1JobStatus | None,
+) -> None:
+    labels = {
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": "current-uid",
+    }
+    owners = [
+        client.V1OwnerReference(
+            api_version="batch/v1",
+            kind="CronJob",
+            name="weather-update",
+            uid="current-uid",
+        )
+    ]
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="self-job",
+            labels=None if owned else labels,
+            owner_references=owners if owned else None,
+        ),
+        status=status,
+    )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=[job])
+    retry_name = Mock(
+        side_effect=AssertionError("Unnamed guard must not check retry parents")
+    )
+    monkeypatch.setattr("reformatters.common.kubernetes.retry_job_name", retry_name)
+
+    assert has_running_cronjob_job("weather-update")
+    retry_name.assert_not_called()
+    running_cronjob_api.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+
+
+@pytest.mark.parametrize("condition_type", ["Complete", "Failed"])
+def test_has_running_cronjob_job_without_name_ignores_terminal_targets(
+    running_cronjob_api: Mock,
+    condition_type: str,
+) -> None:
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="target-job",
+            labels={
+                "dynamical.org/cronjob-name": "weather-update",
+                "dynamical.org/cronjob-uid": "current-uid",
+            },
+        ),
+        status=client.V1JobStatus(
+            active=1,
+            conditions=[client.V1JobCondition(type=condition_type, status="True")],
+        ),
+    )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=[job])
+    assert not has_running_cronjob_job("weather-update")
+
+
+@pytest.mark.parametrize("owned", [False, True])
+def test_has_running_cronjob_job_without_name_excludes_foreign_uid(
+    running_cronjob_api: Mock,
+    owned: bool,
+) -> None:
+    labels = {
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": "foreign-uid",
+    }
+    owners = [
+        client.V1OwnerReference(
+            api_version="batch/v1",
+            kind="CronJob",
+            name="weather-update",
+            uid="foreign-uid",
+        )
+    ]
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="target-job",
+            labels=None if owned else labels,
+            owner_references=owners if owned else None,
+        ),
+        status=client.V1JobStatus(active=1),
+    )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=[job])
+    assert not has_running_cronjob_job("weather-update")
+
+
+def test_has_running_cronjob_job_without_name_allows_empty_namespace(
+    running_cronjob_api: Mock,
+) -> None:
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=[])
+    assert not has_running_cronjob_job("weather-update", None)
+
+
+@pytest.mark.parametrize(
+    ("labels", "owner_kind", "owner_name", "owner_uid", "expected"),
+    [
+        pytest.param(
+            None, "CronJob", "weather-update", "current-uid", True, id="owned"
+        ),
+        pytest.param(
+            {
+                "dynamical.org/cronjob-name": "weather-update",
+                "dynamical.org/cronjob-uid": "current-uid",
+            },
+            None,
+            None,
+            None,
+            True,
+            id="manual",
+        ),
+        pytest.param(
+            {
+                "dynamical.org/cronjob-name": "foreign-update",
+                "dynamical.org/cronjob-uid": "current-uid",
+            },
+            None,
+            None,
+            None,
+            False,
+            id="foreign-label",
+        ),
+        pytest.param(
+            {
+                "dynamical.org/cronjob-name": "weather-update",
+                "dynamical.org/cronjob-uid": "stale-uid",
+            },
+            None,
+            None,
+            None,
+            False,
+            id="stale-label",
+        ),
+        pytest.param(
+            {"dynamical.org/cronjob-name": "weather-update"},
+            None,
+            None,
+            None,
+            False,
+            id="missing-uid-label",
+        ),
+        pytest.param(
+            {"dynamical.org/cronjob-uid": "current-uid"},
+            None,
+            None,
+            None,
+            False,
+            id="missing-name-label",
+        ),
+        pytest.param(
+            None, "CronJob", "foreign-update", "current-uid", False, id="foreign-owner"
+        ),
+        pytest.param(
+            None, "CronJob", "weather-update", "stale-uid", False, id="stale-owner"
+        ),
+        pytest.param(
+            None, "Job", "weather-update", "current-uid", False, id="foreign-owner-kind"
+        ),
+        pytest.param(None, None, None, None, False, id="unrelated-name-prefix"),
+    ],
+)
+def test_has_running_cronjob_job_matches_current_provenance(
+    running_cronjob_api: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    labels: dict[str, str] | None,
+    owner_kind: str | None,
+    owner_name: str | None,
+    owner_uid: str | None,
+    expected: bool,
+) -> None:
+    owners = (
+        [
+            client.V1OwnerReference(
+                api_version="batch/v1", kind=owner_kind, name=owner_name, uid=owner_uid
+            )
+        ]
+        if owner_kind
+        else None
+    )
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="weather-update-other",
+            labels=labels,
+            owner_references=owners,
+            creation_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        ),
+        status=client.V1JobStatus(active=1),
+    )
+    running_cronjob_api.list_namespaced_job.return_value.items.append(job)
+    log = Mock()
+    monkeypatch.setattr("reformatters.common.kubernetes.log", log)
+
+    assert has_running_cronjob_job("weather-update", "self-job") is expected
+    running_cronjob_api.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+    if expected:
+        log.info.assert_called_once_with(
+            "CronJob weather-update has unfinished Job weather-update-other"
+        )
+    else:
+        log.info.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        pytest.param(None, True, id="no-status"),
+        pytest.param(client.V1JobStatus(), True, id="pending"),
+        pytest.param(client.V1JobStatus(active=0), True, id="zero-active"),
+        pytest.param(client.V1JobStatus(active=0, failed=3), True, id="retrying"),
+        pytest.param(
+            client.V1JobStatus(active=0, succeeded=1),
+            True,
+            id="succeeded-without-terminal-condition",
+        ),
+        *[
+            pytest.param(
+                client.V1JobStatus(
+                    active=0,
+                    conditions=[
+                        client.V1JobCondition(
+                            type=condition_type, status=condition_status
+                        )
+                    ],
+                ),
+                True,
+                id=f"{condition_type}-{condition_status}",
+            )
+            for condition_type, condition_status in (
+                ("Complete", "False"),
+                ("Failed", "False"),
+                ("Complete", "Unknown"),
+                ("Failed", "Unknown"),
+                ("SuccessCriteriaMet", "True"),
+                ("FailureTarget", "True"),
+            )
+        ],
+        *[
+            pytest.param(
+                client.V1JobStatus(
+                    active=1,
+                    conditions=[
+                        client.V1JobCondition(type=condition_type, status="True")
+                    ],
+                ),
+                False,
+                id=f"terminal-{condition_type}",
+            )
+            for condition_type in ("Complete", "Failed")
+        ],
+    ],
+)
+def test_has_running_cronjob_job_uses_terminal_conditions(
+    running_cronjob_api: Mock, status: client.V1JobStatus | None, expected: bool
+) -> None:
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="other-job",
+            creation_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            labels={
+                "dynamical.org/cronjob-name": "weather-update",
+                "dynamical.org/cronjob-uid": "current-uid",
+            },
+        ),
+        status=status,
+    )
+    running_cronjob_api.list_namespaced_job.return_value.items.append(job)
+    assert has_running_cronjob_job("weather-update", "self-job") is expected
+
+
+@pytest.mark.parametrize("manual", [False, True])
+def test_has_running_cronjob_job_excludes_self(
+    running_cronjob_api: Mock, manual: bool
+) -> None:
+    labels = (
+        {
+            "dynamical.org/cronjob-name": "weather-update",
+            "dynamical.org/cronjob-uid": "current-uid",
+        }
+        if manual
+        else None
+    )
+    owners = (
+        None
+        if manual
+        else [
+            client.V1OwnerReference(
+                api_version="batch/v1",
+                kind="CronJob",
+                name="weather-update",
+                uid="current-uid",
+            )
+        ]
+    )
+    job = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name="self-job",
+            labels=labels,
+            owner_references=owners,
+            creation_timestamp=datetime(2025, 1, 1, 1, tzinfo=UTC),
+        ),
+        status=client.V1JobStatus(active=1),
+    )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=[job])
+    assert not has_running_cronjob_job("weather-update", "self-job")
+
+
+def test_has_running_cronjob_job_ignores_younger_unfinished_jobs(
+    running_cronjob_api: Mock,
+) -> None:
+    labels = {
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": "current-uid",
+    }
+    jobs = [
+        *running_cronjob_api.list_namespaced_job.return_value.items,
+        client.V1Job(
+            metadata=client.V1ObjectMeta(
+                name="finished-job",
+                labels=labels,
+                creation_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+            ),
+            status=client.V1JobStatus(
+                conditions=[client.V1JobCondition(type="Complete", status="True")]
+            ),
+        ),
+        client.V1Job(metadata=client.V1ObjectMeta(name="unrelated-job")),
+        client.V1Job(
+            metadata=client.V1ObjectMeta(
+                name="newer-job",
+                labels=labels,
+                creation_timestamp=datetime(2025, 1, 1, 2, tzinfo=UTC),
+            )
+        ),
+    ]
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=jobs)
+    assert not has_running_cronjob_job("weather-update", "self-job")
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+
+
+def test_has_running_cronjob_job_without_siblings(running_cronjob_api: Mock) -> None:
+    assert not has_running_cronjob_job("weather-update", "self-job")
+
+
+@pytest.mark.parametrize("with_sibling", [False, True])
+def test_has_running_cronjob_job_requires_self_in_list(
+    running_cronjob_api: Mock, with_sibling: bool
+) -> None:
+    jobs = (
+        [
+            client.V1Job(
+                metadata=client.V1ObjectMeta(
+                    name="older-job",
+                    labels={
+                        "dynamical.org/cronjob-name": "weather-update",
+                        "dynamical.org/cronjob-uid": "current-uid",
+                    },
+                    creation_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+                )
+            )
+        ]
+        if with_sibling
+        else []
+    )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=jobs)
+    with pytest.raises(
+        AssertionError, match="Job self-job not found in namespace weather"
+    ):
+        has_running_cronjob_job("weather-update", "self-job")
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+
+
+@pytest.mark.parametrize("reverse_listing", [False, True])
+@pytest.mark.parametrize(
+    ("older_name", "younger_name", "delay"),
+    [
+        pytest.param(
+            "older-job", "younger-job", timedelta(seconds=1), id="older-timestamp"
+        ),
+        pytest.param("a-job", "b-job", timedelta(0), id="same-timestamp-name-tie"),
+        pytest.param(
+            "z-job", "a-job", timedelta(seconds=1), id="timestamp-before-name"
+        ),
+    ],
+)
+def test_has_running_cronjob_job_concurrent_pair_only_younger_defers(
+    running_cronjob_api: Mock,
+    reverse_listing: bool,
+    older_name: str,
+    younger_name: str,
+    delay: timedelta,
+) -> None:
+    labels = {
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": "current-uid",
+    }
+    created = datetime(2025, 1, 1, tzinfo=UTC)
+    jobs = [
+        client.V1Job(
+            metadata=client.V1ObjectMeta(
+                name=older_name, labels=labels, creation_timestamp=created
+            )
+        ),
+        client.V1Job(
+            metadata=client.V1ObjectMeta(
+                name=younger_name, labels=labels, creation_timestamp=created + delay
+            )
+        ),
+    ]
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(
+        items=list(reversed(jobs)) if reverse_listing else jobs
+    )
+    assert not has_running_cronjob_job("weather-update", older_name)
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+    running_cronjob_api.reset_mock()
+    assert has_running_cronjob_job("weather-update", younger_name)
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+
+
+@pytest.mark.parametrize("unrelated_older", [False, True])
+@pytest.mark.parametrize(
+    "parent_name",
+    [
+        pytest.param("weather-update", id="initial-parent"),
+        pytest.param("weather-update-r1", id="retry-parent"),
+        pytest.param("a" * 62 + "b", id="long-digested-parent"),
+    ],
+)
+def test_has_running_cronjob_job_ignores_active_retry_parent_only(
+    running_cronjob_api: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+    parent_name: str,
+    unrelated_older: bool,
+) -> None:
+    _, own_name = retry_job_name(parent_name)
+    if len(parent_name) > 52:
+        assert len(own_name) == 52
+        assert own_name != parent_name + "-r1"
+    own_job = running_cronjob_api.list_namespaced_job.return_value.items[0]
+    own_job.metadata.name = own_name
+    labels = {
+        "dynamical.org/cronjob-name": "weather-update",
+        "dynamical.org/cronjob-uid": "current-uid",
+    }
+    parent = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            name=parent_name,
+            labels=labels,
+            creation_timestamp=datetime(2025, 1, 1, tzinfo=UTC),
+        ),
+        status=client.V1JobStatus(active=1),
+    )
+    jobs = [parent, own_job]
+    if unrelated_older:
+        jobs.append(
+            client.V1Job(
+                metadata=client.V1ObjectMeta(
+                    name="unrelated-older-job",
+                    labels=labels,
+                    creation_timestamp=datetime(2024, 12, 31, tzinfo=UTC),
+                ),
+                status=client.V1JobStatus(active=1),
+            )
+        )
+    running_cronjob_api.list_namespaced_job.return_value = client.V1JobList(items=jobs)
+    log = Mock()
+    monkeypatch.setattr("reformatters.common.kubernetes.log", log)
+
+    assert has_running_cronjob_job("weather-update", own_name) is unrelated_older
+    running_cronjob_api.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
+    running_cronjob_api.list_namespaced_job.assert_called_once_with(
+        "weather", _request_timeout=10
+    )
+    if unrelated_older:
+        log.info.assert_called_once_with(
+            "CronJob weather-update has unfinished Job unrelated-older-job"
+        )
+    else:
+        log.info.assert_not_called()
+
+
+def test_has_running_cronjob_job_requires_current_uid(
+    running_cronjob_api: Mock,
+) -> None:
+    running_cronjob_api.read_namespaced_cron_job.return_value.metadata.uid = None
+    with pytest.raises(AssertionError, match="CronJob has no UID"):
+        has_running_cronjob_job("weather-update", "self-job")
+    running_cronjob_api.list_namespaced_job.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "operation", ["read_namespaced_cron_job", "list_namespaced_job"]
+)
+def test_has_running_cronjob_job_propagates_api_errors(
+    running_cronjob_api: Mock, operation: str
+) -> None:
+    request = getattr(running_cronjob_api, operation)
+    request.side_effect = ApiException(status=403)
+    with pytest.raises(ApiException) as error:
+        has_running_cronjob_job("weather-update", "self-job")
+    assert error.value.status == 403
+    assert request.call_count == 1
+
+
 def _deployed_cronjob(*, suspend: bool = False) -> Mock:
     cronjob = Mock()
     cronjob.metadata.uid = "12345678-1234-1234-1234-123456789abc"
@@ -653,9 +1214,12 @@ def test_create_job_clones_live_template_without_owner_reference(
 
     assert create_job_from_cronjob("weather-update", "weather-retry-r1")
     load_config.assert_called_once_with()
-    batch.read_namespaced_cron_job.assert_called_once_with("weather-update", "weather")
+    batch.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
     batch.create_namespaced_job.assert_called_once()
     namespace, job = batch.create_namespaced_job.call_args.args
+    assert batch.create_namespaced_job.call_args.kwargs == {"_request_timeout": 10}
     assert namespace == "weather"
     assert job.metadata.name == "weather-retry-r1"
     assert job.metadata.owner_references is None
@@ -705,6 +1269,11 @@ def test_create_job_skips_only_within_live_deadline(
         is created
     )
     assert batch.create_namespaced_job.called is created
+    batch.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
+    if created:
+        assert batch.create_namespaced_job.call_args.kwargs == {"_request_timeout": 10}
 
 
 def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -719,6 +1288,9 @@ def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert not create_job_from_cronjob("weather-update", "weather-retry-r1")
+    batch.read_namespaced_cron_job.assert_called_once_with(
+        "weather-update", "weather", _request_timeout=10
+    )
     batch.create_namespaced_job.assert_not_called()
 
 
@@ -761,7 +1333,11 @@ def test_create_job_409_requires_matching_identity(
         with pytest.raises(ApiException) as error:
             create_job_from_cronjob("weather-update", "weather-retry-r1")
         assert error.value.status == 409
-    batch.read_namespaced_job.assert_called_once_with("weather-retry-r1", "weather")
+    batch.create_namespaced_job.assert_called_once()
+    assert batch.create_namespaced_job.call_args.kwargs == {"_request_timeout": 10}
+    batch.read_namespaced_job.assert_called_once_with(
+        "weather-retry-r1", "weather", _request_timeout=10
+    )
 
 
 def test_create_job_propagates_non_conflict_api_error(

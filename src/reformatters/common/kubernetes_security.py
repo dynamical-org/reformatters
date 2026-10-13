@@ -559,7 +559,7 @@ def trigger_deployment_resources(
                     {
                         "apiGroups": ["batch"],
                         "resources": ["jobs"],
-                        "verbs": ["create", "get"],
+                        "verbs": ["create", "get", "list"],
                     },
                 ],
             },

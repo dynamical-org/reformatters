@@ -69,7 +69,17 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
+Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`.
+
+### Materialized update plan
+
+Source-gated production forecast updates first have worker 0 write `plan/ready.json`, including for single-worker Jobs. It freezes the selected init times and template end before any branch or metadata write. Other workers and replacement pods reuse that decision.
+
+An update yields to an older unfinished Job of the same CronJob, identified by its owner reference or the trigger's CronJob name and UID labels. Pending Jobs count; terminal Jobs do not. Creation time, then name, determines ordering. A validation retry ignores its direct parent, which has already finalized its writes before submitting the retry. This is a best-effort check, not a lock: Icechunk's final publication check still resolves concurrent primary writes, and deprecated Zarr replicas retain some exposure.
+
+The plan removes init times at or before the primary store's frontier and trims its end to the newest candidate init that wxopticon has recorded as source-ready. Interior inits remain in the plan even if their source is incomplete. Validation retries retain the frontier for repair; an unrelated older sibling can still cause a retry to yield. `reprocess_materialized_frontier` also retains the frontier for products with delayed extensions, at the cost of repeating work. Source readiness is a monitoring signal, not proof of every materialized value; some source products sample ensemble members.
+
+An empty plan skips processing and still runs final-worker validation. Its small plan file remains so late pods can also skip. Normal publication clears the plan with the other coordination files. Removing the routine frontier re-download means holes below validation thresholds need an explicit repair backfill.
 
 ### Setup signal
 

@@ -18,7 +18,7 @@ rules:
     verbs: [get, trigger]
   - apiGroups: [batch]
     resources: [jobs]
-    verbs: [create, get]
+    verbs: [create, get, list]
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [roles, rolebindings]
     verbs: [create]

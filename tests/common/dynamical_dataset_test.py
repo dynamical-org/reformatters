@@ -1,6 +1,8 @@
+import json
 import subprocess
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -37,7 +39,8 @@ from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.monitoring import monitor_cron
-from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.source_availability import SourceAvailability, Summary
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     _NO_SECRET_NAME,
@@ -1234,3 +1237,481 @@ def test_backfill_local_fails_in_wrong_environment(
             dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
     else:
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+
+
+class MaterializedForecastConfig(ExampleConfig):
+    dims: tuple[Dim, ...] = ("init_time",)
+    append_dim: AppendDim = "init_time"
+    append_dim_start: Timestamp = pd.Timestamp("2025-01-01")
+    append_dim_frequency: Timedelta = pd.Timedelta("6h")
+
+
+def _materialized_forecast_template(end: datetime) -> xr.DataTree:
+    inits = pd.date_range("2025-01-01", end, freq="6h", inclusive="left")
+    var = xr.DataArray(
+        np.zeros(len(inits), dtype=np.float32),
+        dims=("init_time",),
+        coords={"init_time": inits},
+    )
+    var.encoding = {"dtype": "float32", "chunks": (1,), "shards": (1,)}
+    return xr.DataTree.from_dict(
+        {"/": xr.Dataset({"var": var}, attrs={"dataset_id": "example-dataset"})}
+    )
+
+
+@dataclass
+class MaterializedPlanning:
+    dataset: ExampleDataset
+    tmp_store: Path
+    store: Mock
+    generate: Mock
+    template: Mock
+    source: Mock
+    sibling: Mock
+    process: Mock
+    validate: Mock
+    files: dict[str, bytes]
+
+    def run(
+        self, worker_index: int = 0, job_name: str = "update-123"
+    ) -> (
+        tuple[Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.DataTree]
+        | None
+    ):
+        return self.dataset._planned_materialized_update_jobs(
+            job_name, self.tmp_store, worker_index
+        )
+
+
+@pytest.fixture
+def materialized_planning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> MaterializedPlanning:
+    dataset = ExampleDataset(
+        template_config=MaterializedForecastConfig(),
+        materialized_source_availability=SourceAvailability(
+            product_id="example-product", lead_hours=24
+        ),
+    )
+    store = Mock()
+    store.k8s_secret_names.return_value = []
+    store.open_primary_datatree.return_value = xr.DataTree.from_dict(
+        {
+            "/": xr.Dataset(
+                coords={"init_time": pd.date_range("2025-01-01", periods=2, freq="6h")}
+            )
+        }
+    )
+    files: dict[str, bytes] = {}
+
+    def read_plan(job_name: str, prefix: str) -> list[bytes]:
+        assert prefix == "plan"
+        return [files[job_name]] if job_name in files else []
+
+    def write_plan(job_name: str, key: str, data: bytes) -> None:
+        assert key == "plan/ready.json"
+        files[job_name] = data
+
+    store.read_all_coordination_files.side_effect = read_plan
+    store.write_coordination_file.side_effect = write_plan
+    monkeypatch.setattr(ExampleDataset, "store_factory", store)
+    template_ds = _materialized_forecast_template(datetime(2025, 1, 2))
+    candidate_jobs = ExampleRegionJob.get_jobs(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        append_dim="init_time",
+        all_data_vars=dataset.template_config.data_vars,
+        reformat_job_name="update-123",
+    )
+    generate = Mock(return_value=(candidate_jobs, template_ds))
+    template = Mock(side_effect=_materialized_forecast_template)
+    source = Mock(
+        return_value=Summary.model_validate(
+            {
+                "products": [
+                    {
+                        "id": "example-product",
+                        "recent_inits": [
+                            {
+                                "init_time": init,
+                                "lead_groups": [{"max_lead": 24, "status": status}],
+                            }
+                            for init, status in (
+                                ("2025-01-01T00:00:00Z", "complete"),
+                                ("2025-01-01T06:00:00Z", "partial"),
+                                ("2025-01-01T12:00:00Z", "complete"),
+                                ("2025-01-01T18:00:00Z", "partial"),
+                            )
+                        ],
+                    }
+                ],
+            }
+        )
+    )
+    sibling = Mock(return_value=False)
+    process = Mock()
+    validate = Mock()
+    monkeypatch.setattr(ExampleDataset, "_tmp_store", Mock(return_value=tmp_path))
+    monkeypatch.setattr(ExampleDataset, "_operational_update_jobs", generate)
+    monkeypatch.setattr(ExampleDataset, "_get_template", template)
+    monkeypatch.setattr(ExampleDataset, "_process_region_jobs", process)
+    monkeypatch.setattr(ExampleDataset, "_validate_after_update", validate)
+    monkeypatch.setattr(Summary, "fetch", source)
+    monkeypatch.setattr(kubernetes, "has_running_cronjob_job", sibling)
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("CRON_JOB_NAME", "example-dataset-update")
+    return MaterializedPlanning(
+        dataset,
+        tmp_path,
+        store,
+        generate,
+        template,
+        source,
+        sibling,
+        process,
+        validate,
+        files,
+    )
+
+
+def _planned_inits(
+    result: tuple[
+        Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.DataTree
+    ]
+    | None,
+) -> list[pd.Timestamp]:
+    assert result is not None
+    jobs, template = result
+    return [
+        pd.Timestamp(template.coords["init_time"].values[job.region.start])
+        for job in jobs
+    ]
+
+
+def test_materialized_plan_trims_new_inits_after_newest_ready(
+    materialized_planning: MaterializedPlanning,
+) -> None:
+    fixture = materialized_planning
+    result = fixture.run()
+    assert _planned_inits(result) == [pd.Timestamp("2025-01-01T12:00:00")]
+    assert json.loads(fixture.files["update-123"]) == {
+        "append_dim_end": "2025-01-01T18:00:00",
+        "init_times": ["2025-01-01T12:00:00"],
+        "skip_reason": None,
+    }
+    fixture.sibling.assert_called_once_with("example-dataset-update", "update-123")
+    fixture.generate.assert_called_once_with("update-123", fixture.tmp_store)
+    fixture.source.assert_called_once_with()
+    fixture.template.assert_called_once_with(datetime(2025, 1, 1, 18))
+
+
+@pytest.mark.parametrize("later_ready", [False, True])
+def test_materialized_plan_includes_unready_inits_before_newest_ready_cutoff(
+    materialized_planning: MaterializedPlanning,
+    later_ready: bool,
+) -> None:
+    fixture = materialized_planning
+    source_inits = fixture.source.return_value.products[0].recent_inits
+    source_inits[2].lead_groups[0].status = "partial"
+    source_inits[3].lead_groups[0].status = "complete" if later_ready else "partial"
+
+    result = fixture.run()
+    plan = json.loads(fixture.files["update-123"])
+    if later_ready:
+        assert _planned_inits(result) == [
+            pd.Timestamp("2025-01-01T12:00:00"),
+            pd.Timestamp("2025-01-01T18:00:00"),
+        ]
+        assert plan["init_times"] == ["2025-01-01T12:00:00", "2025-01-01T18:00:00"]
+        assert plan["append_dim_end"] == "2025-01-02T00:00:00"
+    else:
+        assert result is None
+        assert plan["init_times"] == []
+        assert plan["append_dim_end"] is None
+        fixture.template.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("job_name", "expected_frontier"),
+    [("update-123-r1", True), ("update-123-r7", True), ("update-r1-123", False)],
+)
+def test_materialized_validation_retry_repairs_frontier_without_source_readiness(
+    materialized_planning: MaterializedPlanning,
+    job_name: str,
+    expected_frontier: bool,
+) -> None:
+    fixture = materialized_planning
+    inits = _planned_inits(fixture.run(job_name=job_name))
+    assert (pd.Timestamp("2025-01-01T06:00:00") in inits) is expected_frontier
+    assert pd.Timestamp("2025-01-01T18:00:00") not in inits
+
+
+def test_materialized_gefs_reprocess_flag_keeps_frontier_on_initial_run(
+    materialized_planning: MaterializedPlanning,
+) -> None:
+    fixture = materialized_planning
+    fixture.dataset = fixture.dataset.model_copy(
+        update={"reprocess_materialized_frontier": True}
+    )
+    assert _planned_inits(fixture.run()) == [
+        pd.Timestamp("2025-01-01T06:00:00"),
+        pd.Timestamp("2025-01-01T12:00:00"),
+    ]
+
+
+def test_materialized_frontier_only_repair_needs_no_source_request(
+    materialized_planning: MaterializedPlanning,
+) -> None:
+    fixture = materialized_planning
+    jobs, template = fixture.generate.return_value
+    fixture.generate.return_value = ([jobs[1]], template)
+    fixture.source.side_effect = AssertionError("Frontier repair must not query source")
+    assert _planned_inits(fixture.run(job_name="update-123-r1")) == [
+        pd.Timestamp("2025-01-01T06:00:00")
+    ]
+    fixture.source.assert_not_called()
+
+
+@pytest.mark.parametrize("worker_index", [0, 1, 2])
+def test_materialized_sibling_skip_avoids_source_generation_and_branch_setup(
+    materialized_planning: MaterializedPlanning,
+    worker_index: int,
+) -> None:
+    fixture = materialized_planning
+    fixture.sibling.return_value = True
+    if worker_index:
+        assert fixture.run() is None
+        fixture.sibling.reset_mock()
+    fixture.dataset.update("update-123", worker_index=worker_index, workers_total=3)
+    assert json.loads(fixture.files["update-123"]) == {
+        "append_dim_end": None,
+        "init_times": [],
+        "skip_reason": "older unfinished sibling",
+    }
+    fixture.generate.assert_not_called()
+    fixture.source.assert_not_called()
+    fixture.template.assert_not_called()
+    fixture.store.open_primary_datatree.assert_not_called()
+    fixture.store.icechunk_repos.assert_not_called()
+    fixture.process.assert_not_called()
+    fixture.store.clear_coordination_files.assert_not_called()
+    if worker_index == 2:
+        fixture.validate.assert_called_once_with("update-123")
+    else:
+        fixture.validate.assert_not_called()
+    assert fixture.sibling.call_count == (0 if worker_index else 1)
+
+
+@pytest.mark.parametrize("empty_candidates", [False, True])
+def test_materialized_empty_plan_still_validates_and_remains_for_late_workers(
+    materialized_planning: MaterializedPlanning,
+    empty_candidates: bool,
+) -> None:
+    fixture = materialized_planning
+    if empty_candidates:
+        fixture.generate.return_value = ([], fixture.generate.return_value[1])
+    else:
+        fixture.source.return_value = Summary.model_validate(
+            {"products": [{"id": "example-product", "recent_inits": []}]}
+        )
+    fixture.dataset.update("update-123")
+    assert json.loads(fixture.files["update-123"])["init_times"] == []
+    assert fixture.run(worker_index=4) is None
+    fixture.generate.assert_called_once()
+    fixture.process.assert_not_called()
+    fixture.validate.assert_called_once_with("update-123")
+    fixture.store.clear_coordination_files.assert_not_called()
+    if empty_candidates:
+        fixture.source.assert_not_called()
+
+
+@pytest.mark.parametrize("worker_index", [0, 1, 4])
+def test_materialized_late_or_replacement_worker_reuses_plan(
+    materialized_planning: MaterializedPlanning,
+    worker_index: int,
+) -> None:
+    fixture = materialized_planning
+    first = fixture.run()
+    frozen_bytes = fixture.files["update-123"]
+    fixture.generate.side_effect = AssertionError("Cannot recompute existing plan")
+    fixture.source.side_effect = AssertionError("Cannot refetch existing plan")
+    fixture.sibling.side_effect = AssertionError(
+        "Cannot recheck sibling for existing plan"
+    )
+    fixture.store.open_primary_datatree.side_effect = AssertionError(
+        "Cannot reread frontier"
+    )
+    replacement = fixture.run(worker_index=worker_index)
+    assert _planned_inits(replacement) == _planned_inits(first)
+    assert fixture.files["update-123"] == frozen_bytes
+    fixture.store.write_coordination_file.assert_called_once()
+    assert fixture.template.call_args_list[0] == fixture.template.call_args_list[1]
+
+
+def test_materialized_nonzero_worker_polls_every_five_seconds_for_plan(
+    materialized_planning: MaterializedPlanning,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = materialized_planning
+    first = fixture.run()
+    fixture.store.read_all_coordination_files.side_effect = [
+        [],
+        [],
+        [fixture.files["update-123"]],
+    ]
+    fixture.store.read_all_coordination_files.reset_mock()
+    sleep = Mock()
+    monkeypatch.setattr(dynamical_dataset.time, "sleep", sleep)
+    assert _planned_inits(fixture.run(worker_index=1)) == _planned_inits(first)
+    assert [call.args for call in sleep.call_args_list] == [(5,), (5,)]
+    assert fixture.store.read_all_coordination_files.call_count == 3
+    fixture.generate.assert_called_once()
+
+
+def test_materialized_single_worker_retry_uses_persistent_plan_after_failure(
+    materialized_planning: MaterializedPlanning,
+) -> None:
+    fixture = materialized_planning
+    fixture.process.side_effect = [RuntimeError("worker interrupted"), None]
+    with pytest.raises(RuntimeError, match="worker interrupted"):
+        fixture.dataset.update("update-123")
+    fixture.generate.side_effect = AssertionError("Single-worker retry must reuse plan")
+    fixture.dataset.update("update-123")
+    fixture.generate.assert_called_once()
+    fixture.source.assert_called_once()
+    fixture.validate.assert_called_once_with("update-123")
+    assert (
+        fixture.process.call_args_list[0].kwargs["all_jobs"]
+        == fixture.process.call_args_list[1].kwargs["all_jobs"]
+    )
+
+
+def test_materialized_plan_freezes_template_end_across_moving_clock(
+    materialized_planning: MaterializedPlanning,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = materialized_planning
+    now = Mock(return_value=pd.Timestamp("2025-01-02"))
+    monkeypatch.setattr(pd.Timestamp, "now", now)
+
+    def generate(
+        job_name: str, tmp_store: Path
+    ) -> tuple[Sequence[ExampleRegionJob], xr.DataTree]:
+        template = _materialized_forecast_template(pd.Timestamp.now().to_pydatetime())
+        return ExampleRegionJob.get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template,
+            append_dim="init_time",
+            all_data_vars=fixture.dataset.template_config.data_vars,
+            reformat_job_name=job_name,
+        ), template
+
+    fixture.generate.side_effect = generate
+    first = fixture.run()
+    now.return_value = pd.Timestamp("2025-01-03")
+    replacement = fixture.run(worker_index=1)
+    assert _planned_inits(first) == _planned_inits(replacement)
+    now.assert_called_once()
+    assert [call.args for call in fixture.template.call_args_list] == [
+        (datetime(2025, 1, 1, 18),),
+        (datetime(2025, 1, 1, 18),),
+    ]
+
+
+@pytest.mark.parametrize("invalid_dim", [False, True])
+def test_materialized_plan_requires_single_init_regions(
+    materialized_planning: MaterializedPlanning,
+    invalid_dim: bool,
+) -> None:
+    fixture = materialized_planning
+    jobs, template = fixture.generate.return_value
+    if invalid_dim:
+        fixture.dataset = fixture.dataset.model_copy(
+            update={"template_config": ExampleConfig()}
+        )
+    else:
+        fixture.generate.return_value = (
+            [jobs[0].model_copy(update={"region": slice(0, 2)})],
+            template,
+        )
+    with pytest.raises(AssertionError, match="require"):
+        fixture.run()
+    assert not fixture.files
+    fixture.source.assert_not_called()
+
+
+@pytest.mark.parametrize("source_error", [False, True])
+def test_materialized_planning_errors_propagate_without_plan_or_processing(
+    materialized_planning: MaterializedPlanning,
+    source_error: bool,
+) -> None:
+    fixture = materialized_planning
+    failing_call = fixture.source if source_error else fixture.sibling
+    failing_call.side_effect = RuntimeError("planning failed")
+    with pytest.raises(RuntimeError, match="planning failed"):
+        fixture.dataset.update("update-123")
+    assert not fixture.files
+    fixture.process.assert_not_called()
+    fixture.validate.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("prod", "opted_in", "cron_name"),
+    [
+        (False, True, "example-dataset-update"),
+        (True, False, "example-dataset-update"),
+        (True, True, None),
+        (True, True, "foreign-update"),
+    ],
+)
+def test_unopted_materialized_updates_keep_existing_path(
+    materialized_planning: MaterializedPlanning,
+    monkeypatch: pytest.MonkeyPatch,
+    prod: bool,
+    opted_in: bool,
+    cron_name: str | None,
+) -> None:
+    fixture = materialized_planning
+    monkeypatch.setattr(Config, "env", Env.prod if prod else Env.test)
+    if cron_name is None:
+        monkeypatch.delenv("CRON_JOB_NAME", raising=False)
+    else:
+        monkeypatch.setenv("CRON_JOB_NAME", cron_name)
+    if not opted_in:
+        fixture.dataset = fixture.dataset.model_copy(
+            update={"materialized_source_availability": None}
+        )
+    fixture.dataset.update("update-123")
+    fixture.generate.assert_called_once_with("update-123", fixture.tmp_store)
+    fixture.process.assert_called_once()
+    assert (
+        fixture.process.call_args.kwargs["all_jobs"] is fixture.generate.return_value[0]
+    )
+    fixture.store.read_all_coordination_files.assert_not_called()
+    fixture.source.assert_not_called()
+    fixture.sibling.assert_not_called()
+
+
+def test_virtual_updates_do_not_use_materialized_plan(
+    materialized_planning: MaterializedPlanning,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = materialized_planning
+    dataset = ExampleVirtualDataset(
+        materialized_source_availability=fixture.dataset.materialized_source_availability
+    )
+    generate = Mock(return_value=([], xr.DataTree()))
+    run = Mock()
+    monkeypatch.setattr(ExampleVirtualDataset, "store_factory", fixture.store)
+    monkeypatch.setattr(
+        ExampleVirtualDataset, "_tmp_store", Mock(return_value=fixture.tmp_store)
+    )
+    monkeypatch.setattr(ExampleVirtualDataset, "_operational_update_jobs", generate)
+    monkeypatch.setattr(ExampleVirtualDataset, "_assert_no_structural_drift", Mock())
+    monkeypatch.setattr(ExampleVirtualDataset, "_run_virtual_operational_update", run)
+    monkeypatch.setattr(ExampleVirtualDataset, "_validate_after_update", Mock())
+    dataset.update("update-123")
+    generate.assert_called_once()
+    run.assert_called_once_with([], 0, 1)
+    fixture.store.read_all_coordination_files.assert_not_called()
+    fixture.source.assert_not_called()

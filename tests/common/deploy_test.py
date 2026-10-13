@@ -127,7 +127,11 @@ def test_deploy_operational_resources(monkeypatch: pytest.MonkeyPatch) -> None:
                 item["metadata"]["name"] for item in resources["items"]
             ),
         },
-        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["create", "get"]},
+        {
+            "apiGroups": ["batch"],
+            "resources": ["jobs"],
+            "verbs": ["create", "get", "list"],
+        },
     ]
     assert rbac["RoleBinding"]["roleRef"] == {
         "apiGroup": "rbac.authorization.k8s.io",
