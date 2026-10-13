@@ -2853,7 +2853,6 @@ VARIABLE_DEFINITIONS = (
             short_name="gh",
             standard_name="geopotential_height",
             units="m",
-            comment="The source can report invalid heights, including 0 m, 100000 m and heights at or below geopotential_height_0c_isotherm. Some invalid heights fall within the usual range, so no single value or threshold masks them all.",
             step_type="instant",
         ),
     ),
