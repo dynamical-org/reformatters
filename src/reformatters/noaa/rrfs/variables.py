@@ -2901,7 +2901,7 @@ VARIABLE_DEFINITIONS = (
         ),
     ),
     VariableDefinition(
-        name="pressure_level_of_adiabatic_condensation_from_sfc",
+        name="pressure_adiabatic_condensation_level",
         element="PRES",
         level="level of adiabatic condensation from sfc",
         attrs=DataVarAttrs(
