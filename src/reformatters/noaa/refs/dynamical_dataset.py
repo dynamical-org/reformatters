@@ -1,10 +1,7 @@
-from collections.abc import Sequence
 from datetime import timedelta
 
 from pydantic import NonNegativeInt
 
-from reformatters.common.kubernetes import CronJob
-from reformatters.common.pydantic import replace
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
 from .models import NoaaRefsDataVar
@@ -17,9 +14,3 @@ class NoaaRefsDataset(NoaaRrfsDataset[NoaaRefsDataVar, NoaaRefsSourceFileCoord])
     update_deadline: timedelta = timedelta(minutes=125)
     template_config: NoaaRefsForecastTemplateConfig
     region_job_class: type[NoaaRefsRegionJob] = NoaaRefsRegionJob
-
-    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        return tuple(
-            replace(job, suspend=True)
-            for job in super().operational_kubernetes_resources(image_tag)
-        )

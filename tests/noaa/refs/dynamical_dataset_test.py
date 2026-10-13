@@ -151,7 +151,7 @@ def assert_offset_gdal_samples(
 
 
 @pytest.mark.parametrize("dataset_class", DATASETS)
-def test_operational_configuration_is_suspended_and_requires_complete_manifests(
+def test_operational_configuration_requires_complete_manifests(
     dataset_class: type[
         NoaaRefsForecastHourlyVirtualDataset | NoaaRefsForecast3HourlyVirtualDataset
     ],
@@ -164,8 +164,8 @@ def test_operational_configuration_is_suspended_and_requires_complete_manifests(
     )
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == f"{dataset.dataset_id}-update"
-    assert update.suspend
-    assert update.as_kubernetes_object()["spec"]["suspend"] is True
+    assert not update.suspend
+    assert update.as_kubernetes_object()["spec"]["suspend"] is False
     assert update.schedule == "55 1,7,13,19 * * *"
     assert update.pod_active_deadline == pd.Timedelta("125min")
     assert update.cpu == "1.5"
