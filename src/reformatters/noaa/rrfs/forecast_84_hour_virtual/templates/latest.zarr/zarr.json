@@ -5575,61 +5575,6 @@
         "node_type": "array",
         "storage_transformers": []
       },
-      "geopotential_height_adiabatic_condensation_level": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "HGT",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Geometric height of adiabatic condensation level above ground",
-          "short_name": "hacg",
-          "standard_name": "atmosphere_lifting_condensation_level_wrt_surface",
-          "units": "m",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
       "geopotential_height_cloud_base": {
         "shape": [
           1,
@@ -5671,7 +5616,7 @@
           "short_name": "gh",
           "standard_name": "geopotential_height",
           "units": "m",
-          "comment": "NaN where no cloud was detected. In some source messages, heights beyond the packing range are reduced by multiples of 8192 m and cannot be distinguished from true heights; use pressure_cloud_base instead.",
+          "comment": "NaN where no cloud was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -6286,6 +6231,61 @@
           "units": "W m-2",
           "comment": "NaN over open water. Averaged over the preceding hour.",
           "step_type": "avg",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
+      "height_above_ground_adiabatic_condensation_level": {
+        "shape": [
+          1,
+          85,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "HGT",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Geometric height of adiabatic condensation level above ground",
+          "short_name": "hacg",
+          "standard_name": "atmosphere_lifting_condensation_level_wrt_surface",
+          "units": "m",
+          "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
@@ -10296,6 +10296,61 @@
         "node_type": "array",
         "storage_transformers": []
       },
+      "new_snow_density_surface": {
+        "shape": [
+          1,
+          85,
+          1059,
+          1799
+        ],
+        "data_type": "float64",
+        "chunk_grid": {
+          "name": "regular",
+          "configuration": {
+            "chunk_shape": [
+              1,
+              1,
+              1059,
+              1799
+            ]
+          }
+        },
+        "chunk_key_encoding": {
+          "name": "default",
+          "configuration": {
+            "separator": "/"
+          }
+        },
+        "fill_value": "NaN",
+        "codecs": [
+          {
+            "name": "gribberish",
+            "configuration": {
+              "var": "SDEN",
+              "adjust_longitude_range": true,
+              "north_up": true
+            }
+          }
+        ],
+        "attributes": {
+          "long_name": "Snow density",
+          "short_name": "rsn",
+          "units": "kg m-3",
+          "comment": "Diagnosed density of newly falling snow from a snow-to-liquid ratio, independent of snow on the ground. NaN where the air 300 m above ground is 5 \u00b0C or warmer.",
+          "step_type": "instant",
+          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+          "_FillValue": "AAAAAAAA+H8="
+        },
+        "dimension_names": [
+          "init_time",
+          "lead_time",
+          "y",
+          "x"
+        ],
+        "zarr_format": 3,
+        "node_type": "array",
+        "storage_transformers": []
+      },
       "number_of_soil_layers_in_root_zone_surface": {
         "shape": [
           1,
@@ -11506,62 +11561,6 @@
           "standard_name": "air_pressure",
           "units": "Pa",
           "comment": "NaN where no cloud bottom was detected.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAABq6MA="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "pressure_grid_scale_cloud_top_level": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": -50000.0,
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "PRES",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Pressure",
-          "short_name": "pres",
-          "standard_name": "air_pressure",
-          "units": "Pa",
-          "comment": "NaN where no cloud top was detected.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAABq6MA="
@@ -14091,61 +14090,6 @@
           "standard_name": "surface_snow_area_fraction",
           "units": "1",
           "comment": "NaN over water.",
-          "step_type": "instant",
-          "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
-          "_FillValue": "AAAAAAAA+H8="
-        },
-        "dimension_names": [
-          "init_time",
-          "lead_time",
-          "y",
-          "x"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "snow_density_surface": {
-        "shape": [
-          1,
-          85,
-          1059,
-          1799
-        ],
-        "data_type": "float64",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              1,
-              1,
-              1059,
-              1799
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "gribberish",
-            "configuration": {
-              "var": "SDEN",
-              "adjust_longitude_range": true,
-              "north_up": true
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Snow density",
-          "short_name": "rsn",
-          "units": "kg m-3",
-          "comment": "Diagnosed density of newly falling snow from a snow-to-liquid ratio, independent of snow on the ground. NaN where the air 300 m above ground is 5 \u00b0C or warmer.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

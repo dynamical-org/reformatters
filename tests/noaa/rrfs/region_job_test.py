@@ -224,6 +224,15 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                         or re.fullmatch(r"\d+ hour fcst", window) is not None
                     )
                 )
+                # This field's data duplicates PRES at cloud top as of 2026-10-13;
+                # RRFS is not yet operational, so this may change.
+                excluded_cloud_top_duplicate = (
+                    not config.members
+                    and not config.sub_hourly
+                    and family == "2dfld"
+                    and element == "PRES"
+                    and level == "grid scale cloud top level"
+                )
                 assert (
                     duplicate
                     or zero_placeholder
@@ -232,6 +241,7 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                     or excluded_radiation_or_shear
                     or excluded_ffg
                     or excluded_lifted_index
+                    or excluded_cloud_top_duplicate
                 ), (path, identity)
             seen.add(identity)
 

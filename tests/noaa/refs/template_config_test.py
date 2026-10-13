@@ -559,14 +559,7 @@ def test_cloud_soil_and_radar_comments_keep_raw_values_and_statistic_scope() -> 
     variables = {v.name: v for v in CombinedProductsConfig().data_vars}
     cloud = variables["geopotential_height_cloud_base"]
     comment = cloud.attrs.comment or ""
-    for text in (
-        "When none contribute",
-        "In some source messages",
-        "multiples of 8192 m",
-        "near 3616 m",
-        "cannot be distinguished from true heights",
-    ):
-        assert text in comment
+    assert "When none contribute" in comment
     assert "Mask" not in comment
     for name in ("soil_temperature_0m", "volumetric_soil_moisture_0m"):
         comment = variables[name].attrs.comment or ""

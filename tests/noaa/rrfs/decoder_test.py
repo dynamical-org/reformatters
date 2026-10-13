@@ -31,7 +31,6 @@ CASES = (
 
 SEMANTIC_MARKERS = (
     ("pressure_cloud_top", -50000.0),
-    ("pressure_grid_scale_cloud_top_level", -50000.0),
     ("pressure_grid_scale_cloud_bottom_level", -50000.0),
     ("temperature_cloud_top", -500.0),
     ("geopotential_height_supercooled_liquid_water_base", -5000.0),
@@ -220,7 +219,7 @@ def test_semantic_marker_physical_controls(sample: str, tmp_path: Path) -> None:
     np.testing.assert_array_equal(actual, read_gdal(layer_name))
     assert np.all(actual[water | inland_water] == 0)
     assert np.isnan(variables[layer_name].encoding.fill_value)
-    for variable_name, marker in SEMANTIC_MARKERS[6:]:
+    for variable_name, marker in SEMANTIC_MARKERS[5:]:
         missing = read_gdal(variable_name) == marker
         expected = (
             water | inland_water
@@ -250,9 +249,9 @@ def test_semantic_marker_physical_controls(sample: str, tmp_path: Path) -> None:
             np.isnan(dataset.geopotential_height_cloud_base.values.squeeze()),
             missing_base,
         )
-    for variable_name, marker in SEMANTIC_MARKERS[:4]:
+    for variable_name, marker in SEMANTIC_MARKERS[:3]:
         np.testing.assert_array_equal(read_gdal(variable_name) == marker, missing_base)
-    for variable_name, marker in SEMANTIC_MARKERS[4:6]:
+    for variable_name, marker in SEMANTIC_MARKERS[3:5]:
         layer = read_gdal(variable_name)
         valid = layer != marker
         assert np.all(layer[valid] > 0)

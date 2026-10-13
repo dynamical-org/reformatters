@@ -22,15 +22,6 @@
     "end": 162368701,
     "index_line": "168:160500015:d=2026081400:PRES:cloud top:6 hour fcst:"
   },
-  "semantic-markers/A-pressure_grid_scale_cloud_top_level.grib2": {
-    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
-    "sha256": "64c56971bc15734f5aa1c91a9041352d0141334e5e15123cd08c8dcd457b05e5",
-    "element": "PRES",
-    "level": "grid scale cloud top level",
-    "start": 166868293,
-    "end": 168736979,
-    "index_line": "172:166868293:d=2026081400:PRES:grid scale cloud top level:6 hour fcst:"
-  },
   "semantic-markers/A-pressure_grid_scale_cloud_bottom_level.grib2": {
     "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260814/00/rrfs.t00z.2dfld.3km.f006.conus.grib2",
     "sha256": "041bbce5964c1ba6e4f1f503a32e141e6bd88ba66519599a83adc3fba6d57126",
@@ -156,15 +147,6 @@
     "start": 155136734,
     "end": 156926374,
     "index_line": "168:155136734:d=2026100812:PRES:cloud top:60 hour fcst:"
-  },
-  "semantic-markers/C-pressure_grid_scale_cloud_top_level.grib2": {
-    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
-    "sha256": "fdbec3cb79231188b518b6480de15c063b1bf4f48fccb6624ae4807445a5c6a8",
-    "element": "PRES",
-    "level": "grid scale cloud top level",
-    "start": 161438566,
-    "end": 163228206,
-    "index_line": "172:161438566:d=2026100812:PRES:grid scale cloud top level:60 hour fcst:"
   },
   "semantic-markers/C-pressure_grid_scale_cloud_bottom_level.grib2": {
     "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20261008/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
