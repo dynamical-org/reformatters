@@ -15,8 +15,8 @@ class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
     update_deadline: timedelta = timedelta(minutes=59)
     update_job_deadline: timedelta | None = timedelta(minutes=59)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=60)
-    # October 7-11, 2026: at least 11/18 source files were published by init +133m.
-    min_present_fraction: ClassVar[tuple[float, ...]] = (11 / 18, 1.0)
+    # 00Z and 12Z cycles can have as few as 9/18 files by the poll deadline.
+    min_present_fraction: ClassVar[tuple[float, ...]] = (6 / 18, 1.0)
     template_config: NoaaRrfsForecastSubHourlyVirtualTemplateConfig = (
         NoaaRrfsForecastSubHourlyVirtualTemplateConfig()
     )
