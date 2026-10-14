@@ -188,6 +188,67 @@ def test_region_job(store_factory: StoreFactory) -> None:
         np.testing.assert_array_equal(data_var.values, expected_values)
 
 
+def test_read_into_data_array_retains_download_failures(
+    template_ds: xr.DataTree, tmp_path: Path
+) -> None:
+    data_var = ExampleDataVar(name="var0")
+    job = ExampleRegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=[data_var],
+        append_dim="time",
+        region=slice(0, 7),
+        reformat_job_name="test-job",
+    )
+    data_array = (
+        template_ds.to_dataset()[data_var.name].isel(time=slice(0, 7)).compute()
+    )
+    coords = [
+        ExampleSourceFileCoords(
+            time=pd.Timestamp("2025-01-01T00"), status=SourceFileStatus.DownloadFailed
+        ),
+        ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T01")),
+        ExampleSourceFileCoords(time=pd.Timestamp("2025-01-01T06")),
+    ]
+    results = job._read_into_data_array(data_array, data_var, coords)
+    assert [c.time for c in results] == [c.time for c in coords]
+    assert [c.status for c in results] == [
+        SourceFileStatus.DownloadFailed,
+        SourceFileStatus.Succeeded,
+        SourceFileStatus.ReadFailed,
+    ]
+    assert np.isnan(data_array.isel(time=0).values).all()
+    assert (data_array.isel(time=1).values == 1).all()
+    assert np.isnan(data_array.isel(time=6).values).all()
+
+
+def test_prepare_data_array_for_write_defaults_to_noop(
+    template_ds: xr.DataTree, tmp_path: Path, store_factory: StoreFactory
+) -> None:
+    data_var = ExampleDataVar(name="var0")
+    job = ExampleRegionJob(
+        tmp_store=tmp_path,
+        template_ds=template_ds,
+        data_vars=[data_var],
+        append_dim="time",
+        region=slice(0, 1),
+        reformat_job_name="test-job",
+    )
+    data_array = (
+        template_ds.to_dataset()[data_var.name].isel(time=slice(0, 1)).compute()
+    )
+    coords = [
+        ExampleSourceFileCoords(
+            time=pd.Timestamp("2025-01-01T00"), status=SourceFileStatus.DownloadFailed
+        )
+    ]
+    results = job.prepare_data_array_for_write(
+        data_array, data_var, coords, store_factory.primary_store()
+    )
+    assert np.isnan(data_array.values).all()
+    assert results is coords
+
+
 @pytest.mark.parametrize("var_fill_value", [np.nan, 0.0])
 def test_region_job_empty_chunk_writing(
     store_factory: StoreFactory,

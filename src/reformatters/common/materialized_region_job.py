@@ -122,6 +122,16 @@ class MaterializedRegionJob(
                 data_array.values, keep_mantissa_bits=keep_mantissa_bits
             )
 
+    def prepare_data_array_for_write(
+        self,
+        data_array: xr.DataArray,  # noqa: ARG002
+        data_var: DATA_VAR,  # noqa: ARG002
+        source_file_coords: Sequence[SOURCE_FILE_COORD],
+        primary_store: Store,  # noqa: ARG002
+    ) -> Sequence[SOURCE_FILE_COORD]:
+        """Adjust transformed output in place and return final processing statuses."""
+        return source_file_coords
+
     @classmethod
     def process_worker_jobs(
         cls,
@@ -252,6 +262,12 @@ class MaterializedRegionJob(
                         data_array,
                         data_var,
                     )
+                    data_var_source_file_coords = self.prepare_data_array_for_write(
+                        data_array,
+                        data_var,
+                        data_var_source_file_coords,
+                        primary_store,
+                    )
                     self._write_shards(
                         data_array_template,
                         shared_buffer,
@@ -273,7 +289,11 @@ class MaterializedRegionJob(
                         )
                     )
 
-                    results[data_var.path] = data_var_source_file_coords
+                    results[data_var.path] = [
+                        c
+                        for c in data_var_source_file_coords
+                        if c.status != SourceFileStatus.DownloadFailed
+                    ]
 
                 self._cleanup_local_files(source_file_coords)  # after _group_ is done
 
@@ -343,10 +363,6 @@ class MaterializedRegionJob(
         Reads data from source files into `out`.
         Returns a list of coords with the final status.
         """
-        # Skip coords where the download failed
-        read_coords = (
-            c for c in source_file_coords if c.status == SourceFileStatus.Processing
-        )
 
         def _read_and_write_one(coord: SOURCE_FILE_COORD) -> ArrayND[np.generic]:
             return self.read_data(coord, data_var)
@@ -357,7 +373,11 @@ class MaterializedRegionJob(
         log.info(f"Reading {data_var.name}...")
         with ThreadPoolExecutor(max_workers=self.read_parallelism) as executor:
             futures = {}
-            for i, coord in enumerate(read_coords):
+            for i, coord in enumerate(source_file_coords):
+                # Skip coords where the download failed
+                if coord.status != SourceFileStatus.Processing:
+                    updated_coords[i] = coord
+                    continue
                 future = executor.submit(_read_and_write_one, coord)
                 futures[future] = (i, coord)
 

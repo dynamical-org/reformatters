@@ -23,6 +23,7 @@ from reformatters.common.region_job import (
     CoordinateValue,
     RegionJob,
     SourceFileCoord,
+    SourceFileStatus,
 )
 from reformatters.common.types import (
     AppendDim,
@@ -89,6 +90,8 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
 class NoaaMrmsRegionJob(
     MaterializedRegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]
 ):
+    existing_time_end: Timestamp | None = None
+
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""
         return slice(max(0, self.region.start - 1), self.region.stop)
@@ -285,7 +288,54 @@ class NoaaMrmsRegionJob(
             filter_start=append_dim_start,
             filter_end=append_dim_end,
         )
-        return jobs, template_ds
+        return [
+            replace(
+                job,
+                existing_time_end=pd.Timestamp(ds_max_time),
+            )
+            for job in jobs
+        ], template_ds
+
+    def prepare_data_array_for_write(
+        self,
+        data_array: xr.DataArray,
+        data_var: NoaaMrmsDataVar,
+        source_file_coords: Sequence[NoaaMrmsSourceFileCoord],
+        primary_store: Store,
+    ) -> Sequence[NoaaMrmsSourceFileCoord]:
+        if self.existing_time_end is None:
+            return source_file_coords
+        failed_coords = [
+            coord
+            for coord in source_file_coords
+            if coord.status == SourceFileStatus.DownloadFailed
+            and coord.time <= self.existing_time_end
+        ]
+        if not failed_coords:
+            return source_file_coords
+
+        with xr.open_zarr(primary_store, chunks=None) as existing_ds:
+            stored_times = existing_ds.indexes["time"]
+            reuse_coords = [
+                coord for coord in failed_coords if coord.time in stored_times
+            ]
+            if not reuse_coords:
+                return source_file_coords
+            times = [coord.time for coord in reuse_coords]
+            # Batch times so each temporal chunk is decoded once per variable.
+            data_array.loc[{"time": times}] = (
+                existing_ds[data_var.name].sel(time=times).values
+            )
+
+        log.info(f"Reused {len(reuse_coords)} published hours for {data_var.name}")
+        reused_times = set(times)
+        return [
+            replace(coord, status=SourceFileStatus.Succeeded)
+            if coord.status == SourceFileStatus.DownloadFailed
+            and coord.time in reused_times
+            else coord
+            for coord in source_file_coords
+        ]
 
 
 # For precipitation_surface only: maps missing hourly timestamps to the RadarOnly file
