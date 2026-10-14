@@ -131,11 +131,6 @@ def test_download_file_propagates_missing_file(
         _job().download_file(coord)
 
 
-@pytest.fixture(autouse=True)
-def clear_listings() -> None:
-    region_job._available_urls.cache_clear()
-
-
 @pytest.mark.parametrize("product", ["final", "preliminary"])
 def test_generate_source_file_coords(
     monkeypatch: pytest.MonkeyPatch,
@@ -183,17 +178,10 @@ def test_generate_source_file_coords(
     assert coords[0].out_loc() == {"time": times[0]}
     assert len(requested) == 3
 
-    _job(product).generate_source_file_coords(processing_region_ds, [])
-    assert len(requested) == 3
-    config = UcsbChcChirpsAnalysisFinalTemplateConfig()
-    type(job).get_jobs(
-        Path("unused.zarr"),
-        config.get_template(pd.Timestamp("1981-01-02")),
-        "time",
-        list(config.data_vars),
-        "next-run",
+    present.append(
+        UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=times[-1])
     )
-    job.generate_source_file_coords(processing_region_ds, [])
+    assert job.generate_source_file_coords(processing_region_ds, []) == present
     assert len(requested) == 6
 
 
@@ -209,6 +197,9 @@ def test_empty_listing_and_empty_region(monkeypatch: pytest.MonkeyPatch) -> None
                 200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
             ),
             httpx.Response(200, text='<a href="../">Parent</a>'),
+            httpx.Response(
+                200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
+            ),
         ]
     )
     monkeypatch.setattr(region_job, "httpx_get", get)
@@ -228,7 +219,7 @@ def test_empty_listing_and_empty_region(monkeypatch: pytest.MonkeyPatch) -> None
         )
         == []
     )
-    assert get.call_count == 2
+    assert get.call_count == 3
 
 
 @pytest.mark.parametrize("missing_year", [True, False])
@@ -277,7 +268,6 @@ def test_listing_failure_propagates(
         _job().generate_source_file_coords(
             xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)}), []
         )
-    assert region_job._available_urls.cache_info().currsize == int(year_listing)
 
 
 def test_malformed_listing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -372,7 +362,7 @@ def test_downloads_share_one_per_second_limit_including_retries(
         )
         assert job.download_file(coord).read_bytes() == b"tiff"
 
-    region_job._available_urls("https://example.org/list/")
+    region_job._list_directory_urls("https://example.org/list/")
     assert starts == [0.0, 1.0, 2.0, 3.0]
     now += 60.0
     job.download_file(coord)

@@ -1,9 +1,8 @@
 import re
 from collections.abc import Callable, Mapping, Sequence
-from functools import lru_cache
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import NamedTuple, Self
+from typing import NamedTuple
 from urllib.parse import urljoin
 
 import numpy as np
@@ -69,8 +68,7 @@ class _DirectoryLinks(HTMLParser):
                     self.urls.add(urljoin(self.directory_url, value))
 
 
-@lru_cache(maxsize=256)
-def _available_urls(directory_url: str) -> frozenset[str]:
+def _list_directory_urls(directory_url: str) -> frozenset[str]:
     response = httpx_get(directory_url, rate_limiter=chirps_rate_limiter)
     parser = _DirectoryLinks(directory_url)
     parser.feed(response.text)
@@ -78,6 +76,36 @@ def _available_urls(directory_url: str) -> frozenset[str]:
         f"Directory index has no parent link: {directory_url}"
     )
     return frozenset(parser.urls)
+
+
+def _available_file_urls(
+    product: ChirpsProduct, requested_years: Sequence[int], current_year: int
+) -> set[str]:
+    product_url = f"{_BASE_URL}/{_PRODUCT_PATHS[product].directory}/"
+    years = _list_directory_urls(product_url)
+    assert any(
+        re.fullmatch(re.escape(product_url) + r"\d{4}/", url) for url in years
+    ), f"No year directories in {product_url}"
+    available: set[str] = set()
+    for year in dict.fromkeys(requested_years):
+        directory = f"{product_url}{year}/"
+        if directory not in years:
+            assert year >= current_year, f"Missing historical directory: {directory}"
+            continue
+        pattern = (
+            re.escape(
+                f"{directory}chirps-v3.0.{_PRODUCT_PATHS[product].filename_infix}.{year}."
+            )
+            + r"\d{2}\.\d{2}\.tif"
+        )
+        files = {
+            url for url in _list_directory_urls(directory) if re.fullmatch(pattern, url)
+        }
+        assert files or year >= current_year, f"No CHIRPS files in {directory}"
+        if not files:
+            log.warning(f"No CHIRPS files in {directory}")
+        available.update(files)
+    return available
 
 
 class UcsbChcChirpsAnalysisSourceFileCoord(SourceFileCoord):
@@ -109,33 +137,6 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
 
     download_parallelism: int = 1
 
-    @classmethod
-    def get_jobs(
-        cls,
-        tmp_store: Path,
-        template_ds: xr.DataTree,
-        append_dim: AppendDim,
-        all_data_vars: Sequence[DataVar[BaseInternalAttrs]],
-        reformat_job_name: str,
-        filter_start: Timestamp | None = None,
-        filter_end: Timestamp | None = None,
-        filter_contains: list[Timestamp] | None = None,
-        filter_variable_names: list[str] | None = None,
-    ) -> Sequence[Self]:
-        # Repeated local runs share a process but must discover newly published files.
-        _available_urls.cache_clear()
-        return super().get_jobs(
-            tmp_store,
-            template_ds,
-            append_dim,
-            all_data_vars,
-            reformat_job_name,
-            filter_start,
-            filter_end,
-            filter_contains,
-            filter_variable_names,
-        )
-
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -149,31 +150,10 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
         ]
         if not coords:
             return []
-        product_url = f"{_BASE_URL}/{_PRODUCT_PATHS[self.product].directory}/"
-        years = _available_urls(product_url)
-        assert any(
-            re.fullmatch(re.escape(product_url) + r"\d{4}/", url) for url in years
-        ), f"No year directories in {product_url}"
         now = pd.Timestamp.now(tz="UTC").tz_localize(None)
-        available: set[str] = set()
-        for year in dict.fromkeys(coord.time.year for coord in coords):
-            directory = f"{product_url}{year}/"
-            if directory not in years:
-                assert year >= now.year, f"Missing historical directory: {directory}"
-                continue
-            pattern = (
-                re.escape(
-                    f"{directory}chirps-v3.0.{_PRODUCT_PATHS[self.product].filename_infix}.{year}."
-                )
-                + r"\d{2}\.\d{2}\.tif"
-            )
-            files = {
-                url for url in _available_urls(directory) if re.fullmatch(pattern, url)
-            }
-            assert files or year >= now.year, f"No CHIRPS files in {directory}"
-            if not files:
-                log.warning(f"No CHIRPS files in {directory}")
-            available.update(files)
+        available = _available_file_urls(
+            self.product, [coord.time.year for coord in coords], now.year
+        )
         missing_old = [
             coord.time
             for coord in coords
