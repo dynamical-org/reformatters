@@ -56,7 +56,7 @@ class NoaaRrfsDataset(
         }
         hours = (
             "*"
-            if len(fire_hours) == 24
+            if fire_hours == set(range(24))
             else ",".join(str(h) for h in sorted(fire_hours))
         )
 
