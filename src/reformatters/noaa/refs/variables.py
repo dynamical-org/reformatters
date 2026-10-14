@@ -783,7 +783,7 @@ _FIELD_COMMENTS = {
     (
         "HGT",
         "cloud base",
-    ): "Mean and standard deviation use only members with a cloud base. When none contribute, the mean is the source's no-cloud height of about 20000 m and the standard deviation is zero, which does not indicate measured certainty.",
+    ): "Mean and standard deviation use only members with a cloud base. When none contribute, the mean holds the source's no-cloud value and the standard deviation is zero, which does not indicate measured certainty.",
     (
         "TSOIL",
         "0-0 m below ground",
