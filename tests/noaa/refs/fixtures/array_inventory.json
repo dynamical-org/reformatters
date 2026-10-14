@@ -1367,12 +1367,12 @@
   {
     "path": "probability_of_vertical_wind_shear_0_609m_above_10p3",
     "cadence_hours": 1,
-    "metadata_sha256": "22b986856f213685e5b4621b55ec97216406702c647a5f7a405fb249c5e6f3d7"
+    "metadata_sha256": "8207959c362b68fc4a8d6759c4701240b4aa35d46ec0717a0156f357d6151879"
   },
   {
     "path": "probability_of_vertical_wind_shear_0_609m_above_20",
     "cadence_hours": 1,
-    "metadata_sha256": "dcdfc6904449877294bc93dca3c4517f3b416265826e66d58ebb077fa5f18946"
+    "metadata_sha256": "8cc349010ef20f973d4df08e543810439923021daaee5d7994dec6830d6f532b"
   },
   {
     "path": "probability_of_visibility_surface_below_1600",
@@ -1682,7 +1682,7 @@
   {
     "path": "vertical_wind_shear_0_609m",
     "cadence_hours": 1,
-    "metadata_sha256": "5bf7847ca65e11b654c895d9a907582c096336a0a95a5501b3d6e832e3547397"
+    "metadata_sha256": "1923fcae9694280ac58b7fc3823c662e72eb45aa7e00266e85cfe417e57d44e9"
   },
   {
     "path": "visibility_surface",
