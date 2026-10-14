@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 # Reviewed releases can have package-specific cutoffs within the five-day window.
 [tool.uv]
 exclude-newer = "5 days"
-exclude-newer-package = { gribberish = "2026-10-07T00:00:00Z" }
+exclude-newer-package = { gribberish = "2026-10-14T16:10:00Z" }
 
 
 [project.scripts]
