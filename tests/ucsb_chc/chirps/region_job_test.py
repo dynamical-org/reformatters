@@ -131,15 +131,175 @@ def test_download_file_propagates_missing_file(
         _job().download_file(coord)
 
 
-def test_generate_source_file_coords() -> None:
-    times = pd.date_range("2025-01-01", "2025-01-03", freq="1D")
+@pytest.fixture(autouse=True)
+def clear_listings() -> None:
+    region_job._available_urls.cache_clear()
+
+
+@pytest.mark.parametrize("product", ["final", "preliminary"])
+def test_generate_source_file_coords(
+    monkeypatch: pytest.MonkeyPatch,
+    product: ChirpsProduct,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    times = pd.date_range("2024-12-31", "2025-01-03", freq="1D")
     processing_region_ds = xr.Dataset(coords={"time": times})
+    job = _job(product)
+    present = [
+        UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time)
+        for time in times[:3]
+    ]
+    requested: list[str] = []
 
-    coords = _job("preliminary").generate_source_file_coords(processing_region_ds, [])
+    def get(url: str, *, rate_limiter: RateLimiter) -> httpx.Response:
+        assert rate_limiter is region_job.chirps_rate_limiter
+        requested.append(url)
+        if not url.rstrip("/").rsplit("/", 1)[-1].isdigit():
+            return httpx.Response(
+                200,
+                text='<a href="../">Parent</a><a href="2024/">2024</a><a href="2025/">2025</a>',
+            )
+        links = "".join(
+            f"<tr><td><a href='{coord.get_url().rsplit('/', 1)[-1]}'>{coord.time}</a></td></tr>"
+            for coord in present
+            if coord.get_url().startswith(url)
+        )
+        absent_url = UcsbChcChirpsAnalysisSourceFileCoord(
+            product=product, time=times[-1]
+        ).get_url()
+        return httpx.Response(
+            200,
+            text=f"""<html><h1>Index of {url}</h1><table>
+            <a href="../">Parent Directory</a><a href="?C=N&amp;O=D">Name</a>
+            {links}<a href="{absent_url}.gz">compressed</a>
+            <a href="https://example.org/{absent_url.rsplit("/", 1)[-1]}">other host</a>
+            {absent_url}</table></html>""",
+        )
 
-    assert [c.time for c in coords] == list(times)
-    assert {c.product for c in coords} == {"preliminary"}
-    assert coords[0].out_loc() == {"time": pd.Timestamp("2025-01-01")}
+    monkeypatch.setattr(region_job, "httpx_get", get)
+    coords = job.generate_source_file_coords(processing_region_ds, [])
+    assert coords == present
+    assert "missing historical dates" in caplog.text
+    assert coords[0].out_loc() == {"time": times[0]}
+    assert len(requested) == 3
+
+    _job(product).generate_source_file_coords(processing_region_ds, [])
+    assert len(requested) == 3
+    config = UcsbChcChirpsAnalysisFinalTemplateConfig()
+    type(job).get_jobs(
+        Path("unused.zarr"),
+        config.get_template(pd.Timestamp("1981-01-02")),
+        "time",
+        list(config.data_vars),
+        "next-run",
+    )
+    job.generate_source_file_coords(processing_region_ds, [])
+    assert len(requested) == 6
+
+
+def test_empty_listing_and_empty_region(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-01")),
+    )
+    get = MagicMock(
+        side_effect=[
+            httpx.Response(
+                200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
+            ),
+            httpx.Response(200, text='<a href="../">Parent</a>'),
+        ]
+    )
+    monkeypatch.setattr(region_job, "httpx_get", get)
+    job = _job()
+    assert job.generate_source_file_coords(xr.Dataset(coords={"time": []}), []) == []
+    get.assert_not_called()
+    assert (
+        job.generate_source_file_coords(
+            xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)}), []
+        )
+        == []
+    )
+    assert get.call_count == 2
+    assert (
+        job.generate_source_file_coords(
+            xr.Dataset(coords={"time": pd.date_range("2026-01-01", periods=2)}), []
+        )
+        == []
+    )
+    assert get.call_count == 2
+
+
+@pytest.mark.parametrize("missing_year", [True, False])
+def test_missing_historical_listing_fails(
+    monkeypatch: pytest.MonkeyPatch, missing_year: bool
+) -> None:
+    get = MagicMock(
+        side_effect=[
+            httpx.Response(
+                200,
+                text=f'<a href="../">Parent</a><a href="{2026 if missing_year else 2025}/">year</a>',
+            ),
+            httpx.Response(
+                200,
+                text='<a href="../">Parent</a><a href="chirps-v3.1.rnl.2025.01.01.tif">wrong version</a>',
+            ),
+        ]
+    )
+    monkeypatch.setattr(region_job, "httpx_get", get)
+    with pytest.raises(
+        AssertionError, match=r"Missing historical directory|No CHIRPS files"
+    ):
+        _job().generate_source_file_coords(
+            xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)}), []
+        )
+
+
+@pytest.mark.parametrize("status", [403, 404, 503, None])
+@pytest.mark.parametrize("year_listing", [False, True])
+def test_listing_failure_propagates(
+    monkeypatch: pytest.MonkeyPatch, status: int | None, year_listing: bool
+) -> None:
+    def get(url: str, *, rate_limiter: RateLimiter) -> httpx.Response:
+        if year_listing and not url.endswith("2025/"):
+            return httpx.Response(
+                200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
+            )
+        if status is None:
+            raise httpx.ReadTimeout("listing timed out")
+        response = httpx.Response(status, request=httpx.Request("GET", url))
+        response.raise_for_status()
+        return response
+
+    monkeypatch.setattr(region_job, "httpx_get", get)
+    with pytest.raises(httpx.HTTPError):
+        _job().generate_source_file_coords(
+            xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)}), []
+        )
+    assert region_job._available_urls.cache_info().currsize == int(year_listing)
+
+
+def test_malformed_listing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        region_job,
+        "httpx_get",
+        MagicMock(return_value=httpx.Response(200, text="<html>Access denied</html>")),
+    )
+    with pytest.raises(AssertionError, match="no parent link"):
+        _job().generate_source_file_coords(
+            xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)}), []
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("product", ["final", "preliminary"])
+def test_live_directory_listing(product: ChirpsProduct) -> None:
+    times = pd.date_range("2025-01-01", periods=3)
+    coords = _job(product).generate_source_file_coords(
+        xr.Dataset(coords={"time": times}), []
+    )
+    assert [coord.time for coord in coords] == list(times)
 
 
 def test_read_data_masks_fill_value_and_converts_to_rate(
@@ -190,7 +350,7 @@ def test_downloads_share_one_per_second_limit_including_retries(
         return httpx.Response(
             503 if len(starts) == 1 else 200,
             request=httpx.Request("GET", url),
-            content=b"tiff",
+            content=b'<a href="../">Parent</a>' if url.endswith("/") else b"tiff",
         )
 
     monkeypatch.setattr(download.time, "monotonic", lambda: now)
@@ -212,8 +372,9 @@ def test_downloads_share_one_per_second_limit_including_retries(
         )
         assert job.download_file(coord).read_bytes() == b"tiff"
 
-    assert starts == [0.0, 1.0, 2.0]
+    region_job._available_urls("https://example.org/list/")
+    assert starts == [0.0, 1.0, 2.0, 3.0]
     now += 60.0
     job.download_file(coord)
     job.download_file(coord)
-    assert starts[-2:] == [62.0, 63.0]
+    assert starts[-2:] == [63.0, 64.0]

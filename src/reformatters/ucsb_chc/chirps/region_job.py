@@ -1,6 +1,10 @@
+import re
 from collections.abc import Callable, Mapping, Sequence
+from functools import lru_cache
+from html.parser import HTMLParser
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Self
+from urllib.parse import urljoin
 
 import numpy as np
 import pandas as pd
@@ -13,7 +17,8 @@ from reformatters.common.config_models import (
     DataVar,
     mask_source_fill_value_inplace,
 )
-from reformatters.common.download import RateLimiter, httpx_download_to_disk
+from reformatters.common.download import RateLimiter, httpx_download_to_disk, httpx_get
+from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -35,6 +40,7 @@ from reformatters.ucsb_chc.chirps.template_config import (
 )
 
 chirps_rate_limiter = RateLimiter(max_per_minute=60)
+log = get_logger(__name__)
 
 _BASE_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily"
 
@@ -50,6 +56,30 @@ _PRODUCT_PATHS: dict[ChirpsProduct, _ProductPath] = {
 }
 
 
+class _DirectoryLinks(HTMLParser):
+    def __init__(self, directory_url: str) -> None:
+        super().__init__()
+        self.directory_url = directory_url
+        self.urls: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a":
+            for name, value in attrs:
+                if name == "href" and value is not None:
+                    self.urls.add(urljoin(self.directory_url, value))
+
+
+@lru_cache(maxsize=256)
+def _available_urls(directory_url: str) -> frozenset[str]:
+    response = httpx_get(directory_url, rate_limiter=chirps_rate_limiter)
+    parser = _DirectoryLinks(directory_url)
+    parser.feed(response.text)
+    assert urljoin(directory_url, "../") in parser.urls, (
+        f"Directory index has no parent link: {directory_url}"
+    )
+    return frozenset(parser.urls)
+
+
 class UcsbChcChirpsAnalysisSourceFileCoord(SourceFileCoord):
     """One CHIRPS daily GeoTIFF for a given product and time."""
 
@@ -62,9 +92,12 @@ class UcsbChcChirpsAnalysisSourceFileCoord(SourceFileCoord):
     def get_url(self) -> str:
         path = _PRODUCT_PATHS[self.product]
         return (
-            f"{_BASE_URL}/{path.directory}/{self.time:%Y}/"
-            f"chirps-v3.0.{path.filename_infix}.{self.time:%Y.%m.%d}.tif"
+            self.directory_url()
+            + f"chirps-v3.0.{path.filename_infix}.{self.time:%Y.%m.%d}.tif"
         )
+
+    def directory_url(self) -> str:
+        return f"{_BASE_URL}/{_PRODUCT_PATHS[self.product].directory}/{self.time:%Y}/"
 
 
 class UcsbChcChirpsAnalysisMaterializedRegionJob(
@@ -76,17 +109,82 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
 
     download_parallelism: int = 1
 
+    @classmethod
+    def get_jobs(
+        cls,
+        tmp_store: Path,
+        template_ds: xr.DataTree,
+        append_dim: AppendDim,
+        all_data_vars: Sequence[DataVar[BaseInternalAttrs]],
+        reformat_job_name: str,
+        filter_start: Timestamp | None = None,
+        filter_end: Timestamp | None = None,
+        filter_contains: list[Timestamp] | None = None,
+        filter_variable_names: list[str] | None = None,
+    ) -> Sequence[Self]:
+        # Repeated local runs share a process but must discover newly published files.
+        _available_urls.cache_clear()
+        return super().get_jobs(
+            tmp_store,
+            template_ds,
+            append_dim,
+            all_data_vars,
+            reformat_job_name,
+            filter_start,
+            filter_end,
+            filter_contains,
+            filter_variable_names,
+        )
+
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DataVar[BaseInternalAttrs]],  # noqa: ARG002
     ) -> Sequence[UcsbChcChirpsAnalysisSourceFileCoord]:
-        return [
+        coords = [
             UcsbChcChirpsAnalysisSourceFileCoord(
                 product=self.product, time=pd.Timestamp(time)
             )
             for time in processing_region_ds["time"].values
         ]
+        if not coords:
+            return []
+        product_url = f"{_BASE_URL}/{_PRODUCT_PATHS[self.product].directory}/"
+        years = _available_urls(product_url)
+        assert any(
+            re.fullmatch(re.escape(product_url) + r"\d{4}/", url) for url in years
+        ), f"No year directories in {product_url}"
+        now = pd.Timestamp.now(tz="UTC").tz_localize(None)
+        available: set[str] = set()
+        for year in dict.fromkeys(coord.time.year for coord in coords):
+            directory = f"{product_url}{year}/"
+            if directory not in years:
+                assert year >= now.year, f"Missing historical directory: {directory}"
+                continue
+            pattern = (
+                re.escape(
+                    f"{directory}chirps-v3.0.{_PRODUCT_PATHS[self.product].filename_infix}.{year}."
+                )
+                + r"\d{2}\.\d{2}\.tif"
+            )
+            files = {
+                url for url in _available_urls(directory) if re.fullmatch(pattern, url)
+            }
+            assert files or year >= now.year, f"No CHIRPS files in {directory}"
+            if not files:
+                log.warning(f"No CHIRPS files in {directory}")
+            available.update(files)
+        missing_old = [
+            coord.time
+            for coord in coords
+            if coord.get_url() not in available
+            and coord.time < now - self.expected_unavailable_window
+        ]
+        if missing_old:
+            log.error(
+                f"CHIRPS {self.product} source listing is missing historical dates: {missing_old}"
+            )
+        return [coord for coord in coords if coord.get_url() in available]
 
     def download_file(self, coord: UcsbChcChirpsAnalysisSourceFileCoord) -> Path:
         return httpx_download_to_disk(
