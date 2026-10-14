@@ -9861,7 +9861,7 @@
           "long_name": "Probability of vertical wind shear (0-609 m above ground) above 10.3 m s-1",
           "short_name": "probability_of_vertical_wind_shear_0_609m_above_10p3",
           "units": "percent",
-          "comment": "Probability of vertical wind shear (0-609 m above ground) above 10.3 m s-1.",
+          "comment": "Probability of vertical wind shear (0-609 m above ground) above 10.3 m s-1. Over terrain above roughly 1500 to 1800 m the source does not compute the shear and writes 0.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -9916,7 +9916,7 @@
           "long_name": "Probability of vertical wind shear (0-609 m above ground) above 20 m s-1",
           "short_name": "probability_of_vertical_wind_shear_0_609m_above_20",
           "units": "percent",
-          "comment": "Probability of vertical wind shear (0-609 m above ground) above 20 m s-1.",
+          "comment": "Probability of vertical wind shear (0-609 m above ground) above 20 m s-1. Over terrain above roughly 1500 to 1800 m the source does not compute the shear and writes 0.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -13104,7 +13104,7 @@
           "long_name": "Vertical wind shear",
           "short_name": "vws",
           "units": "m s-1",
-          "comment": "Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
+          "comment": "Over terrain above roughly 1500 to 1800 m the source does not compute the shear and writes 0. Mean is the weighted mean of member speeds. Standard deviation is sqrt(var(u) + var(v)), the vector spread including variation in direction, rather than the standard deviation of speed.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

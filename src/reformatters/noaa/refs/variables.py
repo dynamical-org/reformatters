@@ -797,6 +797,10 @@ _FIELD_COMMENTS = {
         "700-500 mb above ground",
     ): "Vertical velocity in a layer defined by pressure differences above ground, rather than an isobaric layer.",
     (
+        "VWSH",
+        "0-609 m above ground",
+    ): "Over terrain above roughly 1500 to 1800 m the source does not compute the shear and writes 0.",
+    (
         "var discipline=0 center=7 local_table=1 parmcat=6 parm=202",
         "0 m above ground",
     ): "Fog liquid water is derived by the ensemble generator. Mean is weighted over members with positive fog liquid water. Standard deviation divides the weighted sum of squared deviations from that mean over all nonmissing members, including zero-fog members, by the positive-member weight sum before taking the square root. Both are zero when no member has fog.",
@@ -1554,7 +1558,10 @@ def _statistic_attrs(field: ProductField, *, spread_only: bool) -> DataVarAttrs:
             ),
         )
     elif element in ("WIND", "VWSH"):
-        attrs = replace(attrs, comment=_WIND_COMMENT)
+        attrs = replace(
+            attrs,
+            comment=" ".join(filter(None, (attrs.comment, _WIND_COMMENT))),
+        )
     elif element == "CIN":
         attrs = replace(
             attrs,
@@ -1619,7 +1626,7 @@ def _probability_attrs(
         level_label = _PROBABILITY_LEVEL_LABELS.get(level, level)
         description = f"{quantity} ({level_label}) {reader_condition}"
         comment = f"{probability_label} {description}."
-        if element in ("CAPE", "CIN") and field.attrs.comment:
+        if element in ("CAPE", "CIN", "VWSH") and field.attrs.comment:
             comment += f" {field.attrs.comment}"
         if element == "CIN":
             comment += " Convective inhibition is negative where there is inhibition and at or near zero where there is none."

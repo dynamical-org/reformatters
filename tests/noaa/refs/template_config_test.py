@@ -446,6 +446,17 @@ def test_product_caps_and_vector_spread_have_no_inherited_fill() -> None:
         assert "NaN" not in (var.attrs.comment or "")
     for name in ("wind_speed_10m", "vertical_wind_shear_0_609m"):
         assert "vector spread" in (variables[name].attrs.comment or "")
+    for name in (
+        "vertical_wind_shear_0_609m",
+        "probability_of_vertical_wind_shear_0_609m_above_10p3",
+        "probability_of_vertical_wind_shear_0_609m_above_20",
+    ):
+        assert "does not compute the shear and writes 0" in (
+            variables[name].attrs.comment or ""
+        )
+    assert "writes 0" not in (
+        variables["vertical_wind_shear_0_6000m"].attrs.comment or ""
+    )
     ffri = [
         v for v in config.data_vars if v.internal_attrs.source_families == ("ffri",)
     ]
