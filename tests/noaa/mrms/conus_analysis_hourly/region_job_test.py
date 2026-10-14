@@ -632,10 +632,11 @@ def test_preservation_batches_missing_times_and_uses_coordinate_intersection(
     data_var = data_vars[0]
     times = pd.date_range("2026-10-07T14:00", periods=50, freq="h")
     ds = template_ds.to_dataset()[[data_var.name]].reindex(time=times)
-    ds[data_var.name].encoding.update(chunks=(648, 2, 2), shards=(648, 2, 2))
+    ds[data_var.name].encoding.update(chunks=(648, 1, 1), shards=(648, 1, 1))
     template_ds = xr.DataTree.from_dict({"/": ds})
     existing_ds = ds.isel(time=[i for i in range(50) if i != 1]).compute()
-    existing_ds[data_var.name].data[:] = 165
+    spatial_values = np.arange(4, dtype=np.float32).reshape(2, 2) + 165
+    existing_ds[data_var.name].data[:] = spatial_values
     store = tmp_path / "existing.zarr"
     with template_utils.ignore_consolidated_metadata_spec_warning():
         existing_ds.to_zarr(store, consolidated=True)
@@ -645,9 +646,9 @@ def test_preservation_batches_missing_times_and_uses_coordinate_intersection(
         template_ds=template_ds,
         data_vars=[data_var],
         append_dim="time",
-        region=slice(0, 50),
+        region=slice(1, 50),
         reformat_job_name="test-update",
-        existing_time_end=times[43],
+        existing_time_end=times[44],
     )
     data_array = template_ds.to_dataset()[data_var.name].compute()
     coords = [
@@ -662,7 +663,7 @@ def test_preservation_batches_missing_times_and_uses_coordinate_intersection(
     async def decode_single(
         self: BloscCodec, chunk_bytes: Buffer, chunk_spec: ArraySpec
     ) -> Buffer:
-        if chunk_spec.shape == (648, 2, 2):
+        if chunk_spec.shape == (648, 1, 1):
             decoded_time_chunks.append(chunk_spec.shape)
         return await original_decode(self, chunk_bytes, chunk_spec)
 
@@ -671,13 +672,12 @@ def test_preservation_batches_missing_times_and_uses_coordinate_intersection(
         data_array, data_var, coords, primary_store
     )
 
-    assert len(decoded_time_chunks) == 1
+    assert len(decoded_time_chunks) == 4
     reused_times = [c.time for c in results if c.status == SourceFileStatus.Succeeded]
-    assert reused_times == [time for i, time in enumerate(times[:44]) if i != 1]
+    assert reused_times == list(times[2:45])
     assert len(reused_times) == 43
     expected = np.full((50, 2, 2), np.nan, dtype=np.float32)
-    expected[:44] = 165
-    expected[1] = np.nan
+    expected[2:45] = spatial_values
     np.testing.assert_array_equal(data_array.values, expected)
 
 
@@ -709,7 +709,7 @@ def test_preservation_does_not_restore_read_failures(
     )
     assert np.isnan(data_array.values).all()
     assert all(c.status == SourceFileStatus.ReadFailed for c in results)
-    primary_store.assert_not_called()
+    assert primary_store.mock_calls == []
 
 
 def test_update_template_with_results(

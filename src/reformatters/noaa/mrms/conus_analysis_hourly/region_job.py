@@ -1,4 +1,5 @@
 import gzip
+import itertools
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -16,6 +17,7 @@ from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import http_download_to_disk
 from reformatters.common.grib import grib_decimal_scale_factors
+from reformatters.common.iterating import chunk_slices
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.pydantic import replace
@@ -305,11 +307,14 @@ class NoaaMrmsRegionJob(
     ) -> Sequence[NoaaMrmsSourceFileCoord]:
         if self.existing_time_end is None:
             return source_file_coords
+        output_start = pd.Timestamp(
+            self.template_ds.to_dataset()["time"].values[self.region.start]
+        )
         failed_coords = [
             coord
             for coord in source_file_coords
             if coord.status == SourceFileStatus.DownloadFailed
-            and coord.time <= self.existing_time_end
+            and output_start <= coord.time <= self.existing_time_end
         ]
         if not failed_coords:
             return source_file_coords
@@ -322,10 +327,19 @@ class NoaaMrmsRegionJob(
             if not reuse_coords:
                 return source_file_coords
             times = [coord.time for coord in reuse_coords]
-            # Batch times so each temporal chunk is decoded once per variable.
-            data_array.loc[{"time": times}] = (
-                existing_ds[data_var.name].sel(time=times).values
+            existing = existing_ds[data_var.name]
+            shard_sizes = dict(
+                zip(existing.dims, existing.encoding["shards"], strict=True)
             )
+            # Spatial shards bound memory while batching times avoids repeated decodes.
+            for latitude, longitude in itertools.product(
+                chunk_slices(existing.sizes["latitude"], shard_sizes["latitude"]),
+                chunk_slices(existing.sizes["longitude"], shard_sizes["longitude"]),
+            ):
+                spatial_indexer = {"latitude": latitude, "longitude": longitude}
+                data_array.isel(spatial_indexer).loc[{"time": times}] = (
+                    existing.isel(spatial_indexer).sel(time=times).values
+                )
 
         log.info(f"Reused {len(reuse_coords)} published hours for {data_var.name}")
         reused_times = set(times)
