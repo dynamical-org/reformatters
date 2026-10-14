@@ -51,14 +51,13 @@ class NoaaRrfsDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cadence = int(self.template_config.append_dim_frequency.total_seconds() / 3600)
 
-        hours = ",".join(
-            str(h)
-            for h in sorted(
-                {
-                    (h + self.update_offset_minutes // 60) % 24
-                    for h in range(0, 24, cadence)
-                }
-            )
+        fire_hours = {
+            (h + self.update_offset_minutes // 60) % 24 for h in range(0, 24, cadence)
+        }
+        hours = (
+            "*"
+            if fire_hours == set(range(24))
+            else ",".join(str(h) for h in sorted(fire_hours))
         )
 
         return (
