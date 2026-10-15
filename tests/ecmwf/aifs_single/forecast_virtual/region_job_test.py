@@ -1,14 +1,21 @@
+import asyncio
 import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 from unittest.mock import Mock
 
+import icechunk
 import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.storage import (
+    IcechunkVirtualConfig,
+    _repository_config_and_credentials,
+    manifest_append_dim_split,
+)
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     region_job as region_job_module,
 )
@@ -16,8 +23,11 @@ from reformatters.ecmwf.aifs_single.forecast_virtual.region_job import (
     S3_FALLBACK_BEFORE,
     EcmwfAifsSingleForecastVirtualRegionJob,
     EcmwfAifsSingleForecastVirtualSourceFileCoord,
+    aifs_single_virtual_chunk_containers,
 )
 from reformatters.ecmwf.aifs_single.forecast_virtual.template_config import (
+    AIFS_2026_UPGRADE_DATE,
+    PRESSURE_LEVELS,
     EcmwfAifsSingleForecastVirtualTemplateConfig,
     EcmwfAifsSingleVirtualDataVar,
 )
@@ -317,6 +327,36 @@ def test_file_refs_pressure_group_routes_each_level(
         assert ref.out_loc["init_time"] == _ERA2_INIT
 
 
+@pytest.mark.parametrize("lead_hour", [0, 6])
+@pytest.mark.parametrize("numeric_levels", [False, True])
+def test_file_refs_accepts_real_index_level_selectors(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    lead_hour: int,
+    numeric_levels: bool,
+) -> None:
+    rows = [
+        json.loads(line)
+        for line in (FIXTURES_DIR / f"aifs_single_20250301_00z_{lead_hour}h.index")
+        .read_text()
+        .splitlines()
+    ]
+    if numeric_levels:
+        for row in rows:
+            if "levelist" in row:
+                row["levelist"] = int(row["levelist"])
+    data_vars = [get_var("temperature_2m"), get_var("pressure_level/temperature")]
+    _fake_index(monkeypatch, tmp_path, "\n".join(json.dumps(row) for row in rows))
+    file_size = max(row["_offset"] + row["_length"] for row in rows)
+    refs = make_job(template_ds, data_vars).file_refs(
+        _coord(data_vars, lead_time=pd.Timedelta(hours=lead_hour)), file_size
+    )
+    assert len(refs) == len(PRESSURE_LEVELS)
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+
+
 def test_file_refs_missing_level_yields_no_ref(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -338,6 +378,142 @@ def test_file_refs_skips_stale_index_past_eof(
     job = make_job(template_ds, data_vars=data_vars)
     # File truncated below the matched message's end byte -> stale/mismatched -> skip.
     assert job.file_refs(_coord(data_vars), file_size=1200) == []
+
+
+@pytest.mark.parametrize("processing_mode", ["update", "backfill"])
+@pytest.mark.parametrize(
+    "bad_row",
+    [
+        "{bad json",
+        "[]",
+        "null",
+        *[
+            json.dumps(
+                {
+                    "param": "10u",
+                    "levtype": "sfc",
+                    "_offset": 100,
+                    "_length": 100,
+                    **change,
+                }
+            )
+            for change in [
+                {"param": ["10u"]},
+                {"levtype": {}},
+                {"levelist": []},
+                {"levelist": "bad"},
+                {"levelist": 1.5},
+                {"param": None},
+                {"_offset": -1},
+                {"_offset": 1.5},
+                {"_offset": True},
+                {"_offset": "bad"},
+                {"_length": 0},
+                {"_length": -1},
+                {"_length": []},
+                {"_length": 10000},
+            ]
+        ],
+        '{"param":"10u","levtype":"sfc"}',
+    ],
+)
+def test_source_row_errors_preserve_committed_siblings(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    processing_mode: Literal["update", "backfill"],
+    bad_row: str,
+) -> None:
+    data_vars = [
+        get_var(name)
+        for name in ("temperature_2m", "wind_u_10m", "skin_temperature_surface")
+    ]
+    init_time = pd.Timestamp(template_ds.to_dataset().get_index("init_time")[0])
+    template = xr.DataTree(
+        template_ds.to_dataset()[[var.name for var in data_vars]].sel(
+            init_time=[init_time]
+        )
+    )
+    job = make_job(template, data_vars, processing_mode=processing_mode)
+    coords = [
+        _coord(data_vars, init_time=init_time, lead_time=pd.Timedelta(hours=hour))
+        for hour in (0, 6)
+    ]
+    _fake_index(
+        monkeypatch,
+        tmp_path,
+        _index_line("2t", "sfc", 0, 100)
+        + bad_row
+        + "\n"
+        + _index_line("skt", "sfc", 200, 100),
+    )
+    monkeypatch.setattr(
+        EcmwfAifsSingleForecastVirtualRegionJob,
+        "discover_available",
+        lambda self, pending: [(coord, 300) for coord in pending],
+    )
+    config, credentials = _repository_config_and_credentials(
+        IcechunkVirtualConfig(
+            containers=aifs_single_virtual_chunk_containers(),
+            manifest_split=manifest_append_dim_split(split_size=32, dim="init_time"),
+        )
+    )
+    repo = icechunk.Repository.create(
+        icechunk.in_memory_storage(),
+        config=config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    session = repo.writable_session("main")
+    template.to_zarr(session.store, compute=False, consolidated=False)
+    session.commit("template")
+
+    job.process_virtual(repo, [], "main", coords)
+
+    store = repo.readonly_session("main").store
+    for lead_index in (0, 1):
+        assert asyncio.run(store.exists(f"temperature_2m/c/0/{lead_index}/0/0"))
+        assert asyncio.run(
+            store.exists(f"skin_temperature_surface/c/0/{lead_index}/0/0")
+        )
+        assert not asyncio.run(store.exists(f"wind_u_10m/c/0/{lead_index}/0/0"))
+    assert job.filter_already_present(coords, store) == []
+    assert any(
+        record.levelname == "ERROR" and "Skipping" in record.message
+        for record in caplog.records
+    )
+    assert "Missing 1 expected messages" in caplog.text
+
+
+@pytest.mark.parametrize("init_time", [_ERA2_INIT, AIFS_2026_UPGRADE_DATE])
+@pytest.mark.parametrize("param", ["t", "q"])
+def test_missing_message_logging_accounts_for_known_pressure_levels(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    init_time: pd.Timestamp,
+    param: str,
+) -> None:
+    var = get_var(
+        "pressure_level/temperature"
+        if param == "t"
+        else "pressure_level/specific_humidity"
+    )
+    content = "".join(
+        _index_line(param, "pl", index * 100, 100, str(level))
+        for index, level in enumerate(PRESSURE_LEVELS)
+        if level != 10
+    )
+    _fake_index(monkeypatch, tmp_path, content)
+    job = make_job(template_ds, [var])
+    assert (
+        len(job.file_refs(_coord([var], init_time=init_time), 10000))
+        == len(PRESSURE_LEVELS) - 1
+    )
+    assert ("Missing 1 expected messages" in caplog.text) == (
+        param == "t" and init_time >= AIFS_2026_UPGRADE_DATE
+    )
 
 
 def test_file_refs_s3_source_reads_index_and_points_refs_at_s3(
@@ -606,6 +782,7 @@ def test_file_refs_covers_every_variable_in_a_real_index(
     lead_time: pd.Timedelta,
     index_fixture: str,
     file_size: int,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Every variable a real source file carries gets a ref from that file's real index.
 
@@ -633,6 +810,7 @@ def test_file_refs_covers_every_variable_in_a_real_index(
     expected = {var.path for var in coord.data_vars}
     assert expected, "the coord should carry variables at this lead time"
     assert {ref.data_var.path for ref in refs} == expected
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
 
 
 def test_operational_update_jobs_single_polling_job(

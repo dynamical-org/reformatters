@@ -5,6 +5,7 @@ import pandas as pd
 import xarray as xr
 from pydantic import Field
 
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
@@ -14,6 +15,8 @@ from reformatters.noaa.rrfs.region_job import (
     NoaaRrfsRegionJob,
     NoaaRrfsSourceFileCoord,
 )
+
+log = get_logger(__name__)
 
 
 class NoaaRrfsEnsSourceFileCoord(NoaaRrfsSourceFileCoord):
@@ -32,11 +35,13 @@ class NoaaRrfsEnsSourceFileCoord(NoaaRrfsSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {**super().out_loc(), "ensemble_member": self.ensemble_member}
 
-    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...] | None:
         if self.ensemble_member == 0:
             return selectors
         ensemble = f"ENS=+{self.ensemble_member}"
-        assert ensemble in selectors, (self.get_url(), selectors)
+        if [s for s in selectors if s.startswith("ENS=")] != [ensemble]:
+            log.error(f"{self.get_url()}: skipping malformed selectors {selectors}")
+            return None
         return tuple(s for s in selectors if s != ensemble)
 
 
