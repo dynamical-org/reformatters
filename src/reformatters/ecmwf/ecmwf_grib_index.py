@@ -1,13 +1,34 @@
-from collections.abc import Sequence
+import json
+from collections.abc import Iterator, Sequence
 from os import PathLike
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.logging import get_logger
 from reformatters.ecmwf.ecmwf_config_models import (
     EcmwfInternalAttrs,
 )
+
+log = get_logger(__name__)
+
+
+def iter_index_file_rows(
+    index_local_path: PathLike[str],
+) -> Iterator[dict[str, object]]:
+    """Yield JSON objects from an index, logging and skipping malformed rows."""
+    with Path(index_local_path).open("rb") as index_file:
+        for line_number, line in enumerate(index_file, start=1):
+            try:
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    raise ValueError("index row must be a JSON object")
+            except (ValueError, UnicodeDecodeError) as exc:
+                log.error(f"Skipping {index_local_path} row {line_number}: {exc}")
+                continue
+            yield row
 
 
 def grib_message_byte_ranges_from_index(

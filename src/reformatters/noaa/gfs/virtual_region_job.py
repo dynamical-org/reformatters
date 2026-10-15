@@ -140,6 +140,33 @@ class NoaaGfsVirtualRegionJob(
             return True
         return (element, level) not in PGRB2_PREFERRED_MESSAGES
 
+    def expects_index_message(
+        self, coord: GFS_VIRTUAL_COORD, var: NoaaDataVar, level: str
+    ) -> bool:
+        element = var.internal_attrs.grib_element
+        if not self.owns_index_message(coord, element, level):
+            return False
+        if level.endswith(" mb"):
+            pressure = float(level.removesuffix(" mb"))
+            if element in {
+                "TCDC",
+                "CLMR",
+                "CLWMR",
+                "ICMR",
+                "RWMR",
+                "SNMR",
+                "GRLE",
+            }:
+                if pressure < 50:
+                    return False
+                if pressure == 70:
+                    return coord.file_type == "pgrb2b"
+            return (pressure in range(125, 876, 50)) == (coord.file_type == "pgrb2b")
+        if level.endswith(" m above mean sea level"):
+            height = float(level.removesuffix(" m above mean sea level"))
+            return (height in {1829, 2743, 3658}) == (coord.file_type == "pgrb2")
+        return True
+
     def representative_var(self, coord: GFS_VIRTUAL_COORD) -> NoaaDataVar:
         """A variable this file fills, preferring product-specific probes published in
         every archive era."""

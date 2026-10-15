@@ -22,11 +22,26 @@ from reformatters.noaa.noaa_virtual_region_job import (
 
 S3_LOCATION_PREFIX = f"s3://{NODD_BUCKET}/"
 
-# These uploads ended mid-file: the data file and its .idx stop after a handful of
-# messages. Treated as never published, like the hours the archive is missing entirely.
-_TRUNCATED_SOURCE_FILES = (
-    S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t10z.wrfnatf00.grib2",
-    S3_LOCATION_PREFIX + "hrrr.20160805/conus/hrrr.t12z.wrfnatf00.grib2",
+_HRRR_V4_VARIABLES = frozenset(
+    {
+        "maximum_hail_diameter_surface",
+        "aerosol_optical_thickness_atmosphere",
+        "mass_density_8m",
+        "vegetation_surface",
+        "minimum_vegetation_surface",
+        "maximum_vegetation_surface",
+        "leaf_area_index_surface",
+        "column_integrated_mass_density_atmosphere",
+        "total_column_cloud_water_atmosphere",
+        "total_column_cloud_ice_atmosphere",
+        "total_cloud_cover_boundary_layer",
+        "convective_available_potential_energy_0_3000m",
+        "effective_layer_helicity_surface",
+        "critical_angle_0_500m",
+        "layer_thickness_261k_256k",
+        "enhanced_stretching_potential_0_3000m",
+        "model_level/mass_density",
+    }
 )
 
 
@@ -59,19 +74,24 @@ class NoaaHrrrVirtualRegionJob(
     NoaaVirtualRegionJob[NoaaHrrrDataVar, HRRR_VIRTUAL_COORD],
     Generic[HRRR_VIRTUAL_COORD],
 ):
-    """The HRRR NODD bucket, minus the truncated uploads treated as never published."""
+    """The HRRR NODD source bucket."""
 
     source_location_prefix: ClassVar[str] = S3_LOCATION_PREFIX
     source_bucket_region: ClassVar[str] = NODD_BUCKET_REGION
 
-    def discover_available(
-        self, pending: list[HRRR_VIRTUAL_COORD]
-    ) -> list[tuple[HRRR_VIRTUAL_COORD, int]]:
-        return [
-            (coord, size)
-            for coord, size in super().discover_available(pending)
-            if coord.get_url() not in _TRUNCATED_SOURCE_FILES
-        ]
+    def expects_index_message(
+        self, coord: HRRR_VIRTUAL_COORD, var: NoaaHrrrDataVar, level: str
+    ) -> bool:
+        if var.path in _HRRR_V4_VARIABLES and coord.init_time < pd.Timestamp(
+            "2020-12-02T12"
+        ):
+            return False
+        if var.path in {
+            "lightning_threat_1m",
+            "lightning_threat_2m",
+        } and coord.init_time < pd.Timestamp("2022-06-28T12"):
+            return False
+        return super().expects_index_message(coord, var, level)
 
 
 class NoaaHrrrForecastVirtualSourceFileCoord(NoaaHrrrVirtualSourceFileCoord):

@@ -94,10 +94,10 @@ def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> N
     }
 
 
-def test_truncated_source_files_are_never_available(
+def test_truncated_source_files_reach_ref_validation(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The 2016-08-05 native uploads that end mid-file never reach the write loop."""
+    """Truncated files use the same ref validation as every other source file."""
     data_vars = [get_var("model_level/temperature")]
     coords = [
         NoaaHrrrAnalysisVirtualSourceFileCoord(
@@ -117,7 +117,7 @@ def test_truncated_source_files_are_never_available(
     job = make_job(template_ds, data_vars=data_vars)
 
     assert [coord.get_url() for coord, _ in job.discover_available(coords)] == [
-        "s3://noaa-hrrr-bdp-pds/hrrr.20160805/conus/hrrr.t09z.wrfnatf00.grib2"
+        coord.get_url() for coord in coords
     ]
 
 
