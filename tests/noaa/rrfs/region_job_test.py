@@ -280,19 +280,93 @@ def test_member_selector_stripping_preserves_process_and_aerosol_selectors() -> 
         coord.index_selectors(("ENS=+1",))
 
 
-def test_missing_required_messages_fail_loudly() -> None:
+def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
     config = CONFIGS[0]
     var = next(v for v in config.data_vars if v.name == "temperature_2m")
     coord = NoaaRrfsSourceFileCoord(
-        init_time=pd.Timestamp("2026-09-15T00"),
+        init_time=pd.Timestamp("2026-10-15T12"),
         lead_time=pd.Timedelta("2h"),
         source_family="2dfld",
         data_vars=[var],
     )
-    with pytest.raises(
-        AssertionError, match=r"required GRIB messages absent.*temperature_2m"
-    ):
+    with caplog.at_level("WARNING"):
         make_job(config)._check_refs_complete(coord, [])
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert "temperature_2m" in warning.message
+    assert "ingesting available messages" in warning.message
+
+
+@pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
+def test_real_index_with_missing_messages_preserves_available_refs(
+    config: NoaaRrfsForecastTemplateConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    filename = (
+        "rrfsens-20261015-12-m003-f001-conus.idx"
+        if config.members
+        else "rrfs-20261015-12-subh-f001-conus.idx"
+        if config.sub_hourly
+        else "rrfs-20261015-12-2dfld-f001-conus.idx"
+    )
+    path = FIXTURES / "missing_messages" / filename
+    lead = pd.Timedelta("1h")
+    job = make_job(config)
+    variables = [
+        v
+        for v in config.data_vars
+        if v.internal_attrs.source_family == ("subh" if config.sub_hourly else "2dfld")
+        and v.available_at(lead)
+    ]
+    (coord,) = job.generate_source_file_coords(
+        xr.Dataset(
+            coords={
+                "init_time": [pd.Timestamp("2026-10-15T12")],
+                "lead_time": [lead],
+                "ensemble_member": [3],
+            }
+        ),
+        variables,
+    )
+    local = tmp_path / "index.idx"
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *a: 217)
+    lines = parse_grib_index_lines(path)
+    assert not {"FRZR", "FROZR"} & {line[1] for line in lines}
+    file_size = lines[-1][0] + 1000
+    local.write_bytes(path.read_bytes())
+    with caplog.at_level("WARNING"):
+        refs = job.file_refs(coord, file_size)
+    assert refs
+    missing_paths = {
+        v.path for v in variables if v.internal_attrs.grib_element in {"FRZR", "FROZR"}
+    }
+    assert missing_paths
+    present_paths = {ref.data_var.path for ref in refs}
+    assert present_paths == {v.path for v in variables} - missing_paths
+    assert job.representative_var(coord).path in present_paths
+    expected_leads = (
+        set(pd.to_timedelta([15, 30, 45, 60], unit="min"))
+        if config.sub_hourly
+        else {lead}
+    )
+    assert {(ref.data_var.path, ref.out_loc["lead_time"]) for ref in refs} == {
+        (var_path, lead_time)
+        for var_path in present_paths
+        for lead_time in expected_leads
+    }
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert all(path in warning.message for path in missing_paths)
 
 
 def test_supported_leads_are_explicit_for_binary_run_totals() -> None:

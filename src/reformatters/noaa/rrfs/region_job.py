@@ -6,6 +6,7 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.config_models import ROOT
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
@@ -18,6 +19,7 @@ from reformatters.noaa.rrfs.models import NoaaRrfsDataVar, RrfsSourceFamily
 
 SOURCE_PREFIX = "s3://noaa-rrfs-ops-pds/"
 SOURCE_REGION = "us-east-1"
+log = get_logger(__name__)
 
 
 def rrfs_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
@@ -75,9 +77,11 @@ class NoaaRrfsRegionJob(NoaaVirtualRegionJob[NoaaRrfsDataVar, NoaaRrfsSourceFile
             for r in refs
         }
         missing = expected - actual
-        assert not missing, (
-            f"{coord.get_url()}: required GRIB messages absent from index: {sorted(missing, key=str)}"
-        )
+        if missing:
+            log.warning(
+                f"{coord.get_url()}: GRIB messages absent from index: "
+                f"{sorted(missing, key=str)}; ingesting available messages"
+            )
 
 
 class NoaaRrfsHourlyRegionJob(NoaaRrfsRegionJob):
