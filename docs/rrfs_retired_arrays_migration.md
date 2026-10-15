@@ -94,9 +94,9 @@ and check actual completions rather than assuming the example applies.
 scheduled fire for sub-hourly.** Target zero by migrating sub-hourly in its observed
 post-run gap. If its old writer runs to the deadline and the gap is too short,
 allow the first new-image fire to hit the structural guard, then migrate promptly
-after confirming the old writer is gone. Pod retries have roughly five minutes of exponential backoff in total; migration
-within that budget may recover the same fire. Otherwise the next natural fire
-recovers it. Do not migrate while an old-image
+after confirming the old writer is gone. Pod retries have roughly five minutes of
+exponential backoff in total; migration within that budget may recover the same
+fire. Otherwise the next natural fire recovers it. Do not migrate while an old-image
 writer is running merely to avoid that alert. One affected fire can generate
 multiple pod exception events plus a cron-monitor failure; notification rules
 prevent promising an exact email/push count. If more than one fire would be missed,
