@@ -105,9 +105,9 @@ def _index_line(
 
 
 def _fake_index(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str | dict[str, str]
 ) -> list[str]:
-    """Serve `content` as every index download; returns the downloaded URLs."""
+    """Serve index contents, optionally by URL; return the downloaded URLs."""
     downloaded: list[str] = []
 
     def fake_download(url: str, dataset_id: str, **kwargs: str) -> Path:
@@ -117,7 +117,7 @@ def _fake_index(
             assert not kwargs
         downloaded.append(url)
         path = tmp_path / (url.rsplit("/", 1)[-1])
-        path.write_text(content)
+        path.write_text(content[url] if isinstance(content, dict) else content)
         return path
 
     monkeypatch.setattr(region_job_module, "gcs_download_to_disk", fake_download)
@@ -373,29 +373,52 @@ def test_file_refs_missing_level_yields_no_ref(
 def test_file_refs_skips_stale_index_past_eof(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _fake_index(monkeypatch, tmp_path, _index_line("2t", "sfc", 500, 1000))
+    _fake_index(
+        monkeypatch,
+        tmp_path,
+        _index_line("2t", "sfc", 0, 100) + _index_line("10u", "sfc", 500, 1000),
+    )
     data_vars = [get_var("temperature_2m")]
     job = make_job(template_ds, data_vars=data_vars)
-    # File truncated below the matched message's end byte -> stale/mismatched -> skip.
+    # An unselected row past EOF invalidates the earlier, in-bounds ref too.
     assert job.file_refs(_coord(data_vars), file_size=1200) == []
+
+
+def test_file_refs_quarantines_decreasing_byte_ranges(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _fake_index(
+        monkeypatch,
+        tmp_path,
+        _index_line("2t", "sfc", 200, 100) + _index_line("10u", "sfc", 0, 100),
+    )
+    data_vars = [get_var("temperature_2m")]
+    assert make_job(template_ds, data_vars).file_refs(_coord(data_vars), 300) == []
+    assert "untrustworthy index byte geometry" in caplog.text
 
 
 @pytest.mark.parametrize("processing_mode", ["update", "backfill"])
 @pytest.mark.parametrize(
-    "bad_row",
+    ("bad_row", "quarantine"),
     [
-        "{bad json",
-        "[]",
-        "null",
+        ("{bad json", False),
+        ("[]", False),
+        ("null", False),
         *[
-            json.dumps(
-                {
-                    "param": "10u",
-                    "levtype": "sfc",
-                    "_offset": 100,
-                    "_length": 100,
-                    **change,
-                }
+            (
+                json.dumps(
+                    {
+                        "param": "10u",
+                        "levtype": "sfc",
+                        "_offset": 100,
+                        "_length": 100,
+                        **change,
+                    }
+                ),
+                "_offset" in change or "_length" in change,
             )
             for change in [
                 {"param": ["10u"]},
@@ -405,6 +428,8 @@ def test_file_refs_skips_stale_index_past_eof(
                 {"levelist": 1.5},
                 {"param": None},
                 {"_offset": -1},
+                {"_offset": 0},
+                {"_offset": 50},
                 {"_offset": 1.5},
                 {"_offset": True},
                 {"_offset": "bad"},
@@ -414,16 +439,19 @@ def test_file_refs_skips_stale_index_past_eof(
                 {"_length": 10000},
             ]
         ],
-        '{"param":"10u","levtype":"sfc"}',
+        ('{"param":"10u","levtype":"sfc"}', True),
+        (_index_line("unselected", "sfc", 50, 100), True),
+        (_index_line("", "sfc", 50, 100), True),
     ],
 )
-def test_source_row_errors_preserve_committed_siblings(
+def test_source_errors_preserve_committed_sibling_files(
     template_ds: xr.DataTree,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     processing_mode: Literal["update", "backfill"],
     bad_row: str,
+    quarantine: bool,
 ) -> None:
     data_vars = [
         get_var(name)
@@ -443,10 +471,15 @@ def test_source_row_errors_preserve_committed_siblings(
     _fake_index(
         monkeypatch,
         tmp_path,
-        _index_line("2t", "sfc", 0, 100)
-        + bad_row
-        + "\n"
-        + _index_line("skt", "sfc", 200, 100),
+        {
+            coords[0].get_index_url(): _index_line("2t", "sfc", 0, 100)
+            + bad_row
+            + "\n"
+            + _index_line("skt", "sfc", 200, 100),
+            coords[1].get_index_url(): _index_line("2t", "sfc", 0, 100)
+            + _index_line("10u", "sfc", 100, 100)
+            + _index_line("skt", "sfc", 200, 100),
+        },
     )
     monkeypatch.setattr(
         EcmwfAifsSingleForecastVirtualRegionJob,
@@ -472,17 +505,24 @@ def test_source_row_errors_preserve_committed_siblings(
 
     store = repo.readonly_session("main").store
     for lead_index in (0, 1):
-        assert asyncio.run(store.exists(f"temperature_2m/c/0/{lead_index}/0/0"))
+        assert asyncio.run(store.exists(f"temperature_2m/c/0/{lead_index}/0/0")) == (
+            lead_index == 1 or not quarantine
+        )
         assert asyncio.run(
             store.exists(f"skin_temperature_surface/c/0/{lead_index}/0/0")
+        ) == (lead_index == 1 or not quarantine)
+        assert asyncio.run(store.exists(f"wind_u_10m/c/0/{lead_index}/0/0")) == (
+            lead_index == 1
         )
-        assert not asyncio.run(store.exists(f"wind_u_10m/c/0/{lead_index}/0/0"))
-    assert job.filter_already_present(coords, store) == []
+    assert job.filter_already_present(coords, store) == (
+        [coords[0]] if quarantine else []
+    )
     assert any(
         record.levelname == "ERROR" and "Skipping" in record.message
         for record in caplog.records
     )
-    assert "Missing 1 expected messages" in caplog.text
+    assert ("Missing 1 expected messages" in caplog.text) == (not quarantine)
+    assert ("untrustworthy index byte geometry" in caplog.text) == quarantine
 
 
 @pytest.mark.parametrize("init_time", [_ERA2_INIT, AIFS_2026_UPGRADE_DATE])

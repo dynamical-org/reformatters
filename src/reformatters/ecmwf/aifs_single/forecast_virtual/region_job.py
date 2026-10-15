@@ -215,8 +215,27 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         location = coord.get_url()
         refs = []
         found = set()
+        previous_end = 0
         try:
             for row in iter_index_file_rows(index_path):
+                try:
+                    offset = _index_integer(row["_offset"])
+                    length = _index_integer(row["_length"])
+                    if (
+                        offset < previous_end
+                        or length <= 0
+                        or offset + length > file_size
+                    ):
+                        raise ValueError(
+                            f"byte range {offset}+{length} overlaps or precedes "
+                            f"previous end {previous_end}, or falls outside {file_size}-byte file"
+                        )
+                except (KeyError, TypeError, ValueError) as exc:
+                    log.error(
+                        f"Skipping {location}: untrustworthy index byte geometry: {row!r}: {exc}"
+                    )
+                    return []
+                previous_end = offset + length
                 try:
                     param, levtype = row["param"], row["levtype"]
                     if not isinstance(param, str) or not isinstance(levtype, str):
@@ -229,12 +248,6 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
                         or (levtype in {"pl", "sol"} and level is None)
                     ):
                         raise ValueError("missing message selector")
-                    offset = _index_integer(row["_offset"])
-                    length = _index_integer(row["_length"])
-                    if offset < 0 or length <= 0 or offset + length > file_size:
-                        raise ValueError(
-                            f"byte range {offset}+{length} outside {file_size}-byte file"
-                        )
                 except (KeyError, TypeError, ValueError) as exc:
                     log.error(f"Skipping index row for {location}: {row!r}: {exc}")
                     continue

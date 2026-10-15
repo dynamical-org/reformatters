@@ -3,12 +3,7 @@ from itertools import pairwise
 from typing import Any, ClassVar, Generic, TypeVar
 
 from httpx import HTTPError
-from obstore.exceptions import (
-    GenericError,
-    PermissionDeniedError,
-    PreconditionError,
-    UnauthenticatedError,
-)
+from obstore.exceptions import BaseError
 
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
@@ -208,14 +203,7 @@ class NoaaVirtualRegionJob(
             if not 0 < length <= file_size - start:
                 try:
                     length = self.grib_message_length_at(coord, start, file_size)
-                except (
-                    OSError,
-                    HTTPError,
-                    GenericError,
-                    PermissionDeniedError,
-                    PreconditionError,
-                    UnauthenticatedError,
-                ):
+                except OSError, HTTPError, BaseError:
                     log.exception(
                         f"{location}: skipping message at {start}: failed to read "
                         "its length beside an out-of-range index offset"

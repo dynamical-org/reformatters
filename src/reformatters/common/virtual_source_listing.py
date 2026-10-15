@@ -1,4 +1,5 @@
 import obstore
+from obstore.exceptions import BaseError
 
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SOURCE_FILE_COORD
@@ -44,6 +45,6 @@ def _list_objects(
         try:
             for batch in obstore.list(store, prefix=prefix, chunk_size=10_000):
                 listed.update((meta["path"], meta["size"]) for meta in batch)
-        except Exception:
+        except OSError, BaseError:
             log.exception(f"Could not finish listing source prefix {prefix}")
     return listed

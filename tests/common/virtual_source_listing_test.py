@@ -218,3 +218,12 @@ def test_listing_failure_preserves_other_prefixes_and_completed_pages(
     }
     assert "Could not finish listing source prefix bad/" in caplog.text
     assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_listing_programming_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    def listing(*args: object, **kwargs: object) -> None:
+        raise TypeError("invalid listing invocation")
+
+    monkeypatch.setattr(obstore, "list", listing)
+    with pytest.raises(TypeError, match="invalid listing invocation"):
+        virtual_source_listing._list_objects(obstore.store.MemoryStore(), ["dir/"])
