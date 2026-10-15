@@ -1913,7 +1913,10 @@ def test_check_virtual_decode_health_rejects_unknown_all_nan_var(
         )
 
 
-@pytest.mark.parametrize("state", ["missing", "nan", "restored", "decode_error"])
+@pytest.mark.parametrize(
+    "state",
+    ["missing", "nan", "restored", "decode_error", "partial_nan", "partial_restored"],
+)
 def test_check_virtual_decode_health_source_omission(
     tmp_path: Path, state: str
 ) -> None:
@@ -1931,10 +1934,12 @@ def test_check_virtual_decode_health_source_omission(
         if state != "decode_error":
             source.write_bytes(
                 np.full(
-                    N_LAT * N_LON, np.nan if state == "nan" else 1.0, dtype="<f8"
+                    N_LAT * N_LON,
+                    np.nan if state in {"nan", "partial_nan"} else 1.0,
+                    dtype="<f8",
                 ).tobytes()
             )
-        for lead_idx in range(N_LEADS):
+        for lead_idx in range(1 if state.startswith("partial_") else N_LEADS):
             session.store.set_virtual_ref(
                 f"omitted/c/0/{lead_idx}/0/0",
                 source.as_uri(),
@@ -1944,13 +1949,32 @@ def test_check_virtual_decode_health_source_omission(
         session.commit("Source field restored")
         store = _primary_repo(dataset.store_factory).readonly_session("main").store
     context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+    if state.startswith("partial_"):
+        da = context.ds["omitted"].sel(init_time=APPEND_DIM_START)
+        loc: Mapping[Dim, CoordinateValue] = {"init_time": APPEND_DIM_START}
+        args = (
+            da,
+            loc,
+            job.data_vars[-1],
+            job,
+            store,
+            zarr.open_group(store, mode="r"),
+        )
+        assert not validation.CheckVirtualDecodeHealth._sampled_refs_present(*args)
+        assert validation.CheckVirtualDecodeHealth._sampled_refs_present(
+            *args, require_all=False
+        )
     assert validation.CheckVirtualManifestCompleteness().check(context).passed
     strict = validation.CheckVirtualDecodeHealth().check(context)
-    assert strict.passed == (state == "restored")
+    assert strict.passed == (state in {"restored", "partial_restored"})
     allowed = validation.CheckVirtualDecodeHealth(
         allow_missing_vars=("omitted",)
     ).check(context)
-    assert allowed.passed == (state in {"missing", "restored"}), allowed.message
+    assert allowed.passed == (state in {"missing", "restored", "partial_restored"}), (
+        allowed.message
+    )
+    if state == "missing" or state.startswith("partial_"):
+        assert "had no reference at sampled positions: omitted" in allowed.message
     if state == "decode_error":
         assert "omitted: decode error" in allowed.message
     else:

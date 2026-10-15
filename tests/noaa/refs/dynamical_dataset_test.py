@@ -331,8 +331,11 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     ]
     original_template = config.get_template
     monkeypatch.setattr(type(config), "data_vars", property(lambda self: selected))
-    monkeypatch.setattr(type(dataset), "allow_missing_vars", ())
-
+    monkeypatch.setattr(
+        type(dataset),
+        "allow_missing_vars",
+        tuple(v for v in dataset.allow_missing_vars if v in variables),
+    )
     monkeypatch.setattr(
         type(config),
         "get_template",

@@ -1134,8 +1134,7 @@ class CheckVirtualDecodeHealth(Validator):
                     )
                     if error is not None and var_path not in first_error:
                         first_error[var_path] = error
-                if self.reference_presence is not None:
-                    no_reference_vars |= skipped
+                no_reference_vars |= skipped
 
         problems = (
             ["No sampled variable had a reference at the selected positions"]
@@ -1151,25 +1150,27 @@ class CheckVirtualDecodeHealth(Validator):
             ):
                 problems.append(f"{var_path}: every sampled chunk decoded entirely NaN")
 
+        missing_summary = (
+            f" ({len(no_reference_vars)} variable(s) had no reference at sampled "
+            f"positions: {', '.join(sorted(no_reference_vars))})"
+            if no_reference_vars
+            else ""
+        )
         target_label = ", ".join(str(p) for p in sorted(targets))
         if problems:
             return ValidationResult(
                 passed=False,
                 checked_count=decoded_refs,
                 message=f"Decode health failures at {append_dim}={target_label}:\n"
-                + "\n".join(f"- {p}" for p in problems),
+                + "\n".join(f"- {p}" for p in problems)
+                + missing_summary,
             )
         message = (
             f"Decoded {len(to_decode)} present source files across "
             f"{len(min_nan_fraction)} variables at {append_dim}={target_label} "
             "— all readable"
         )
-        if self.reference_presence is not None and no_reference_vars:
-            message += (
-                f" ({len(no_reference_vars)} variable(s) had no reference at sampled "
-                "positions — reference existence is reported by the "
-                "availability/manifest check)"
-            )
+        message += missing_summary
         return ValidationResult(
             passed=True, message=message, checked_count=decoded_refs
         )
@@ -1245,7 +1246,7 @@ class CheckVirtualDecodeHealth(Validator):
                 nan_fraction >= 1.0
                 and var.path in self.allow_missing_vars
                 and not self._sampled_refs_present(
-                    da, loc, var, region_job, store, group
+                    da, loc, var, region_job, store, group, require_all=False
                 )
             ):
                 skipped.add(var.path)
@@ -1270,6 +1271,8 @@ class CheckVirtualDecodeHealth(Validator):
         region_job: VirtualRegionJob[Any, Any],
         store: IcechunkStore,
         group: zarr.Group,
+        *,
+        require_all: bool = True,
     ) -> bool:
         locations: list[dict[Dim, CoordinateValue]] = [dict(out_loc)]
         spatial_dims = {"y", "x", "latitude", "longitude"}
@@ -1293,7 +1296,8 @@ class CheckVirtualDecodeHealth(Validator):
             assert index is not None
             encoded = metadata.chunk_key_encoding.encode_chunk_key(index)
             keys.append(f"{array.path}/{encoded}")
-        return all(zarr.core.sync.sync(store.exists(key)) for key in keys)
+        present = (zarr.core.sync.sync(store.exists(key)) for key in keys)
+        return all(present) if require_all else any(present)
 
     def _sample_leads(
         self, coords: Sequence[SourceFileCoord]

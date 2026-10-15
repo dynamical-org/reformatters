@@ -134,7 +134,6 @@ def test_poll_deadline_update_schedule_and_decode_health(
         if var.internal_attrs.grib_element in {"FRZR", "FROZR"}
     }
     assert decode.allow_missing_vars
-
     assert decode.allow_all_nan_vars == (
         ("new_snow_density_surface",)
         if cls
