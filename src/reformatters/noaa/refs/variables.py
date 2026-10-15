@@ -1363,8 +1363,8 @@ _RADAR_SPREAD_COMMENT = (
     "contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height."
 )
 _SPARSE_RADAR_COMMENTS = {
-    "REFC": "A value of 0 dBZ can also be a valid reflectivity.",
-    "REFD": "A value of 0 dBZ can also be a valid reflectivity.",
+    "REFC": "A value of 0 dBZ can be a valid reflectivity.",
+    "REFD": "A value of 0 dBZ can be a valid reflectivity.",
     "MAXREF": "A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
     "RETOP": "Negative values indicate no echo. Mask values < 0.",
 }

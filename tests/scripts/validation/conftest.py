@@ -19,7 +19,7 @@ def statistic_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunCon
     names = (
         "wind_u_10m",
         "temperature_2m",
-        "composite_reflectivity",
+        "derived_radar_reflectivity_1000m",
         "temperature_2m_standard_deviation",
     )
     variables = [v for v in config.data_vars if v.name in names]

@@ -11,7 +11,8 @@ This migration removes 32 array paths from six existing v0.1.0 stores. It remove
 them from **all initialization times on main**, including historical values.
 The pre-migration snapshot remains accessible through a retained Icechunk tag.
 The dataset version and URL do not change. Communicate this breaking schema
-change and the historical access instructions before execution.
+change and the historical tag naming pattern before execution. Send a completion
+notice with the verified tag and snapshot for each store after execution.
 
 | Dataset ID | Removed arrays |
 | --- | --- |
@@ -93,12 +94,22 @@ and check actual completions rather than assuming the example applies.
 scheduled fire for sub-hourly.** Target zero by migrating sub-hourly in its observed
 post-run gap. If its old writer runs to the deadline and the gap is too short,
 allow the first new-image fire to hit the structural guard, then migrate promptly
-after confirming the old writer is gone. A later retry may recover the same fire;
-otherwise the next natural fire recovers it. Do not migrate while an old-image
+after confirming the old writer is gone. Pod retries have roughly five minutes of exponential backoff in total; migration
+within that budget may recover the same fire. Otherwise the next natural fire
+recovers it. Do not migrate while an old-image
 writer is running merely to avoid that alert. One affected fire can generate
 multiple pod exception events plus a cron-monitor failure; notification rules
 prevent promising an exact email/push count. If more than one fire would be missed,
 stop and escalate the rollout plan. No suspension or Job deletion is included.
+
+REFS hourly remains red on its retired reflectivity field until the first
+post-migration update. To meet the five-store zero-failure target, choose a window
+after its existing fire and retry chain have terminal Job conditions. A validation
+retry takes the CronJob image at the time of failure: before deployment it can
+create another old-image writer; after deployment but before migration it can
+create a new-image structural-guard failure. If deployment overlaps that decision,
+budget an additional affected REFS hourly fire. Pod retries within an existing Job
+keep that Job's image. A missing pod alone never establishes writer quiescence.
 
 ## Execute the approved migration
 
@@ -186,21 +197,11 @@ under dated `### Review notes`; do not encode archive-era facts as timeless vari
 comments. Rebuild affected availability plots/statistics against the migrated schema
 before publication: deleting Markdown sections does not regenerate a plot.
 
-### Review notes
-
-- **2026-10-15 source-method change:** NOAA changed instantaneous snow, ice-pellet,
-  freezing-rain, and rain typing from a microphysics-based method to a diagnosed
-  thermodynamic method. The categorical fields retain their 0/1 meaning; comparisons
-  across this date include a method discontinuity.
-- **2026-10-15 REFS PMMN change:** NOAA changed composite and 1 km reflectivity PMMN
-  calculations to ignore negative reflectivity inputs. Earlier data retains the
-  older calculation. Zero can be valid reflectivity; neither zero nor all historical
-  negative values should be globally masked.
-
-Use the categorical note for products containing affected categorical-derived
-fields and the PMMN note for REFS hourly. Communicate the schema removal and
-per-store historical tag in the release notice after the migration is executed;
-drafts must not claim that an unexecuted migration has already happened.
+Use dated NOAA-notice notes for the categorical diagnosis and REFS PMMN method
+changes; their exact first changed cycles are not established. Put these notes in
+the validation reports, including historical PMMN no-echo floors and the fact that
+zero can be valid reflectivity. Replace draft retirement language with the verified
+per-store tags and snapshots in the completion notice.
 
 After **all six** stores are migrated, their normal metadata refreshes have applied
 the PMMN comments, and the updated validation reports are approved for publication:
@@ -217,3 +218,7 @@ same store assets, dimensions, and unrelated metadata. Commit the regenerated
 before the stores change. The generator reads live stores, so generating against
 unmigrated production cannot validate the final catalog. Record that post-migration
 step as operator work, not as a completed action in the code PR.
+
+After rollout and publication, remove this single-use script, its tests and this
+runbook in a cleanup change; retain the execution ledger and historical-access
+notice outside the application source.

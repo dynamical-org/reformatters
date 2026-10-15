@@ -217,7 +217,9 @@ def test_point_arrays_select_statistic_without_averaging_slices(
     assert stats.label_value == "mean"
 
 
-@pytest.mark.parametrize("var", ["pressure_level/wind_u", "composite_reflectivity"])
+@pytest.mark.parametrize(
+    "var", ["pressure_level/wind_u", "derived_radar_reflectivity_1000m"]
+)
 def test_virtual_sample_and_value_plot_record_statistic(
     statistic_context: RunContext,
     monkeypatch: pytest.MonkeyPatch,

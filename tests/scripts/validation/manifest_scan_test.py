@@ -73,7 +73,7 @@ def test_plot_statistic_selection_preserves_source_family_scan_coverage(
         in (
             "wind_u_10m",
             "temperature_2m",
-            "composite_reflectivity",
+            "derived_radar_reflectivity_1000m",
             "temperature_2m_standard_deviation",
         )
     ]
@@ -92,7 +92,7 @@ def test_plot_statistic_selection_preserves_source_family_scan_coverage(
     assert {v.name for v in spread.data_vars} == {
         "wind_u_10m",
         "temperature_2m_standard_deviation",
-        "composite_reflectivity",
+        "derived_radar_reflectivity_1000m",
     }
     counts: dict[pd.Timestamp, list[int]] = {}
     _fold_file_availability([(mean, True), (spread, False)], {}, counts)

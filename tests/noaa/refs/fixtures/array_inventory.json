@@ -822,12 +822,12 @@
   {
     "path": "probability_matched_mean_composite_reflectivity",
     "cadence_hours": 1,
-    "metadata_sha256": "c32e409e0103f1fd288348bf4e663cca078c955b664c2e0cfc20e81d120e2d69"
+    "metadata_sha256": "cd03267edc34e86a6404e853d14c115ba0f4e8d97565dd33a186ac94a0f8af05"
   },
   {
     "path": "probability_matched_mean_derived_radar_reflectivity_1000m",
     "cadence_hours": 1,
-    "metadata_sha256": "56d78ae4e665c5ceaae9df4c843290b6485f4d3e22f7901003000dd44219025c"
+    "metadata_sha256": "3046d17bd3965ea09e03b7b5d8d6865e95e0bff7f461796f558a3e722153119c"
   },
   {
     "path": "probability_matched_mean_echo_top",

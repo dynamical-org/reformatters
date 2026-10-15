@@ -599,7 +599,7 @@ def test_cloud_soil_and_radar_comments_keep_raw_values_and_statistic_scope() -> 
                 sparse.attrs.comment or ""
             )
         else:
-            assert "A value of 0 dBZ can also be a valid reflectivity." in (
+            assert "A value of 0 dBZ can be a valid reflectivity." in (
                 sparse.attrs.comment or ""
             )
         assert np.isnan(statistic.encoding.fill_value)

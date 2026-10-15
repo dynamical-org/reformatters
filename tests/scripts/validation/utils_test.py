@@ -144,7 +144,7 @@ def test_statistic_and_numeric_levels_are_independent(
     [
         ("wind_u_10m", "mean"),
         ("temperature_2m", "mean"),
-        ("composite_reflectivity", "standard_deviation"),
+        ("derived_radar_reflectivity_1000m", "standard_deviation"),
     ],
 )
 @pytest.mark.parametrize("all_nan", [False, True])

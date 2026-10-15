@@ -39,7 +39,7 @@
     "short_name": "probability_matched_mean_derived_radar_reflectivity_1000m",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "A value of 0 dBZ can also be a valid reflectivity.",
+    "comment": "A value of 0 dBZ can be a valid reflectivity.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
