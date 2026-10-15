@@ -448,6 +448,18 @@ def test_every_source_message_reaches_an_array(
     assert len(positions) == len(refs)
     assert "GRIB messages absent from index" not in caplog.text
 
+    if file_type == "pgrb2b":
+        cloud_refs = [
+            ref
+            for ref in refs
+            if ref.data_var.path == "pressure_level/cloud_cover"
+            and ref.out_loc["pressure_level"] == 70
+        ]
+        assert len(cloud_refs) == 1
+        job._check_refs_complete(coord, [ref for ref in refs if ref not in cloud_refs])
+        assert "pressure_level/cloud_cover" in caplog.text
+        assert "('pressure_level', 70.0)" in caplog.text
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize("era", _ERAS)

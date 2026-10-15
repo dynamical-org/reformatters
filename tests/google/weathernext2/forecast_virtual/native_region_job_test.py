@@ -507,6 +507,47 @@ def test_object_listing_retries_transient_response() -> None:
     assert client.get.call_count == 2
 
 
+@pytest.mark.parametrize("status", [403, 404])
+def test_object_listing_keeps_prior_pages_when_next_page_is_unavailable(
+    status: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG", logger=region_job_module.__name__)
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    request = httpx.Request("GET", OBJECTS_LOCATION)
+    client = Mock()
+    client.get.side_effect = [
+        httpx.Response(
+            200,
+            request=request,
+            json={
+                "items": [
+                    {
+                        "name": f"{prefix}0.1.0.0",
+                        "size": "100",
+                        "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA==",
+                    }
+                ],
+                "nextPageToken": "next",
+            },
+        ),
+        httpx.Response(status, request=request),
+    ]
+
+    objects = region_job_module._list_objects(
+        client, region_job_module.ObjectListingQuery(prefix)
+    )
+
+    assert objects == {
+        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": region_job_module.NativeObjectMetadata(
+            100, '"00000000000000000000000000000000"'
+        )
+    }
+    assert client.get.call_count == 2
+    assert "Listing unavailable" in caplog.text
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+
+
 @pytest.mark.parametrize("processing_mode", ["update", "backfill"])
 @pytest.mark.parametrize("source_layout", ["historical", "operational"])
 @pytest.mark.parametrize(
@@ -514,6 +555,8 @@ def test_object_listing_retries_transient_response() -> None:
     [
         "query",
         "page",
+        "query404",
+        "page404",
         "transport",
         "server",
         "json",
@@ -608,7 +651,7 @@ def test_source_listing_errors_preserve_committed_siblings(
     assert job.filter_already_present([coords[0]], store) == []
     assert job.filter_already_present([coords[1]], store) == [coords[1]]
     assert any(record.levelname == "ERROR" for record in caplog.records) == (
-        failure != "missing"
+        failure not in {"missing", "query", "page", "query404", "page404"}
     )
     assert "source chunks unavailable" in caplog.text
 
@@ -622,8 +665,15 @@ def _listing_failure_response(
     request = httpx.Request("GET", url)
     if failure == "transport":
         raise httpx.ReadError("listing unavailable", request=request)
-    if failure in {"query", "server"} or "pageToken" in params:
-        return httpx.Response(503 if failure == "server" else 403, request=request)
+    if failure in {"query", "query404", "server"} or "pageToken" in params:
+        status = (
+            503
+            if failure == "server"
+            else 404
+            if failure in {"query404", "page404"}
+            else 403
+        )
+        return httpx.Response(status, request=request)
     items: list[object] = [
         {
             "name": chunk.location.removeprefix(PROXY_LOCATION_PREFIX),
@@ -633,9 +683,12 @@ def _listing_failure_response(
         for chunk in chunks
     ]
     payload: object = {"items": items}
-    if failure in {"page", "token"}:
+    if failure in {"page", "page404", "token"}:
         items.pop()
-        payload = {"items": items, "nextPageToken": "next" if failure == "page" else []}
+        payload = {
+            "items": items,
+            "nextPageToken": [] if failure == "token" else "next",
+        }
     elif failure == "json":
         return httpx.Response(200, request=request, content=b"{bad")
     elif failure == "payload":

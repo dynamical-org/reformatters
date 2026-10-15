@@ -457,6 +457,11 @@ def _list_objects(
                 get_page,
                 retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
             )
+            if response.status_code in {403, 404}:
+                log.debug(
+                    f"Listing unavailable for {query} page {page_token!r}: HTTP {response.status_code}"
+                )
+                return objects
             response.raise_for_status()
             payload = response.json()
             if not isinstance(payload, dict) or not isinstance(

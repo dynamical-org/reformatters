@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from obstore.exceptions import GenericError
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
@@ -946,7 +947,7 @@ def test_noaa_source_failures_commit_healthy_siblings(
     [
         (OSError, False),
         (shared_region_job_module.HTTPError, False),
-        (shared_region_job_module.GenericError, False),
+        (GenericError, False),
         (AssertionError, True),
         (ValueError, True),
     ],

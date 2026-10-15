@@ -471,6 +471,20 @@ def test_malformed_message_keeps_its_offset(
     assert caplog.records[-1].levelname == "ERROR"
 
 
+@pytest.mark.parametrize("tolerate_malformed", [False, True])
+def test_empty_window_in_historical_hrrr_index_is_valid(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    tolerate_malformed: bool,
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text("614:295146787:d=2016011506:APCP:surface::\n")
+    assert parse_grib_index_lines(path, tolerate_malformed=tolerate_malformed) == [
+        (295146787, "APCP", "surface", "", ()),
+    ]
+    assert not caplog.records
+
+
 @pytest.mark.parametrize(
     "message", ["2:unreadable:d=2026091500:TMP:surface:anl:", "garbage"]
 )

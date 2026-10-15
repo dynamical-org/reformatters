@@ -90,7 +90,7 @@ def parse_grib_index_lines(
                     "message boundaries cannot be inferred safely"
                 )
                 return []
-            if tolerate_malformed and (len(fields) < 6 or not all(fields[3:6])):
+            if tolerate_malformed and (len(fields) < 6 or not all(fields[3:5])):
                 log.error(
                     f"{index_path}: malformed GRIB index message at row {row}, "
                     f"offset {start}; retaining its boundary and skipping its refs"

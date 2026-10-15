@@ -223,18 +223,7 @@ def test_completeness_expectations_match_source_eras(
     )
     refs = make_job(template_ds, variables).file_refs(coord, file_size=10**10)
     assert refs
-    missing_logs = [
-        record.message
-        for record in caplog.records
-        if "GRIB messages absent from index" in record.message
-    ]
-    if file_type == "sfc" and init_time.startswith("2020"):
-        # These indexes label LFC as "reserved", which the catalog does not match.
-        assert len(missing_logs) == 1
-        assert "[('geopotential_height_level_of_free_convection'," in missing_logs[0]
-        assert missing_logs[0].count("('init_time',") == 1
-    else:
-        assert not missing_logs
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
     if file_type == "prs":
         assert {
             ref.out_loc["pressure_level"]
