@@ -17,11 +17,6 @@ class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=60)
     # 00Z and 12Z source publication can continue past the poll deadline.
     min_present_fraction: ClassVar[tuple[float, ...]] = (6 / 18, 1.0)
-    # NOAA omits these messages starting with the 2026-10-15 12Z cycle.
-    allow_missing_vars: ClassVar[tuple[str, ...]] = (
-        "frozen_precipitation_run_total_surface",
-        "freezing_rain_run_total_surface",
-    )
     template_config: NoaaRrfsForecastSubHourlyVirtualTemplateConfig = (
         NoaaRrfsForecastSubHourlyVirtualTemplateConfig()
     )

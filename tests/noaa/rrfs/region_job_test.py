@@ -233,8 +233,14 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
                     and element == "PRES"
                     and level == "grid scale cloud top level"
                 )
+                retired_accumulation = (
+                    family in {"2dfld", "subh"}
+                    and element in {"FRZR", "FROZR"}
+                    and level == "surface"
+                )
                 assert (
-                    duplicate
+                    retired_accumulation
+                    or duplicate
                     or zero_placeholder
                     or excluded_surface_product
                     or excluded_member_product
@@ -300,7 +306,7 @@ def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> Non
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
-def test_real_index_with_missing_messages_preserves_available_refs(
+def test_post_retirement_index_contains_all_configured_messages(
     config: NoaaRrfsForecastTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -345,12 +351,11 @@ def test_real_index_with_missing_messages_preserves_available_refs(
     with caplog.at_level("WARNING"):
         refs = job.file_refs(coord, file_size)
     assert refs
-    missing_paths = {
-        v.path for v in variables if v.internal_attrs.grib_element in {"FRZR", "FROZR"}
-    }
-    assert missing_paths
+    assert not any(
+        v.internal_attrs.grib_element in {"FRZR", "FROZR"} for v in variables
+    )
     present_paths = {ref.data_var.path for ref in refs}
-    assert present_paths == {v.path for v in variables} - missing_paths
+    assert present_paths == {v.path for v in variables}
     assert job.representative_var(coord).path in present_paths
     expected_leads = (
         set(pd.to_timedelta([15, 30, 45, 60], unit="min"))
@@ -362,11 +367,7 @@ def test_real_index_with_missing_messages_preserves_available_refs(
         for var_path in present_paths
         for lead_time in expected_leads
     }
-    (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
-    assert coord.get_url() in warning.message
-    assert "GRIB messages absent from index" in warning.message
-    assert all(path in warning.message for path in missing_paths)
+    assert not caplog.records
 
 
 def test_supported_leads_are_explicit_for_binary_run_totals() -> None:

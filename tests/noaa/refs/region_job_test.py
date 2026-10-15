@@ -172,6 +172,13 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
                     )
                 )
             )
+            or (family == "prob" and element == "FRZR" and level == "surface")
+            or (
+                family == "sprd"
+                and element == "REFC"
+                and level == "entire atmosphere (considered as a single layer)"
+                and selectors == ("ens spread", "process=193")
+            )
             or (
                 family == "prob"
                 and element == "CIN"
@@ -224,7 +231,7 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
     assert covered == {var.path for var in VARIABLES}
 
 
-def test_mean_coords_exclude_exactly_the_five_spread_only_fields() -> None:
+def test_mean_coords_exclude_exactly_the_four_spread_only_fields() -> None:
     region = xr.Dataset(
         coords={
             "init_time": [pd.Timestamp("2026-09-15T12")],
@@ -243,7 +250,6 @@ def test_mean_coords_exclude_exactly_the_five_spread_only_fields() -> None:
         "maximum_updraft_helicity_5000_2000m",
         "derived_radar_reflectivity_1000m",
         "hourly_maximum_radar_reflectivity_1000m",
-        "composite_reflectivity",
         "echo_top",
     }
     assert all(
@@ -409,7 +415,7 @@ def test_exact_selectors_have_distinct_lookup_keys() -> None:
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
-def test_real_index_with_missing_messages_preserves_available_refs(
+def test_post_retirement_index_contains_all_configured_messages(
     config: NoaaRefsForecastHourlyVirtualTemplateConfig
     | NoaaRefsForecast3HourlyVirtualTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
@@ -434,18 +440,13 @@ def test_real_index_with_missing_messages_preserves_available_refs(
     with caplog.at_level("WARNING"):
         refs = job.file_refs(coord, file_size)
     assert refs
-    missing_paths = {
-        v.path for v in coord.data_vars if v.internal_attrs.grib_element == "FRZR"
-    }
-    assert missing_paths
+    assert not any(
+        v.internal_attrs.grib_element in {"FRZR", "FROZR"} for v in coord.data_vars
+    )
     present_paths = {ref.data_var.path for ref in refs}
-    assert present_paths == {v.path for v in coord.data_vars} - missing_paths
+    assert present_paths == {v.path for v in coord.data_vars}
     assert job.representative_var(coord).path in present_paths
-    (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
-    assert coord.get_url() in warning.message
-    assert "GRIB messages absent from index" in warning.message
-    assert all(path in warning.message for path in missing_paths)
+    assert not caplog.records
 
 
 def test_identical_sparse_selectors_still_have_different_source_files() -> None:

@@ -3,7 +3,6 @@
     "temperature_2m",
     "temperature_500hpa",
     "wind_speed_10m",
-    "composite_reflectivity",
     "total_precipitation_6_hour_surface",
     "probability_matched_mean_total_precipitation_1_hour_surface",
     "probability_matched_mean_composite_reflectivity",
@@ -89,29 +88,6 @@
       "point": 5.157712459564209,
       "minimum": 0.6577125191688538,
       "gdal_unit": "[m/s]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 1,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f01.conus.grib2",
-      "message": 1,
-      "offset": 0,
-      "length": 1420029,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "1 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 700,
-      "peak_x": 416,
-      "peak": 32.867183685302734,
-      "point": 12.742185592651367,
-      "minimum": 1.492185115814209,
-      "gdal_unit": "[spread]"
     },
     {
       "init_time": "2026-08-13T00:00:00",
@@ -380,29 +356,6 @@
       "peak": 79.29373168945312,
       "point": 0.7126799821853638,
       "minimum": 2.9999999242136255e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 6,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f06.conus.grib2",
-      "message": 68,
-      "offset": 69320589,
-      "length": 1343942,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "6 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 648,
-      "peak_x": 407,
-      "peak": 27.10855484008789,
-      "point": 8.35855484008789,
-      "minimum": 0.983555257320404,
       "gdal_unit": "[spread]"
     },
     {
@@ -770,29 +723,6 @@
     },
     {
       "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 9,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f09.conus.grib2",
-      "message": 68,
-      "offset": 67628450,
-      "length": 1320303,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "9 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 633,
-      "peak_x": 1767,
-      "peak": 27.051862716674805,
-      "point": 6.176862716674805,
-      "minimum": 1.3018628358840942,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 9,
@@ -1152,29 +1082,6 @@
       "peak": 52.61501693725586,
       "point": 0.19000999629497528,
       "minimum": 5.999999848427251e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 24,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f24.conus.grib2",
-      "message": 70,
-      "offset": 73226315,
-      "length": 1449137,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "24 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 540,
-      "peak_x": 433,
-      "peak": 28.39581871032715,
-      "point": 12.208317756652832,
-      "minimum": 1.1458178758621216,
       "gdal_unit": "[spread]"
     },
     {
@@ -1566,29 +1473,6 @@
     },
     {
       "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 48,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f48.conus.grib2",
-      "message": 70,
-      "offset": 72430414,
-      "length": 1425365,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "48 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 584,
-      "peak_x": 891,
-      "peak": 28.879535675048828,
-      "point": 9.629536628723145,
-      "minimum": 2.3170366287231445,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 48,
@@ -1976,29 +1860,6 @@
     },
     {
       "init_time": "2026-08-13T00:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 60,
-      "key": "refs.20260813/00/ensprod/refs.t00z.sprd.f60.conus.grib2",
-      "message": 70,
-      "offset": 79942261,
-      "length": 1561283,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "60 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 705,
-      "peak_x": 1463,
-      "peak": 31.939998626708984,
-      "point": 10.0,
-      "minimum": 0.10999999940395355,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-08-13T00:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 60,
@@ -2342,29 +2203,6 @@
     },
     {
       "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 1,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f01.conus.grib2",
-      "message": 1,
-      "offset": 0,
-      "length": 1175436,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "1 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 704,
-      "peak_x": 1600,
-      "peak": 32.91606903076172,
-      "point": 9.228569030761719,
-      "minimum": 0.9785687923431396,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 1,
@@ -2630,29 +2468,6 @@
       "peak": 81.37047576904297,
       "point": 0.04829999804496765,
       "minimum": 5.999999848427251e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 6,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f06.conus.grib2",
-      "message": 68,
-      "offset": 64858503,
-      "length": 1209927,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "6 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 878,
-      "peak_x": 1446,
-      "peak": 27.860204696655273,
-      "point": 9.235204696655273,
-      "minimum": 1.3602042198181152,
       "gdal_unit": "[spread]"
     },
     {
@@ -3020,29 +2835,6 @@
     },
     {
       "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 9,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f09.conus.grib2",
-      "message": 68,
-      "offset": 68100224,
-      "length": 1297035,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "9 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 624,
-      "peak_x": 491,
-      "peak": 30.40597915649414,
-      "point": 9.280978202819824,
-      "minimum": 1.2809784412384033,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 9,
@@ -3402,29 +3194,6 @@
       "peak": 59.77139663696289,
       "point": 6.999999459367245e-05,
       "minimum": 6.999999459367245e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 24,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f24.conus.grib2",
-      "message": 70,
-      "offset": 65914464,
-      "length": 1236940,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "24 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 849,
-      "peak_x": 1611,
-      "peak": 27.97730255126953,
-      "point": 9.227302551269531,
-      "minimum": 1.5398024320602417,
       "gdal_unit": "[spread]"
     },
     {
@@ -3816,29 +3585,6 @@
     },
     {
       "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 48,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f48.conus.grib2",
-      "message": 70,
-      "offset": 66210944,
-      "length": 1233703,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "48 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 766,
-      "peak_x": 1634,
-      "peak": 27.784059524536133,
-      "point": 9.59656047821045,
-      "minimum": 1.1590602397918701,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 48,
@@ -4226,29 +3972,6 @@
     },
     {
       "init_time": "2026-09-15T12:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 60,
-      "key": "refs.20260915/12/ensprod/refs.t12z.sprd.f60.conus.grib2",
-      "message": 70,
-      "offset": 82717782,
-      "length": 1661125,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "60 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 1017,
-      "peak_x": 1530,
-      "peak": 32.55999755859375,
-      "point": 10.0,
-      "minimum": 0.10999999940395355,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T12:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 60,
@@ -4592,29 +4315,6 @@
     },
     {
       "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 1,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f01.conus.grib2",
-      "message": 1,
-      "offset": 0,
-      "length": 1271850,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "1 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 750,
-      "peak_x": 983,
-      "peak": 34.970909118652344,
-      "point": 9.283411026000977,
-      "minimum": 1.033410668373108,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 1,
@@ -4880,29 +4580,6 @@
       "peak": 57.915828704833984,
       "point": 0.30173999071121216,
       "minimum": 2.9999999242136255e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 6,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f06.conus.grib2",
-      "message": 68,
-      "offset": 67342658,
-      "length": 1257808,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "6 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 495,
-      "peak_x": 1039,
-      "peak": 29.45001792907715,
-      "point": 7.825017929077148,
-      "minimum": 1.1375178098678589,
       "gdal_unit": "[spread]"
     },
     {
@@ -5270,29 +4947,6 @@
     },
     {
       "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 9,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f09.conus.grib2",
-      "message": 68,
-      "offset": 65789109,
-      "length": 1212110,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "9 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 362,
-      "peak_x": 1241,
-      "peak": 28.150476455688477,
-      "point": 6.775476455688477,
-      "minimum": 1.5254762172698975,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 9,
@@ -5652,29 +5306,6 @@
       "peak": 68.27458190917969,
       "point": 5.999999848427251e-05,
       "minimum": 5.999999848427251e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 24,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f24.conus.grib2",
-      "message": 70,
-      "offset": 65890206,
-      "length": 1210711,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "24 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 837,
-      "peak_x": 1653,
-      "peak": 27.907747268676758,
-      "point": 9.282747268676758,
-      "minimum": 1.9702469110488892,
       "gdal_unit": "[spread]"
     },
     {
@@ -6066,29 +5697,6 @@
     },
     {
       "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 48,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f48.conus.grib2",
-      "message": 70,
-      "offset": 64359596,
-      "length": 1257686,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "48 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 855,
-      "peak_x": 1708,
-      "peak": 28.695953369140625,
-      "point": 9.633453369140625,
-      "minimum": 1.133453130722046,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
       "name": "temperature_2m",
       "family": "sprd",
       "lead_hours": 48,
@@ -6472,29 +6080,6 @@
       "peak": 75.8350601196289,
       "point": 4.999999873689376e-05,
       "minimum": 4.999999873689376e-05,
-      "gdal_unit": "[spread]"
-    },
-    {
-      "init_time": "2026-09-15T18:00:00",
-      "name": "composite_reflectivity",
-      "family": "sprd",
-      "lead_hours": 60,
-      "key": "refs.20260915/18/ensprod/refs.t18z.sprd.f60.conus.grib2",
-      "message": 70,
-      "offset": 80158225,
-      "length": 1586927,
-      "element": "REFC",
-      "level": "entire atmosphere (considered as a single layer)",
-      "window": "60 hour fcst",
-      "selectors": [
-        "ens spread",
-        "process=193"
-      ],
-      "peak_y": 1015,
-      "peak_x": 1474,
-      "peak": 33.98999786376953,
-      "point": 10.0,
-      "minimum": 0.38999998569488525,
       "gdal_unit": "[spread]"
     },
     {

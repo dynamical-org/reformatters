@@ -39,7 +39,7 @@
     "short_name": "probability_matched_mean_composite_reflectivity",
     "standard_name": "equivalent_reflectivity_factor",
     "units": "dBZ",
-    "comment": "The probability-matched mean retains member no-echo floors at -20, -10 or 0 dBZ. A value of 0 dBZ can also be a valid reflectivity; other negative dBZ values can be valid.",
+    "comment": "A value of 0 dBZ can also be a valid reflectivity.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

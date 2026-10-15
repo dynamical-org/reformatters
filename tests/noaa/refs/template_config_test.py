@@ -48,15 +48,15 @@ class TinyProductsConfig(NoaaRefsForecastHourlyVirtualTemplateConfig):
 def test_complete_schema_dimensions_and_encoding() -> None:
     config = CombinedProductsConfig()
     variables = config.data_vars
-    assert len(variables) == len({v.path for v in variables}) == 359
-    assert sum(v.has_statistic for v in variables) == 78
+    assert len(variables) == len({v.path for v in variables}) == 339
+    assert sum(v.has_statistic for v in variables) == 77
     assert {
         families: sum(
             v.has_statistic and v.internal_attrs.source_families == families
             for v in variables
         )
         for families in (("mean", "sprd"), ("mean",), ("sprd",))
-    } == {("mean", "sprd"): 60, ("mean",): 13, ("sprd",): 5}
+    } == {("mean", "sprd"): 60, ("mean",): 13, ("sprd",): 4}
     assert (
         sum(
             v.internal_attrs.source_families[0] in ("pmmn", "lpmm", "avrg")
@@ -69,7 +69,7 @@ def test_complete_schema_dimensions_and_encoding() -> None:
             v.internal_attrs.source_families[0] in ("prob", "eas", "ffri")
             for v in variables
         )
-        == 251
+        == 232
     )
     assert {
         v.name
@@ -578,7 +578,6 @@ def test_cloud_soil_and_radar_comments_keep_raw_values_and_statistic_scope() -> 
         assert "These cells are not marked; use a land mask" in comment
         assert "Mask" not in comment
     for name in (
-        "composite_reflectivity",
         "derived_radar_reflectivity_1000m",
         "hourly_maximum_radar_reflectivity_1000m",
         "echo_top",
@@ -600,8 +599,7 @@ def test_cloud_soil_and_radar_comments_keep_raw_values_and_statistic_scope() -> 
                 sparse.attrs.comment or ""
             )
         else:
-            assert "-20, -10 or 0 dBZ" in (sparse.attrs.comment or "")
-            assert "other negative dBZ values can be valid" in (
+            assert "A value of 0 dBZ can also be a valid reflectivity." in (
                 sparse.attrs.comment or ""
             )
         assert np.isnan(statistic.encoding.fill_value)
@@ -638,8 +636,8 @@ def test_hourly_maximum_probabilities_keep_instantaneous_source_selection(
 @pytest.mark.parametrize(
     ("config_class", "cadence", "count"),
     [
-        (NoaaRefsForecastHourlyVirtualTemplateConfig, 1, 247),
-        (NoaaRefsForecast3HourlyVirtualTemplateConfig, 3, 112),
+        (NoaaRefsForecastHourlyVirtualTemplateConfig, 1, 243),
+        (NoaaRefsForecast3HourlyVirtualTemplateConfig, 3, 96),
     ],
 )
 def test_cadence_partition_preserves_complete_array_inventory(

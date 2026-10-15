@@ -183,12 +183,6 @@ def test_operational_configuration_requires_complete_manifests(
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.allow_all_nan_vars == ()
     assert decode.max_workers == 2
-    assert set(decode.allow_missing_vars) == {
-        var.path
-        for var in dataset.template_config.data_vars
-        if var.internal_attrs.grib_element in {"FRZR", "FROZR"}
-    }
-    assert decode.allow_missing_vars
 
 
 def assert_numeric_snapshots(
@@ -201,7 +195,7 @@ def assert_numeric_snapshots(
     ]
     assert samples
     expected = set(SNAPSHOTS["variables"]) & set(ds.data_vars)
-    assert len(expected) == (8 if has_hourly_fields else 6)
+    assert len(expected) == (7 if has_hourly_fields else 6)
     assert {sample["name"] for sample in samples} == expected
     assert {sample["family"] for sample in samples} == (
         {"eas", "mean", "pmmn", "prob", "sprd"}
@@ -240,10 +234,13 @@ def assert_numeric_snapshots(
             atol=1e-4 if is_offset else 1e-10,
             equal_nan=True,
         )
-    assert ("composite_reflectivity" in ds) == has_hourly_fields
+    assert "composite_reflectivity" not in ds
+    assert ("derived_radar_reflectivity_1000m" in ds) == has_hourly_fields
     if has_hourly_fields:
         assert np.isnan(
-            ds.composite_reflectivity.sel(init_time=init, statistic="mean").values
+            ds.derived_radar_reflectivity_1000m.sel(
+                init_time=init, statistic="mean"
+            ).values
         ).all()
         assert (
             "statistic" not in ds.probability_matched_mean_composite_reflectivity.dims
@@ -319,6 +316,7 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     monkeypatch.setattr(NoaaRefsRegionJob, "download_concurrency", 2)
     variables = [
         *SNAPSHOTS["variables"],
+        "derived_radar_reflectivity_1000m",
         *[name for name in OFFSET_SAMPLES if name not in SNAPSHOTS["variables"]],
         *[f"{name}_standard_deviation" for name in OFFSET_SAMPLES],
     ]
@@ -331,11 +329,6 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     ]
     original_template = config.get_template
     monkeypatch.setattr(type(config), "data_vars", property(lambda self: selected))
-    monkeypatch.setattr(
-        type(dataset),
-        "allow_missing_vars",
-        tuple(v for v in dataset.allow_missing_vars if v in variables),
-    )
     monkeypatch.setattr(
         type(config),
         "get_template",
@@ -420,9 +413,12 @@ def assert_manifest_and_decode_health(
     group = zarr.open_group(store, mode="r")
     for checked_init in pd.to_datetime(window.init_time.values):
         assert_snapshot_references(store, job, checked_init)
-    assert ("composite_reflectivity" in updated) == has_hourly_fields
+    assert "composite_reflectivity" not in updated
+    assert ("derived_radar_reflectivity_1000m" in updated) == has_hourly_fields
     if has_hourly_fields:
-        spread_only = next(v for v in selected if v.name == "composite_reflectivity")
+        spread_only = next(
+            v for v in selected if v.name == "derived_radar_reflectivity_1000m"
+        )
         assert all(
             key[1] == 1 for key in asyncio.run(manifest_refs(store, spread_only.name))
         )
