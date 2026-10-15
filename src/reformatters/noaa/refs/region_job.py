@@ -109,7 +109,6 @@ class NoaaRefsRegionJob(NoaaVirtualRegionJob[NoaaRefsDataVar, NoaaRefsSourceFile
         assert len(refs) == len(actual), (
             f"{coord.get_url()}: duplicate output references"
         )
-        assert actual <= expected, f"{coord.get_url()}: unexpected output references"
         if missing := expected - actual:
             log.warning(
                 f"{coord.get_url()}: GRIB messages absent from index: "

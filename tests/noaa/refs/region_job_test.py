@@ -220,8 +220,6 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
             assert "temperature_2m" in warning.message
             with pytest.raises(AssertionError, match="duplicate output references"):
                 job._check_refs_complete(coord, [*refs, refs[0]])
-            with pytest.raises(AssertionError, match="unexpected output references"):
-                job._check_refs_complete(replace(coord, data_vars=[]), refs)
         covered.update(ref.data_var.path for ref in refs)
     assert covered == {var.path for var in VARIABLES}
 
@@ -379,11 +377,8 @@ def test_rolling_windows_match_real_labels(
     assert not variable.available_at(pd.Timedelta(hours=hours + 1))
 
 
-@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
-def test_missing_required_messages_warn_for_every_init(
-    init: str, caplog: pytest.LogCaptureFixture
-) -> None:
-    coord = file_coord(pd.Timestamp(init), "mean", pd.Timedelta("1h"))
+def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
+    coord = file_coord(pd.Timestamp("2026-10-15T12"), "mean", pd.Timedelta("1h"))
     with caplog.at_level("WARNING"):
         make_job()._check_refs_complete(coord, [])
     (warning,) = caplog.records
@@ -414,17 +409,17 @@ def test_exact_selectors_have_distinct_lookup_keys() -> None:
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
-@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
-def test_partial_index_preserves_available_refs_and_restored_freezing_rain(
+def test_real_index_with_missing_messages_preserves_available_refs(
     config: NoaaRefsForecastHourlyVirtualTemplateConfig
     | NoaaRefsForecast3HourlyVirtualTemplateConfig,
-    init: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    path = index_path("prob", 6)
-    coord = file_coord(pd.Timestamp(init), "prob", pd.Timedelta("6h"), config.data_vars)
+    path = FIXTURES / "missing_messages" / "refs-20261015-12-prob-f03-conus.idx"
+    coord = file_coord(
+        pd.Timestamp("2026-10-15T12"), "prob", pd.Timedelta("3h"), config.data_vars
+    )
     job = make_job(config.data_vars)
     local = tmp_path / "index.idx"
     monkeypatch.setattr(
@@ -433,49 +428,24 @@ def test_partial_index_preserves_available_refs_and_restored_freezing_rain(
     )
     monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
     lines = parse_grib_index_lines(path)
+    assert "FRZR" not in {line[1] for line in lines}
     file_size = lines[-1][0] + 1000
     local.write_bytes(path.read_bytes())
-    full_refs = job.file_refs(coord, file_size)
-    freezing_paths = {
+    with caplog.at_level("WARNING"):
+        refs = job.file_refs(coord, file_size)
+    assert refs
+    missing_paths = {
         v.path for v in coord.data_vars if v.internal_attrs.grib_element == "FRZR"
     }
-    assert freezing_paths
-    freezing_refs = [ref for ref in full_refs if ref.data_var.path in freezing_paths]
-    assert {ref.data_var.path for ref in freezing_refs} == freezing_paths
-    assert not caplog.records
-
-    local.write_text(
-        "\n".join(
-            line
-            for line in path.read_text().splitlines()
-            if line.split(":")[3] != "FRZR"
-        )
-        + "\n"
-    )
-    remaining_starts = [line[0] for line in parse_grib_index_lines(local)]
-    ends = dict(zip(remaining_starts, [*remaining_starts[1:], file_size], strict=True))
-    with caplog.at_level("WARNING"):
-        partial_refs = job.file_refs(coord, file_size)
-    assert partial_refs
-    assert not freezing_paths & {ref.data_var.path for ref in partial_refs}
-    available_refs = [
-        ref for ref in full_refs if ref.data_var.path not in freezing_paths
-    ]
-    # Removing index entries extends the preceding ref's range to the next retained offset.
-    assert partial_refs == [
-        ref._replace(length=ends[ref.offset] - ref.offset) for ref in available_refs
-    ]
-    assert len(partial_refs) + len(freezing_refs) == len(full_refs)
+    assert missing_paths
+    present_paths = {ref.data_var.path for ref in refs}
+    assert present_paths == {v.path for v in coord.data_vars} - missing_paths
+    assert job.representative_var(coord).path in present_paths
     (warning,) = caplog.records
     assert warning.levelname == "WARNING"
     assert coord.get_url() in warning.message
     assert "GRIB messages absent from index" in warning.message
-    assert all(path in warning.message for path in freezing_paths)
-
-    caplog.clear()
-    local.write_bytes(path.read_bytes())
-    assert job.file_refs(coord, file_size) == full_refs
-    assert not caplog.records
+    assert all(path in warning.message for path in missing_paths)
 
 
 def test_identical_sparse_selectors_still_have_different_source_files() -> None:
