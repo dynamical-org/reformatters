@@ -280,19 +280,116 @@ def test_member_selector_stripping_preserves_process_and_aerosol_selectors() -> 
         coord.index_selectors(("ENS=+1",))
 
 
-def test_missing_required_messages_fail_loudly() -> None:
+@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
+def test_missing_required_messages_warn_for_every_init(
+    init: str, caplog: pytest.LogCaptureFixture
+) -> None:
     config = CONFIGS[0]
     var = next(v for v in config.data_vars if v.name == "temperature_2m")
     coord = NoaaRrfsSourceFileCoord(
-        init_time=pd.Timestamp("2026-09-15T00"),
+        init_time=pd.Timestamp(init),
         lead_time=pd.Timedelta("2h"),
         source_family="2dfld",
         data_vars=[var],
     )
-    with pytest.raises(
-        AssertionError, match=r"required GRIB messages absent.*temperature_2m"
-    ):
+    with caplog.at_level("WARNING"):
         make_job(config)._check_refs_complete(coord, [])
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert "temperature_2m" in warning.message
+    assert "ingesting available messages" in warning.message
+
+
+@pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
+@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
+def test_partial_index_preserves_available_refs_and_restored_freezing_rain(
+    config: NoaaRrfsForecastTemplateConfig,
+    init: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    pattern = (
+        "rrfsens.*/12/m001/*.2dfldnomads.3km.f024.*.idx"
+        if config.members
+        else "rrfs.*/00/*.subh.f001.*.idx"
+        if config.sub_hourly
+        else "rrfs.*/00/*.2dfld.3km.f001.*.idx"
+    )
+    (path,) = FIXTURES.glob(pattern)
+    lead = pd.Timedelta("24h" if config.members else "1h")
+    job = make_job(config)
+    variables = [
+        v
+        for v in config.data_vars
+        if v.internal_attrs.source_family == ("subh" if config.sub_hourly else "2dfld")
+        and v.available_at(lead)
+    ]
+    (coord,) = job.generate_source_file_coords(
+        xr.Dataset(
+            coords={
+                "init_time": [pd.Timestamp(init)],
+                "lead_time": [lead],
+                "ensemble_member": [1],
+            }
+        ),
+        variables,
+    )
+    local = tmp_path / "index.idx"
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *a: 217)
+    lines = parse_grib_index_lines(path)
+    file_size = lines[-1][0] + 1000
+    local.write_bytes(path.read_bytes())
+    full_refs = job.file_refs(coord, file_size)
+    freezing_paths = {
+        v.path for v in variables if v.internal_attrs.grib_element == "FRZR"
+    }
+    assert freezing_paths
+    freezing_refs = [ref for ref in full_refs if ref.data_var.path in freezing_paths]
+    assert {ref.data_var.path for ref in freezing_refs} == freezing_paths
+    assert {ref.out_loc["lead_time"] for ref in freezing_refs} == set(
+        coord.message_lead_times()
+    )
+    assert not caplog.records
+
+    local.write_text(
+        "\n".join(
+            line
+            for line in path.read_text().splitlines()
+            if line.split(":")[3] != "FRZR"
+        )
+        + "\n"
+    )
+    remaining_starts = [line[0] for line in parse_grib_index_lines(local)]
+    ends = dict(zip(remaining_starts, [*remaining_starts[1:], file_size], strict=True))
+    with caplog.at_level("WARNING"):
+        partial_refs = job.file_refs(coord, file_size)
+    assert partial_refs
+    assert not freezing_paths & {ref.data_var.path for ref in partial_refs}
+    available_refs = [
+        ref for ref in full_refs if ref.data_var.path not in freezing_paths
+    ]
+    # Removing index entries extends the preceding ref's range to the next retained offset.
+    assert partial_refs == [
+        ref._replace(length=ends[ref.offset] - ref.offset) for ref in available_refs
+    ]
+    assert len(partial_refs) + len(freezing_refs) == len(full_refs)
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert all(path in warning.message for path in freezing_paths)
+
+    caplog.clear()
+    local.write_bytes(path.read_bytes())
+    assert job.file_refs(coord, file_size) == full_refs
+    assert not caplog.records
 
 
 def test_supported_leads_are_explicit_for_binary_run_totals() -> None:

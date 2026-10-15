@@ -181,7 +181,7 @@ class NoaaVirtualRegionJob(
     def _check_refs_complete(
         self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
     ) -> None:
-        """Hook for a subclass to reject a file whose index matched only some of the
+        """Hook for a subclass to report or reject an index matching only some of the
         coord's variables. Reached only once the index parsed and every byte range
         checked out, so an empty `refs` here means nothing matched, not a skipped file.
         """

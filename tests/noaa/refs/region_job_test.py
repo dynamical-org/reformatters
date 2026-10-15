@@ -123,6 +123,7 @@ def file_coord(
 def test_every_source_message_is_referenced_except_explicit_exclusions(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     job = make_job()
     monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
@@ -206,13 +207,21 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
             assert isinstance(ref.data_var, NoaaRefsDataVar)
             assert ("statistic" in ref.out_loc) == (family in ("mean", "sprd"))
         if family == "mean" and lead == pd.Timedelta("1h"):
-            with pytest.raises(AssertionError, match="required GRIB messages absent"):
+            caplog.clear()
+            with caplog.at_level("WARNING"):
                 job._check_refs_complete(
                     coord,
                     [ref for ref in refs if ref.data_var.name != "temperature_2m"],
                 )
+            (warning,) = caplog.records
+            assert warning.levelname == "WARNING"
+            assert coord.get_url() in warning.message
+            assert "GRIB messages absent from index" in warning.message
+            assert "temperature_2m" in warning.message
             with pytest.raises(AssertionError, match="duplicate output references"):
                 job._check_refs_complete(coord, [*refs, refs[0]])
+            with pytest.raises(AssertionError, match="unexpected output references"):
+                job._check_refs_complete(replace(coord, data_vars=[]), refs)
         covered.update(ref.data_var.path for ref in refs)
     assert covered == {var.path for var in VARIABLES}
 
@@ -370,10 +379,22 @@ def test_rolling_windows_match_real_labels(
     assert not variable.available_at(pd.Timedelta(hours=hours + 1))
 
 
-def test_missing_required_or_wrong_selector_fails() -> None:
-    coord = file_coord(pd.Timestamp("2026-09-15T12"), "mean", pd.Timedelta("1h"))
-    with pytest.raises(AssertionError, match="required GRIB messages absent"):
+@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
+def test_missing_required_messages_warn_for_every_init(
+    init: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    coord = file_coord(pd.Timestamp(init), "mean", pd.Timedelta("1h"))
+    with caplog.at_level("WARNING"):
         make_job()._check_refs_complete(coord, [])
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert "temperature_2m" in warning.message
+    assert "ingesting available messages" in warning.message
+
+
+def test_exact_selectors_have_distinct_lookup_keys() -> None:
     var = next(v for v in VARIABLES if v.name == "temperature_2m")
     altered = replace(
         var,
@@ -390,6 +411,71 @@ def test_missing_required_or_wrong_selector_fails() -> None:
         "1 hour fcst",
         ("process=193",),
     ) in make_job()._message_lookup([altered], 1)
+
+
+@pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)
+@pytest.mark.parametrize("init", ["2026-08-13", "2026-09-15", "2026-10-15"])
+def test_partial_index_preserves_available_refs_and_restored_freezing_rain(
+    config: NoaaRefsForecastHourlyVirtualTemplateConfig
+    | NoaaRefsForecast3HourlyVirtualTemplateConfig,
+    init: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = index_path("prob", 6)
+    coord = file_coord(pd.Timestamp(init), "prob", pd.Timedelta("6h"), config.data_vars)
+    job = make_job(config.data_vars)
+    local = tmp_path / "index.idx"
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
+    lines = parse_grib_index_lines(path)
+    file_size = lines[-1][0] + 1000
+    local.write_bytes(path.read_bytes())
+    full_refs = job.file_refs(coord, file_size)
+    freezing_paths = {
+        v.path for v in coord.data_vars if v.internal_attrs.grib_element == "FRZR"
+    }
+    assert freezing_paths
+    freezing_refs = [ref for ref in full_refs if ref.data_var.path in freezing_paths]
+    assert {ref.data_var.path for ref in freezing_refs} == freezing_paths
+    assert not caplog.records
+
+    local.write_text(
+        "\n".join(
+            line
+            for line in path.read_text().splitlines()
+            if line.split(":")[3] != "FRZR"
+        )
+        + "\n"
+    )
+    remaining_starts = [line[0] for line in parse_grib_index_lines(local)]
+    ends = dict(zip(remaining_starts, [*remaining_starts[1:], file_size], strict=True))
+    with caplog.at_level("WARNING"):
+        partial_refs = job.file_refs(coord, file_size)
+    assert partial_refs
+    assert not freezing_paths & {ref.data_var.path for ref in partial_refs}
+    available_refs = [
+        ref for ref in full_refs if ref.data_var.path not in freezing_paths
+    ]
+    # Removing index entries extends the preceding ref's range to the next retained offset.
+    assert partial_refs == [
+        ref._replace(length=ends[ref.offset] - ref.offset) for ref in available_refs
+    ]
+    assert len(partial_refs) + len(freezing_refs) == len(full_refs)
+    (warning,) = caplog.records
+    assert warning.levelname == "WARNING"
+    assert coord.get_url() in warning.message
+    assert "GRIB messages absent from index" in warning.message
+    assert all(path in warning.message for path in freezing_paths)
+
+    caplog.clear()
+    local.write_bytes(path.read_bytes())
+    assert job.file_refs(coord, file_size) == full_refs
+    assert not caplog.records
 
 
 def test_identical_sparse_selectors_still_have_different_source_files() -> None:
@@ -416,7 +502,10 @@ def test_identical_sparse_selectors_still_have_different_source_files() -> None:
 
 @pytest.mark.parametrize("processes", [(4, 193), (193, 4), (4,), (193,), ()])
 def test_surface_height_spread_accepts_either_copy(
-    processes: tuple[int, ...], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    processes: tuple[int, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     path = index_path("sprd", 1)
     lines = path.read_text().splitlines()
@@ -444,8 +533,14 @@ def test_surface_height_spread_accepts_either_copy(
     coord = file_coord(pd.Timestamp("2026-08-13T00"), "sprd", pd.Timedelta("1h"))
     file_size = int(lines[-1].split(":")[1]) + 1000
     if not processes:
-        with pytest.raises(AssertionError, match="required GRIB messages absent"):
-            make_job().file_refs(coord, file_size)
+        with caplog.at_level("WARNING"):
+            refs = make_job().file_refs(coord, file_size)
+        assert "geopotential_height_surface" not in {r.data_var.name for r in refs}
+        assert len(refs) == len(coord.data_vars) - 1
+        (warning,) = caplog.records
+        assert warning.levelname == "WARNING"
+        assert "geopotential_height_surface" in warning.message
+        assert "GRIB messages absent from index" in warning.message
         return
     refs = make_job().file_refs(coord, file_size)
     height = item(r for r in refs if r.data_var.name == "geopotential_height_surface")

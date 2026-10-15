@@ -5,6 +5,7 @@ from typing import ClassVar
 import pandas as pd
 import xarray as xr
 
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef
@@ -15,6 +16,8 @@ from reformatters.noaa.noaa_virtual_region_job import (
 from reformatters.noaa.rrfs.region_job import SOURCE_PREFIX, SOURCE_REGION
 
 from .models import NoaaRefsDataVar, ProductFamily
+
+log = get_logger(__name__)
 
 
 class NoaaRefsSourceFileCoord(NoaaVirtualSourceFileCoord[NoaaRefsDataVar]):
@@ -106,6 +109,9 @@ class NoaaRefsRegionJob(NoaaVirtualRegionJob[NoaaRefsDataVar, NoaaRefsSourceFile
         assert len(refs) == len(actual), (
             f"{coord.get_url()}: duplicate output references"
         )
-        assert actual == expected, (
-            f"{coord.get_url()}: required GRIB messages absent from index: {sorted(expected - actual)}"
-        )
+        assert actual <= expected, f"{coord.get_url()}: unexpected output references"
+        if missing := expected - actual:
+            log.warning(
+                f"{coord.get_url()}: GRIB messages absent from index: "
+                f"{sorted(missing)}; ingesting available messages"
+            )
