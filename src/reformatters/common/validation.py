@@ -1055,7 +1055,8 @@ class CheckVirtualDecodeHealth(Validator):
 
     `allow_all_nan_vars` explicitly names variables that may legitimately carry their
     missing state across every sampled chunk. They still fail on decode errors or missing
-    sampled chunk references.
+    sampled chunk references. `allow_missing_vars` also permits absent references for
+    named source-omitted variables; present all-NaN references and decode errors still fail.
     """
 
     positions: int | Literal["all"] = 1
@@ -1064,6 +1065,7 @@ class CheckVirtualDecodeHealth(Validator):
     max_positions: int | None = None
     max_workers: int = 32
     allow_all_nan_vars: Sequence[str] = ()
+    allow_missing_vars: Sequence[str] = ()
     # Offline opt-in. Given (var_path, out_loc), returns presence by vertical label
     # (None for root variables). A variable with no reference at a position is skipped
     # (not decoded, not a failure) -- reference existence is the availability check's
@@ -1091,12 +1093,7 @@ class CheckVirtualDecodeHealth(Validator):
         store = context.store
         assert isinstance(store, IcechunkStore)
         ds = context.ds
-        unknown = sorted(set(self.allow_all_nan_vars) - set(context.known_var_paths()))
-        if unknown:
-            raise ValueError(
-                f"{type(self).__name__} names unknown allow_all_nan_vars {unknown}. "
-                f"Known variable paths: {sorted(context.known_var_paths())}"
-            )
+        self._validate_allowlists(context.known_var_paths())
         append_dim = region_job.append_dim
         candidates = region_job.source_file_coords()
         if not candidates:
@@ -1177,6 +1174,15 @@ class CheckVirtualDecodeHealth(Validator):
             passed=True, message=message, checked_count=decoded_refs
         )
 
+    def _validate_allowlists(self, known_var_paths: Sequence[str]) -> None:
+        for field in ("allow_all_nan_vars", "allow_missing_vars"):
+            unknown = sorted(set(getattr(self, field)) - set(known_var_paths))
+            if unknown:
+                raise ValueError(
+                    f"{type(self).__name__} names unknown {field} {unknown}. "
+                    f"Known variable paths: {sorted(known_var_paths)}"
+                )
+
     def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
         if isinstance(self.positions, int):
             return set(present_positions[-self.positions :])
@@ -1235,6 +1241,15 @@ class CheckVirtualDecodeHealth(Validator):
                 continue
 
             nan_fraction = float(np.isnan(values).mean())
+            if (
+                nan_fraction >= 1.0
+                and var.path in self.allow_missing_vars
+                and not self._sampled_refs_present(
+                    da, loc, var, region_job, store, group
+                )
+            ):
+                skipped.add(var.path)
+                continue
             error = None
             if (
                 nan_fraction >= 1.0

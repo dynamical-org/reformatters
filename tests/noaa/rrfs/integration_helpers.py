@@ -76,6 +76,11 @@ def backfill_and_update_in_isolated_store(
         "allow_all_nan_vars",
         tuple(v for v in dataset.allow_all_nan_vars if v in variables),
     )
+    monkeypatch.setattr(
+        type(dataset),
+        "allow_missing_vars",
+        tuple(v for v in dataset.allow_missing_vars if v in variables),
+    )
     selected_leads = list(range(8)) if subhourly else [2]
 
     def select_dataset(ds: xr.Dataset) -> xr.Dataset:

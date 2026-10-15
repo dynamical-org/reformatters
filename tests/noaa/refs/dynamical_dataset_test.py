@@ -183,6 +183,12 @@ def test_operational_configuration_requires_complete_manifests(
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.allow_all_nan_vars == ()
     assert decode.max_workers == 2
+    assert set(decode.allow_missing_vars) == {
+        var.path
+        for var in dataset.template_config.data_vars
+        if var.internal_attrs.grib_element in {"FRZR", "FROZR"}
+    }
+    assert decode.allow_missing_vars
 
 
 def assert_numeric_snapshots(
@@ -325,6 +331,8 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     ]
     original_template = config.get_template
     monkeypatch.setattr(type(config), "data_vars", property(lambda self: selected))
+    monkeypatch.setattr(type(dataset), "allow_missing_vars", ())
+
     monkeypatch.setattr(
         type(config),
         "get_template",

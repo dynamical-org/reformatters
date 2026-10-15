@@ -1913,6 +1913,70 @@ def test_check_virtual_decode_health_rejects_unknown_all_nan_var(
         )
 
 
+@pytest.mark.parametrize("state", ["missing", "nan", "restored", "decode_error"])
+def test_check_virtual_decode_health_source_omission(
+    tmp_path: Path, state: str
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(1)
+    template_ds["omitted"] = template_ds["temperature_2m"].copy(deep=True)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    job = job.model_copy(
+        update={"data_vars": [*job.data_vars, VirtualTestDataVar(name="omitted")]}
+    )
+    if state != "missing":
+        session = _primary_repo(dataset.store_factory).writable_session("main")
+        source = tmp_path / "omitted.bin"
+        if state != "decode_error":
+            source.write_bytes(
+                np.full(
+                    N_LAT * N_LON, np.nan if state == "nan" else 1.0, dtype="<f8"
+                ).tobytes()
+            )
+        for lead_idx in range(N_LEADS):
+            session.store.set_virtual_ref(
+                f"omitted/c/0/{lead_idx}/0/0",
+                source.as_uri(),
+                offset=0,
+                length=BLOCK_NBYTES,
+            )
+        session.commit("Source field restored")
+        store = _primary_repo(dataset.store_factory).readonly_session("main").store
+    context = _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+    assert validation.CheckVirtualManifestCompleteness().check(context).passed
+    strict = validation.CheckVirtualDecodeHealth().check(context)
+    assert strict.passed == (state == "restored")
+    allowed = validation.CheckVirtualDecodeHealth(
+        allow_missing_vars=("omitted",)
+    ).check(context)
+    assert allowed.passed == (state in {"missing", "restored"}), allowed.message
+    if state == "decode_error":
+        assert "omitted: decode error" in allowed.message
+    else:
+        _overwrite_messages_with_nan(tmp_path, init_idx=0)
+        result = validation.CheckVirtualDecodeHealth(
+            allow_missing_vars=("omitted",)
+        ).check(context)
+        assert not result.passed
+        assert (
+            "temperature_2m: every sampled chunk decoded entirely NaN" in result.message
+        )
+
+
+def test_check_virtual_decode_health_rejects_unknown_missing_var(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(1)
+    store = _backfilled_store(dataset, template_ds, emit=slice(0, 1))
+    job = _make_region_job(template_ds, region=slice(0, 1))
+    with pytest.raises(ValueError, match="unknown allow_missing_vars"):
+        validation.CheckVirtualDecodeHealth(allow_missing_vars=("not_a_var",)).check(
+            _virtual_context(job, store, xr.open_zarr(store, decode_timedelta=True))
+        )
+
+
 def test_check_virtual_decode_health_skips_vars_without_reference(
     tmp_path: Path,
 ) -> None:
