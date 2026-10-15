@@ -2,7 +2,7 @@
   {
     "path": "composite_reflectivity",
     "cadence_hours": 1,
-    "metadata_sha256": "bc1d8e6e03f8efba9b6cf5da3e6505a88221d937818d935fa00d88947149061c"
+    "metadata_sha256": "93c9ab6be8110ed57a232e06300dfeaaf730d838ac7308b103bedb691d8364b7"
   },
   {
     "path": "convective_available_potential_energy_180_0mb",
@@ -37,62 +37,62 @@
   {
     "path": "derived_radar_reflectivity_1000m",
     "cadence_hours": 1,
-    "metadata_sha256": "d603b49be7ab10ed90500ed6aee4f968447ff3d5c8699ddf8e1f37b5e5a01da8"
+    "metadata_sha256": "47801dfba21af3df1c3586d781b88c73c01f9e15b42577ee16fac6454e2859f1"
   },
   {
     "path": "dew_point_temperature_2m",
     "cadence_hours": 1,
-    "metadata_sha256": "6bd703152032ea99c537e94e510acbede8a35239b34f5d3f2bdf14cbbfff0617"
+    "metadata_sha256": "900274ccd1c018feb631de4451102d97d8a9528d1d14fef6ddd66cb25017e018"
   },
   {
     "path": "dew_point_temperature_2m_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "06fb612b41098ee4b1ba4e7147f2bd562175efc6be9231087ae5495842993f94"
+    "metadata_sha256": "41c8a8de766783eb26abd2ce0051caba328540379101ecd42708e2a4dc5c443b"
   },
   {
     "path": "dew_point_temperature_500hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "81c18d16e3cdc2c89f488458d5cf7def6e27a9c40d7aadf8e8d688bc11763c65"
+    "metadata_sha256": "e2986c3fb067791d5199b152068e7b64a7a81ecaffff3290021f7f2a650ed753"
   },
   {
     "path": "dew_point_temperature_500hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "1eee34dc7502d1d8ded7e420bbadd4f8219c8777e75b27a21b85d23803718422"
+    "metadata_sha256": "3edfef385e3b83694fbaf83069dffe752bb983bb99d19876cb4cbad9bddd858c"
   },
   {
     "path": "dew_point_temperature_700hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "843b6829fc5af33325edc67261a4016f4d709aff6651719b15b65b32410809a2"
+    "metadata_sha256": "1aec63384810ce57b707c219a6ce0a1576b45ec9eaf4901f30563786f04f679f"
   },
   {
     "path": "dew_point_temperature_700hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "b1b208dc4288f96fb6d396670ee186cdd5e66ea170a8f69dbdae2a9b119b63f4"
+    "metadata_sha256": "110a369d4f1d425c8b7cc1345e79b9d43c4686ff48708c89e53a6a74f6842049"
   },
   {
     "path": "dew_point_temperature_850hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "fa5a97cc791273f9beecd417184c8e401908a50f2123811c3c705579b077574c"
+    "metadata_sha256": "ecf41365db1b4a3593c1946f04a1ffa9b0a7f3fcdf7f88232ab636ff0d8af2a1"
   },
   {
     "path": "dew_point_temperature_850hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "e25f469123387b5f508769f1b74885e1aaec1e8bb584e91ddb25b405dcf47be6"
+    "metadata_sha256": "cea8292b264ccb32e9542ad0e573acde3fecf2fc0f4a8fcaec0a017ed461f4cd"
   },
   {
     "path": "dew_point_temperature_925hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "d86ce30a18fb6a2878264b0f99f0eeafa155236d2347891c22b7865d20846246"
+    "metadata_sha256": "01400920ffbb721c46e4a15e25154d627b8f89983c922e6c53f702dd605b0d44"
   },
   {
     "path": "dew_point_temperature_925hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "5be36fabcff1824bc9f053a14cdfdf54c189fdf2004f7749ad5e0047d8278861"
+    "metadata_sha256": "be6d153834a289700ac4f9fbe1f8eb709bfe62e0d4bc23afc26adbe8cfe1464e"
   },
   {
     "path": "echo_top",
     "cadence_hours": 1,
-    "metadata_sha256": "069a80daeac2e4b3509125f3c39a89f983d6dd623fc3e888941d958f9b6e39fc"
+    "metadata_sha256": "faaef8151e970ec035ae852523c74aafe3fb0e82142c46febe98ec8a154a8f34"
   },
   {
     "path": "ensemble_agreement_scale_probability_of_total_precipitation_12_hour_surface_above_127",
@@ -337,7 +337,7 @@
   {
     "path": "hourly_maximum_radar_reflectivity_1000m",
     "cadence_hours": 1,
-    "metadata_sha256": "0597cfcebee4ea038f7304ec040cd955f7d8cd4063d03c5065197408396ca51d"
+    "metadata_sha256": "8be447568ddb62dd3a0f8e5a90667044d3f0ed386f3a69f6d1ef4b6f4f4240b2"
   },
   {
     "path": "categorical_ice_pellets_surface",
@@ -367,7 +367,7 @@
   {
     "path": "maximum_updraft_helicity_5000_2000m",
     "cadence_hours": 1,
-    "metadata_sha256": "9d5997099cb1bfb494524509bc6cdf4ade7cacb09794f51785d15e491cf6f01c"
+    "metadata_sha256": "f93b7933909bd8dcaea7c02e7b01dcc51486ef3ae3c859c0a8b0893c4f81f6a0"
   },
   {
     "path": "mean_probability_matched_mean_average_total_precipitation_1_hour_surface",
@@ -1537,12 +1537,12 @@
   {
     "path": "soil_temperature_0m",
     "cadence_hours": 1,
-    "metadata_sha256": "87e1ed2dd0b4b3dc268462996fa889d874008efafdda3ffdd4bea78790927b51"
+    "metadata_sha256": "969d211169a0f7adaf7fc9e1169bd2f9d3d1114e06397c625206b02c1c893fe6"
   },
   {
     "path": "soil_temperature_0m_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "c60741da3558a1362ea999300d7235370bb730868a3f16e2ee40d1f7c64614c7"
+    "metadata_sha256": "0eb67ddde575451bc601a6d50778a7bf78ad1a816fd48d1e1696bf7794fe5181"
   },
   {
     "path": "storm_relative_helicity_3000_0m",
@@ -1552,72 +1552,72 @@
   {
     "path": "temperature_250hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "6122180e762fb4d0edad0565ab904ac09ed328007e43e33a03999698f5f0c545"
+    "metadata_sha256": "b00cdec421385d70bf9230388d9514464d61f0584ad3368593132022b7651b0e"
   },
   {
     "path": "temperature_250hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "1844d269719f9970c04f881b286d3cb75a7969ee83fb7d046167f52dce92fc05"
+    "metadata_sha256": "7231f7d125fa0657dbed30d3689aecf38f6a72018970b83f3cbad10372fa2770"
   },
   {
     "path": "temperature_2m",
     "cadence_hours": 1,
-    "metadata_sha256": "8eb76a2d7419093ad1600753d94694bbc544788a8cd24ed0e2ef72c6fae610f1"
+    "metadata_sha256": "4b034acb6f6ae580be14afd71c4d6ccd8aac66a56f7bb18dda4bfc21afdc6acf"
   },
   {
     "path": "temperature_2m_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "f402ad0cd90168c5f5b449f0d03253747021e75dde9e747e8de2d5acd5173b70"
+    "metadata_sha256": "62d084343502c3d3c612b066d260f7c48ceb3eb52f2ec717bf043f82484c80e1"
   },
   {
     "path": "temperature_500hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "edcf32429aeb48b40f50cd9ff73e46c304ab9d7df180020aa2f68be8e82963ea"
+    "metadata_sha256": "e3b877244260efca7e908ec5df9738b80db5314ed9821831d055b9aa02d7aa0d"
   },
   {
     "path": "temperature_500hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "adc284053722bc7a79cc80d5cc28a8b30957c533048f458cb4396e2c3b5a0b13"
+    "metadata_sha256": "fc588e6bd28b806dba2ff4b59f552d8157dd6e54c91fa789988653d02614290c"
   },
   {
     "path": "temperature_700hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "d93155ee11536affcf455a471713ed88e35ed12c5bfed36218e122c9ae894dab"
+    "metadata_sha256": "816cd76204056139c7d691aac51625426a0897925381eee2ea1deed03182492d"
   },
   {
     "path": "temperature_700hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "28c7082a533b1fd829326bc8525a794430baf9e1c4f5363a712784db5939500c"
+    "metadata_sha256": "890272ecc061e2c598de9e123a54274b5ba55c660b75092b5bc0e2b70301e9df"
   },
   {
     "path": "temperature_850hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "7f1ed26db1fd76f79c703dc2521667a16b7fc6895721a68886803a929890ddb2"
+    "metadata_sha256": "fef4e9d6a0b6b566e230aee8be444080891fd54c7603fa9a3ef4dbc9ae5b3cc0"
   },
   {
     "path": "temperature_850hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "a3ee6f7df5566cdcb4085bd05a54839945ff7239466b08d533ad42350cfada20"
+    "metadata_sha256": "04241a855bc932eda995981077b99906ca5a56fab6290cf56f6895ee1be82a73"
   },
   {
     "path": "temperature_925hpa",
     "cadence_hours": 1,
-    "metadata_sha256": "004baab9136ee3d0ac06d4a77477432c097a64e33091ea6df3421a7696c989d0"
+    "metadata_sha256": "6c491d7b561881f016f0344b993007191778d8db375c3212d35fa830dcefa12d"
   },
   {
     "path": "temperature_925hpa_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "977149fc4e4613aeb44f1bffd32337a646f78c012d8530454bd4aa2b67a027e1"
+    "metadata_sha256": "35578a1d5357c0c1f90b502b33fe38abaa26c208dff5fa4bc49c35f62e1cb616"
   },
   {
     "path": "temperature_surface",
     "cadence_hours": 1,
-    "metadata_sha256": "fac81b158f761f02d510906172e50416dbd571c161864f92a1848308b42b318b"
+    "metadata_sha256": "a2ca43c53d0279287dd4f7cef7e7aa832a321e65064af605b0e847eee5b12dc8"
   },
   {
     "path": "temperature_surface_standard_deviation",
     "cadence_hours": 1,
-    "metadata_sha256": "2e92d11cc696aa3dbb9531164aad674fcc00605ecca4dacfb860c345a6c013d5"
+    "metadata_sha256": "4b9f5560e5ded3c23e2f2144fb0f19f9386ff075c21ac1e258ad009e9cd84811"
   },
   {
     "path": "total_cloud_cover_atmosphere",

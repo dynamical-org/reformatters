@@ -1541,7 +1541,9 @@ def _variable(
     )
 
 
-def _statistic_attrs(field: ProductField, *, spread_only: bool) -> DataVarAttrs:
+def _statistic_attrs(
+    field: ProductField, *, name: str, spread_only: bool
+) -> DataVarAttrs:
     element, level = field.element, field.level
     attrs = field.attrs
     if spread_only:
@@ -1552,7 +1554,7 @@ def _statistic_attrs(field: ProductField, *, spread_only: bool) -> DataVarAttrs:
                     None,
                     (
                         attrs.comment,
-                        "The mean slice is always missing; the probability-matched mean is provided as a separate variable.",
+                        f"REFS does not populate the mean statistic, use probability_matched_mean_{name} instead.",
                     ),
                 )
             ),
@@ -1666,8 +1668,8 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
         families: tuple[ProductFamily, ...] = (
             ("sprd",) if selectors == ("process=193",) else ("mean", "sprd")
         )
-        attrs = _statistic_attrs(field, spread_only=families == ("sprd",))
         name = _window_name(field.name, duration)
+        attrs = _statistic_attrs(field, name=name, spread_only=families == ("sprd",))
         has_offset = any(
             codec.get("name") == "scale_offset"
             and codec.get("configuration", {}).get("offset", 0) != 0
@@ -1682,7 +1684,7 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
                         None,
                         (
                             attrs.comment,
-                            f"The standard_deviation slice is not populated; read {name}_standard_deviation without the statistic dimension, in kelvin differences; 1 K of difference equals 1 degree_Celsius of difference.",
+                            f"The standard_deviation slice is not populated; read {name}_standard_deviation without the statistic dimension.",
                         ),
                     )
                 ),
@@ -1712,7 +1714,7 @@ def data_vars(dims: Dims) -> Sequence[NoaaRefsDataVar]:
                         None,
                         (
                             field.attrs.comment,
-                            "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
+                            "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members.",
                         ),
                     )
                 ),

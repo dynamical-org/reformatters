@@ -38,7 +38,7 @@
     "long_name": "Standard deviation of dew point temperature",
     "short_name": "dew_point_temperature_850hpa_standard_deviation",
     "units": "K",
-    "comment": "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members. This is a temperature difference in K, numerically equal to the difference in degree_Celsius; no temperature offset is applied.",
+    "comment": "NOAA spread: member-weighted population standard deviation with weights normalized over contributing members.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
