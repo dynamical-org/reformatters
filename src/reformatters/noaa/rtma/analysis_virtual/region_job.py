@@ -81,6 +81,8 @@ class NoaaRtmaAnalysisVirtualRegionJob(
             )
             for message in messages
         ]
+        # Partial coverage would let the representative chunk suppress retries
+        # for missing fields in the same source file.
         missing = {var.path for var in coord.data_vars} - {
             ref.data_var.path for ref in refs
         }
