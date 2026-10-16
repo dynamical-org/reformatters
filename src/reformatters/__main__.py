@@ -118,6 +118,7 @@ from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.dynamical_dataset import
 from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
     NoaaRrfsEnsForecastVirtualDataset,
 )
+from reformatters.noaa.rtma.analysis_virtual import NoaaRtmaAnalysisVirtualDataset
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
@@ -132,6 +133,12 @@ class NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a AWS Open Data dataset."""
 
     base_path: str = "s3://dynamical-noaa-hrrr"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-rtma"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -312,6 +319,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     ),
     NoaaHrrrAnalysisVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRtmaAnalysisVirtualDataset(
+        primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
