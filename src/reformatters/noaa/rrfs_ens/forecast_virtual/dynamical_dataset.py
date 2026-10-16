@@ -9,9 +9,10 @@ from .template_config import NoaaRrfsEnsForecastVirtualTemplateConfig
 
 
 class NoaaRrfsEnsForecastVirtualDataset(NoaaRrfsDataset):
-    # Files publish near init +81-212 min; polling starts before the first lead.
-    update_offset_minutes: NonNegativeInt = 75
-    update_deadline: timedelta = timedelta(minutes=160)
+    # Poll before early leads while preserving late-cycle coverage.
+    update_offset_minutes: NonNegativeInt = 70
+    update_deadline: timedelta = timedelta(minutes=165)
+
     template_config: NoaaRrfsEnsForecastVirtualTemplateConfig = (
         NoaaRrfsEnsForecastVirtualTemplateConfig()
     )

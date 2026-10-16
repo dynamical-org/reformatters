@@ -27,7 +27,6 @@ class NoaaRrfsDataset(
     template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     update_offset_minutes: NonNegativeInt
     update_deadline: timedelta
-    update_job_deadline: timedelta | None = None
     min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
@@ -65,7 +64,7 @@ class NoaaRrfsDataset(
                 name=f"{self.dataset_id}-update",
                 schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
                 pod_active_deadline=self.update_deadline,
-                active_deadline=self.update_job_deadline,
+                active_deadline=self.update_deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.5",
