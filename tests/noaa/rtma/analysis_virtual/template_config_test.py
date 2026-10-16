@@ -2,13 +2,27 @@ from typing import Any
 
 import numpy as np
 import pyproj
+import pytest
 
 from reformatters.common.projection import latitude_longitude_grids
+from reformatters.noaa.rtma.analysis_virtual import template_config
 from reformatters.noaa.rtma.analysis_virtual.template_config import (
     NoaaRtmaAnalysisVirtualTemplateConfig,
     spatial_coordinates,
 )
 from reformatters.noaa.rtma.grib_header import GRID_PROJ
+
+
+def test_coordinate_statistics_ignore_projection_roundoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = NoaaRtmaAnalysisVirtualTemplateConfig().coords
+    y, x = spatial_coordinates()
+    monkeypatch.setattr(
+        template_config, "spatial_coordinates", lambda: (y + 1e-9, x - 1e-9)
+    )
+    actual = NoaaRtmaAnalysisVirtualTemplateConfig().coords
+    assert [coord.attrs for coord in actual] == [coord.attrs for coord in expected]
 
 
 def test_grid_coordinates_match_independent_eccodes_points(

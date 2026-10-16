@@ -145,7 +145,12 @@ class NoaaRtmaAnalysisVirtualTemplateConfig(TemplateConfig[RtmaDataVar]):
                         units=units,
                         axis=axis,
                         statistics_approximate=StatisticsApproximate(
-                            min=float(values.min()), max=float(values.max())
+                            min=round(float(values.min()), 3)
+                            if axis
+                            else float(values.min()),
+                            max=round(float(values.max()), 3)
+                            if axis
+                            else float(values.max()),
                         ),
                     ),
                 )

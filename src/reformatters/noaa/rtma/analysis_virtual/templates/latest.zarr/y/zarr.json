@@ -42,8 +42,8 @@
     "axis": "Y",
     "units": "m",
     "statistics_approximate": {
-      "min": -263797.50271268317,
-      "max": 3789568.4852873166
+      "min": -263797.503,
+      "max": 3789568.485
     },
     "_FillValue": "AAAAAAAA+H8="
   },
