@@ -80,17 +80,7 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
 
-RRFS/REFS polling starts before typical source publication, with equal Job and pod deadlines. All values below are in minutes; start offsets and polling cutoffs are relative to the newest targeted initialization. Subhourly retains its shorter polling budget and six-of-eighteen completeness tier for that initialization.
-
-| Product | Start offset | Job / pod duration | Poll cutoff | Cycle cadence |
-| --- | ---: | ---: | ---: | ---: |
-| RRFS 18h | 65 | 95 | 155 | 180 |
-| RRFS 84h | 65 | 170 | 230 | 360 |
-| RRFS ensemble | 70 | 165 | 230 | 360 |
-| REFS hourly and 3-hourly | 105 | 135 | 235 | 360 |
-| RRFS subhourly | 75 | 59 | 133 | 60 |
-
-Validation retries copy both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff still belongs to the preceding fire: an RRFS 18h retry at init +146 minutes can poll only until +155, while a retry at +158 is skipped because its 95-minute budget would cross the next fire at +245. A retry admitted after its polling cutoff gets an initial sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
+Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
 
