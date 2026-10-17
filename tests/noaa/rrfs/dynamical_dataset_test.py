@@ -168,9 +168,16 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.max_workers == 2
     assert decode.allow_all_nan_vars == (
-        ("new_snow_density_surface",)
-        if cls
-        in {NoaaRrfsForecast18HourVirtualDataset, NoaaRrfsForecast84HourVirtualDataset}
+        (
+            "freezing_rain_run_total_surface",
+            "freezing_rain_surface",
+            "frozen_precipitation_run_total_surface",
+            "frozen_precipitation_surface",
+            "new_snow_density_surface",
+        )
+        if cls is NoaaRrfsForecast84HourVirtualDataset
+        else ("new_snow_density_surface",)
+        if cls is NoaaRrfsForecast18HourVirtualDataset
         else ()
     )
 

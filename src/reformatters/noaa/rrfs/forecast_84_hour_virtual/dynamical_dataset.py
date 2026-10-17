@@ -13,8 +13,15 @@ class NoaaRrfsForecast84HourVirtualDataset(NoaaRrfsDataset):
     # Poll before early leads while preserving late-cycle coverage.
     update_offset_minutes: NonNegativeInt = 65
     update_deadline: timedelta = timedelta(minutes=170)
-    # Snow density is all NaN when the air 300 m above ground is 5 °C or warmer everywhere.
-    allow_all_nan_vars: ClassVar[tuple[str, ...]] = ("new_snow_density_surface",)
+    # These variables are all NaN when temperatures are above freezing everywhere
+    # (no snow/freezing precipitation occurs during warm weather conditions).
+    allow_all_nan_vars: ClassVar[tuple[str, ...]] = (
+        "freezing_rain_run_total_surface",
+        "freezing_rain_surface",
+        "frozen_precipitation_run_total_surface",
+        "frozen_precipitation_surface",
+        "new_snow_density_surface",
+    )
     template_config: NoaaRrfsForecast84HourVirtualTemplateConfig = (
         NoaaRrfsForecast84HourVirtualTemplateConfig()
     )
