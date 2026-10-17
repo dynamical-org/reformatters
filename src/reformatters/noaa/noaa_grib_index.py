@@ -5,8 +5,11 @@ from os import PathLike
 import pandas as pd
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 from reformatters.noaa.models import NoaaInternalAttrs
+
+log = get_logger(__name__)
 
 # Fallback "end" pad for the final message in an index file, whose true end
 # byte is unknown without the file size. Ranged downloads return bytes up to the
@@ -59,23 +62,44 @@ def grib_index_window_str(var: DataVar[NoaaInternalAttrs], lead_hours: float) ->
 
 def parse_grib_index_lines(
     index_path: PathLike[str],
+    *,
+    tolerate_malformed: bool = False,
 ) -> list[tuple[int, str, str, str, tuple[str, ...]]]:
     """Parse a NOAA .idx into (start_byte, element, level, window, selectors).
 
     Line format: `<msg#>:<start>:d=<YYYYMMDDHH>:<ELEMENT>:<LEVEL>:<WINDOW>:`. The
     element field never contains a colon (even the unnamed `var discipline=...`
-    message), so a plain split is safe.
+    message), so a plain split is safe. With `tolerate_malformed`, unreadable message
+    fields retain their byte offset with empty labels, and an unreadable offset
+    invalidates the whole index.
     """
     lines = []
     with open(index_path) as f:
-        for raw_line in f:
+        for row, raw_line in enumerate(f, start=1):
             line = raw_line.rstrip("\n")
             if not line:
                 continue
             fields = line.split(":")
+            try:
+                start = int(fields[1])
+            except IndexError, ValueError:
+                if not tolerate_malformed:
+                    raise
+                log.error(
+                    f"Skipping {index_path}: unreadable GRIB index offset at row {row}; "
+                    "message boundaries cannot be inferred safely"
+                )
+                return []
+            if tolerate_malformed and (len(fields) < 6 or not all(fields[3:5])):
+                log.error(
+                    f"{index_path}: malformed GRIB index message at row {row}, "
+                    f"offset {start}; retaining its boundary and skipping its refs"
+                )
+                lines.append((start, "", "", "", ()))
+                continue
             lines.append(
                 (
-                    int(fields[1]),
+                    start,
                     fields[3],
                     fields[4],
                     fields[5],

@@ -20,6 +20,10 @@ from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.virtual_region_job import (
     NoaaHrrrForecastVirtualSourceFileCoord,
 )
+from tests.noaa.grib_index_fixtures import (
+    cached_grib_index,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaHrrrForecast48HourVirtualTemplateConfig()
 _LEAD_6H = pd.Timedelta("6h")
@@ -187,3 +191,42 @@ def test_operational_update_jobs_single_polling_job(
     assert now - init_times[-1] < TEMPLATE_CONFIG.append_dim_frequency
     # 14h window at the 6h cadence = the current + 2 prior cycles.
     assert job.region == slice(len(init_times) - 3, len(init_times))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("file_type", ["sfc", "prs", "nat"])
+@pytest.mark.parametrize(
+    "init_time",
+    ["2020-12-02T11", "2020-12-02T12", "2022-06-28T11", "2022-06-28T12"],
+)
+def test_completeness_expectations_match_source_eras(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    file_type: Literal["sfc", "prs", "nat"],
+    init_time: str,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda url: cached_grib_index(url, "hrrr-virtual-expectations-test"),
+    )
+    variables = [
+        var
+        for var in TEMPLATE_CONFIG.data_vars
+        if var.internal_attrs.hrrr_file_type == file_type
+    ]
+    coord = _coord(file_type, variables).model_copy(
+        update={"init_time": pd.Timestamp(init_time)}
+    )
+    refs = make_job(template_ds, variables).file_refs(coord, file_size=10**10)
+    assert refs
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+    if file_type == "prs":
+        assert {
+            ref.out_loc["pressure_level"]
+            for ref in refs
+            if ref.data_var.name == "dew_point_temperature"
+        } == set(template_ds["pressure_level"].to_dataset().get_index("pressure_level"))

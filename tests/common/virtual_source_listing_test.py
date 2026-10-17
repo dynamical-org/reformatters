@@ -1,4 +1,5 @@
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from typing import Any
 
 import obstore
 import pytest
@@ -186,3 +187,43 @@ def test_discovery_against_real_memory_store() -> None:
         ("both", 9000),
         ("data_only", 50),
     }
+
+
+@pytest.mark.parametrize("fail_after_page", [False, True])
+def test_listing_failure_preserves_other_prefixes_and_completed_pages(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    fail_after_page: bool,
+) -> None:
+    def listing(
+        store: obstore.store.ObjectStore,
+        *,
+        prefix: str,
+        chunk_size: int,
+    ) -> Iterator[list[dict[str, Any]]]:
+        if prefix == "bad/":
+            if fail_after_page:
+                yield [{"path": "bad/present", "size": 50}]
+            raise OSError("listing unavailable")
+        yield [{"path": prefix + "present", "size": 100}]
+
+    monkeypatch.setattr(obstore, "list", listing)
+    result = virtual_source_listing._list_objects(
+        obstore.store.MemoryStore(), ["before/", "bad/", "after/"]
+    )
+    assert result == {
+        "before/present": 100,
+        "after/present": 100,
+        **({"bad/present": 50} if fail_after_page else {}),
+    }
+    assert "Could not finish listing source prefix bad/" in caplog.text
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_listing_programming_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    def listing(*args: object, **kwargs: object) -> None:
+        raise TypeError("invalid listing invocation")
+
+    monkeypatch.setattr(obstore, "list", listing)
+    with pytest.raises(TypeError, match="invalid listing invocation"):
+        virtual_source_listing._list_objects(obstore.store.MemoryStore(), ["dir/"])

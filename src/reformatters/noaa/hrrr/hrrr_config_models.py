@@ -17,6 +17,12 @@ type NoaaHrrrDomain = Literal["alaska", "conus"]
 # - subh: 2D surface levels, sub-hourly
 type NoaaHrrrFileType = Literal["prs", "nat", "sfc", "subh"]
 
+HRRR_V2_FIRST_INIT = pd.Timestamp("2016-08-23T12")
+HRRR_V3_FIRST_INIT = pd.Timestamp("2018-07-12T12")
+# HRRR v3 ran the 00/06/12/18Z cycles to 36h; v4 extended them to 48h starting with the
+# 2020-12-02T12Z init (the first init with f37-f48 files on NODD).
+HRRR_V4_FIRST_INIT = pd.Timestamp("2020-12-02T12")
+
 
 class NoaaHrrrInternalAttrs(NoaaInternalAttrs):
     hrrr_file_type: NoaaHrrrFileType

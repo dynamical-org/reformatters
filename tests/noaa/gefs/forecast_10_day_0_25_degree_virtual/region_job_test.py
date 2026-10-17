@@ -298,11 +298,14 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
     assert all(r.location == coord.get_url() for r in refs)
 
 
-def test_file_refs_refuses_an_index_missing_a_requested_variable(
-    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_file_refs_logs_an_index_missing_a_requested_variable(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """At lead 9 the accumulation window is 6-9, so a 0-9 line is a different message.
-    Committing the file anyway would leave a NaN column nothing ever retries."""
+    The unmatched cell stays absent and is reported as an error."""
 
     stub_grib_source_file_reads(
         monkeypatch,
@@ -324,8 +327,10 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AssertionError, match="has no message for"):
-        job.file_refs(coord, file_size=1200)
+    assert job.file_refs(coord, file_size=1200) == []
+    assert "GRIB messages absent from index" in caplog.text
+    assert "total_precipitation_surface" in caplog.text
+    assert caplog.records[-1].levelname == "ERROR"
 
 
 _IDX_FIXTURE_NAME = re.compile(r"^(\d{8}T\d{2})_([cp]\d{2})_f(\d{3})\.idx$")
@@ -344,6 +349,7 @@ def test_every_requested_variable_maps_to_a_real_message(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     fixture_name: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Run the real coord generation and ref building against real archived indexes.
 
@@ -382,8 +388,9 @@ def test_every_requested_variable_maps_to_a_real_message(
     last_start = max(int(line.split(":")[1]) for line in index_text.splitlines())
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(coord, file_size=last_start + 1_000_000)
+    assert "GRIB messages absent from index" not in caplog.text
 
-    # file_refs asserts nothing was requested but absent; this pins the other direction,
+    # Completeness reports missing messages; this pins the other direction,
     # that every requested variable got exactly one ref.
     assert sorted(r.data_var.name for r in refs) == sorted(
         v.name for v in coord.data_vars

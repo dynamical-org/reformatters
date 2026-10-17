@@ -1,7 +1,9 @@
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock
 
+import httpx
 import pandas as pd
 import pytest
 import xarray as xr
@@ -16,7 +18,10 @@ from reformatters.noaa.hrrr.analysis_virtual.template_config import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.virtual_region_job import NoaaHrrrVirtualRegionJob
-from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
+from tests.noaa.grib_index_fixtures import (
+    cached_grib_index,
+    stub_grib_source_file_reads,
+)
 
 TEMPLATE_CONFIG = NoaaHrrrAnalysisVirtualTemplateConfig()
 
@@ -94,10 +99,10 @@ def test_group_file_probe_loc_carries_first_level(template_ds: xr.DataTree) -> N
     }
 
 
-def test_truncated_source_files_are_never_available(
+def test_truncated_source_files_reach_ref_validation(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The 2016-08-05 native uploads that end mid-file never reach the write loop."""
+    """Truncated files use the same ref validation as every other source file."""
     data_vars = [get_var("model_level/temperature")]
     coords = [
         NoaaHrrrAnalysisVirtualSourceFileCoord(
@@ -117,8 +122,105 @@ def test_truncated_source_files_are_never_available(
     job = make_job(template_ds, data_vars=data_vars)
 
     assert [coord.get_url() for coord, _ in job.discover_available(coords)] == [
-        "s3://noaa-hrrr-bdp-pds/hrrr.20160805/conus/hrrr.t09z.wrfnatf00.grib2"
+        coord.get_url() for coord in coords
     ]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("hour", [10, 12])
+@pytest.mark.parametrize("processing_mode", ["backfill", "update"])
+def test_truncated_source_file_requires_representative(
+    template_ds: xr.DataTree,
+    caplog: pytest.LogCaptureFixture,
+    hour: int,
+    processing_mode: Literal["backfill", "update"],
+) -> None:
+    data_vars = [
+        var
+        for var in TEMPLATE_CONFIG.data_vars
+        if var.internal_attrs.hrrr_file_type == "nat"
+    ]
+    coord = NoaaHrrrAnalysisVirtualSourceFileCoord(
+        init_time=pd.Timestamp(f"2016-08-05T{hour:02d}:00"),
+        lead_time=pd.Timedelta(0),
+        domain="conus",
+        file_type="nat",
+        data_vars=data_vars,
+    )
+    response = httpx.head(
+        coord.get_url().replace(
+            "s3://noaa-hrrr-bdp-pds/", "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/"
+        )
+    )
+    response.raise_for_status()
+    job = make_job(template_ds, data_vars).model_copy(
+        update={"processing_mode": processing_mode}
+    )
+
+    refs = job._file_refs_or_skip(coord, int(response.headers["content-length"]))
+
+    if hour == 12:
+        assert refs
+        assert any(
+            ref.data_var.path == "model_level/temperature"
+            and ref.out_loc["model_level"] == 1
+            for ref in refs
+        )
+        assert len(refs) < len(data_vars) * 50
+    else:
+        assert refs == []
+        assert "refs do not cover representative" in caplog.text
+    assert "GRIB messages absent from index" in caplog.text
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "init_time",
+    [
+        "2014-10-01T06",
+        "2016-01-15T06",
+        "2016-08-23T11",
+        "2016-08-23T14",
+        "2017-06-01T06",
+        "2018-07-12T11",
+        "2018-07-12T14",
+        "2019-06-01T06",
+        "2020-06-01T06",
+        "2021-06-01T06",
+        "2022-06-27T21",
+        "2022-06-28T00",
+        "2023-06-01T06",
+    ],
+)
+def test_completeness_expectations_match_source_eras(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    init_time: str,
+) -> None:
+    stub_grib_source_file_reads(
+        monkeypatch,
+        shared_region_job_module,
+        tmp_path,
+        lambda url: cached_grib_index(url, "hrrr-analysis-expectations-test"),
+    )
+    job = make_job(template_ds, TEMPLATE_CONFIG.data_vars)
+    region_ds = xr.Dataset(coords={"time": [pd.Timestamp(init_time)]})
+    coords = job.generate_source_file_coords(region_ds, TEMPLATE_CONFIG.data_vars)
+    for generated_coord in coords:
+        coord = generated_coord.model_copy(
+            update={"init_time": pd.Timestamp(init_time)}
+        )
+        refs = job.file_refs(coord, file_size=10**10)
+        assert refs, coord
+        assert not [record for record in caplog.records if record.levelname == "ERROR"]
+
+        missing_ref = refs[0]
+        job._check_refs_complete(coord, [ref for ref in refs if ref is not missing_ref])
+        assert missing_ref.data_var.path in caplog.text
+        assert "GRIB messages absent from index" in caplog.text
+        caplog.clear()
 
 
 @pytest.mark.parametrize(

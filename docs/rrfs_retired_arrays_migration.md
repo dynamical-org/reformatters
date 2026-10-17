@@ -34,12 +34,8 @@ The validation-exception revert and all 32 template removals ship in the **same
 PR and image**. Never deploy the revert separately. Retain partial-file ingestion:
 one defective source file must not prevent healthy files from committing.
 
-Merge and deploy this retirement before the generalized virtual partial-ingestion
-change in #1218. That change must then rebase and pass its combined checks.
-Deploying #1218 first would log errors for the retired fields until this retirement
-deploys; the old missing-source validation exceptions do not suppress ingestion
-errors. Main merges deploy automatically, so two nearby merges are not a reliable
-way to obtain one combined deployment.
+Main merges deploy automatically, so two nearby merges are not a reliable way to
+obtain one combined deployment.
 
 Normal operational metadata refresh does **not** delete arrays. Both the update
 structural guard and metadata-overwrite guard reject a template missing an existing

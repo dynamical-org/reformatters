@@ -129,6 +129,7 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
     monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
     covered = set()
     for path in INDEX_PATHS:
+        caplog.clear()
         family = next(f for f in FAMILIES if f == path.name.split(".")[2])
         lead = pd.Timedelta(hours=int(path.name.split(".")[3][1:]))
         coord = file_coord(
@@ -153,6 +154,9 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
             variant_refs = make_job(config.data_vars).file_refs(
                 variant_coord, lines[-1][0] + 1000
             )
+            assert not [
+                record for record in caplog.records if record.levelname == "ERROR"
+            ]
             assert {ref.data_var.path for ref in variant_refs} == {
                 v.path for v in variant_coord.data_vars
             }
@@ -215,13 +219,13 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
             assert ("statistic" in ref.out_loc) == (family in ("mean", "sprd"))
         if family == "mean" and lead == pd.Timedelta("1h"):
             caplog.clear()
-            with caplog.at_level("WARNING"):
+            with caplog.at_level("ERROR"):
                 job._check_refs_complete(
                     coord,
                     [ref for ref in refs if ref.data_var.name != "temperature_2m"],
                 )
             (warning,) = caplog.records
-            assert warning.levelname == "WARNING"
+            assert warning.levelname == "ERROR"
             assert coord.get_url() in warning.message
             assert "GRIB messages absent from index" in warning.message
             assert "temperature_2m" in warning.message
@@ -353,8 +357,7 @@ def test_member_count_token_is_removed_without_losing_exact_selectors(
     coord = file_coord(pd.Timestamp("2026-10-02"), family, pd.Timedelta("60h"))
     selectors = ("prob >12.7", f"prob fcst 0/{count}", "process=197")
     assert coord.index_selectors(selectors) == ("prob >12.7", "process=197")
-    with pytest.raises(AssertionError):
-        coord.index_selectors(("prob >12.7", "process=197"))
+    assert coord.index_selectors(("prob >12.7", "process=197")) is None
 
 
 @pytest.mark.parametrize(
@@ -383,12 +386,12 @@ def test_rolling_windows_match_real_labels(
     assert not variable.available_at(pd.Timedelta(hours=hours + 1))
 
 
-def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
+def test_missing_required_messages_log_errors(caplog: pytest.LogCaptureFixture) -> None:
     coord = file_coord(pd.Timestamp("2026-10-15T12"), "mean", pd.Timedelta("1h"))
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         make_job()._check_refs_complete(coord, [])
     (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
+    assert warning.levelname == "ERROR"
     assert coord.get_url() in warning.message
     assert "GRIB messages absent from index" in warning.message
     assert "temperature_2m" in warning.message
@@ -437,7 +440,7 @@ def test_post_retirement_index_contains_all_configured_messages(
     assert "FRZR" not in {line[1] for line in lines}
     file_size = lines[-1][0] + 1000
     local.write_bytes(path.read_bytes())
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         refs = job.file_refs(coord, file_size)
     assert refs
     assert not any(
@@ -504,12 +507,12 @@ def test_surface_height_spread_accepts_either_copy(
     coord = file_coord(pd.Timestamp("2026-08-13T00"), "sprd", pd.Timedelta("1h"))
     file_size = int(lines[-1].split(":")[1]) + 1000
     if not processes:
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("ERROR"):
             refs = make_job().file_refs(coord, file_size)
         assert "geopotential_height_surface" not in {r.data_var.name for r in refs}
         assert len(refs) == len(coord.data_vars) - 1
         (warning,) = caplog.records
-        assert warning.levelname == "WARNING"
+        assert warning.levelname == "ERROR"
         assert "geopotential_height_surface" in warning.message
         assert "GRIB messages absent from index" in warning.message
         return
@@ -522,7 +525,39 @@ def test_surface_height_spread_accepts_either_copy(
 
 def test_pmm_process_cannot_supply_arithmetic_mean() -> None:
     coord = file_coord(pd.Timestamp("2026-08-13T00"), "mean", pd.Timedelta("1h"))
-    with pytest.raises(
-        AssertionError, match="PMM process cannot supply an arithmetic mean"
-    ):
-        coord.index_selectors(("wt ens mean", "process=193"))
+    assert coord.index_selectors(("wt ens mean", "process=193")) is None
+
+
+@pytest.mark.parametrize("family", ["mean", "sprd", "prob", "eas", "ffri"])
+def test_malformed_selector_row_does_not_drop_healthy_messages(
+    family: ProductFamily,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = index_path(family, 1)
+    lines = path.read_text().splitlines()
+    local = tmp_path / "index.idx"
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *args, **kwargs: local,
+    )
+    monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *args: 217)
+    coord = file_coord(pd.Timestamp("2026-08-13"), family, pd.Timedelta("1h"))
+    file_size = int(lines[-1].split(":")[1]) + 1000
+    local.write_text("\n".join(lines) + "\n")
+    job = make_job()
+    healthy = job.file_refs(coord, file_size)
+    target = healthy[0]
+    for i, line in enumerate(lines):
+        fields = line.split(":")
+        if int(fields[1]) == target.offset:
+            lines[i] = ":".join([*fields[:6], "malformed selector"])
+    caplog.clear()
+    local.write_text("\n".join(lines) + "\n")
+    partial = job.file_refs(coord, file_size)
+    assert partial == [ref for ref in healthy if ref.offset != target.offset]
+    assert "skipping malformed selectors" in caplog.text
+    assert "GRIB messages absent from index" in caplog.text
+    assert target.data_var.path in caplog.text
+    assert all(record.levelname == "ERROR" for record in caplog.records)
