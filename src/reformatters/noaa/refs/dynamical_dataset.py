@@ -10,7 +10,7 @@ from .template_config import NoaaRefsForecastTemplateConfig
 
 
 class NoaaRefsDataset(NoaaRrfsDataset[NoaaRefsDataVar, NoaaRefsSourceFileCoord]):
-    update_offset_minutes: NonNegativeInt = 115
-    update_deadline: timedelta = timedelta(minutes=125)
+    update_offset_minutes: NonNegativeInt = 105
+    update_deadline: timedelta = timedelta(minutes=135)
     template_config: NoaaRefsForecastTemplateConfig
     region_job_class: type[NoaaRefsRegionJob] = NoaaRefsRegionJob

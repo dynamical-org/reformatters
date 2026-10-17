@@ -10,9 +10,9 @@ from .template_config import NoaaRrfsForecast18HourVirtualTemplateConfig
 
 
 class NoaaRrfsForecast18HourVirtualDataset(NoaaRrfsDataset):
-    # Files publish near init +110-140 min; polling starts before the first lead.
-    update_offset_minutes: NonNegativeInt = 100
-    update_deadline: timedelta = timedelta(minutes=60)
+    # Poll before early leads while preserving late-cycle coverage.
+    update_offset_minutes: NonNegativeInt = 65
+    update_deadline: timedelta = timedelta(minutes=95)
     # Snow density is all NaN when the air 300 m above ground is 5 °C or warmer everywhere.
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ("new_snow_density_surface",)
     template_config: NoaaRrfsForecast18HourVirtualTemplateConfig = (

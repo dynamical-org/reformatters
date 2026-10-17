@@ -13,7 +13,6 @@ class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
     # Polling leaves time to validate and exit before the next hourly update.
     update_offset_minutes: NonNegativeInt = 75
     update_deadline: timedelta = timedelta(minutes=59)
-    update_job_deadline: timedelta | None = timedelta(minutes=59)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=60)
     # 00Z and 12Z source publication can continue past the poll deadline.
     min_present_fraction: ClassVar[tuple[float, ...]] = (6 / 18, 1.0)

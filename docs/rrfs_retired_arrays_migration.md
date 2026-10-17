@@ -74,21 +74,10 @@ CronJobs. No suspension or manual trigger is needed in the planned procedure.
    after its last old writer exits, then apply in that gap. If there is insufficient
    margin, use the controlled missed-fire fallback below; do not introduce a suspension.
 
-The schedules observed for this incident are below. Re-read live schedules at
-execution time; these times are UTC.
-
-| Dataset | Scheduled fires | Pod deadline |
-| --- | --- | --- |
-| RRFS sub-hourly | Hourly at :15 | 59 minutes |
-| RRFS 18-hour | 01:40, 04:40, 07:40, 10:40, 13:40, 16:40, 19:40, 22:40 | 60 minutes |
-| RRFS 84-hour | 01:40, 07:40, 13:40, 19:40 | 135 minutes |
-| RRFS ensemble | 01:15, 07:15, 13:15, 19:15 | 160 minutes |
-| REFS hourly and 3-hourly | 01:55, 07:55, 13:55, 19:55 | 125 minutes |
-
-For the five non-sub-hourly stores, a conservative example is after the 22:40
-18-hour run and any retry finish, but before 01:15. At maximum deadlines that is
-approximately 23:41–01:14. Start the build/deploy early enough to use this window,
-and check actual completions rather than assuming the example applies.
+Compute the quiet window from live UTC CronJob schedules, Job and pod deadlines,
+and the actual completion of every writer, including retries and terminating pods.
+Allow for image publication and deployment before the earliest next fire; a
+previously observed quiet window is not a guarantee for another release.
 
 **Expected rollout failures: zero for those five stores, and zero or one affected
 scheduled fire for sub-hourly.** Target zero by migrating sub-hourly in its observed

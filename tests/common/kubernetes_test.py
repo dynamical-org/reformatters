@@ -626,12 +626,13 @@ def _deployed_cronjob(*, suspend: bool = False) -> Mock:
         labels={"template-label": "value"}, annotations={"template-note": "value"}
     )
     cronjob.spec.job_template.spec = client.V1JobSpec(
+        active_deadline_seconds=600,
         template=client.V1PodTemplateSpec(
             spec=client.V1PodSpec(
                 containers=[client.V1Container(name="worker")],
                 active_deadline_seconds=600,
             )
-        )
+        ),
     )
     return cronjob
 
@@ -670,6 +671,8 @@ def test_create_job_clones_live_template_without_owner_reference(
     }
     assert job.spec == cronjob.spec.job_template.spec
     assert job.spec is not cronjob.spec.job_template.spec
+    assert job.spec.active_deadline_seconds == 600
+    assert job.spec.template.spec.active_deadline_seconds == 600
 
 
 @pytest.mark.parametrize(
