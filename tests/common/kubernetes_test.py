@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -263,6 +264,16 @@ def _cron_job_with_name(name: str, cron_job_class: type[CronJob] = CronJob) -> C
         workers_total=1,
         parallelism=1,
     )
+
+
+def test_cron_concurrency_defaults_to_replace_and_can_allow_overlap() -> None:
+    cron = _cron_job_with_name("archive-update")
+    default = cron.as_kubernetes_object()
+    assert default["spec"]["concurrencyPolicy"] == "Replace"
+    overlapping = cron.model_copy(update={"concurrency_policy": "Allow"})
+    expected = copy.deepcopy(default)
+    expected["spec"]["concurrencyPolicy"] = "Allow"
+    assert overlapping.as_kubernetes_object() == expected
 
 
 @pytest.mark.parametrize(
