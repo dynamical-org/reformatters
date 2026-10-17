@@ -12,7 +12,6 @@ class NoaaRrfsEnsForecastVirtualDataset(NoaaRrfsDataset):
     # Poll before early leads while preserving late-cycle coverage.
     update_offset_minutes: NonNegativeInt = 70
     update_deadline: timedelta = timedelta(minutes=165)
-
     template_config: NoaaRrfsEnsForecastVirtualTemplateConfig = (
         NoaaRrfsEnsForecastVirtualTemplateConfig()
     )
