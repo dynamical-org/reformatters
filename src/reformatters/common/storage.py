@@ -516,12 +516,14 @@ def commit_if_icechunk(
             retry(
                 functools.partial(_commit, store),
                 max_attempts=10,
+                non_retryable_exceptions=(icechunk.ConflictError,),
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_commit, primary_store),
             max_attempts=10,
+            non_retryable_exceptions=(icechunk.ConflictError,),
         )
 
 

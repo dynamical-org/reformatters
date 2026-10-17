@@ -55,6 +55,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
             name=f"{self.dataset_id}-update",
             schedule="50 * * * *",
             pod_active_deadline=timedelta(minutes=59),
+            active_deadline=timedelta(minutes=59),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",

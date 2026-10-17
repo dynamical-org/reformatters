@@ -51,6 +51,7 @@ def test_polling_leaves_validation_time_inside_single_deadline(
     deadline = pd.Timestamp("2026-10-02T01:47")
 
     assert cron.pod_active_deadline == timedelta(minutes=59)
+    assert cron.active_deadline == cron.pod_active_deadline
     assert dataset._virtual_poll_deadline(fire) == deadline
     assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
     assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)

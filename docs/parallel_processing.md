@@ -61,9 +61,9 @@ All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). 
 
 ### Virtual Icechunk operational updates (single-writer exception)
 
-Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Their *operational* updates run **single-writer** and commit whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
+Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Each *operational* Job runs **one writer** and commits whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
 
-This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. See [virtual_datasets.md](virtual_datasets.md).
+This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. A concurrent commit conflict rebuilds the virtual batch from a fresh session; disjoint backfill writes retain automatic rebasing. See [virtual_datasets.md](virtual_datasets.md).
 
 Virtual *backfills* are **not** an exception — they use the normal temp-branch coordinator above (parallel across workers, pre-sized branch, finalize resets `main`).
 

@@ -20,6 +20,7 @@ from reformatters.common.config import Config
 from reformatters.common.config_models import BaseInternalAttrs, Coordinate, DataVar
 from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
 from reformatters.common.zarr import assert_fill_values_set, copy_zarr_metadata
 
@@ -390,51 +391,69 @@ def refresh_store_metadata(
     backfilled); store-written coordinate values are preserved. Icechunk stores commit
     only when something actually changed.
     """
-    existing = store_factory.open_primary_datatree()
-    existing_sizes = {
-        node.path: node.sizes[append_dim]
-        for node in existing.subtree
-        if append_dim in node.sizes
-    }
-    # Group sizes are always equal: every group grows in one atomic commit, and
-    # open_datatree above raises on a store where they differ.
-    committed_size = existing_sizes.get("/", 0)
-    if committed_size == 0:
-        log.info("Primary store is empty, initial sizing is the backfill's job")
-        return
 
-    trimmed = xr.DataTree.from_dict(
-        {
-            node.path: node.to_dataset(inherit=False).isel(
-                {append_dim: slice(0, committed_size)}
+    def refresh_transaction() -> None:
+        ordered_stores = [
+            *store_factory.replica_stores(writable=True),
+            store_factory.primary_store(writable=True),
+        ]
+        for store in ordered_stores:
+            existing = xr.open_datatree(
+                store,  # ty: ignore[invalid-argument-type]
+                engine="zarr",
+                decode_timedelta=True,
+                chunks=None,
+                consolidated=False,
             )
-            for node in template_ds.subtree
-        }
-    )
-    assert_safe_overwrite(
-        trimmed, existing, append_dim, allow_new_arrays=True, allow_expansion=False
-    )
+            # Group sizes are always equal: every group grows in one atomic commit, and
+            # open_datatree above raises on a store where they differ.
+            committed_size = existing.sizes.get(append_dim, 0)
+            if committed_size == 0:
+                log.info(
+                    f"Store {store} is empty, initial sizing is the backfill's job"
+                )
+                continue
 
-    write_metadata(trimmed, tmp_store, consolidated=consolidated)
-    exclude_coords = store_written_coords(trimmed)
-    ordered_stores = [
-        *store_factory.replica_stores(writable=True),
-        store_factory.primary_store(writable=True),
-    ]
-    for store in ordered_stores:
-        copy_zarr_metadata(
-            trimmed,
-            tmp_store,
-            store,
-            skip_unchanged=True,
-            exclude_coord_value_chunks=exclude_coords,
-        )
-        if isinstance(store, IcechunkStore) and store.session.has_uncommitted_changes:
-            store.session.commit(
-                "Refresh metadata from template",
-                rebase_with=icechunk.ConflictDetector(),
+            trimmed = xr.DataTree.from_dict(
+                {
+                    node.path: node.to_dataset(inherit=False).isel(
+                        {append_dim: slice(0, committed_size)},
+                        missing_dims="ignore",
+                    )
+                    for node in template_ds.subtree
+                }
             )
-            log.info(f"Refreshed metadata from template on {store}")
+            assert_safe_overwrite(
+                trimmed,
+                existing,
+                append_dim,
+                allow_new_arrays=True,
+                allow_expansion=False,
+            )
+
+            write_metadata(trimmed, tmp_store, mode="w", consolidated=consolidated)
+            copy_zarr_metadata(
+                trimmed,
+                tmp_store,
+                store,
+                skip_unchanged=True,
+                exclude_coord_value_chunks=store_written_coords(trimmed),
+            )
+            if (
+                isinstance(store, IcechunkStore)
+                and store.session.has_uncommitted_changes
+            ):
+                store.session.commit(
+                    "Refresh metadata from template",
+                    rebase_with=icechunk.ConflictDetector(),
+                )
+                log.info(f"Refreshed metadata from template on {store}")
+
+    retry(
+        refresh_transaction,
+        max_attempts=5,
+        retryable_exceptions=(icechunk.ConflictError,),
+    )
 
 
 def make_empty_variable(

@@ -57,6 +57,18 @@ def test_retry_sleeps_between_every_attempt(sleeps: list[float]) -> None:
     assert len(sleeps) == 7
 
 
+def test_non_retryable_subclass_propagates_without_sleep(sleeps: list[float]) -> None:
+    mock_func = Mock(side_effect=FileNotFoundError("permanent"))
+    with pytest.raises(FileNotFoundError, match="permanent"):
+        retry(
+            mock_func,
+            retryable_exceptions=(OSError,),
+            non_retryable_exceptions=(FileNotFoundError,),
+        )
+    assert mock_func.call_count == 1
+    assert sleeps == []
+
+
 def test_exponential_backoff_time_grows_then_caps() -> None:
     max_delays = [0.2, 1, 2, 4, 8, 16, 16, 16]
     for attempt, max_delay in enumerate(max_delays):
