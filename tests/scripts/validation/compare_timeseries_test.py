@@ -91,7 +91,7 @@ def test_unpinned_selection_stays_within_the_archive() -> None:
     ("var", "label", "comparable"),
     [
         ("pressure_level/wind_u", "mean", True),
-        ("composite_reflectivity", "standard_deviation", False),
+        ("derived_radar_reflectivity_1000m", "standard_deviation", False),
         ("temperature_2m_standard_deviation", None, False),
     ],
 )

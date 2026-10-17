@@ -288,19 +288,6 @@ _FIELDS = {
         ),
         filters=(),
     ),
-    ("FRZR", "surface"): ProductField(
-        name="freezing_rain_surface",
-        element="FRZR",
-        level="surface",
-        attrs=DataVarAttrs(
-            short_name="fzra",
-            long_name="Freezing rain",
-            units="kg m-2",
-            standard_name=None,
-            step_type="instant",
-        ),
-        filters=(),
-    ),
     ("HCDC", "high cloud layer"): _rrfs_field(
         "high_cloud_cover", name="high_cloud_cover", level="high cloud layer"
     ),
@@ -867,7 +854,6 @@ _STATISTICS: tuple[tuple[str, str, int, tuple[str, ...]], ...] = (
     ("MSLET", "mean sea level", 0, ()),
     ("MXUPHL", "5000-2000 m above ground", 0, ("process=193",)),
     ("PWAT", "entire atmosphere (considered as a single layer)", 0, ()),
-    ("REFC", "entire atmosphere (considered as a single layer)", 0, ("process=193",)),
     ("REFD", "1000 m above ground", 0, ("process=193",)),
     ("RETOP", "entire atmosphere (considered as a single layer)", 0, ("process=193",)),
     ("RH", "700 mb", 0, ()),
@@ -1198,46 +1184,6 @@ _PROBABILITIES: tuple[
     ),
     (
         "prob",
-        "FRZR",
-        "surface",
-        1,
-        ("prob >0.254", "prob >2.54", "prob >6.35"),
-        ("Neighborhood Probability",),
-    ),
-    (
-        "prob",
-        "FRZR",
-        "surface",
-        3,
-        ("prob >0.254", "prob >2.54", "prob >6.35"),
-        ("Neighborhood Probability",),
-    ),
-    (
-        "prob",
-        "FRZR",
-        "surface",
-        6,
-        ("prob >0.254", "prob >12.7", "prob >2.54", "prob >6.35"),
-        ("Neighborhood Probability",),
-    ),
-    (
-        "prob",
-        "FRZR",
-        "surface",
-        12,
-        ("prob >0.254", "prob >12.7", "prob >2.54", "prob >6.35"),
-        ("Neighborhood Probability",),
-    ),
-    (
-        "prob",
-        "FRZR",
-        "surface",
-        24,
-        ("prob >0.254", "prob >12.7", "prob >2.54", "prob >25.4", "prob >6.35"),
-        ("Neighborhood Probability",),
-    ),
-    (
-        "prob",
         "HGT",
         "cloud ceiling",
         0,
@@ -1417,14 +1363,13 @@ _RADAR_SPREAD_COMMENT = (
     "contribute to standard deviation, so it does not measure only uncertainty in echo magnitude or height."
 )
 _SPARSE_RADAR_COMMENTS = {
-    "REFC": "The probability-matched mean retains member no-echo floors at -20, -10 or 0 dBZ. A value of 0 dBZ can also be a valid reflectivity; other negative dBZ values can be valid.",
-    "REFD": "The probability-matched mean retains member no-echo floors at -20, -10 or 0 dBZ. A value of 0 dBZ can also be a valid reflectivity; other negative dBZ values can be valid.",
+    "REFC": "A value of 0 dBZ can be a valid reflectivity.",
+    "REFD": "A value of 0 dBZ can be a valid reflectivity.",
     "MAXREF": "A value of 0 dBZ can mean no echo or a valid reflectivity at the source's lowest reported value.",
     "RETOP": "Negative values indicate no echo. Mask values < 0.",
 }
 _PROBABILITY_THRESHOLD_UNITS = {
     "APCP": "kg m-2",
-    "FRZR": "kg m-2",
     "TMP": "K",
     "DPT": "K",
     "var discipline=0 center=7 local_table=1 parmcat=6 parm=202": "g kg-1",

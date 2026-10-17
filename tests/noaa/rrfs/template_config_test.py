@@ -23,10 +23,10 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.template_config import (
 @pytest.mark.parametrize(
     ("config", "count"),
     [
-        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 316),
-        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 316),
-        (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 38),
-        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 62),
+        (NoaaRrfsForecast84HourVirtualTemplateConfig(), 312),
+        (NoaaRrfsForecast18HourVirtualTemplateConfig(), 312),
+        (NoaaRrfsForecastSubHourlyVirtualTemplateConfig(), 36),
+        (NoaaRrfsEnsForecastVirtualTemplateConfig(), 60),
     ],
     ids=lambda value: (
         value.dataset_id

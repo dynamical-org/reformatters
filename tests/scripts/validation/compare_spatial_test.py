@@ -46,7 +46,7 @@ def test_align_reference_spatially_keeps_full_longitude_for_geographic_xy(
     ("var", "label", "comparable"),
     [
         ("pressure_level/wind_u", "mean", True),
-        ("composite_reflectivity", "standard_deviation", False),
+        ("derived_radar_reflectivity_1000m", "standard_deviation", False),
         ("temperature_2m_standard_deviation", None, False),
     ],
 )

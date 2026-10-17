@@ -128,12 +128,6 @@ def test_poll_deadline_update_schedule_and_decode_health(
     )
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.max_workers == 2
-    assert set(decode.allow_missing_vars) == {
-        var.path
-        for var in dataset.template_config.data_vars
-        if var.internal_attrs.grib_element in {"FRZR", "FROZR"}
-    }
-    assert decode.allow_missing_vars
     assert decode.allow_all_nan_vars == (
         ("new_snow_density_surface",)
         if cls

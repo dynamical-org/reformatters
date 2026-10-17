@@ -1,10 +1,5 @@
 [
   {
-    "path": "composite_reflectivity",
-    "cadence_hours": 1,
-    "metadata_sha256": "93c9ab6be8110ed57a232e06300dfeaaf730d838ac7308b103bedb691d8364b7"
-  },
-  {
     "path": "convective_available_potential_energy_180_0mb",
     "cadence_hours": 1,
     "metadata_sha256": "28816085b827bb0051e2fe76c4e4d8f8a584d5f01d73306754c3998081ae5ca6"
@@ -450,101 +445,6 @@
     "metadata_sha256": "3c99c59151a7096e793e6d22e54c28ea60588997a81a10c381693b256a5e5cfb"
   },
   {
-    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_0p254",
-    "cadence_hours": 3,
-    "metadata_sha256": "9bb3f79e474e60d3c7c10751a89a57656a6a850ae9efd600bc70be89cc3888a5"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_12p7",
-    "cadence_hours": 3,
-    "metadata_sha256": "f2a9b7fb740c4ed4089fdc7baba0237a887c192d6eda3084b1b795dd2bf1e0e3"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_2p54",
-    "cadence_hours": 3,
-    "metadata_sha256": "a1ab12bb2dc1c685cc0f8511ee6987c2c50029eaae797fc68d180903a62a7d44"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_12_hour_surface_above_6p35",
-    "cadence_hours": 3,
-    "metadata_sha256": "4b1cec2aacd8e3222ba15cac659730c28456fe5fa8a1e8fcf68495ff07f2ea1a"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_0p254",
-    "cadence_hours": 1,
-    "metadata_sha256": "33305da05a13661ecfc6f0c42a2bbec92d8d36b0ad9ca868b269c3ab84180967"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_2p54",
-    "cadence_hours": 1,
-    "metadata_sha256": "9de9589dabeff346ea38fcc1ee9963dd8977c0929359e5a757eca59d83bf1ac2"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_1_hour_surface_above_6p35",
-    "cadence_hours": 1,
-    "metadata_sha256": "b2da5a10c2b38cfad1e661e47fb45e248ea9a913037da94769518ef65c8b33c1"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_0p254",
-    "cadence_hours": 3,
-    "metadata_sha256": "e5038ab6c509502a53128a9a054417d668cb78902d1b73b5c0387575e0f97ae3"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_12p7",
-    "cadence_hours": 3,
-    "metadata_sha256": "bc38c85ad475a1b2927d4404f74d2a0cc2be4470cd9b1b2ca738323dae4a3c5d"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_25p4",
-    "cadence_hours": 3,
-    "metadata_sha256": "26f99ecd823579a6fabb8a9de19a26d371bc1849158962affcf1ea583a3acd5b"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_2p54",
-    "cadence_hours": 3,
-    "metadata_sha256": "9d5f1f84c326ee2fb20ed6e62a0451a8ca2448da756a379b3012236918929938"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_24_hour_surface_above_6p35",
-    "cadence_hours": 3,
-    "metadata_sha256": "cae499e39028b29491de05cb07406a24804d7576eb80254f51bbaf7d1f8264f1"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_0p254",
-    "cadence_hours": 3,
-    "metadata_sha256": "23e7b7c81eb2163223858ec01f6c7cf153ce1fb313d8830d6e76edb0f7d82948"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_2p54",
-    "cadence_hours": 3,
-    "metadata_sha256": "509a952652ac4a0d7c1aff7f655616c89b0fd74638708f63f2432fbdf7c32d0c"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_3_hour_surface_above_6p35",
-    "cadence_hours": 3,
-    "metadata_sha256": "99fe85038d84868dfe683dbc5d7e085cfefae1e78d1ca4e8f495b177f9963e53"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_0p254",
-    "cadence_hours": 3,
-    "metadata_sha256": "090bf7d4c9a79f8d49fed407568117654739ae750d55ea5e9d61f81757f92692"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_12p7",
-    "cadence_hours": 3,
-    "metadata_sha256": "d422e807526aaf60110b0241e3b2c32044b696747c7c61bc3c6ec090e4a36e32"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_2p54",
-    "cadence_hours": 3,
-    "metadata_sha256": "914e08e0f26899c689980359362d57b8b11f6802c6a9cc2f7461445ce3cb7671"
-  },
-  {
-    "path": "neighborhood_probability_of_freezing_rain_6_hour_surface_above_6p35",
-    "cadence_hours": 3,
-    "metadata_sha256": "1161ebba1a7b83cd51e52ae89b12b892e657ff31a67cf5756dd65ede7d71a7a5"
-  },
-  {
     "path": "neighborhood_probability_of_hourly_maximum_radar_reflectivity_1000m_above_40",
     "cadence_hours": 1,
     "metadata_sha256": "f7bb3140764cef63bff7121b6ce8776a9dcc7aa9a9dc7a1dd4b418317ed24a42"
@@ -922,12 +822,12 @@
   {
     "path": "probability_matched_mean_composite_reflectivity",
     "cadence_hours": 1,
-    "metadata_sha256": "ad78f0b27bd058c8e5e63cdcd9bdc8bcfba16ce4761489c60b63c14ffa76c5ad"
+    "metadata_sha256": "cd03267edc34e86a6404e853d14c115ba0f4e8d97565dd33a186ac94a0f8af05"
   },
   {
     "path": "probability_matched_mean_derived_radar_reflectivity_1000m",
     "cadence_hours": 1,
-    "metadata_sha256": "011ddcb769499936336ce4288881d6b2cfbbc23c2b6aca2225ba0cba6ce0f04a"
+    "metadata_sha256": "3046d17bd3965ea09e03b7b5d8d6865e95e0bff7f461796f558a3e722153119c"
   },
   {
     "path": "probability_matched_mean_echo_top",
