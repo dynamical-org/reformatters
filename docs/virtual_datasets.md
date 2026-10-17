@@ -10,14 +10,14 @@ A virtual dataset complements the materialized (rechunked) time-series dataset o
 
 - **Spatial / map-optimized chunking.** Chunks follow the native source-file layout — usually one time step over the full spatial grid — so a virtual `-spatial` dataset serves map and spatial queries efficiently, while the materialized dataset provides the complementary time-series chunking.
 - **Every curated source variable, cheaply.** A variable costs only a handful of byte-range refs, not a rechunked copy, so a virtual dataset can include every variable we have metadata for rather than just the materialized subset.
-- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data can be visible within seconds of publication while an update is polling (target ≤ 5 s end to end). See [Operational updates](#operational-updates-single-writer).
+- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data can be visible within seconds of publication while an update is polling (target ≤ 5 s end to end). See [Operational updates](#operational-updates-one-worker-per-job).
 
 ## Scale
 
 Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — one `(variable, …, lead/time)` field — becomes one virtual chunk, so ref counts track the full Cartesian product of the dataset's dimensions *including the variable axis*. A multi-year ensemble dataset reaches order 10⁹ refs and tens of millions of source index files. Two consequences shape the design:
 
 - **Manifests must be split** (see [Manifest splitting](#manifest-splitting)) — a single per-array manifest at this ref count is too large to rewrite on every commit.
-- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and run single-writer.
+- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and use one worker per Job.
 
 ## The write loop
 
@@ -30,7 +30,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 **The yield is the commit unit.** The loop's batching policy: a backfill sweeps once and yields everything available across the worker's jobs, so the whole worker is **one commit** — this keeps the commit count at `workers_total` rather than one-per-init, relieving shared-branch CAS contention (`jobs_per_pod` sets the batch = inits per commit, mirroring `MaterializedRegionJob`). An operational update yields every file `discover_available` returns on a sweep that contributes refs, so a file's refs commit the tick it is found; `tick_interval` only lower-bounds sweep cadence. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The default generator skips a file with an error log if its refs do not cover the representative cell `filter_already_present` probes, allowing other files in the tick to commit. Such a file remains eligible for the next update. The write loop asserts this same coverage contract for custom generators.
 
-`processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates-single-writer)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
+`processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates-one-worker-per-job)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
 ## What a `VirtualRegionJob` implementer writes
 
@@ -64,7 +64,7 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
-## Operational updates: single writer
+## Operational updates: one worker per Job
 
 `operational_update_jobs()` returns **one** job spanning the active window (the recent, still-incomplete span of the append dim). One pod commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
 

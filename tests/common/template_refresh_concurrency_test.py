@@ -301,25 +301,28 @@ def test_refresh_empty_primary_is_noop(
     assert not (tmp_path / "refresh.zarr").exists()
 
 
+@pytest.mark.parametrize("consolidated", [False, True])
 def test_refresh_zarr3_replica_uses_its_own_extent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, consolidated: bool
 ) -> None:
     primary = _repo(2)
     replica = zarr.storage.MemoryStore()
-    _template(4).to_zarr(replica, mode="w", consolidated=False)
+    template_utils.write_metadata(
+        _template(4), replica, mode="w-", consolidated=consolidated
+    )
     factory, _ = _factory(monkeypatch, primary, [replica])
     template_utils.refresh_store_metadata(
         factory,
         _template(6, fixed=True),
         "time",
         tmp_path / "refresh.zarr",
-        consolidated=False,
+        consolidated=consolidated,
     )
     tree = xr.open_datatree(
         replica,  # ty: ignore[invalid-argument-type]
         engine="zarr",
         chunks=None,
-        consolidated=False,
+        consolidated=consolidated,
     )
     assert all(node.sizes["time"] == 4 for node in tree.subtree)
     assert tree.attrs["description"] == "fixed"
