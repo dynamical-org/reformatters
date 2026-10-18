@@ -73,13 +73,9 @@ Workers coordinate via files in an object store directory at `{base_path}/{datas
 
 ### Materialized update plan
 
-Source-gated production forecast updates first have worker 0 write `plan/ready.json`, including for single-worker Jobs. It freezes the selected init times and template end before any branch or metadata write. Other workers and replacement pods reuse that decision.
+Production materialized updates opt into planning with `materialized_source_availability`. Worker 0 freezes `plan/ready.json` before branch or metadata writes; workers and replacement pods reuse it, including in single-worker Jobs. The plan selects new inits through the newest source-ready candidate. Updates yield to older unfinished sibling Jobs on a best-effort basis: Icechunk checks concurrent primary publication; deprecated Zarr replicas retain some exposure.
 
-An update yields to an older unfinished Job of the same CronJob, identified by its owner reference or the trigger's CronJob name and UID labels. Pending Jobs count; terminal Jobs do not. Creation time, then name, determines ordering. A validation retry ignores its direct parent, which has already finalized its writes before submitting the retry. This is a best-effort check, not a lock: Icechunk's final publication check still resolves concurrent primary writes, and deprecated Zarr replicas retain some exposure.
-
-The plan removes init times at or before the primary store's frontier and trims its end to the newest candidate init that wxopticon has recorded as source-ready. Interior inits remain in the plan even if their source is incomplete. Validation retries retain the frontier for repair; an unrelated older sibling can still cause a retry to yield. `reprocess_materialized_frontier` also retains the frontier for products with delayed extensions, at the cost of repeating work. Source readiness is a monitoring signal, not proof of every materialized value; some source products sample ensemble members.
-
-An empty plan skips processing and still runs final-worker validation. Its small plan file remains so late pods can also skip. Normal publication clears the plan with the other coordination files. Removing the routine frontier re-download means holes below validation thresholds need an explicit repair backfill.
+Empty plans still run validation. Validation retries and `reprocess_materialized_frontier` may include the latest stored init. Use a repair backfill for older holes.
 
 ### Setup signal
 
