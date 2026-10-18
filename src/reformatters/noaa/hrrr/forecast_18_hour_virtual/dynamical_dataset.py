@@ -31,7 +31,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
         NoaaHrrrForecast18HourVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=10)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -54,8 +54,9 @@ class NoaaHrrrForecast18HourVirtualDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="50 * * * *",
-            pod_active_deadline=timedelta(minutes=59),
-            active_deadline=timedelta(minutes=59),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(minutes=75),
+            active_deadline=timedelta(minutes=75),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",

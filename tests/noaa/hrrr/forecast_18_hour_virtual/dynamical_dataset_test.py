@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from reformatters.common import validation
+from reformatters.common import template_utils, validation, virtual_region_job
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
 )
@@ -19,6 +20,14 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from tests.common.dynamical_dataset_test import assert_configured_validators
+from tests.common.virtual_region_job_test import (
+    VirtualTestRegionJob,
+    VirtualTestSourceFileCoord,
+    _create_template_ds,
+    _make_dataset,
+    _make_region_job,
+    _primary_repo,
+)
 
 _Y, _X = 635, 1062
 _INIT = "2024-06-01T01:00"
@@ -48,13 +57,76 @@ def test_polling_leaves_validation_time_inside_single_deadline(
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
     fire = pd.Timestamp("2026-10-02T00:50")
-    deadline = pd.Timestamp("2026-10-02T01:47")
+    deadline = pd.Timestamp("2026-10-02T01:55")
 
-    assert cron.pod_active_deadline == timedelta(minutes=59)
+    assert cron.pod_active_deadline == timedelta(minutes=75)
     assert cron.active_deadline == cron.pod_active_deadline
     assert dataset._virtual_poll_deadline(fire) == deadline
     assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
-    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)
+    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=10)
+    assert deadline - cron.next_fire_time(fire) == timedelta(minutes=5)
+    rendered = cron.as_kubernetes_object()["spec"]
+    assert rendered["concurrencyPolicy"] == "Allow"
+    job_spec = rendered["jobTemplate"]["spec"]
+    assert job_spec["activeDeadlineSeconds"] == 4500
+    assert job_spec["template"]["spec"]["activeDeadlineSeconds"] == 4500
+
+
+@pytest.mark.parametrize("ready_at", ["00:47:01", "00:49:59", "00:50:01"])
+def test_late_source_pair_commits_during_hourly_handoff(
+    dataset: NoaaHrrrForecast18HourVirtualDataset,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ready_at: str,
+) -> None:
+    synthetic = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), synthetic.store_factory)
+    repo = _primary_repo(synthetic.store_factory)
+    now = [pd.Timestamp("2026-10-18T00:46:59")]
+    paired_ready = pd.Timestamp(f"2026-10-18T{ready_at}")
+    original_refs = VirtualTestRegionJob.process_virtual_refs
+
+    def discover(
+        self: VirtualTestRegionJob, pending: list[VirtualTestSourceFileCoord]
+    ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+        return [(coord, 48) for coord in pending] if now[0] >= paired_ready else []
+
+    def refs(
+        self: VirtualTestRegionJob, coord: VirtualTestSourceFileCoord, file_size: int
+    ) -> list[VirtualRef]:
+        return list(next(original_refs(self, [coord]))[0][1])
+
+    def advance(seconds: float) -> None:
+        now[0] += pd.Timedelta(seconds=1)
+
+    monkeypatch.setattr(pd.Timestamp, "now", lambda tz=None: now[0])
+    monkeypatch.setattr(virtual_region_job.time, "sleep", advance)
+    monkeypatch.setattr(VirtualTestRegionJob, "discover_available", discover)
+    monkeypatch.setattr(VirtualTestRegionJob, "file_refs", refs)
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_virtual_refs",
+        VirtualRegionJob.process_virtual_refs,
+    )
+    job = _make_region_job(
+        _create_template_ds(1), region=slice(0, 1), processing_mode="update"
+    ).model_copy(
+        update={
+            "poll_deadline": dataset._virtual_poll_deadline(
+                pd.Timestamp("2026-10-17T23:50")
+            )
+        }
+    )
+
+    job.process_virtual(repo, [], "main", job.source_file_coords())
+
+    assert now[0] == paired_ready
+    assert (
+        job.filter_already_present(
+            job.source_file_coords(), repo.readonly_session("main").store
+        )
+        == []
+    )
 
 
 @pytest.mark.slow
@@ -195,7 +267,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "50 * * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
+    assert update_cron_job.pod_active_deadline == timedelta(minutes=75)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
