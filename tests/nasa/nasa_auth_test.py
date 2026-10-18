@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
@@ -71,11 +71,14 @@ def transport(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
 
 @pytest.fixture(params=["imerg", "smap"])
 def download_group(
-    request: pytest.FixtureRequest, tmp_path: Path
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Callable[[], Sequence[SourceFileCoord]], int]:
     template_ds = xr.DataTree(xr.Dataset(attrs={"dataset_id": f"test-{request.param}"}))
     time = pd.Timestamp("2015-04-01")
     if request.param == "imerg":
+        monkeypatch.setattr(
+            "reformatters.nasa.imerg.region_job.rasterio.open", MagicMock()
+        )
         imerg_job = NasaImergAnalysisEarlyRegionJob(
             tmp_store=tmp_path,
             template_ds=template_ds,
