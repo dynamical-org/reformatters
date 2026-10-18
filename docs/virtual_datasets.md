@@ -66,23 +66,15 @@ This invariant is also what lets the filter probe a single representative cell p
 
 ## Operational updates: one worker per Job
 
-`operational_update_jobs()` returns **one** job spanning the active window (the recent, still-incomplete span of the append dim). One pod commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
+Use one worker per operational Job. Commit whole files and any required dimension growth atomically to `main`; rebuild conflicting batches from a fresh session. Use a backfill to catch up rather than adding operational workers.
 
-Each batch reads file presence and committed dimensions from its writable session, then publishes whole-file refs and any required growth atomically. `ConflictDetector` rebases disjoint writes. A conflicting update discards the session and retries from the current snapshot, filtering files another writer already committed; exhausted retries fail visibly. Replicas commit before the primary, using each repository's own extent. Explicit backfill overwrites retain their requested writes. If an update falls far behind, run a backfill to catch up rather than scaling an operational Job to multiple workers.
+Refresh template metadata against the same writable snapshot used to determine the committed extent. Keep metadata unconsolidated and never grow dimensions beyond ingested data.
 
-Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. The refresh reads and renders against the same writable snapshot; a concurrent append forces a fresh retry instead of copying stale shapes. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
+Anchor polling and inline validation to the same operational window. Reserve time for validation before the deadline; size that allowance from measured runtime. Pending source files are retried by subsequent updates.
 
-Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
+CronJob concurrency policies are not store-wide locks. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods. Bound replacement-pod lifetime with a whole-Job deadline.
 
-Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
-
-**Files the source hasn't published yet roll to the next fire rather than failing the run.** An update stops polling at its `poll_deadline` — the scheduled fire plus the cron job's `pod_active_deadline`, less a small grace — and returns with those files still pending; final validation determines whether the Job succeeds. The next fire re-sweeps an overlapping window. Files published during an inactive gap wait until that fire; low latency requires a polling pod when the source files arrive. `pod_active_deadline` therefore sizes how long a fire chases its own files: cover the source's typical publication time with headroom, and let a late cycle roll over rather than stretching past the fire interval (`concurrencyPolicy: Replace` kills a run that outlives its successor's fire anyway). The scheduled fire is captured once at invocation entry and fixes the polling deadline and source window through validation, even if initialization crosses another fire. A replacement starting after a subsequent fire selects that newer window; a whole-Job deadline bounds its remaining lifetime. A source that stops publishing altogether is caught by validation in the final update pod (data currency and manifest completeness).
-
-Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
-
-Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
-
-Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
+See `DynamicalDataset` and `VirtualRegionJob` for the update lifecycle and each dataset's `operational_kubernetes_resources()` for its scheduling policy.
 
 ## Backfill: parallel on a pre-sized temp branch
 
@@ -135,7 +127,7 @@ The loop opens sessions on all stores and commits replicas-then-primary. "Commit
 
 ## Operational validation
 
-The final update pod validates each operational update. A dataset lists every check — configured `validation.Validator` instances — in its `validators()`. `validate_dataset` runs each against a `ValidationContext` (the opened dataset, store, append dim, template variables). A check that probes the manifest sets `requires_virtual_dataset`, and the context additionally carries the operational-window region job. Inline validation reuses the exact window polled by that invocation; standalone validation builds the current window. Both share the window across primary and replicas. `CheckCurrentData` retains its wall-clock due rule but never demands an init beyond that window, so a predecessor validating during a handoff does not judge its successor's work.
+Configure operational checks in `validators()`. Inline validation uses the window polled by that invocation; standalone validation uses the current window. Currency checks are limited to the validated window.
 
 Two virtual checks ship in `validation.py`. Their sampling is bounded; size the validation allowance from measured runtime for the dataset:
 

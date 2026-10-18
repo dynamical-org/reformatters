@@ -59,13 +59,9 @@ All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). 
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
 
-### Virtual Icechunk operational updates (single-writer exception)
+### Virtual Icechunk operational updates
 
-Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Each *operational* Job runs **one writer** and commits whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
-
-This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. A concurrent commit conflict rebuilds the virtual batch from a fresh session; disjoint backfill writes retain automatic rebasing. See [virtual_datasets.md](virtual_datasets.md).
-
-Virtual *backfills* are **not** an exception — they use the normal temp-branch coordinator above (parallel across workers, pre-sized branch, finalize resets `main`).
+Virtual operational updates use one worker per Job and commit whole source files atomically to `main`, without the temp-branch coordinator. Virtual backfills use the normal temp-branch flow. See [virtual_datasets.md](virtual_datasets.md#operational-updates-one-worker-per-job).
 
 ## Worker coordination
 
