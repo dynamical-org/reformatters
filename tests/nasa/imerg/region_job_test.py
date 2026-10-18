@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 import pytest
+import rasterio
 import requests
 import xarray as xr
 
@@ -151,6 +152,7 @@ def _patch_sessions(
     earthdata: MagicMock,
 ) -> None:
     monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("rasterio.open", MagicMock())
     monkeypatch.setattr("reformatters.common.download.DOWNLOAD_DIR", tmp_path)
     monkeypatch.setattr(
         "reformatters.nasa.imerg.region_job.get_pps_session", lambda: pps
@@ -211,6 +213,44 @@ def test_download_file_all_sources_connection_error_raises_file_not_found(
         _job().download_file(coord)
     assert coord.candidate_urls()[-1][1] in str(caught.value)
     assert "Connection reset by peer" in str(caught.value)
+
+
+def test_download_file_falls_through_unreadable_hdf5_to_archive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    session = MagicMock()
+    session.get.return_value = _fake_response(_HDF5_MAGIC + b"granule-bytes")
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    reader = MagicMock()
+    reader.side_effect = [
+        MagicMock(),
+        rasterio.errors.RasterioIOError("bad object header version number"),
+        MagicMock(),
+        rasterio.errors.RasterioIOError("bad object header version number"),
+        MagicMock(),
+        MagicMock(),
+    ]
+    monkeypatch.setattr("rasterio.open", reader)
+
+    coord = _recent_coord()
+    path = _job().download_file(coord)
+
+    assert path.suffix == ".HDF5"
+    assert session.get.call_args.args[0] == coord.get_url("gesdisc")
+    assert reader.call_count == 6
+
+
+def test_download_file_rejects_magic_valid_unreadable_hdf5(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    open_raster = rasterio.open
+    session = MagicMock()
+    session.get.return_value = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    monkeypatch.setattr("rasterio.open", open_raster)
+
+    with pytest.raises(FileNotFoundError, match="Unreadable HDF5 body"):
+        _job().download_file(_recent_coord())
 
 
 def test_read_data_masks_exact_sentinel_and_scales(

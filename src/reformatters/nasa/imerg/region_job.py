@@ -170,6 +170,16 @@ class NasaImergAnalysisMaterializedRegionJob(
                     # non-HDF5 file to the reader.
                     last_failure = f"Non-HDF5 body from {url}"
                     continue
+                try:
+                    for data_var in self.data_vars:
+                        subdataset = (
+                            f"HDF5:{local_path}:{data_var.internal_attrs.h5_path}"
+                        )
+                        with rasterio.open(subdataset):
+                            pass
+                except rasterio.errors.RasterioIOError as e:
+                    last_failure = f"Unreadable HDF5 body from {url}: {e}"
+                    continue
                 return local_path
             raise FileNotFoundError(
                 f"No IMERG granule found for {coord.run} {coord.time}: {last_failure}"
