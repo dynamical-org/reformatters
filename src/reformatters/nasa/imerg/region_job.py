@@ -136,6 +136,7 @@ class NasaImergAnalysisMaterializedRegionJob(
     def download_file(self, coord: NasaImergAnalysisSourceFileCoord) -> Path:
         def _download() -> Path:
             last_failure = "no candidates"
+            unreadable_error: ValueError | None = None
             for source, url in coord.candidate_urls():
                 session = (
                     get_pps_session()
@@ -178,9 +179,13 @@ class NasaImergAnalysisMaterializedRegionJob(
                         with rasterio.open(subdataset):
                             pass
                 except rasterio.errors.RasterioIOError as e:
-                    last_failure = f"Unreadable HDF5 body from {url}: {e}"
+                    unreadable_error = ValueError(
+                        f"Unreadable HDF5 body from {url}: {e}"
+                    )
                     continue
                 return local_path
+            if unreadable_error is not None:
+                raise unreadable_error
             raise FileNotFoundError(
                 f"No IMERG granule found for {coord.run} {coord.time}: {last_failure}"
             )

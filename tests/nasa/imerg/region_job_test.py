@@ -8,6 +8,7 @@ import rasterio
 import requests
 import xarray as xr
 
+from reformatters.common.download import is_not_found
 from reformatters.common.pydantic import replace
 from reformatters.nasa.imerg.analysis_early.region_job import (
     NasaImergAnalysisEarlyRegionJob,
@@ -240,17 +241,22 @@ def test_download_file_falls_through_unreadable_hdf5_to_archive(
     assert reader.call_count == 6
 
 
+@pytest.mark.parametrize("fallback_status", [200, 404])
 def test_download_file_rejects_magic_valid_unreadable_hdf5(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fallback_status: int
 ) -> None:
     open_raster = rasterio.open
     session = MagicMock()
-    session.get.return_value = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    unreadable = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    fallback = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    fallback.status_code = fallback_status
+    session.get.side_effect = [unreadable, fallback, fallback, fallback] * 6
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
     monkeypatch.setattr("rasterio.open", open_raster)
 
-    with pytest.raises(FileNotFoundError, match="Unreadable HDF5 body"):
+    with pytest.raises(ValueError, match="Unreadable HDF5 body") as caught:
         _job().download_file(_recent_coord())
+    assert not is_not_found(caught.value)
 
 
 def test_read_data_masks_exact_sentinel_and_scales(
