@@ -25,7 +25,7 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 
-`backfill-kubernetes` captures one UTC reference time at launch, at whole-second precision, and places `--reference-time=<ISO>` in the shared worker command. Every worker and pod retry uses that instant. `backfill-local` defaults to its launch time; `backfill` also accepts the flag. To resume the same admission window, run `backfill-kubernetes` from your machine with the original `--reference-time`. Manual: Backfill has no reference-time input, so resubmitting that workflow captures a new launch time.
+Backfill workers and retries share a launch reference time; reuse `--reference-time` to resume the same admission window. Resubmitting Manual: Backfill captures a new reference time.
 
 ## Tuning parallelism
 

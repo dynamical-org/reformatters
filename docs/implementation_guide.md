@@ -81,7 +81,7 @@ Set `dataset_id` and `name` in `dataset_attributes` following the id/name conven
 
 Read the [chunk/shard layout tool](./chunk_shard_layout_tool.md) docs and use the tool to find chunk and shard sizes for your data variables.
 
-String dimension coordinates use `Encoding(dtype="str", fill_value="", ...)` and string labels, which serialize as Zarr `string` arrays with `vlen-utf8`.
+String dimension coordinates use string labels and `Encoding(dtype="str", fill_value="", ...)`.
 
 Follow the `keep_mantissa_bits` guidance in AGENTS.md when setting each data variable's encoding.
 
