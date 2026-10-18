@@ -68,11 +68,11 @@ This invariant is also what lets the filter probe a single representative cell p
 
 Use one worker per operational Job. Commit whole files and any required dimension growth atomically to `main`; rebuild conflicting batches from a fresh session. Use a backfill to catch up rather than adding operational workers.
 
-Refresh template metadata against the same writable snapshot used to determine the committed extent. Keep metadata unconsolidated and never grow dimensions beyond ingested data.
+Metadata refresh uses the same writable snapshot to read the committed extent and publish template metadata. Keep metadata unconsolidated and never grow dimensions beyond ingested data.
 
-Anchor polling and inline validation to the same operational window. Reserve time for validation before the deadline; size that allowance from measured runtime. Pending source files are retried by subsequent updates.
+Polling and inline validation share one operational window. Pending source files are retried by subsequent updates.
 
-CronJob concurrency policies are not store-wide locks. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods. Bound replacement-pod lifetime with a whole-Job deadline.
+CronJob concurrency policies are not store-wide locks. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 
 See `DynamicalDataset` and `VirtualRegionJob` for the update lifecycle and each dataset's `operational_kubernetes_resources()` for its scheduling policy.
 
