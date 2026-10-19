@@ -53,7 +53,7 @@ class NoaaRtmaAnalysisVirtualDataset(
                 secret_names=self.store_factory.k8s_secret_names(),
                 workers_total=1,
                 parallelism=1,
-                suspend=True,
+                suspend=False,
             )
         ]
 
