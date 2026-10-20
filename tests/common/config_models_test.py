@@ -202,6 +202,70 @@ def test_mask_source_fill_value_requires_exact_float32_match() -> None:
 
 
 class TestDatasetAttributes:
+    @pytest.mark.parametrize("license_name", ["CC-BY-4.0", "other"])
+    @pytest.mark.parametrize("notice_bits", range(16))
+    def test_complete_license_notices_if_and_only_if_other_license(
+        self, license_name: str, notice_bits: int
+    ) -> None:
+        attributes = {
+            "dataset_id": "test-dataset",
+            "dataset_version": "1.0",
+            "name": "Test Dataset",
+            "description": "A test dataset.",
+            "attribution": "Test attribution.",
+            "license": license_name,
+            "spatial_domain": "Global",
+            "spatial_resolution": "0.25 degrees (~20km)",
+            "time_domain": "2020-01-01 to present",
+            "time_resolution": "1 hour",
+        }
+        notices = {
+            "copyright": "Test copyright",
+            "terms_of_use": "Test terms",
+            "usage_restrictions": "Test restrictions",
+            "notice_files": ("https://example.com/notices/NOTICE.txt",),
+        }
+        attributes.update(
+            (name, value)
+            for index, (name, value) in enumerate(notices.items())
+            if notice_bits & (1 << index)
+        )
+        if (license_name == "other") == (notice_bits == 15):
+            DatasetAttributes.model_validate(attributes)
+        else:
+            with pytest.raises(ValidationError, match=r"license|License"):
+                DatasetAttributes.model_validate(attributes)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "NOTICE.txt",
+            "http://example.com/NOTICE.txt",
+            "https:///NOTICE.txt",
+            "https://example.com/a b",
+        ],
+    )
+    def test_notice_files_require_absolute_https_urls(self, url: str) -> None:
+        with pytest.raises(ValidationError, match="absolute HTTPS"):
+            DatasetAttributes.model_validate(
+                {
+                    "dataset_id": "test-dataset",
+                    "dataset_version": "1.0",
+                    "name": "Test Dataset",
+                    "description": "A test dataset.",
+                    "attribution": "Test attribution.",
+                    "license": "other",
+                    "spatial_domain": "Global",
+                    "spatial_resolution": "0.25 degrees (~20km)",
+                    "time_domain": "2020-01-01 to present",
+                    "time_resolution": "1 hour",
+                    "copyright": "Test copyright",
+                    "terms_of_use": "Test terms",
+                    "usage_restrictions": "Test restrictions",
+                    "notice_files": (url,),
+                }
+            )
+
     def test_valid_attributes(self) -> None:
         attrs = DatasetAttributes(
             dataset_id="test-dataset",

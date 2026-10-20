@@ -11,6 +11,7 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
 )
+from reformatters.google.weathernext_terms import REAL_TIME_ATTRIBUTION
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
@@ -39,8 +40,11 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
         assert len(config.data_vars) == 14
         assert sum(var.group is ROOT for var in config.data_vars) == 8
         assert sum(var.group == "pressure_level" for var in config.data_vars) == 6
-        assert config.dataset_attributes.license == "CC-BY-4.0"
-        assert config.dataset_attributes.attribution == (
+        expected_license = (
+            "CC-BY-4.0" if config.source_layout == "historical" else "other"
+        )
+        assert config.dataset_attributes.license == expected_license
+        expected_attribution = (
             "Google requires this attribution: © 2025 DeepMind Technologies Limited's "
             "machine learning models used to create the experimental data made available "
             "at https://developers.google.com/earth-engine/datasets/catalog/"
@@ -53,6 +57,16 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
             "check that you can comply with any applicable restrictions or terms and "
             "conditions before use."
         )
+        if config.source_layout == "operational":
+            expected_attribution = (
+                "Google requires this attribution for data relating to a time less than "
+                f"1 hour ago and the future: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
+                "For data relating to a time 1 hour ago or more, Google requires this attribution: "
+                + expected_attribution.removeprefix(
+                    "Google requires this attribution: "
+                )
+            )
+        assert config.dataset_attributes.attribution == expected_attribution
 
 
 def test_historical_coordinate_statistics_are_fixed() -> None:

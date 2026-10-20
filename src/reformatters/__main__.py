@@ -59,6 +59,9 @@ from reformatters.google.weathernext2.forecast_historical_virtual import (
 from reformatters.google.weathernext2.forecast_operational_virtual import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
+from reformatters.google.weathernext2.storage import (
+    Weathernext2IcechunkDatasetStorageConfig,
+)
 from reformatters.google.weathernext3.forecast_15_day_0_05_degree_virtual import (
     GoogleWeathernext3Forecast15Day005DegreeVirtualDataset,
 )
@@ -227,18 +230,6 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     base_path: str = "s3://upstream-gridded-zarrs"
     k8s_secret_name: str = "upstream-gridded-zarrs-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
-
-
-class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
-    """Icechunk storage in the private WeatherNext 2 bucket.
-
-    This is an R2 bucket. Its endpoint URL and `force_path_style` come from the
-    k8s secret, which holds `icechunk.s3_storage` kwargs.
-    """
-
-    base_path: str = "s3://dynamical-google-weathernext2"
-    k8s_secret_name: str = "weathernext2-storage-options-key"  # noqa: S105
-    format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
 class Weathernext3IcechunkDatasetStorageConfig(StorageConfig):

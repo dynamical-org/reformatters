@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Annotated, Any, Generic, Literal, TypeVar
+from urllib.parse import urlsplit
 
 import numcodecs
 import numcodecs.abc
@@ -46,8 +47,8 @@ type SpatialResolution = Literal[
     "4 km",
     "36 km",
 ]
-# Only SPDX license identifiers (https://spdx.org/licenses/) should be added to this type.
-type License = Literal["CC-BY-4.0"]
+# Use "other" for terms not represented by a supported SPDX license identifier.
+type License = Literal["CC-BY-4.0", "other"]
 
 
 class DatasetAttributes(FrozenBaseModel):
@@ -63,6 +64,33 @@ class DatasetAttributes(FrozenBaseModel):
     time_resolution: AttributeStr
     forecast_domain: AttributeStr | None = None
     forecast_resolution: AttributeStr | None = None
+    copyright: str | None = None
+    terms_of_use: str | None = None
+    usage_restrictions: str | None = None
+    modifications: Sentence | None = None
+    notice_files: tuple[str, ...] | None = None
+
+    @pydantic.model_validator(mode="after")
+    def validate_license_notices(self) -> DatasetAttributes:
+        notices = (
+            self.copyright,
+            self.terms_of_use,
+            self.usage_restrictions,
+            self.notice_files,
+        )
+        assert (self.license == "other") == all(notices), (
+            "license='other' if and only if all license notices are set"
+        )
+        for url in self.notice_files or ():
+            parsed = urlsplit(url)
+            assert parsed.scheme == "https", (
+                "notice_files must contain absolute HTTPS URLs"
+            )
+            assert parsed.netloc, "notice_files must contain absolute HTTPS URLs"
+            assert not any(char.isspace() for char in url), (
+                "notice_files must contain absolute HTTPS URLs"
+            )
+        return self
 
 
 class StatisticsApproximate(FrozenBaseModel):
