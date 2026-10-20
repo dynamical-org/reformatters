@@ -56,32 +56,72 @@ def unrestricted_update_job(
     )
 
 
-def test_unrestricted_update_rejects_backlog_before_discovery(
-    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+def test_unrestricted_update_rejects_mixed_pressure_backlog_before_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    job = unrestricted_update_job
-    bound = (
-        job.manifest_init_split
-        * len(job.template_ds.to_dataset().lead_time)
-        * len(job.data_vars)
-    )
-    coord = job.source_file_coords()[0]
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        OPERATIONAL.get_template(pd.Timestamp("2025-01-03")),
+        OPERATIONAL.data_vars,
+    ).model_copy(update={"processing_mode": "update", "region": slice(0, 8)})
+    coords = job.source_file_coords()
+    newest = max(coord.init_time for coord in coords)
+    pending = [
+        coord
+        for coord in coords
+        if coord.init_time == newest or coord.data_vars[0].group == "pressure_level"
+    ]
+    assert len(pending) == 3_360
     discovery = Mock(side_effect=AssertionError("discovery must not run"))
     monkeypatch.setattr(type(job), "discover_available", discovery)
     with pytest.raises(
         AssertionError,
-        match=rf"{bound + 1}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+        match=r"2426880.*1320960.*docs/weathernext2_holdback.md#unrestricted-rollout",
     ):
-        list(job.process_virtual_refs([coord] * (bound + 1)))
+        list(job.process_virtual_refs(pending))
     discovery.assert_not_called()
 
 
-@pytest.mark.parametrize("at_bound", [False, True])
-def test_unrestricted_update_admits_steady_state_and_batch_boundary(
+@pytest.mark.parametrize("extra_ref", [False, True])
+def test_unrestricted_update_reference_budget_boundary(
     unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
     monkeypatch: pytest.MonkeyPatch,
-    at_bound: bool,
+    extra_ref: bool,
+) -> None:
+    job = unrestricted_update_job
+    coords = job.source_file_coords()
+    oldest = min(coord.init_time for coord in coords)
+    pending = [coord for coord in coords if coord.init_time == oldest]
+    refs_per_init = sum(len(job._source_chunks(coord)) for coord in pending)
+    bound = refs_per_init * job.manifest_init_split
+    pending *= job.manifest_init_split
+    if extra_ref:
+        extra = coords[0].model_copy()
+        count = type(job)._source_chunk_count
+        monkeypatch.setattr(
+            type(job),
+            "_source_chunk_count",
+            lambda self, coord: 1 if coord is extra else count(self, coord),
+        )
+        pending.append(extra)
+    discovery = Mock(return_value=[])
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    if extra_ref:
+        with pytest.raises(
+            AssertionError,
+            match=rf"{bound + 1}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+        ):
+            list(job.process_virtual_refs(pending))
+        discovery.assert_not_called()
+    else:
+        assert list(job.process_virtual_refs(pending)) == []
+        discovery.assert_called_once_with(pending)
+
+
+def test_unrestricted_update_admits_steady_state(
+    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     job = unrestricted_update_job
     coords = job.source_file_coords()
@@ -94,16 +134,55 @@ def test_unrestricted_update_admits_steady_state_and_batch_boundary(
     ]
     per_init = len(job.template_ds.to_dataset().lead_time) * len(job.data_vars)
     assert len(pending) == 2 * per_init + len(job.data_vars)
-    if at_bound:
-        pending = [coords[0]] * (job.manifest_init_split * per_init)
     discovery = Mock(return_value=[])
     monkeypatch.setattr(type(job), "discover_available", discovery)
     assert list(job.process_virtual_refs(pending)) == []
     discovery.assert_called_once_with(pending)
 
 
+@pytest.mark.parametrize("historical", [False, True])
+def test_wn2_source_chunk_count_matches_refs(historical: bool) -> None:
+    config = HISTORICAL if historical else OPERATIONAL
+    cls = (
+        GoogleWeathernext2ForecastHistoricalVirtualRegionJob
+        if historical
+        else GoogleWeathernext2ForecastOperationalVirtualRegionJob
+    )
+    init = pd.Timestamp("2022-01-02T12:00" if historical else "2025-03-01T06:00")
+    job = _job(
+        cls, config, config.get_template(init + pd.Timedelta("6h")), config.data_vars
+    )
+    for var in config.data_vars:
+        coord = _coord(config, [var], init)
+        assert job._source_chunk_count(coord) == len(job._source_chunks(coord))
+    coord = _coord(config, config.data_vars, init)
+    assert job._source_chunk_count(coord) == len(job._source_chunks(coord))
+
+
+def test_source_chunk_count_matches_refs(
+    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+) -> None:
+    job = unrestricted_update_job
+    init = pd.Timestamp(job.template_ds.to_dataset().init_time.values[0])
+    lead = pd.Timedelta(job.template_ds.to_dataset().lead_time.values[0])
+    for coord in job._coords_for_step(init, lead, job.data_vars):
+        assert job._source_chunk_count(coord) == len(job._source_chunks(coord))
+
+
 def test_unrestricted_eligibility_does_not_compare_valid_time() -> None:
     assert is_publishable(pd.Timestamp.max, pd.Timedelta("360h"), pd.Timestamp.max)
+
+
+def test_unrestricted_step_enumeration_does_not_compare_valid_time(
+    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+) -> None:
+    job = unrestricted_update_job
+    processing_ds = job._processing_region_ds().isel(init_time=slice(0, 1))
+    processing_ds = processing_ds.assign_coords(init_time=[pd.Timestamp.max])
+    coords = job.generate_source_file_coords(processing_ds, job.data_vars)
+    assert coords
+    assert all(coord.init_time == pd.Timestamp.max for coord in coords)
+    assert not job._step_coords(processing_ds, job.data_vars, publishable=False)
 
 
 def test_unrestricted_holdback_validation_skips_manifest() -> None:

@@ -51,9 +51,18 @@ Keep `--overwrite-chunks`: the existing-store CLI has no add-only worker mode. W
 
 ### Update size limit
 
-Before discovery, an unrestricted update's missing candidates must not exceed `manifest_init_split × all product leads × all product variables`, counted as `(init, lead, variable)` coordinates. WN2's bound is `4 × 60 × 14 = 3,360`. A new landing init adds 840 candidates; one missed fire adds at most another 840, plus a typical one-lead straggler across all variables adds 14: 1,694 candidates. Even an entire additional late init totals 2,520, below the bound.
+Before discovery, an unrestricted update sums the refs each pending coordinate produces, including ensemble members, pressure levels, and statistics. The bound is `manifest_init_split × refs per full product init`, derived from the same chunk axes used to build refs. WN2's bound is `4 × 60 × 64 × (8 + 6 × 13) = 1,320,960` refs. A new landing init plus one missed-fire init and one straggling lead across all variables total `2 × 330,240 + 5,504 = 665,984` refs; three full inits total 990,720. Seven older inits missing their six pressure-level variables plus one fully missing newest init total 2,426,880 refs and exceed the bound despite having only 3,360 coordinates.
 
-WN3 15-day bounds are `64 × 360 × V` and 48-hour bounds are `384 × 48 × V`, with `V=19` or `2` for the grid. A newest init plus one missed-fire init plus one entire straggling init is at most `3 × leads × V`: 3/64 of the 15-day bound or 3/384 of the 48-hour bound. Source delays can exceed these ordinary cases; an oversized backlog fails with its count, bound, and this rollout link instead of building a giant ref batch. The size guard applies only to unrestricted updates; backfill batching is unchanged.
+WN3 bounds include all six statistics:
+
+| Product | Refs per init | Manifest inits | Ref bound |
+| --- | ---: | ---: | ---: |
+| 15-day, 0.1° | `360 × 19 × 6 = 41,040` | 64 | 2,626,560 |
+| 15-day, 0.05° | `360 × 2 × 6 = 4,320` | 64 | 276,480 |
+| 48-hour, 0.1° | `48 × 19 × 6 = 5,472` | 384 | 2,101,248 |
+| 48-hour, 0.05° | `48 × 2 × 6 = 576` | 384 | 221,184 |
+
+A newest init plus one missed-fire init plus one entire straggling init uses 3/64 of the 15-day bound or 3/384 of the 48-hour bound. Source delays can exceed these ordinary cases; an oversized backlog fails with its ref count, bound, and this rollout link instead of building a giant ref batch. The size guard applies only to unrestricted updates; backfill batching is unchanged.
 
 ## Withdrawal containment
 
@@ -66,7 +75,7 @@ WeatherNext 3 withdrawal containment is the Worker gate plus suspending all four
 WN3 enablement is gated on readiness to carry out this procedure, distinct from restoring delayed publication:
 
 1. Restore the Worker gate or block the route.
-2. Purge the `wn.dynamical.org` Cloudflare cache, including chunk responses served with `public, max-age=86400`.
+2. Restoring the gate blocks access to restricted cached bytes immediately because it runs before `ChunkCache`; cached copies are deleted only by expiry, within 24 hours. No restricted purge operation exists yet.
 3. Suspend the crons and drain active writers.
 4. For WN2, purge refs with the existing tool or delete the operational repo prefix.
 5. For WN3, delete its repo prefixes; ref-removal tooling is not provided.

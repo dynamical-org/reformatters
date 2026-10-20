@@ -136,6 +136,11 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
     ) -> Mapping[Dim, CoordinateValue]:
         return {**super().representative_probe_loc(coord, var), "statistic": "mean"}
 
+    def _source_chunk_count(
+        self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord
+    ) -> int:
+        return len(coord.data_vars) * len(STATISTICS)
+
     def _source_chunks(
         self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord
     ) -> Sequence[NativeSourceChunk[GoogleWeathernext3DataVar]]:

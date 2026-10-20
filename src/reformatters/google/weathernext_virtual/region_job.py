@@ -10,7 +10,6 @@ import xarray as xr
 from pydantic import Field, model_validator
 
 from reformatters.common.config_models import DataVar
-from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
@@ -109,6 +108,10 @@ class WeatherNextVirtualRegionJob(
     def _source_chunks(
         self, coord: SOURCE_COORD
     ) -> Sequence[NativeSourceChunk[DATA_VAR]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _source_chunk_count(self, coord: SOURCE_COORD) -> int:
         raise NotImplementedError
 
     @abstractmethod
@@ -214,13 +217,25 @@ class WeatherNextVirtualRegionJob(
             if (
                 self.publication_holdback is None
                 and self.publication_cutoff == pd.Timestamp.max
+                and remaining
             ):
-                bound = self.manifest_init_split * sum(
-                    array.sizes["lead_time"]
-                    for _, array in walk_data_arrays(self.template_ds)
+                sample = remaining[0]
+                refs_per_step = sum(
+                    self._source_chunk_count(coord)
+                    for coord in self._coords_for_step(
+                        sample.init_time, sample.lead_time, self.data_vars
+                    )
                 )
-                assert len(remaining) <= bound, (
-                    f"Unrestricted update has {len(remaining)} pending coordinates, exceeding bound {bound}; "
+                bound = (
+                    self.manifest_init_split
+                    * self.template_ds.to_dataset().sizes["lead_time"]
+                    * refs_per_step
+                )
+                pending_refs = sum(
+                    self._source_chunk_count(coord) for coord in remaining
+                )
+                assert pending_refs <= bound, (
+                    f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
                     "run the rollout backfill in docs/weathernext2_holdback.md#unrestricted-rollout"
                 )
             yield from super().process_virtual_refs(remaining)

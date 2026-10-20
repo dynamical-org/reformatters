@@ -226,25 +226,36 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             for data_var in data_var_group
         ]
 
+    def _source_chunk_axes(
+        self, var: GoogleWeathernext2DataVar
+    ) -> tuple[Sequence[int], Sequence[int | None]]:
+        ensemble_members = [
+            int(value)
+            for value in self.template_ds.to_dataset().get_index("ensemble_member")
+        ]
+        if self.source_layout == "historical":
+            return ensemble_members[::4], (
+                [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
+            )
+        return ensemble_members, [None] if var.group is ROOT else PRESSURE_LEVELS
+
+    def _source_chunk_count(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> int:
+        return sum(
+            len(members) * len(levels)
+            for var in coord.data_vars
+            for members, levels in [self._source_chunk_axes(var)]
+        )
+
     def _source_chunks(
         self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
     ) -> list[NativeSourceChunk[GoogleWeathernext2DataVar]]:
         assert coord.source_layout == self.source_layout
         store_key_prefix = _store_key(coord.get_url()) + "/"
-        ensemble_members = [
-            int(value)
-            for value in self.template_ds.to_dataset().get_index("ensemble_member")
-        ]
         chunks = []
         for var in coord.data_vars:
-            if self.source_layout == "historical":
-                members = ensemble_members[::4]
-                levels: Sequence[int | None] = (
-                    [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
-                )
-            else:
-                members = ensemble_members
-                levels = [None] if var.group is ROOT else PRESSURE_LEVELS
+            members, levels = self._source_chunk_axes(var)
             for member in members:
                 for level in levels:
                     key = coord.chunk_key(var, member, level)
