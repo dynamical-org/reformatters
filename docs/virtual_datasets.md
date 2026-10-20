@@ -157,6 +157,4 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 
 Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
-Datasets can also supply immutable repository files through `DynamicalDataset.repo_files()`. `StoreFactory.persist_repo_files()` writes and verifies these files using each destination's credentials before virtual update metadata refresh, worker-0 backfill setup commits, and metadata-only backfill refresh. The files live outside Icechunk sessions and accompany whole-prefix copies. See [WeatherNext terms notices](weathernext2_holdback.md#terms-notices) for a content-addressed bundle.
-
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).
