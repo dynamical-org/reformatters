@@ -3,7 +3,7 @@ import json
 import math
 import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
@@ -136,6 +136,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     def num_variable_groups(self) -> int:
         """Number of variable groups for parallel updates."""
         return self.region_job_class.num_variable_groups(self.template_config.data_vars)
+
+    def repo_files(self) -> Mapping[str, bytes]:
+        return {}
 
     def update(
         self,
@@ -274,6 +277,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     append_dim_end=resolved_end,
                 )
                 metadata = jobs[0].commit_metadata() if jobs else {}
+            self.store_factory.persist_repo_files(self.repo_files())
             template_utils.refresh_store_metadata(
                 self.store_factory,
                 template_ds,
@@ -542,6 +546,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             metadata=all_jobs[0].commit_metadata()
             if all_jobs and isinstance(all_jobs[0], VirtualRegionJob)
             else None,
+            repo_files=self.repo_files(),
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -624,6 +629,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
+        self.store_factory.persist_repo_files(self.repo_files())
         job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             [job], self.store_factory, "main", worker_index, overwrite_chunks=False
