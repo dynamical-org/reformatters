@@ -195,11 +195,17 @@ def test_parse_cutoff_requires_offset_and_normalizes_to_naive_utc() -> None:
     assert result.tz is None
 
 
-def test_delete_and_publish_require_explicit_cutoff(
+def test_audit_delete_and_publish_require_explicit_cutoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", True)
     runner = CliRunner()
+
+    audit_result = runner.invoke(
+        weathernext2_holdback.app,
+        ["audit", "https://example.com/forecast.icechunk"],
+        color=True,
+    )
 
     delete_result = runner.invoke(
         weathernext2_holdback.app,
@@ -218,13 +224,23 @@ def test_delete_and_publish_require_explicit_cutoff(
     )
 
     assert delete_result.exit_code == 2
+    assert audit_result.exit_code == 2
+    assert "--cutoff" in unstyle(audit_result.output)
     assert "--cutoff" in unstyle(delete_result.output)
     assert publish_result.exit_code == 2
     assert "--cutoff" in unstyle(publish_result.output)
 
 
+@pytest.mark.parametrize(
+    "dataset_id",
+    [
+        "google-weathernext2-forecast-historical-virtual",
+        "google-weathernext3-forecast-15-day-0-1-degree-virtual",
+    ],
+)
 def test_destructive_commands_reject_non_operational_dataset(
     monkeypatch: pytest.MonkeyPatch,
+    dataset_id: str,
 ) -> None:
     def unexpected_lookup(_dataset_id: str) -> None:
         pytest.fail("registry lookup must follow the exact dataset guard")
@@ -234,7 +250,7 @@ def test_destructive_commands_reject_non_operational_dataset(
     )
 
     with pytest.raises(typer.BadParameter, match="destructive commands only support"):
-        _operational_dataset("google-weathernext2-forecast-historical-virtual")
+        _operational_dataset(dataset_id)
 
 
 def test_audit_reports_present_refs_timing_and_exits_one(
