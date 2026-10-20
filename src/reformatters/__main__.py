@@ -59,9 +59,6 @@ from reformatters.google.weathernext2.forecast_historical_virtual import (
 from reformatters.google.weathernext2.forecast_operational_virtual import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
-from reformatters.google.weathernext2.storage import (
-    Weathernext2IcechunkDatasetStorageConfig,
-)
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
@@ -122,6 +119,7 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
     NoaaRrfsEnsForecastVirtualDataset,
 )
 from reformatters.noaa.rtma.analysis_virtual import NoaaRtmaAnalysisVirtualDataset
+from reformatters.noaa.rtma_ru.analysis_virtual import NoaaRtmaRuAnalysisVirtualDataset
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
@@ -263,6 +261,18 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     format: DatasetFormat = DatasetFormat.ZARR3
 
 
+class Weathernext2IcechunkDatasetStorageConfig(StorageConfig):
+    """Icechunk storage in the private WeatherNext 2 bucket.
+
+    This is an R2 bucket. Its endpoint URL and `force_path_style` come from the
+    k8s secret, which holds `icechunk.s3_storage` kwargs.
+    """
+
+    base_path: str = "s3://dynamical-google-weathernext2"
+    k8s_secret_name: str = "weathernext2-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
 # Registry of all DynamicalDatasets.
 DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # NOAA
@@ -312,6 +322,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaRtmaAnalysisVirtualDataset(
+        primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRtmaRuAnalysisVirtualDataset(
         primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourVirtualDataset(

@@ -20,7 +20,6 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
 from reformatters.google.weathernext2.forecast_virtual.validation import (
     CheckNoRefsInsideHoldback,
 )
-from reformatters.google.weathernext_terms import repo_notice_files
 
 from .template_config import (
     GoogleWeathernext2ForecastOperationalVirtualTemplateConfig,
@@ -51,15 +50,6 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             ),
         )
     )
-
-    def repo_files(self) -> dict[str, bytes]:
-        return repo_notice_files(
-            self.template_config.dataset_attributes,
-            product=self.template_config.product,
-            modifications=self.template_config.modifications,
-            usage_restrictions=self.template_config.usage_restrictions,
-            non_endorsement=self.template_config.non_endorsement,
-        )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")

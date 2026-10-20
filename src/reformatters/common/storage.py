@@ -1,10 +1,9 @@
 import contextlib
 import functools
-import mimetypes
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -44,7 +43,6 @@ class StorageConfig(FrozenBaseModel):
     """Configuration for the storage of a dataset in production."""
 
     base_path: str
-    public_base_path: str | None = None
     k8s_secret_name: str = _NO_SECRET_NAME
     format: DatasetFormat
 
@@ -82,13 +80,10 @@ class StoreFactory(FrozenBaseModel):
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
 
-    def primary_url(self, *, public: bool = False) -> str:
+    def primary_url(self) -> str:
         """Canonical production URL for the primary store, regardless of environment."""
         return _build_dataset_url(
-            self.dataset_id,
-            self.template_config_version,
-            self.primary_storage_config,
-            public=public,
+            self.dataset_id, self.template_config_version, self.primary_storage_config
         )
 
     def replica_urls(self) -> list[str]:
@@ -260,49 +255,6 @@ class StoreFactory(FrozenBaseModel):
             repo.save_config()
             log.info(f"Persisted virtual chunk container config to {role} {store_path}")
 
-    def persist_repo_files(self, files: Mapping[str, bytes]) -> None:
-        """Write and verify immutable files beside each Icechunk repository's objects."""
-        if not files:
-            return
-        configs = [self.primary_storage_config, *self.replica_storage_configs]
-        if Config.is_dev:
-            configs = configs[:1]
-        for config in configs:
-            assert config.format == DatasetFormat.ICECHUNK
-            store_path = _get_store_path(self.dataset_id, self.version, config)
-            options = (
-                _icechunk_to_s3fs_storage_options(config.load_storage_options())
-                if Config.is_prod
-                else {}
-            )
-            fs = fsspec.filesystem(urlparse(store_path).scheme or "file", **options)
-            for name, data in files.items():
-                assert name
-                assert not PurePosixPath(name).is_absolute()
-                assert ".." not in PurePosixPath(name).parts
-                path = f"{store_path}/{name}"
-                fs.invalidate_cache(path)
-                if fs.exists(path):
-                    assert fs.cat_file(path) == data, (
-                        f"Immutable repo file differs: {path}"
-                    )
-                    continue
-                content_type = (
-                    mimetypes.guess_type(name)[0] or "application/octet-stream"
-                )
-                if content_type == "text/plain":
-                    content_type += "; charset=utf-8"
-                fs.makedirs(path.rsplit("/", 1)[0], exist_ok=True)
-                try:
-                    with fs.open(path, "xb", ContentType=content_type) as file:
-                        file.write(data)
-                except FileExistsError:
-                    pass
-                fs.invalidate_cache(path)
-                assert fs.cat_file(path) == data, (
-                    f"Repo file verification failed: {path}"
-                )
-
     def _coordination_base_path(self) -> str:
         if Config.is_prod:
             base_path = self.primary_storage_config.base_path
@@ -422,11 +374,7 @@ def _get_store_path(
 
 
 def _build_dataset_url(
-    dataset_id: str,
-    version: str,
-    storage_config: StorageConfig,
-    *,
-    public: bool = False,
+    dataset_id: str, version: str, storage_config: StorageConfig
 ) -> str:
     """Canonical production URL for a dataset, regardless of `Config.env`.
 
@@ -435,12 +383,7 @@ def _build_dataset_url(
     not for opening a store.
     """
     return _format_dataset_path(
-        (storage_config.public_base_path or storage_config.base_path)
-        if public
-        else storage_config.base_path,
-        dataset_id,
-        version,
-        storage_config.format,
+        storage_config.base_path, dataset_id, version, storage_config.format
     )
 
 

@@ -11,12 +11,7 @@
     "time_domain": "Forecasts initialized 2025-01-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 6-360 hours (0.25-15 days) ahead",
-    "forecast_resolution": "6 hourly",
-    "notice_files": [
-      "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/TERMS_OF_USE.pdf",
-      "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/LEGALLY_BINDING_TERMS_OF_USE.txt",
-      "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/NOTICE.txt"
-    ]
+    "forecast_resolution": "6 hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {
@@ -253,12 +248,7 @@
           "time_domain": "Forecasts initialized 2025-01-01 00:00:00 UTC to Present",
           "time_resolution": "Forecasts initialized every 6 hours",
           "forecast_domain": "Forecast lead time 6-360 hours (0.25-15 days) ahead",
-          "forecast_resolution": "6 hourly",
-          "notice_files": [
-            "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/TERMS_OF_USE.pdf",
-            "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/LEGALLY_BINDING_TERMS_OF_USE.txt",
-            "https://google-weathernext2.r2.dynamical.org/google-weathernext2-forecast-operational-virtual/v0.1.0.icechunk/notices/431fa8bfd766/NOTICE.txt"
-          ]
+          "forecast_resolution": "6 hourly"
         },
         "zarr_format": 3,
         "consolidated_metadata": {

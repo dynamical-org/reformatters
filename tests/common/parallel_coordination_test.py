@@ -8,7 +8,6 @@ lives in tests/common/parallel_writes_test.py.
 
 import json
 import logging
-from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -35,10 +34,6 @@ class FakeStoreFactory:
         self._replica_stores: list[object] = []
         self.published_tree: xr.DataTree = xr.DataTree.from_dict({"/": xr.Dataset()})
         self.persist_virtual_config_calls = 0
-        self.repo_files: dict[str, bytes] = {}
-
-    def persist_repo_files(self, files: Mapping[str, bytes]) -> None:
-        self.repo_files.update(files)
 
     def persist_virtual_config(self) -> None:
         self.persist_virtual_config_calls += 1
@@ -229,13 +224,6 @@ class TestParallelSetupFirstWorker:
         repos = [("primary", primary_repo), ("replica-0", replica_repo)]
         ds = _template()
 
-        files = {"notices/revision/NOTICE.txt": b"Notice\n"}
-
-        def assert_repo_files_persisted(*args: object, **kwargs: object) -> None:
-            assert factory.repo_files == files
-
-        stub_io["copy_zarr_metadata"].side_effect = assert_repo_files_persisted
-
         result = pc.parallel_setup(
             factory,  # ty: ignore[invalid-argument-type]
             is_first=True,
@@ -246,7 +234,6 @@ class TestParallelSetupFirstWorker:
             tmp_store=tmp_path,
             icechunk_repos=repos,  # ty: ignore[invalid-argument-type]
             consolidated=True,
-            repo_files=files,
         )
 
         # Each repo had create_branch called with the main snapshot captured.

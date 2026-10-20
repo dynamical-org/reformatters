@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from typing import Annotated, Any, Generic, Literal, TypeVar
-from urllib.parse import urlsplit
 
 import numcodecs
 import numcodecs.abc
@@ -64,20 +63,6 @@ class DatasetAttributes(FrozenBaseModel):
     time_resolution: AttributeStr
     forecast_domain: AttributeStr | None = None
     forecast_resolution: AttributeStr | None = None
-    notice_files: tuple[str, ...] | None = None
-
-    @pydantic.model_validator(mode="after")
-    def validate_notice_files(self) -> DatasetAttributes:
-        for url in self.notice_files or ():
-            parsed = urlsplit(url)
-            assert parsed.scheme == "https", (
-                "notice_files must contain absolute HTTPS URLs"
-            )
-            assert parsed.netloc, "notice_files must contain absolute HTTPS URLs"
-            assert not any(char.isspace() for char in url), (
-                "notice_files must contain absolute HTTPS URLs"
-            )
-        return self
 
 
 class StatisticsApproximate(FrozenBaseModel):

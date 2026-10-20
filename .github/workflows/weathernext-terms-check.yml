@@ -11,18 +11,17 @@ on:
     paths:
       - .github/workflows/weathernext-terms-check.yml
       - src/reformatters/google/weathernext_terms.py
-      - src/reformatters/google/weathernext_terms_of_use.pdf
 
 jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Compare Google's Terms with the vendored copy
+      - name: Compare Google's Terms with the pinned checksum
         shell: bash
         run: |
           set -euo pipefail
           terms_url=$(sed -n 's/^TERMS_URL = "\(.*\)"$/\1/p' src/reformatters/google/weathernext_terms.py)
           curl --fail --location --retry 3 --max-time 120 "$terms_url" --output "$RUNNER_TEMP/terms-of-use.pdf"
-          expected=$(sha256sum src/reformatters/google/weathernext_terms_of_use.pdf | cut -d ' ' -f 1)
+          expected=$(sed -n 's/^TERMS_SHA256 = "\(.*\)"$/\1/p' src/reformatters/google/weathernext_terms.py)
           echo "$expected  $RUNNER_TEMP/terms-of-use.pdf" | sha256sum --check

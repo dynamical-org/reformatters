@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.pydantic import replace
 from reformatters.noaa.rtma.analysis_virtual import region_job as module
 from reformatters.noaa.rtma.analysis_virtual.region_job import (
     NoaaRtmaAnalysisVirtualRegionJob,
@@ -59,6 +60,38 @@ def test_generate_coords_keeps_selected_subset(
         pd.date_range("2017-05-02", periods=2, freq="h")
     )
     assert all(coord.data_vars == selected for coord in coords)
+
+
+@pytest.mark.parametrize(
+    "names", [None, ["temperature_2m"], ["total_cloud_cover_atmosphere"], []]
+)
+def test_generate_coords_respects_variable_availability(
+    job: NoaaRtmaAnalysisVirtualRegionJob, names: list[str] | None
+) -> None:
+    onset = pd.Timestamp("2017-05-02T01:00")
+    selected = [
+        replace(var, internal_attrs=replace(var.internal_attrs, available_from=onset))
+        if var.name == "total_cloud_cover_atmosphere"
+        else var
+        for var in CONFIG.data_vars
+        if names is None or var.name in names
+    ]
+    coords = job.generate_source_file_coords(job.template_ds.dataset, selected)
+    expected_times = (
+        []
+        if not selected
+        else [onset]
+        if names == ["total_cloud_cover_atmosphere"]
+        else list(pd.date_range("2017-05-02", periods=2, freq="h"))
+    )
+    assert [coord.time for coord in coords] == expected_times
+    for coord in coords:
+        assert type(coord) is NoaaRtmaAnalysisVirtualSourceFileCoord
+        assert [var.name for var in coord.data_vars] == [
+            var.name
+            for var in selected
+            if coord.time >= onset or var.name != "total_cloud_cover_atmosphere"
+        ]
 
 
 def test_listing_leaves_source_gaps_without_requiring_index(

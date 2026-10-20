@@ -891,43 +891,6 @@ def test_run_virtual_operational_update_asserts_single_writer() -> None:
         )
 
 
-def test_virtual_update_writes_notice_files_before_refresh_and_processing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    dataset = _make_dataset(tmp_path)
-    files = {"notices/revision/NOTICE.txt": b"Notice\n"}
-    monkeypatch.setattr(type(dataset), "repo_files", lambda self: files)
-    job = _make_region_job(
-        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
-    )
-    store_path = storage._get_store_path(
-        dataset.dataset_id,
-        dataset.store_factory.version,
-        dataset.primary_storage_config,
-    )
-
-    def assert_notice_files_published(*args: object, **kwargs: object) -> None:
-        assert (
-            Path(store_path) / "notices/revision/NOTICE.txt"
-        ).read_bytes() == b"Notice\n"
-
-    refresh = Mock(side_effect=assert_notice_files_published)
-    process = Mock()
-    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", refresh)
-    monkeypatch.setattr(VirtualTestRegionJob, "process_worker_jobs", process)
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
-    refresh.assert_called_once()
-    process.assert_called_once()
-
-    (Path(store_path) / "notices/revision/NOTICE.txt").write_bytes(b"Different\n")
-    refresh.reset_mock()
-    process.reset_mock()
-    with pytest.raises(AssertionError, match="Immutable repo file differs"):
-        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
-    refresh.assert_not_called()
-    process.assert_not_called()
-
-
 @pytest.mark.slow
 def test_virtual_update_rejects_structural_drift_before_any_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1220,22 +1183,10 @@ def test_backfill_kubernetes_metadata_only_refreshes_without_launching_job(
     mock_refresh = Mock()
     monkeypatch.setattr(template_utils, "refresh_store_metadata", mock_refresh)
 
-    files = {"notices/revision/NOTICE.txt": b"Notice\n"}
-    monkeypatch.setattr(ExampleDataset, "repo_files", lambda self: files)
-    calls = Mock()
-    persist = Mock()
-    monkeypatch.setattr(
-        kubernetes_backfill_dataset.store_factory, "persist_repo_files", persist
-    )
-    calls.attach_mock(persist, "persist")
-    calls.attach_mock(mock_refresh, "refresh")
-
     kubernetes_backfill_dataset.backfill_kubernetes(overwrite_metadata=True)
 
     mock_refresh.assert_called_once()
     mock_run.assert_not_called()
-    assert [call[0] for call in calls.mock_calls] == ["persist", "refresh"]
-    persist.assert_called_once_with(files)
 
 
 @pytest.mark.parametrize("env", [Env.dev, Env.test])

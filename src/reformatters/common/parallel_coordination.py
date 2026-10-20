@@ -54,7 +54,6 @@ def parallel_setup(
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
-    repo_files: Mapping[str, bytes] | None = None,
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
@@ -72,7 +71,6 @@ def parallel_setup(
         # This expands the dataset on the temp branch while readers on "main" are unaffected.
         # Branch name is deterministic so worker 0 retries reuse the same branch.
         if icechunk_repos:
-            store_factory.persist_repo_files(repo_files or {})
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
                 snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 import icechunk
 from pydantic import Field
@@ -22,6 +23,11 @@ from .template_config import NoaaRtmaAnalysisVirtualTemplateConfig
 class NoaaRtmaAnalysisVirtualDataset(
     DynamicalDataset[RtmaDataVar, NoaaRtmaAnalysisVirtualSourceFileCoord]
 ):
+    update_schedule: ClassVar[str] = "45 * * * *"
+    update_deadline: ClassVar[timedelta] = timedelta(minutes=50)
+    update_cron_suspended: ClassVar[bool] = False
+    max_delay: ClassVar[timedelta] = timedelta(minutes=90)
+
     template_config: NoaaRtmaAnalysisVirtualTemplateConfig = (
         NoaaRtmaAnalysisVirtualTemplateConfig()
     )
@@ -44,8 +50,8 @@ class NoaaRtmaAnalysisVirtualDataset(
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                schedule="45 * * * *",
-                pod_active_deadline=timedelta(minutes=50),
+                schedule=self.update_schedule,
+                pod_active_deadline=self.update_deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.7",
@@ -53,13 +59,13 @@ class NoaaRtmaAnalysisVirtualDataset(
                 secret_names=self.store_factory.k8s_secret_names(),
                 workers_total=1,
                 parallelism=1,
-                suspend=True,
+                suspend=self.update_cron_suspended,
             )
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=90)),
+            validation.CheckCurrentData(max_delay=self.max_delay),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

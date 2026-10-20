@@ -3,7 +3,7 @@ import json
 import math
 import os
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
@@ -137,9 +137,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         """Number of variable groups for parallel updates."""
         return self.region_job_class.num_variable_groups(self.template_config.data_vars)
 
-    def repo_files(self) -> Mapping[str, bytes]:
-        return {}
-
     def update(
         self,
         reformat_job_name: Annotated[str, typer.Argument(envvar="JOB_NAME")],
@@ -254,7 +251,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 "in place without launching workers; the filter and --docker-image "
                 "options would have no effect"
             )
-            self.store_factory.persist_repo_files(self.repo_files())
             template_utils.refresh_store_metadata(
                 self.store_factory,
                 template_ds,
@@ -506,7 +502,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
-            repo_files=self.repo_files(),
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -589,7 +584,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
-        self.store_factory.persist_repo_files(self.repo_files())
         job.refresh_metadata(self.store_factory, self._tmp_store())
         self.region_job_class.process_worker_jobs(
             [job], self.store_factory, "main", worker_index, overwrite_chunks=False

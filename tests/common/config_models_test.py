@@ -212,12 +212,7 @@ class TestDatasetAttributes:
             "A test licence statement without a period",
         ],
     )
-    @pytest.mark.parametrize(
-        "notice_files", [None, (), ("https://example.com/notices/NOTICE.txt",)]
-    )
-    def test_license_identifier_or_statement_with_optional_notice_files(
-        self, license_name: str, notice_files: tuple[str, ...] | None
-    ) -> None:
+    def test_license_identifier_or_statement(self, license_name: str) -> None:
         attributes = {
             "dataset_id": "test-dataset",
             "dataset_version": "1.0",
@@ -229,42 +224,13 @@ class TestDatasetAttributes:
             "spatial_resolution": "0.25 degrees (~20km)",
             "time_domain": "2020-01-01 to present",
             "time_resolution": "1 hour",
-            "notice_files": notice_files,
         }
         if license_name in ("CC-BY-4.0", "A test licence statement."):
             attrs = DatasetAttributes.model_validate(attributes)
             assert attrs.license == license_name
-            assert attrs.notice_files == notice_files
         else:
             with pytest.raises(ValidationError, match="license"):
                 DatasetAttributes.model_validate(attributes)
-
-    @pytest.mark.parametrize(
-        "url",
-        [
-            "NOTICE.txt",
-            "http://example.com/NOTICE.txt",
-            "https:///NOTICE.txt",
-            "https://example.com/a b",
-        ],
-    )
-    def test_notice_files_require_absolute_https_urls(self, url: str) -> None:
-        with pytest.raises(ValidationError, match="absolute HTTPS"):
-            DatasetAttributes.model_validate(
-                {
-                    "dataset_id": "test-dataset",
-                    "dataset_version": "1.0",
-                    "name": "Test Dataset",
-                    "description": "A test dataset.",
-                    "attribution": "Test attribution.",
-                    "license": "CC-BY-4.0",
-                    "spatial_domain": "Global",
-                    "spatial_resolution": "0.25 degrees (~20km)",
-                    "time_domain": "2020-01-01 to present",
-                    "time_resolution": "1 hour",
-                    "notice_files": (url,),
-                }
-            )
 
     def test_valid_attributes(self) -> None:
         attrs = DatasetAttributes(
