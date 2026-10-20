@@ -2,11 +2,37 @@
 
 The operational virtual product publishes all available forecast steps as Google's source files arrive, including steps whose valid time is in the future. The historical 2022–2024 product is unchanged.
 
-Operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. The next normal update fills missing steps within that window, including steps withheld by a prior publication policy. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill. `expected_forecast_length` describes the source horizon.
+Operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. Routine updates retry missing steps within that window. Fill the held-back backlog with a backfill before enabling unrestricted updates; see the rollout below. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill. `expected_forecast_length` describes the source horizon.
 
 The publication switch is `GoogleWeathernext2ForecastVirtualRegionJob.publication_holdback` in `src/reformatters/google/weathernext2/forecast_virtual/region_job.py`. `None` publishes every available step. Set it to `pd.Timedelta("1h")` to admit only steps with `init_time + lead_time <= scheduled_fire_time - 1h`; a zero holdback still excludes future valid times. Delayed backfills capture the current UTC time minus one hour once per `get_jobs()` call. Historical processing ignores the switch. Delayed mode also restores the template extent and `CheckNoRefsInsideHoldback` validator. That validator probes representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
 
+Unrestricted updates include initializations through `floor_6h(scheduled_fire_time - 7h)`. The seven-hour delay tracks source landing, independently of the publication policy: all leads arrive together, typically about 6–7.5 hours after initialization. It preserves the existing update extent while admitting all available leads. Manifest completeness requires at least 5% of the newest ingested initialization and all of every older initialization; delayed mode retains full completeness for its eligible steps.
+
 Reinstating the delay also requires redeploying the valid-time gate in the `weathernext-proxy-worker` Worker in `dynamical-org/ops`. Removing Icechunk refs alone cannot block guessable source paths or listing routes. Follow the containment order below.
+
+## Terms notices
+
+The operational `license` attribute is a statement covering both “Real-Time Data & Forecasts” and “Historical Data”, using [Google's labels](https://developers.google.com/weathernext/guides/disclaimers) and linking to the applicable Terms and CC BY 4.0. Its attribution includes Google's copyright and required real-time citation. The notice bundle carries the Real-Time Experimental Data Terms; dynamical-stac maps the statement to STAC `license: other` with two titled license links. Values relating to a time less than one hour ago or in the future fall under those Terms; older values remain CC BY 4.0. This metadata does not change the publication holdback. The historical product retains its Earth Engine attribution and `license="CC-BY-4.0"`.
+
+Each operational Icechunk repository carries `notices/<revision>/TERMS_OF_USE.pdf`, `LEGALLY_BINDING_TERMS_OF_USE.txt`, and `NOTICE.txt`. Every group's `notice_files` attribute links to these files. `NOTICE.txt` contains the copyright, binding notice, modifications, attribution, restricted-territory notice, and non-endorsement notice. The shared renderer takes the source product name, modifications, and territory/non-endorsement notices from the operational template config. Revisions are the first 12 SHA-256 hex characters of the sorted file names and bytes (each followed by a NUL). Bundles are immutable: an existing path must contain exactly the expected bytes. Writers publish and read back the files before committing metadata that links to them. Whole-prefix copies include them; Icechunk session exports do not.
+
+The daily `WeatherNext Terms check` workflow compares Google's live PDF with `src/reformatters/google/weathernext_terms_of_use.pdf` and fails on a fetch failure or changed bytes. On failure, distinguish download problems from changed terms. Review any new terms, replace the vendored PDF and `TERMS_SHA256` in `weathernext_terms.py`, update the notice wording as required, regenerate the operational template, and review its new bundle URLs before deploying. Keep prior bundle revisions available for older snapshots. Terms changes require an operator decision; the workflow does not alter publication.
+
+## Unrestricted rollout
+
+The operational update cron is suspended in code. Keep it suspended until the held-back backlog has been backfilled: an update builds every available source group in a tick into one batch, so this backlog would put millions of refs into one commit. Backfill mode splits work by manifest window.
+
+1. Deploy the suspended cron and unrestricted reformatter, wait for running writers to finish, then deploy the proxy Worker's unrestricted chunk and listing access.
+2. Choose the scheduled fire `F` for the controlled update. Set `WINDOW_END = floor_6h(F - 7h) + 6h` and `WINDOW_START = WINDOW_END - 17 days`, using full ISO timestamps with seconds. The end is exclusive and must not precede the store's committed end. If a long suspension leaves older gaps, move the start back to include them. Run the targeted backfill with the sizing used below for withdrawal repairs:
+
+```sh
+DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --overwrite-metadata --append-dim-end WINDOW_END --filter-start WINDOW_START --filter-end WINDOW_END --jobs-per-pod 30 --max-parallelism 10
+```
+
+The existing-store CLI requires overwrite flags. This command rewrites present refs as well as filling missing ones; it does not skip them. Manifest batching bounds each commit, while `--overwrite-metadata` permits extending the store through `WINDOW_END`. Keep other writers stopped until finalization.
+
+3. Verify the backfill completed, then run one controlled update while the cron remains suspended, just after the chosen scheduled fire. Inspect completeness, decode health, memory, and duration in the final pod. If the backfill misses that slot, advance the window and finish the corresponding backfill before the controlled update.
+4. Restore `suspend=False` in a follow-up PR only after the controlled update passes. Verify the deployment and subsequent scheduled fires. Keep the publication switch at `None`.
 
 ## Audit
 

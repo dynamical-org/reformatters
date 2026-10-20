@@ -85,13 +85,19 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
-    assert update.suspend is False
+    assert update.suspend is True
     (current,) = [
         item
         for item in dataset.validators()
         if isinstance(item, validation.CheckCurrentData)
     ]
     assert current.max_delay == timedelta(hours=12)
+    (completeness,) = [
+        item
+        for item in dataset.validators()
+        if isinstance(item, validation.CheckVirtualManifestCompleteness)
+    ]
+    assert completeness.min_present_fraction == (0.05, 1.0)
     assert not any(
         isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
     )
@@ -139,3 +145,11 @@ def test_operational_holdback_validator_follows_publication_policy(
     assert any(
         isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
     ) == (holdback is not None)
+    (completeness,) = [
+        item
+        for item in dataset.validators()
+        if isinstance(item, validation.CheckVirtualManifestCompleteness)
+    ]
+    assert completeness.min_present_fraction == (
+        (0.05, 1.0) if holdback is None else (1.0,)
+    )

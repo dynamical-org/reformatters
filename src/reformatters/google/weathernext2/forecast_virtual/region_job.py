@@ -44,6 +44,7 @@ OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
+OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("7h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
@@ -198,14 +199,17 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             )
         job_fire_time = job_fire_time or _utc_now()
         publication_cutoff = pd.Timestamp.max
-        if cls.publication_holdback is not None:
+        if cls.publication_holdback is None:
+            newest_init = (job_fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+                INIT_TIME_FREQUENCY
+            )
+        else:
             publication_cutoff = job_fire_time - cls.publication_holdback
             latest_publishable_valid_time = (
                 publication_cutoff
                 - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
             )
-            newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
-            job_fire_time = newest_publishable_init + INIT_TIME_FREQUENCY
+            newest_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -213,7 +217,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=job_fire_time,
+            job_fire_time=newest_init + INIT_TIME_FREQUENCY,
         )
         (job,) = jobs
         assert isinstance(job, cls)

@@ -603,7 +603,7 @@ def test_unrestricted_update_includes_newest_init_and_revisits_withheld_steps(
     hour: int,
 ) -> None:
     fire_time = pd.Timestamp("2025-03-20") + pd.Timedelta(hours=hour, minutes=5)
-    newest_init = fire_time.floor("6h")
+    newest_init = (fire_time - pd.Timedelta("7h")).floor("6h")
     older_init = newest_init - pd.Timedelta("2D")
     var = _var(OPERATIONAL, "temperature_2m")
     jobs, template = (
@@ -623,7 +623,12 @@ def test_unrestricted_update_includes_newest_init_and_revisits_withheld_steps(
     init_times = template.to_dataset().get_index("init_time")
     assert init_times[-1] == newest_init
     assert job.region == slice(
-        int(init_times.searchsorted(fire_time - pd.Timedelta("17D"))), len(init_times)
+        int(
+            init_times.searchsorted(
+                newest_init + pd.Timedelta("6h") - pd.Timedelta("17D")
+            )
+        ),
+        len(init_times),
     )
     coords = job.source_file_coords()
     expected_steps = {
@@ -668,3 +673,38 @@ def test_unrestricted_update_includes_newest_init_and_revisits_withheld_steps(
     assert (newest_init, pd.Timedelta("360h")) in missing_steps
     assert (older_init, pd.Timedelta("360h")) in missing_steps
     assert older_init + pd.Timedelta("360h") > fire_time - PUBLICATION_HOLDBACK
+
+
+@pytest.mark.parametrize(
+    ("fire_time", "newest_init"),
+    [
+        (pd.Timestamp("2025-03-20T13:00"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T12:59:59"), pd.Timestamp("2025-03-20T00:00")),
+        (pd.Timestamp("2025-03-20T13:05"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T18:59"), pd.Timestamp("2025-03-20T06:00")),
+    ],
+)
+def test_unrestricted_update_extent_tracks_source_landing(
+    fire_time: pd.Timestamp, newest_init: pd.Timestamp
+) -> None:
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=[_var(OPERATIONAL, "temperature_2m")],
+            reformat_job_name="test",
+            job_fire_time=fire_time,
+        )
+    )
+
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    assert job.publication_cutoff == pd.Timestamp.max
+    assert template.to_dataset().get_index("init_time")[-1] == newest_init
+    assert {
+        coord.lead_time
+        for coord in job.source_file_coords()
+        if coord.init_time == newest_init
+    } == set(OPERATIONAL.dimension_coordinates()["lead_time"])
