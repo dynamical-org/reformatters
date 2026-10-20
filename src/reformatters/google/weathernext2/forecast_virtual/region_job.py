@@ -411,7 +411,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 )
                 assert pending_refs <= bound, (
                     f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
-                    "run the rollout backfill in docs/weathernext2_holdback.md#unrestricted-rollout"
+                    "backfill the missing range with backfill-kubernetes before updating"
                 )
             yield from super().process_virtual_refs(remaining)
             return

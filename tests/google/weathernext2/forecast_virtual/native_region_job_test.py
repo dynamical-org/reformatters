@@ -85,7 +85,7 @@ def test_unrestricted_update_rejects_backlog_before_discovery(
     monkeypatch.setattr(type(job), "discover_available", discovery)
     with pytest.raises(
         AssertionError,
-        match=r"2426880.*1320960.*docs/weathernext2_holdback.md#unrestricted-rollout",
+        match=r"2426880.*1320960.*backfill-kubernetes",
     ):
         list(job.process_virtual_refs(pending))
     discovery.assert_not_called()
@@ -145,7 +145,7 @@ def test_unrestricted_update_reference_bound(
     discovery.reset_mock()
     with pytest.raises(
         AssertionError,
-        match=rf"{bound + members}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+        match=rf"{bound + members}.*{bound}.*backfill-kubernetes",
     ):
         list(job.process_virtual_refs([*pending, extra]))
     discovery.assert_not_called()
