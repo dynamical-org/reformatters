@@ -290,13 +290,15 @@ class CronJob(Job):
         Every pod of one fire derives the same value, including a replacement pod
         started after an eviction, which its own start time would not give.
         """
-        minute, hours, days_of_month = _parse_schedule(self.schedule)
-        fire_time = now.normalize() + timedelta(hours=now.hour, minutes=minute)
-        if fire_time > now:
+        minutes, hours, days_of_month = _parse_schedule(self.schedule)
+        fire_time = now.floor("h")
+        while True:
+            if fire_time.hour in hours and fire_time.day in days_of_month:
+                for minute in sorted(minutes, reverse=True):
+                    candidate = fire_time + timedelta(minutes=minute)
+                    if candidate <= now:
+                        return candidate
             fire_time -= timedelta(hours=1)
-        while fire_time.hour not in hours or fire_time.day not in days_of_month:
-            fire_time -= timedelta(hours=1)
-        return fire_time
 
     def next_fire_time(self, now: Timestamp) -> Timestamp:
         return _next_fire_time(self.schedule, now)
@@ -465,45 +467,51 @@ def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
     return should_retry, f"{prefix}-{parent_digest}{suffix}"
 
 
-# Operational schedules use fixed minutes, selected hours, and either every day or
+# Operational schedules use selected minutes and hours, and either every day or
 # every Nth day of the month.
 _SCHEDULE_PATTERN = re.compile(
-    r"(?P<minute>\d{1,2}) "
+    r"(?P<minutes>\d{1,2}|\*/\d{1,2}) "
     r"(?P<hours>\*|\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) "
     r"(?P<days_of_month>\*|\*/\d{1,2}) \* \*"
 )
 
 
-def _parse_schedule(schedule: str) -> tuple[int, frozenset[int], frozenset[int]]:
-    """The minute, hours, and days of month a cron schedule fires at."""
+def _parse_schedule(
+    schedule: str,
+) -> tuple[frozenset[int], frozenset[int], frozenset[int]]:
+    """The minutes, hours, and days of month a cron schedule fires at."""
     match = _SCHEDULE_PATTERN.fullmatch(schedule)
     assert match is not None, (
         f"Unsupported cron schedule {schedule!r}, expected "
-        "`<minute> <hours> <days-of-month> * *` with hours as `*`, `*/N`, "
+        "`<minutes> <hours> <days-of-month> * *` with minutes as a number or `*/N`, hours as `*`, `*/N`, "
         "`A-B/N`, or a comma separated list and days-of-month as `*` or `*/N`"
     )
-    minute = int(match["minute"])
+    minutes = _parse_schedule_field(match["minutes"], 0, 59)
     hours = _parse_schedule_field(match["hours"], 0, 23)
     days_of_month = _parse_schedule_field(match["days_of_month"], 1, 31)
-    assert minute <= 59, f"Cron schedule {schedule!r} has a minute above 59"
+    assert minutes, f"Cron schedule {schedule!r} selects no minutes"
+    assert max(minutes) <= 59, f"Cron schedule {schedule!r} has a minute above 59"
     assert hours, f"Cron schedule {schedule!r} selects no hours"
     assert max(hours) <= 23, f"Cron schedule {schedule!r} has an hour above 23"
     assert days_of_month, f"Cron schedule {schedule!r} selects no days of month"
-    return minute, hours, days_of_month
+    return minutes, hours, days_of_month
 
 
 def _next_fire_time(schedule: str, now: Timestamp) -> Timestamp:
-    minute, hours, days_of_month = _parse_schedule(schedule)
-    fire_time = now.normalize() + timedelta(hours=now.hour, minutes=minute)
-    if fire_time <= now:
+    minutes, hours, days_of_month = _parse_schedule(schedule)
+    fire_time = now.floor("h")
+    while True:
+        if fire_time.hour in hours and fire_time.day in days_of_month:
+            for minute in sorted(minutes):
+                candidate = fire_time + timedelta(minutes=minute)
+                if candidate > now:
+                    return candidate
         fire_time += timedelta(hours=1)
-    while fire_time.hour not in hours or fire_time.day not in days_of_month:
-        fire_time += timedelta(hours=1)
-    return fire_time
 
 
 def _parse_schedule_field(field: str, start: int, end: int) -> frozenset[int]:
     spec, _, step = field.partition("/")
+    assert not step or int(step) > 0, "Cron schedule step must be positive"
     if "," in spec:
         return frozenset(int(value) for value in spec.split(","))
     if spec == "*":

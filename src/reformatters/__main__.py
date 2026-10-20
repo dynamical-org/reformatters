@@ -119,6 +119,7 @@ from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
     NoaaRrfsEnsForecastVirtualDataset,
 )
 from reformatters.noaa.rtma.analysis_virtual import NoaaRtmaAnalysisVirtualDataset
+from reformatters.noaa.rtma_ru.analysis_virtual import NoaaRtmaRuAnalysisVirtualDataset
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
@@ -321,6 +322,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaRtmaAnalysisVirtualDataset(
+        primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRtmaRuAnalysisVirtualDataset(
         primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast48HourVirtualDataset(

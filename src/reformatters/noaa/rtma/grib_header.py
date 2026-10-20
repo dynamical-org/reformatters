@@ -77,7 +77,7 @@ def scan_analysis_messages(
 
 def _validate_payload(header: bytes, pos: int, length: int, product: bytes) -> None:
     assert product[11] == 0, "Expected zero-lead analysis"
-    assert product[17] == 1, "Expected zero-lead analysis"
+    assert product[17] in (0, 1), "Expected minute or hour forecast time unit"
     assert int.from_bytes(product[18:22]) == 0, "Expected zero-lead analysis"
     assert product[28] == 255, "Unexpected second fixed surface"
     representation, pos = _section(header, pos, 5, length)
