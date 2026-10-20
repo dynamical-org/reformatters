@@ -58,7 +58,8 @@ def test_terms_constants_and_pdf_are_pinned() -> None:
         == "dynamical.org and this dataset are not sponsored, endorsed, or granted official status by Google or any meteorological agency or department. Unless otherwise stated, the Real-Time Experimental Data (i) is not based on data published by; (ii) has not been produced in collaboration with; and (iii) has not been endorsed by any government meteorological agency or department and in no way replaces official alerts, warnings or notices published by such agencies or departments."
     )
     files = render_notice_files(
-        GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
+        GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes,
+        product="Google WeatherNext 2",
     )
     assert hashlib.sha256(files["TERMS_OF_USE.pdf"]).hexdigest() == TERMS_SHA256
 
@@ -67,7 +68,12 @@ def test_notice_rendering_and_revision() -> None:
     attributes = (
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
     )
-    files = render_notice_files(attributes)
+    files = render_notice_files(attributes, product="Google WeatherNext 2")
+    assert {name: hashlib.sha256(data).hexdigest() for name, data in files.items()} == {
+        "TERMS_OF_USE.pdf": "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654",
+        "LEGALLY_BINDING_TERMS_OF_USE.txt": "35a0deb0a5a3c4436a7fffe6e7253baa4c43ec41804a449600e44b233d1b443d",
+        "NOTICE.txt": "13a2c7ad25d7365b797d145a643f14007760e855617e5aba9eeba3c997bd7587",
+    }
     assert set(files) == {
         "TERMS_OF_USE.pdf",
         "LEGALLY_BINDING_TERMS_OF_USE.txt",
@@ -99,10 +105,30 @@ def test_notice_rendering_and_revision() -> None:
         + b"\0"
     ).hexdigest()[:12]
     assert notice_revision(files) == expected_revision
+    assert expected_revision == "9d27d0777f75"
     assert notice_revision(dict(reversed(list(files.items())))) == expected_revision
     assert notice_revision(files | {"NOTICE.txt": b"Changed\n"}) != expected_revision
-    assert repo_notice_files(attributes) == {
+    assert repo_notice_files(attributes, product="Google WeatherNext 2") == {
         f"notices/{expected_revision}/{name}": data for name, data in files.items()
+    }
+
+
+def test_notice_product_is_supplied_by_caller() -> None:
+    attributes = (
+        GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
+    )
+    wn2 = render_notice_files(attributes, product="Google WeatherNext 2")
+    wn3 = render_notice_files(attributes, product="Google WeatherNext 3")
+    assert wn3 == wn2 | {
+        "NOTICE.txt": wn2["NOTICE.txt"].replace(
+            b"from Google WeatherNext 2 experimental forecast data.",
+            b"from Google WeatherNext 3 experimental forecast data.",
+            1,
+        )
+    }
+    revision = notice_revision(wn3)
+    assert repo_notice_files(attributes, product="Google WeatherNext 3") == {
+        f"notices/{revision}/{name}": data for name, data in wn3.items()
     }
 
 

@@ -26,6 +26,7 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
     GoogleWeathernext2ForecastVirtualTemplateConfig
 ):
     source_layout: Literal["operational"] = "operational"
+    product: ClassVar[str] = "Google WeatherNext 2"
     append_dim_start: Timestamp = pd.Timestamp("2025-01-01T00:00")
     dataset_id_value: ClassVar[str] = "google-weathernext2-forecast-operational-virtual"
     dataset_name_value: ClassVar[str] = (
@@ -66,6 +67,7 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
             terms_of_use=LEGALLY_BINDING_NOTICE,
             usage_restrictions=USAGE_RESTRICTIONS,
             notice_files=tuple(
-                f"{public_url}/{path}" for path in repo_notice_files(attributes)
+                f"{public_url}/{path}"
+                for path in repo_notice_files(attributes, product=self.product)
             ),
         )

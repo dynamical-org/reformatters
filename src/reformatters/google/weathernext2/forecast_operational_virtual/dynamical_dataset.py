@@ -53,7 +53,10 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
     )
 
     def repo_files(self) -> dict[str, bytes]:
-        return repo_notice_files(self.template_config.dataset_attributes)
+        return repo_notice_files(
+            self.template_config.dataset_attributes,
+            product=self.template_config.product,
+        )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
