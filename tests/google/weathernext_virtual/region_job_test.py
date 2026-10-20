@@ -14,6 +14,9 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
 from reformatters.google.weathernext_virtual import region_job
 from reformatters.google.weathernext_virtual.holdback import is_publishable
 from reformatters.google.weathernext_virtual.listing import NativeObjectMetadata
+from reformatters.google.weathernext_virtual.region_job import (
+    WeatherNextVirtualRegionJob,
+)
 from reformatters.google.weathernext_virtual.validation import CheckNoRefsInsideHoldback
 from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
     HISTORICAL,
@@ -22,6 +25,81 @@ from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
     _job,
     _var,
 )
+from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS, job_for
+
+
+@pytest.fixture(
+    params=[None, *DATASETS], ids=["wn2", *[ds.dataset_id for ds in DATASETS]]
+)
+def unrestricted_update_job(
+    request: pytest.FixtureRequest,
+) -> WeatherNextVirtualRegionJob[Any, Any]:
+    if request.param is None:
+        job = _job(
+            GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+            OPERATIONAL,
+            OPERATIONAL.get_template(pd.Timestamp("2025-01-01T18:00")),
+            OPERATIONAL.data_vars,
+        )
+    else:
+        dataset = request.param
+        job = job_for(dataset).model_copy(
+            update={"data_vars": dataset.template_config.data_vars}
+        )
+    return job.model_copy(
+        update={
+            "processing_mode": "update",
+            "publication_cutoff": pd.Timestamp.max,
+            "poll_deadline": pd.Timestamp("2000-01-01"),
+            "region": slice(0, 3),
+        }
+    )
+
+
+def test_unrestricted_update_rejects_backlog_before_discovery(
+    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = unrestricted_update_job
+    bound = (
+        job.manifest_init_split
+        * len(job.template_ds.to_dataset().lead_time)
+        * len(job.data_vars)
+    )
+    coord = job.source_file_coords()[0]
+    discovery = Mock(side_effect=AssertionError("discovery must not run"))
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    with pytest.raises(
+        AssertionError,
+        match=rf"{bound + 1}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+    ):
+        list(job.process_virtual_refs([coord] * (bound + 1)))
+    discovery.assert_not_called()
+
+
+@pytest.mark.parametrize("at_bound", [False, True])
+def test_unrestricted_update_admits_steady_state_and_batch_boundary(
+    unrestricted_update_job: WeatherNextVirtualRegionJob[Any, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    at_bound: bool,
+) -> None:
+    job = unrestricted_update_job
+    coords = job.source_file_coords()
+    oldest = min(coord.init_time for coord in coords)
+    first_lead = min(coord.lead_time for coord in coords)
+    pending = [
+        coord
+        for coord in coords
+        if coord.init_time != oldest or coord.lead_time == first_lead
+    ]
+    per_init = len(job.template_ds.to_dataset().lead_time) * len(job.data_vars)
+    assert len(pending) == 2 * per_init + len(job.data_vars)
+    if at_bound:
+        pending = [coords[0]] * (job.manifest_init_split * per_init)
+    discovery = Mock(return_value=[])
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    assert list(job.process_virtual_refs(pending)) == []
+    discovery.assert_called_once_with(pending)
 
 
 def test_unrestricted_eligibility_does_not_compare_valid_time() -> None:

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -33,6 +34,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     template_config: GoogleWeathernext2ForecastOperationalVirtualTemplateConfig = (
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
     )

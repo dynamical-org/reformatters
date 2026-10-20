@@ -105,9 +105,7 @@ def test_template_and_operations(
         for check in dataset.validators()
         if isinstance(check, validation.CheckVirtualManifestCompleteness)
     ]
-    assert completeness.min_present_fraction == (
-        (0.05, 0.05, 1.0) if config.horizon_hours == 48 else (0.05, 1.0)
-    )
+    assert completeness.min_present_fraction == (0.05, 1.0)
     assert not any(
         isinstance(check, CheckNoRefsInsideHoldback) for check in dataset.validators()
     )
@@ -138,7 +136,7 @@ def test_delayed_policy_enables_holdback_validation(
     ids=lambda ds: ds.dataset_id,
 )
 @pytest.mark.parametrize("older_complete", [False, True])
-def test_hourly_completeness_tolerates_overlapping_source_landings(
+def test_hourly_completeness_requires_older_initializations(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     older_complete: bool,
 ) -> None:
@@ -163,7 +161,7 @@ def test_hourly_completeness_tolerates_overlapping_source_landings(
     template_utils.write_metadata(
         template, session.store, "w-", consolidated=False, skip_icechunk_commit=True
     )
-    for init_index, leads in enumerate((20 if older_complete else 10, 10, 10)):
+    for init_index, leads in enumerate((20, 20 if older_complete else 10, 10)):
         for lead_index in range(leads):
             for statistic_index in range(len(STATISTICS)):
                 session.store.set_virtual_ref(
