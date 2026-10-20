@@ -64,14 +64,22 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=False,
+            suspend=True,
         )
         return [update]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
-            validation.CheckVirtualManifestCompleteness(),
-            CheckNoRefsInsideHoldback(),
+            validation.CheckVirtualManifestCompleteness(
+                min_present_fraction=(0.05, 1.0)
+                if self.region_job_class.publication_holdback is None
+                else (1.0,)
+            ),
+            *(
+                (CheckNoRefsInsideHoldback(),)
+                if self.region_job_class.publication_holdback is not None
+                else ()
+            ),
             validation.CheckVirtualDecodeHealth(positions="all", max_positions=2),
         )

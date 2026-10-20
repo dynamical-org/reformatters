@@ -11,7 +11,6 @@ from reformatters.common.region_job import CoordinateValue, LaunchScope, RegionJ
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.google.weathernext_virtual.holdback import (
-    PUBLICATION_HOLDBACK,
     is_publishable,
     utc_now,
 )
@@ -56,6 +55,8 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
 ):
     init_frequency: ClassVar[Timedelta]
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
+    publication_holdback: ClassVar[Timedelta | None] = None
+    source_landing_delay: ClassVar[Timedelta] = pd.Timedelta("6h")
 
     @classmethod
     def operational_update_jobs(
@@ -77,8 +78,12 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         xr.DataTree,
     ]:
         reference_time = job_fire_time or utc_now()
-        cutoff = reference_time - PUBLICATION_HOLDBACK
-        newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(cls.init_frequency)
+        cutoff = cls.cutoff_at(reference_time)
+        newest_init = (
+            (reference_time - cls.source_landing_delay).floor(cls.init_frequency)
+            if cls.publication_holdback is None
+            else (cutoff.floor("h") - pd.Timedelta("1h")).floor(cls.init_frequency)
+        )
         append_dim_end = newest_init + cls.init_frequency
         template = get_template_fn(append_dim_end)
         inits = template.to_dataset().get_index(append_dim)

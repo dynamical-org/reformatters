@@ -19,9 +19,6 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.google.weathernext_virtual.holdback import (
-    PUBLICATION_HOLDBACK,
-)
-from reformatters.google.weathernext_virtual.holdback import (
     utc_now as _utc_now,
 )
 from reformatters.google.weathernext_virtual.listing import (
@@ -109,6 +106,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 ):
     requires_scan_provenance: ClassVar[bool] = False
     source_layout: ClassVar[SourceLayout]
+    source_landing_delay: ClassVar[Timedelta] = pd.Timedelta("7h")
     publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
@@ -126,7 +124,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         reference_time: Timestamp | None = None,
         append_dim_end: Timestamp | None = None,
     ) -> Sequence[Self]:
-        jobs = super().get_jobs(
+        if cls.source_layout == "operational":
+            reference_time = reference_time or _utc_now()
+        return super().get_jobs(
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=append_dim,
@@ -139,10 +139,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             reference_time=reference_time,
             append_dim_end=append_dim_end,
         )
-        if cls.source_layout == "historical":
-            return jobs
-        cutoff = (reference_time or _utc_now()) - PUBLICATION_HOLDBACK
-        return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
     def operational_update_jobs(
@@ -173,12 +169,18 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
-        latest_publishable_valid_time = (
-            publication_cutoff
-            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
-        )
-        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
+        reference_time = job_fire_time or _utc_now()
+        publication_cutoff = cls.cutoff_at(reference_time)
+        if cls.publication_holdback is None:
+            newest_publishable_init = (reference_time - cls.source_landing_delay).floor(
+                INIT_TIME_FREQUENCY
+            )
+        else:
+            latest_publishable_valid_time = (
+                publication_cutoff
+                - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+            )
+            newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -191,7 +193,12 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         (job,) = jobs
         assert isinstance(job, cls)
         return [
-            job.model_copy(update={"publication_cutoff": publication_cutoff})
+            job.model_copy(
+                update={
+                    "publication_cutoff": publication_cutoff,
+                    "reference_time": reference_time,
+                }
+            )
         ], template_ds
 
     def _available_lead_times(
@@ -293,6 +300,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
+    publication_holdback: ClassVar[Timedelta | None] = None
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")

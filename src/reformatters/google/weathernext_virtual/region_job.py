@@ -46,7 +46,16 @@ class WeatherNextVirtualRegionJob(
 ):
     requires_scan_provenance: ClassVar[bool] = True
     manifest_init_split: ClassVar[int]
+    publication_holdback: ClassVar[Timedelta | None] = PUBLICATION_HOLDBACK
     publication_cutoff: Timestamp
+
+    @classmethod
+    def cutoff_at(cls, reference_time: Timestamp) -> Timestamp:
+        return (
+            pd.Timestamp.max
+            if cls.publication_holdback is None
+            else reference_time - cls.publication_holdback
+        )
 
     @model_validator(mode="before")
     @classmethod
@@ -55,24 +64,27 @@ class WeatherNextVirtualRegionJob(
             values = dict(values)
             values.setdefault(
                 "publication_cutoff",
-                pd.Timestamp(values["reference_time"]) - PUBLICATION_HOLDBACK,
+                cls.cutoff_at(pd.Timestamp(values["reference_time"])),
             )
         return values
 
     def commit_metadata(self) -> dict[str, str]:
         metadata = {"reformat_job_name": self.reformat_job_name}
+        reference_time = self.reference_time
         if self.publication_cutoff == pd.Timestamp.max:
-            assert not self.requires_scan_provenance
             metadata["publication_policy"] = "unrestricted"
         else:
             metadata["publication_cutoff"] = self.publication_cutoff.tz_localize(
                 "UTC"
             ).isoformat()
-            metadata["reference_time"] = (
-                (self.reference_time or self.publication_cutoff + PUBLICATION_HOLDBACK)
-                .tz_localize("UTC")
-                .isoformat()
+            reference_time = (
+                reference_time or self.publication_cutoff + PUBLICATION_HOLDBACK
             )
+        if self.requires_scan_provenance:
+            assert reference_time is not None
+            assert self.launch_scope is not None
+        if reference_time is not None:
+            metadata["reference_time"] = reference_time.tz_localize("UTC").isoformat()
         if self.launch_scope is not None:
             metadata["launch_scope"] = self.launch_scope.model_dump_json()
         return metadata

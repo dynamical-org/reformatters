@@ -12,7 +12,9 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
 )
 from reformatters.google.weathernext_virtual import region_job
+from reformatters.google.weathernext_virtual.holdback import is_publishable
 from reformatters.google.weathernext_virtual.listing import NativeObjectMetadata
+from reformatters.google.weathernext_virtual.validation import CheckNoRefsInsideHoldback
 from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
     HISTORICAL,
     OPERATIONAL,
@@ -20,6 +22,23 @@ from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
     _job,
     _var,
 )
+
+
+def test_unrestricted_eligibility_does_not_compare_valid_time() -> None:
+    assert is_publishable(pd.Timestamp.max, pd.Timedelta("360h"), pd.Timestamp.max)
+
+
+def test_unrestricted_holdback_validation_skips_manifest() -> None:
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        OPERATIONAL.get_template(pd.Timestamp("2025-01-01T06:00")),
+        OPERATIONAL.data_vars[:1],
+    )
+    context = Mock()
+    context.virtual_region_job.return_value = job
+    assert CheckNoRefsInsideHoldback().check(context).passed
+    context.virtual_region_job.assert_called_once_with()
 
 
 @pytest.mark.parametrize("historical", [True, False])

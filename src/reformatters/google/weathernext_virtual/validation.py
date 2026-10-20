@@ -1,5 +1,6 @@
 from typing import ClassVar
 
+import pandas as pd
 from icechunk.store import IcechunkStore
 
 from reformatters.common.validation import (
@@ -21,6 +22,8 @@ class CheckNoRefsInsideHoldback(Validator):
     def check(self, context: ValidationContext) -> ValidationResult:
         region_job = context.virtual_region_job()
         assert isinstance(region_job, WeatherNextVirtualRegionJob)
+        if region_job.publication_cutoff == pd.Timestamp.max:
+            return ValidationResult(passed=True, message="Publication is unrestricted")
         store = context.store
         assert isinstance(store, IcechunkStore)
         append_dim = region_job.append_dim

@@ -871,6 +871,80 @@ def test_strict_weathernext_scan_rejects_incomplete_provenance(
         )
 
 
+def test_unrestricted_scan_requires_launch_scope() -> None:
+    with pytest.raises(AssertionError, match="require a recorded launch_scope"):
+        manifest_scan._validate_scan_provenance(
+            manifest_scan.WeatherNextVirtualRegionJob,
+            {
+                "publication_policy": "unrestricted",
+                "reference_time": "2026-01-01T00:00:00Z",
+            },
+            pd.Timestamp("2026-01-01"),
+        )
+
+
+@pytest.mark.parametrize("recorded", ["delayed", "unrestricted", "legacy-max"])
+def test_scan_replays_policy_and_separates_checkpoints(
+    recorded: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = pd.Timestamp("2026-01-01T10:00")
+    scope = LaunchScope(append_dim_end=pd.Timestamp("2026-01-02"))
+    metadata = {
+        "reference_time": reference.tz_localize("UTC").isoformat(),
+        "launch_scope": scope.model_dump_json(),
+    }
+    if recorded == "delayed":
+        metadata["publication_cutoff"] = "2026-01-01T09:00:00+00:00"
+        cutoff = pd.Timestamp("2026-01-01T09:00")
+    elif recorded == "legacy-max":
+        metadata["publication_cutoff"] = pd.Timestamp.max.tz_localize("UTC").isoformat()
+        cutoff = pd.Timestamp.max
+    else:
+        metadata["publication_policy"] = "unrestricted"
+        cutoff = pd.Timestamp.max
+    scan = Mock(return_value=ManifestScanResult({}, {}))
+    monkeypatch.setattr(manifest_scan, "_scan_window", scan)
+    dataset = SimpleNamespace(
+        region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
+        dataset_id="weather",
+        template_config=SimpleNamespace(
+            all_dims=(), append_dim_start=pd.Timestamp("2026-01-01")
+        ),
+    )
+    store = SimpleNamespace(session=SimpleNamespace(snapshot_id="tip"))
+    for override in (None, pd.Timestamp("2026-01-01T08:00")):
+        manifest_scan.scan_manifest(
+            dataset,  # ty: ignore[invalid-argument-type]
+            store,  # ty: ignore[invalid-argument-type]
+            start=pd.Timestamp("2026-01-01"),
+            end=pd.Timestamp("2026-01-02"),
+            snapshot_metadata=metadata,
+            reference_time=reference,
+            publication_cutoff=override,
+            checkpoint_dir=tmp_path,
+        )
+    assert scan.call_count == 2
+    assert scan.call_args_list[0].kwargs["publication_cutoff"] == cutoff
+    assert scan.call_args_list[1].kwargs["publication_cutoff"] == pd.Timestamp(
+        "2026-01-01T08:00"
+    )
+    assert all(
+        call.kwargs["reference_time"] == reference for call in scan.call_args_list
+    )
+    assert len(list(tmp_path.iterdir())) == 2
+
+
+def test_max_cutoff_provenance_preserves_recorded_reference_time() -> None:
+    assert manifest_scan._scan_reference_time(
+        None,
+        None,
+        {
+            "publication_cutoff": pd.Timestamp.max.tz_localize("UTC").isoformat(),
+            "reference_time": "2026-01-01T01:00:00+01:00",
+        },
+    ) == pd.Timestamp("2026-01-01")
+
+
 def test_filtered_repair_skips_unselected_checkpoint_windows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

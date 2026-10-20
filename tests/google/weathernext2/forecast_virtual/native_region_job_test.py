@@ -10,11 +10,15 @@ import xarray as xr
 import zarr
 from zarr.storage import MemoryStore
 
+from reformatters.common import template_utils
 from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.region_job import LaunchScope
-from reformatters.common.storage import commit_if_icechunk
+from reformatters.common.storage import DatasetFormat, StorageConfig, commit_if_icechunk
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
+)
+from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
+    GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
 from reformatters.google.weathernext2.forecast_operational_virtual.template_config import (
     GoogleWeathernext2ForecastOperationalVirtualTemplateConfig,
@@ -37,10 +41,19 @@ from reformatters.google.weathernext_virtual.listing import (
     OBJECTS_LOCATION,
     PROXY_LOCATION_PREFIX,
 )
-from scripts.validation.manifest_scan import _scan_launch_scope
+from scripts.validation.manifest_scan import _scan_launch_scope, scan_manifest
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
+
+
+@pytest.fixture
+def delayed_publication(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        "publication_holdback",
+        pd.Timedelta("1h"),
+    )
 
 
 def _var(
@@ -303,6 +316,7 @@ def test_source_file_coords_are_independent_per_variable() -> None:
 
 def test_backfill_jobs_apply_the_holdback_to_the_current_clock(
     monkeypatch: pytest.MonkeyPatch,
+    delayed_publication: None,
 ) -> None:
     init_time = pd.Timestamp("2025-01-01T00:00")
     now = init_time + pd.Timedelta("18h") + PUBLICATION_HOLDBACK
@@ -368,7 +382,9 @@ def test_historical_validation_job_uses_final_fixed_window(
     ] == list(HISTORICAL.dimension_coordinates()["lead_time"])
 
 
-def test_operational_update_publishes_diagonal_window() -> None:
+def test_operational_update_publishes_diagonal_window(
+    delayed_publication: None,
+) -> None:
     fire_time = pd.Timestamp("2025-03-20T13:05")
     var = _var(OPERATIONAL, "temperature_2m")
 
@@ -425,7 +441,7 @@ def test_operational_update_publishes_diagonal_window() -> None:
     ],
 )
 def test_operational_update_template_ends_at_newest_publishable_init(
-    fire_time: pd.Timestamp, newest_init: pd.Timestamp
+    fire_time: pd.Timestamp, newest_init: pd.Timestamp, delayed_publication: None
 ) -> None:
     var = _var(OPERATIONAL, "temperature_2m")
     jobs, template = (
@@ -469,7 +485,124 @@ def test_direct_operational_update_uses_utc_clock(
 
     [job] = jobs
     assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
-    assert job.publication_cutoff == now - PUBLICATION_HOLDBACK
+    assert job.publication_cutoff == pd.Timestamp.max
+    assert job.reference_time == now
+
+
+def test_unrestricted_backfill_includes_every_future_lead() -> None:
+    reference = pd.Timestamp("2025-01-01T01:00")
+    jobs = GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+        tmp_store=Path("unused.zarr"),
+        template_ds=OPERATIONAL.get_template(pd.Timestamp("2025-01-01T06:00")),
+        append_dim="init_time",
+        all_data_vars=OPERATIONAL.data_vars,
+        reformat_job_name="unrestricted-backfill",
+        filter_variable_names=[OPERATIONAL.data_vars[0].path],
+        reference_time=reference,
+        append_dim_end=pd.Timestamp("2025-01-01T06:00"),
+    )
+    (job,) = jobs
+    assert job.publication_cutoff == pd.Timestamp.max
+    assert [coord.lead_time for coord in job.source_file_coords()] == list(
+        OPERATIONAL.dimension_coordinates()["lead_time"]
+    )
+    assert not job.held_back_source_file_coords()
+    metadata = job.commit_metadata()
+    assert metadata["publication_policy"] == "unrestricted"
+    assert metadata["reference_time"] == reference.tz_localize("UTC").isoformat()
+    assert "publication_cutoff" not in metadata
+    scope = LaunchScope.model_validate_json(metadata["launch_scope"])
+    assert scope.append_dim_end == pd.Timestamp("2025-01-01T06:00Z")
+    assert scope.filter_variable_names == [OPERATIONAL.data_vars[0].path]
+
+
+@pytest.mark.parametrize(
+    "fire", ["2025-03-20T12:59:59", "2025-03-20T13:05", "2025-03-20T19:05"]
+)
+def test_unrestricted_update_revisits_withheld_steps(fire: str) -> None:
+    reference = pd.Timestamp(fire)
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=OPERATIONAL.data_vars[:1],
+            reformat_job_name="unrestricted-update",
+            job_fire_time=reference,
+        )
+    )
+    (job,) = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    newest = (reference - pd.Timedelta("7h")).floor("6h")
+    assert template.to_dataset().get_index("init_time")[-1] == newest
+    coords = {(coord.init_time, coord.lead_time) for coord in job.source_file_coords()}
+    assert (newest, pd.Timedelta("360h")) in coords
+    older = newest - pd.Timedelta("1D")
+    assert older + pd.Timedelta("360h") > reference
+    assert (older, pd.Timedelta("360h")) in coords
+    assert not job.held_back_source_file_coords()
+    metadata = job.commit_metadata()
+    assert metadata["publication_policy"] == "unrestricted"
+    assert metadata["reference_time"] == reference.tz_localize("UTC").isoformat()
+    assert "launch_scope" in metadata
+
+
+@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("live_holdback", [None, pd.Timedelta("1h")])
+def test_scan_replays_operational_snapshot_policy(
+    unrestricted: bool,
+    live_holdback: pd.Timedelta | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        "publication_holdback",
+        live_holdback,
+    )
+    dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path="unused", format=DatasetFormat.ICECHUNK
+        )
+    )
+    start = pd.Timestamp("2025-01-01")
+    end = start + pd.Timedelta("12h")
+    template = OPERATIONAL.get_template(end)
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+    session = repo.writable_session("main")
+    template_utils.write_metadata(
+        template, session.store, "w-", consolidated=False, skip_icechunk_commit=True
+    )
+    session.store.set_virtual_ref(
+        "temperature_2m/c/0/0/59/0/0",
+        "https://example.com/future-step",
+        offset=0,
+        length=16,
+        validate_container=False,
+    )
+    metadata = {
+        "reference_time": "2025-01-01T13:00:00+00:00",
+        "launch_scope": LaunchScope(append_dim_end=end).model_dump_json(),
+    }
+    if unrestricted:
+        metadata["publication_policy"] = "unrestricted"
+    else:
+        metadata["publication_cutoff"] = "2025-01-01T12:00:00+00:00"
+        del metadata["reference_time"]
+    snapshot = session.commit("snapshot policy fixture", metadata=metadata)
+    result = scan_manifest(
+        dataset,
+        repo.readonly_session(snapshot_id=snapshot).store,
+        start=start,
+        end=end,
+        variables=["temperature_2m"],
+        snapshot_metadata=repo.lookup_snapshot(snapshot).metadata,
+        probe_workers=2,
+    )
+    assert result.file_availability == {
+        start: (1, 60) if unrestricted else (0, 2),
+        start + pd.Timedelta("6h"): (0, 60) if unrestricted else (0, 1),
+    }
 
 
 def test_object_listing_retries_transient_response() -> None:
@@ -508,6 +641,7 @@ def test_object_listing_retries_transient_response() -> None:
 
 def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(
     monkeypatch: pytest.MonkeyPatch,
+    delayed_publication: None,
 ) -> None:
     before = pd.Timestamp("2025-01-02T00:59:59")
     after = pd.Timestamp("2025-01-02T01:00:01")
@@ -642,7 +776,9 @@ def test_native_refs_and_paginated_queries_golden(
         ("2025-03-20T19:05", "2025-03-03T18:00", "2025-03-20T18:00"),
     ],
 )
-def test_operational_window_golden(fire: str, start: str, end: str) -> None:
+def test_operational_window_golden(
+    fire: str, start: str, end: str, delayed_publication: None
+) -> None:
     jobs, template = (
         GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
             primary_store=MemoryStore(),
@@ -688,8 +824,26 @@ def test_historical_backfill_is_unrestricted(monkeypatch: pytest.MonkeyPatch) ->
     assert not clock.called
 
 
+def test_historical_explicit_reference_time_preserves_cutoff() -> None:
+    reference = pd.Timestamp("2022-01-01T13:00")
+    jobs = GoogleWeathernext2ForecastHistoricalVirtualRegionJob.get_jobs(
+        tmp_store=Path("unused.zarr"),
+        template_ds=HISTORICAL.get_template(pd.Timestamp("2022-01-01T06:00")),
+        append_dim="init_time",
+        all_data_vars=HISTORICAL.data_vars,
+        reformat_job_name="historical",
+        reference_time=reference,
+    )
+    assert all(job.publication_cutoff == reference - pd.Timedelta("1h") for job in jobs)
+    assert all(job.reference_time == reference for job in jobs)
+    assert (
+        jobs[0].commit_metadata()["publication_cutoff"] == "2022-01-01T12:00:00+00:00"
+    )
+
+
 def test_launch_cutoff_survives_reversed_commits_and_hour_boundary_retry(
     monkeypatch: pytest.MonkeyPatch,
+    delayed_publication: None,
 ) -> None:
 
     reference = pd.Timestamp("2025-01-02T00:59:59")

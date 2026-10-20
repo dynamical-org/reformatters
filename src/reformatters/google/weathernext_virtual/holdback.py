@@ -12,4 +12,4 @@ def utc_now() -> Timestamp:
 def is_publishable(
     init_time: Timestamp, lead_time: Timedelta, cutoff: Timestamp
 ) -> bool:
-    return init_time + lead_time <= cutoff
+    return cutoff == pd.Timestamp.max or init_time + lead_time <= cutoff

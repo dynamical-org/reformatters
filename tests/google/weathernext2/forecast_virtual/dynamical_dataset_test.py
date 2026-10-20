@@ -4,6 +4,7 @@ from pathlib import Path
 
 import icechunk
 import pandas as pd
+import pytest
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -65,13 +66,17 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
     assert _resolved_split_size(split, "/temperature_2m") == 128
 
 
+@pytest.mark.parametrize("holdback", [None, pd.Timedelta("1h")])
 def test_operational_product_has_holdback_aware_crons_and_splits(
     tmp_path: Path,
+    holdback: pd.Timedelta | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
         primary_storage_config=_storage(tmp_path)
     )
 
+    monkeypatch.setattr(dataset.region_job_class, "publication_holdback", holdback)
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
@@ -84,16 +89,24 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
-    assert update.suspend is False
+    assert update.suspend is True
     (current,) = [
         item
         for item in dataset.validators()
         if isinstance(item, validation.CheckCurrentData)
     ]
     assert current.max_delay == timedelta(hours=12)
+    (completeness,) = [
+        item
+        for item in dataset.validators()
+        if isinstance(item, validation.CheckVirtualManifestCompleteness)
+    ]
+    assert completeness.min_present_fraction == (
+        (0.05, 1.0) if holdback is None else (1.0,)
+    )
     assert any(
         isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
-    )
+    ) == (holdback is not None)
     (decode,) = [
         item
         for item in dataset.validators()
@@ -103,7 +116,7 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
     assert decode.max_positions == 2
     assert dataset.region_job_class.operational_update_window == timedelta(days=17)
     description = dataset.template_config.dataset_attributes.description
-    assert "recent initialization times are intentionally partial" in description
+    assert "partial" not in description
     split = dataset.icechunk_virtual_config.manifest_split
     assert _resolved_split_size(split, "/pressure_level/temperature") == 4
     assert _resolved_split_size(split, "/temperature_2m") == 32

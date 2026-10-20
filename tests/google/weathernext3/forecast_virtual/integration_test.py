@@ -34,9 +34,13 @@ from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS, j
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.parametrize("holdback", [None, pd.Timedelta("1h")])
 def test_reference_time_survives_clock_boundary_and_retry(
-    dataset: GoogleWeathernext3ForecastVirtualDataset, monkeypatch: pytest.MonkeyPatch
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    monkeypatch: pytest.MonkeyPatch,
+    holdback: pd.Timedelta | None,
 ) -> None:
+    monkeypatch.setattr(dataset.region_job_class, "publication_holdback", holdback)
     reference = pd.Timestamp("2026-01-02T00:59:59Z").tz_localize(None)
     clock = Mock(
         side_effect=[
@@ -76,9 +80,19 @@ def test_reference_time_survives_clock_boundary_and_retry(
         assert job.launch_scope.append_dim_end == pd.Timestamp("2026-01-02")
         assert job.launch_scope.filter_variable_names == [config.data_vars[0].path]
         assert job.reference_time == reference.tz_localize(None)
-        assert job.publication_cutoff == pd.Timestamp("2026-01-01T23:59:59")
+        if holdback is None:
+            assert job.publication_cutoff == pd.Timestamp.max
+            assert job.commit_metadata()["publication_policy"] == "unrestricted"
+            assert "publication_cutoff" not in job.commit_metadata()
+        else:
+            assert job.publication_cutoff == pd.Timestamp("2026-01-01T23:59:59")
+            assert (
+                job.commit_metadata()["publication_cutoff"]
+                == "2026-01-01T23:59:59+00:00"
+            )
         assert (
-            job.commit_metadata()["publication_cutoff"] == "2026-01-01T23:59:59+00:00"
+            job.commit_metadata()["reference_time"]
+            == reference.tz_localize("UTC").isoformat()
         )
     assert [job.source_file_coords() for job in jobs] == [
         job.source_file_coords() for job in retry
@@ -215,14 +229,26 @@ def test_source_audit_catches_future_source_under_eligible_target(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("live_holdback", [None, pd.Timedelta("1h")])
 @pytest.mark.parametrize("route", ["direct", "availability"])
 def test_scan_defaults_probe_every_statistic_and_count_each_lead(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     route: str,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    unrestricted: bool,
+    live_holdback: pd.Timedelta | None,
 ) -> None:
+    monkeypatch.setattr(dataset.region_job_class, "publication_holdback", live_holdback)
     job = job_for(dataset, "2026-01-01T03:00")
+    if unrestricted:
+        job = job.model_copy(
+            update={
+                "publication_cutoff": pd.Timestamp.max,
+                "reference_time": pd.Timestamp("2026-01-01T04:00"),
+            }
+        )
     repo = icechunk.Repository.create(icechunk.in_memory_storage())
     session = repo.writable_session("main")
     template_utils.write_metadata(
@@ -278,9 +304,13 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
         monkeypatch.setattr(availability, "open_icechunk_repository", lambda url: repo)
         counts = availability.run_manifest_scan(ctx)
         assert (tmp_path / ctx.unavailable_timestamps_file).exists()
-    expected = {start: (1, 3)}
-    if dataset.template_config.horizon_hours == 48:
-        expected[start + pd.Timedelta("1h")] = (0, 2)
+    horizon = dataset.template_config.horizon_hours
+    expected = {start: (1, horizon if unrestricted else 3)}
+    if unrestricted or horizon == 48:
+        expected[start + dataset.template_config.append_dim_frequency] = (
+            0,
+            horizon if unrestricted else 2,
+        )
     assert counts == expected
 
 
@@ -301,9 +331,13 @@ def test_wn3_scan_requires_provenance(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.parametrize("holdback", [None, pd.Timedelta("1h")])
 def test_update_metadata_records_reference_and_launch_scope(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
+    holdback: pd.Timedelta | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(dataset.region_job_class, "publication_holdback", holdback)
     config = dataset.template_config
     fire = pd.Timestamp("2026-02-01T05:10:00Z").tz_localize(None)
     jobs, template = dataset.region_job_class.operational_update_jobs(
@@ -317,10 +351,13 @@ def test_update_metadata_records_reference_and_launch_scope(
     )
     (job,) = jobs
     assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
-    cutoff = fire - pd.Timedelta("1h")
-    end = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
-        config.append_dim_frequency
-    ) + config.append_dim_frequency
+    cutoff = fire - holdback if holdback is not None else pd.Timestamp.max
+    newest = (
+        (cutoff.floor("h") - pd.Timedelta("1h")).floor(config.append_dim_frequency)
+        if holdback is not None
+        else (fire - pd.Timedelta("6h")).floor(config.append_dim_frequency)
+    )
+    end = newest + config.append_dim_frequency
     start = end - job.operational_update_window
     assert job.reference_time == fire
     assert job.publication_cutoff == cutoff
@@ -337,7 +374,11 @@ def test_update_metadata_records_reference_and_launch_scope(
         == end - config.append_dim_frequency
     )
     metadata = job.commit_metadata()
-    assert metadata["publication_cutoff"] == cutoff.tz_localize("UTC").isoformat()
+    if holdback is None:
+        assert metadata["publication_policy"] == "unrestricted"
+        assert "publication_cutoff" not in metadata
+    else:
+        assert metadata["publication_cutoff"] == cutoff.tz_localize("UTC").isoformat()
     assert metadata["reference_time"] == fire.tz_localize("UTC").isoformat()
     scope = json.loads(metadata["launch_scope"])
     assert scope["append_dim_end"] == end.tz_localize("UTC").isoformat()

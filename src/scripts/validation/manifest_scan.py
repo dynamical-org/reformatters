@@ -392,9 +392,11 @@ def _scan_reference_time(
 ) -> pd.Timestamp | None:
     metadata = snapshot_metadata or {}
     if reference_time is None:
+        if publication_cutoff is None and "reference_time" in metadata:
+            reference_time = pd.Timestamp(metadata["reference_time"])
         if publication_cutoff is None and "publication_cutoff" in metadata:
             publication_cutoff = pd.Timestamp(metadata["publication_cutoff"])
-        if publication_cutoff is not None:
+        if reference_time is None and publication_cutoff is not None:
             if publication_cutoff.tz is not None:
                 publication_cutoff = publication_cutoff.tz_convert("UTC").tz_localize(
                     None
@@ -402,8 +404,6 @@ def _scan_reference_time(
             if publication_cutoff == pd.Timestamp.max:
                 return None
             reference_time = publication_cutoff + PUBLICATION_HOLDBACK
-        elif "reference_time" in metadata:
-            reference_time = pd.Timestamp(metadata["reference_time"])
     if reference_time is not None and reference_time.tz is not None:
         reference_time = reference_time.tz_convert("UTC").tz_localize(None)
     return reference_time
@@ -485,10 +485,24 @@ def _validate_scan_provenance(
         assert reference_time is not None, (
             "WeatherNext scans require a recorded cutoff or explicit reference_time"
         )
-    if unrestricted:
-        assert not strict, (
-            "Unrestricted publication is only supported for legacy WeatherNext"
+    if strict and unrestricted:
+        assert "launch_scope" in metadata, (
+            "WeatherNext scans require a recorded launch_scope"
         )
+
+
+def _scan_publication_cutoff(
+    publication_cutoff: pd.Timestamp | None,
+    metadata: Mapping[str, Any],
+) -> pd.Timestamp | None:
+    if publication_cutoff is None:
+        if metadata.get("publication_policy") == "unrestricted":
+            return pd.Timestamp.max
+        if "publication_cutoff" in metadata:
+            publication_cutoff = pd.Timestamp(metadata["publication_cutoff"])
+    if publication_cutoff is not None and publication_cutoff.tz is not None:
+        publication_cutoff = publication_cutoff.tz_convert("UTC").tz_localize(None)
+    return publication_cutoff
 
 
 def scan_manifest(
@@ -534,6 +548,7 @@ def scan_manifest(
     metadata = snapshot_metadata or {}
     if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
         _validate_scan_provenance(dataset.region_job_class, metadata, reference_time)
+        publication_cutoff = _scan_publication_cutoff(publication_cutoff, metadata)
         if replay_launch_scope:
             assert "launch_scope" in metadata, (
                 "Launch-scope replay requires recorded launch_scope"
@@ -559,6 +574,7 @@ def scan_manifest(
             [
                 store.session.snapshot_id,
                 str(reference_time),
+                str(publication_cutoff),
                 *probe_dims,
                 str(admission_units),
                 str(replay_launch_scope),
@@ -607,6 +623,7 @@ def scan_manifest(
                 variables=variables,
                 probe_workers=probe_workers,
                 reference_time=reference_time,
+                publication_cutoff=publication_cutoff,
                 probe_dims=probe_dims,
                 admission_units=admission_units,
                 filter_contains=filter_contains,
@@ -725,6 +742,7 @@ def _scan_window(
     variables: list[str] | None,
     probe_workers: int | None = None,
     reference_time: pd.Timestamp | None = None,
+    publication_cutoff: pd.Timestamp | None = None,
     probe_dims: tuple[str, ...] = (),
     admission_units: bool = False,
     filter_contains: list[pd.Timestamp] | None = None,
@@ -741,6 +759,13 @@ def _scan_window(
             filter_contains=filter_contains,
         ),
     )
+    if publication_cutoff is not None:
+        jobs = [
+            job.model_copy(update={"publication_cutoff": publication_cutoff})
+            if isinstance(job, WeatherNextVirtualRegionJob)
+            else job
+            for job in jobs
+        ]
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
     lead_limits = expected_lead_limits(store)
     group = zarr.open_group(store, mode="r")

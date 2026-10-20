@@ -50,7 +50,7 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
     @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        description = "Weather forecasts from the 64-member Google DeepMind WeatherNext 3 ensemble model. Forecast values are published hourly once their valid time is at least one hour in the past, so recent initialization times are intentionally partial."
+        description = "Weather forecasts from the 64-member Google DeepMind WeatherNext 3 ensemble model."
         if self.grid_degrees == 0.05:
             description += " These variables are WeatherNext 3's station-trained head, defined everywhere."
         return DatasetAttributes(
