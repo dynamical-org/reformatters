@@ -14,18 +14,22 @@ NON_ENDORSEMENT = "dynamical.org and this dataset are not sponsored, endorsed, o
 
 
 def render_notice_files(
-    attributes: DatasetAttributes, *, product: str
+    attributes: DatasetAttributes,
+    *,
+    product: str,
+    modifications: str,
+    usage_restrictions: str,
+    non_endorsement: str,
 ) -> dict[str, bytes]:
-    assert attributes.modifications is not None
     paragraphs = (
         COPYRIGHT,
         f"{attributes.name} ({attributes.dataset_id}) is published by dynamical.org from {product} experimental forecast data.",
         "Data relating to a time less than 1 hour ago and the future is Real-Time Experimental Data governed by the GDM Real-Time Weather Forecasting Experimental Data Terms of Use. TERMS_OF_USE.pdf beside this file is a copy of those terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice. Data relating to a time 1 hour ago or more is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). A forecast value relates to the time in its valid_time coordinate (init_time + lead_time).",
         LEGALLY_BINDING_NOTICE,
-        f"Modifications: {attributes.modifications}",
+        f"Modifications: {modifications}",
         f"Attribution: {attributes.attribution}",
-        USAGE_RESTRICTIONS,
-        NON_ENDORSEMENT,
+        usage_restrictions,
+        non_endorsement,
     )
     return {
         "TERMS_OF_USE.pdf": Path(__file__)
@@ -44,8 +48,19 @@ def notice_revision(files: Mapping[str, bytes]) -> str:
 
 
 def repo_notice_files(
-    attributes: DatasetAttributes, *, product: str
+    attributes: DatasetAttributes,
+    *,
+    product: str,
+    modifications: str,
+    usage_restrictions: str,
+    non_endorsement: str,
 ) -> dict[str, bytes]:
-    files = render_notice_files(attributes, product=product)
+    files = render_notice_files(
+        attributes,
+        product=product,
+        modifications=modifications,
+        usage_restrictions=usage_restrictions,
+        non_endorsement=non_endorsement,
+    )
     revision = notice_revision(files)
     return {f"notices/{revision}/{name}": data for name, data in files.items()}

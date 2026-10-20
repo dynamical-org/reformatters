@@ -11,8 +11,7 @@
     "time_domain": "Forecasts initialized 2022-01-01 00:00:00 UTC to 2024-12-31 18:00:00",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 6-360 hours (0.25-15 days) ahead",
-    "forecast_resolution": "6 hourly",
-    "modifications": "The publisher, dynamical.org, restructured the source data into an Icechunk virtual Zarr dataset of references to the unmodified source chunks, renamed its variables and dimensions, and applies read-time filters that convert temperatures from kelvin to degrees Celsius, geopotential to geopotential height (dividing by 9.80665 m s-2), and 6-hour total precipitation from metres of water equivalent to kg m-2. For pressure-level variables, a read-time filter moves the pressure-level axis after the spatial axes. Values are otherwise the unchanged model output."
+    "forecast_resolution": "6 hourly"
   },
   "zarr_format": 3,
   "node_type": "group"

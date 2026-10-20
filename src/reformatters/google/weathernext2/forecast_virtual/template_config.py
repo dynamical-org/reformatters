@@ -134,7 +134,6 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                 "before use."
             ),
             license="CC-BY-4.0",
-            modifications=self.modifications,
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain=(
@@ -144,24 +143,6 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 6-360 hours (0.25-15 days) ahead",
             forecast_resolution="6 hourly",
-        )
-
-    @property
-    def modifications(self) -> str:
-        pressure_reordering = (
-            " For pressure-level variables, a read-time filter moves the "
-            "pressure-level axis after the spatial axes."
-            if self.source_layout == "historical"
-            else ""
-        )
-        return (
-            "The publisher, dynamical.org, restructured the source data into an "
-            "Icechunk virtual Zarr dataset of references to the unmodified source "
-            "chunks, renamed its variables and dimensions, and applies read-time "
-            "filters that convert temperatures from kelvin to degrees Celsius, "
-            "geopotential to geopotential height (dividing by 9.80665 m s-2), and "
-            "6-hour total precipitation from metres of water equivalent to kg m-2."
-            f"{pressure_reordering} Values are otherwise the unchanged model output."
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:

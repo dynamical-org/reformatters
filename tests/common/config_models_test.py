@@ -203,9 +203,11 @@ def test_mask_source_fill_value_requires_exact_float32_match() -> None:
 
 class TestDatasetAttributes:
     @pytest.mark.parametrize("license_name", ["CC-BY-4.0", "other"])
-    @pytest.mark.parametrize("notice_bits", range(16))
-    def test_complete_license_notices_if_and_only_if_other_license(
-        self, license_name: str, notice_bits: int
+    @pytest.mark.parametrize(
+        "notice_files", [None, (), ("https://example.com/notices/NOTICE.txt",)]
+    )
+    def test_spdx_license_with_optional_notice_files(
+        self, license_name: str, notice_files: tuple[str, ...] | None
     ) -> None:
         attributes = {
             "dataset_id": "test-dataset",
@@ -218,22 +220,13 @@ class TestDatasetAttributes:
             "spatial_resolution": "0.25 degrees (~20km)",
             "time_domain": "2020-01-01 to present",
             "time_resolution": "1 hour",
+            "notice_files": notice_files,
         }
-        notices = {
-            "copyright": "Test copyright",
-            "terms_of_use": "Test terms",
-            "usage_restrictions": "Test restrictions",
-            "notice_files": ("https://example.com/notices/NOTICE.txt",),
-        }
-        attributes.update(
-            (name, value)
-            for index, (name, value) in enumerate(notices.items())
-            if notice_bits & (1 << index)
-        )
-        if (license_name == "other") == (notice_bits == 15):
-            DatasetAttributes.model_validate(attributes)
+        if license_name == "CC-BY-4.0":
+            attrs = DatasetAttributes.model_validate(attributes)
+            assert attrs.notice_files == notice_files
         else:
-            with pytest.raises(ValidationError, match=r"license|License"):
+            with pytest.raises(ValidationError, match="license"):
                 DatasetAttributes.model_validate(attributes)
 
     @pytest.mark.parametrize(
@@ -254,14 +247,11 @@ class TestDatasetAttributes:
                     "name": "Test Dataset",
                     "description": "A test dataset.",
                     "attribution": "Test attribution.",
-                    "license": "other",
+                    "license": "CC-BY-4.0",
                     "spatial_domain": "Global",
                     "spatial_resolution": "0.25 degrees (~20km)",
                     "time_domain": "2020-01-01 to present",
                     "time_resolution": "1 hour",
-                    "copyright": "Test copyright",
-                    "terms_of_use": "Test terms",
-                    "usage_restrictions": "Test restrictions",
                     "notice_files": (url,),
                 }
             )

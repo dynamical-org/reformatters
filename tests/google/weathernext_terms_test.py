@@ -30,6 +30,13 @@ from reformatters.google.weathernext_terms import (
     repo_notice_files,
 )
 
+NOTICE_OPTIONS = {
+    "product": GoogleWeathernext2ForecastOperationalVirtualTemplateConfig.product,
+    "modifications": GoogleWeathernext2ForecastOperationalVirtualTemplateConfig.modifications,
+    "usage_restrictions": GoogleWeathernext2ForecastOperationalVirtualTemplateConfig.usage_restrictions,
+    "non_endorsement": GoogleWeathernext2ForecastOperationalVirtualTemplateConfig.non_endorsement,
+}
+
 
 def test_terms_constants_and_pdf_are_pinned() -> None:
     assert (
@@ -59,7 +66,7 @@ def test_terms_constants_and_pdf_are_pinned() -> None:
     )
     files = render_notice_files(
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes,
-        product="Google WeatherNext 2",
+        **NOTICE_OPTIONS,
     )
     assert hashlib.sha256(files["TERMS_OF_USE.pdf"]).hexdigest() == TERMS_SHA256
 
@@ -68,11 +75,11 @@ def test_notice_rendering_and_revision() -> None:
     attributes = (
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
     )
-    files = render_notice_files(attributes, product="Google WeatherNext 2")
+    files = render_notice_files(attributes, **NOTICE_OPTIONS)
     assert {name: hashlib.sha256(data).hexdigest() for name, data in files.items()} == {
         "TERMS_OF_USE.pdf": "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654",
         "LEGALLY_BINDING_TERMS_OF_USE.txt": "35a0deb0a5a3c4436a7fffe6e7253baa4c43ec41804a449600e44b233d1b443d",
-        "NOTICE.txt": "13a2c7ad25d7365b797d145a643f14007760e855617e5aba9eeba3c997bd7587",
+        "NOTICE.txt": "9acca0faccb920328e2f47e613374d77ba421827c5e5111307a0fd124330b7b2",
     }
     assert set(files) == {
         "TERMS_OF_USE.pdf",
@@ -87,7 +94,7 @@ def test_notice_rendering_and_revision() -> None:
         "Google WeatherNext 2 operational forecast, virtual (google-weathernext2-forecast-operational-virtual) is published by dynamical.org from Google WeatherNext 2 experimental forecast data.",
         "Data relating to a time less than 1 hour ago and the future is Real-Time Experimental Data governed by the GDM Real-Time Weather Forecasting Experimental Data Terms of Use. TERMS_OF_USE.pdf beside this file is a copy of those terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice. Data relating to a time 1 hour ago or more is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). A forecast value relates to the time in its valid_time coordinate (init_time + lead_time).",
         LEGALLY_BINDING_NOTICE,
-        f"Modifications: {attributes.modifications}",
+        f"Modifications: {NOTICE_OPTIONS['modifications']}",
         f"Attribution: {attributes.attribution}",
         USAGE_RESTRICTIONS,
         NON_ENDORSEMENT,
@@ -105,10 +112,10 @@ def test_notice_rendering_and_revision() -> None:
         + b"\0"
     ).hexdigest()[:12]
     assert notice_revision(files) == expected_revision
-    assert expected_revision == "9d27d0777f75"
+    assert expected_revision == "431fa8bfd766"
     assert notice_revision(dict(reversed(list(files.items())))) == expected_revision
     assert notice_revision(files | {"NOTICE.txt": b"Changed\n"}) != expected_revision
-    assert repo_notice_files(attributes, product="Google WeatherNext 2") == {
+    assert repo_notice_files(attributes, **NOTICE_OPTIONS) == {
         f"notices/{expected_revision}/{name}": data for name, data in files.items()
     }
 
@@ -117,8 +124,10 @@ def test_notice_product_is_supplied_by_caller() -> None:
     attributes = (
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
     )
-    wn2 = render_notice_files(attributes, product="Google WeatherNext 2")
-    wn3 = render_notice_files(attributes, product="Google WeatherNext 3")
+    wn2 = render_notice_files(attributes, **NOTICE_OPTIONS)
+    wn3 = render_notice_files(
+        attributes, **(NOTICE_OPTIONS | {"product": "Google WeatherNext 3"})
+    )
     assert wn3 == wn2 | {
         "NOTICE.txt": wn2["NOTICE.txt"].replace(
             b"from Google WeatherNext 2 experimental forecast data.",
@@ -127,8 +136,30 @@ def test_notice_product_is_supplied_by_caller() -> None:
         )
     }
     revision = notice_revision(wn3)
-    assert repo_notice_files(attributes, product="Google WeatherNext 3") == {
-        f"notices/{revision}/{name}": data for name, data in wn3.items()
+    assert repo_notice_files(
+        attributes, **(NOTICE_OPTIONS | {"product": "Google WeatherNext 3"})
+    ) == {f"notices/{revision}/{name}": data for name, data in wn3.items()}
+
+
+@pytest.mark.parametrize(
+    "option", ["modifications", "usage_restrictions", "non_endorsement"]
+)
+def test_notice_text_is_supplied_by_caller(option: str) -> None:
+    attributes = (
+        GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
+    )
+    original = render_notice_files(attributes, **NOTICE_OPTIONS)
+    options = NOTICE_OPTIONS | {option: "A caller-supplied notice."}
+    changed = render_notice_files(attributes, **options)
+    assert changed == original | {
+        "NOTICE.txt": original["NOTICE.txt"].replace(
+            NOTICE_OPTIONS[option].encode(), options[option].encode(), 1
+        )
+    }
+    revision = notice_revision(changed)
+    assert revision != notice_revision(original)
+    assert repo_notice_files(attributes, **options) == {
+        f"notices/{revision}/{name}": data for name, data in changed.items()
     }
 
 
@@ -141,10 +172,7 @@ def test_operational_notice_urls_use_canonical_public_storage(
         primary_storage_config=Weathernext2IcechunkDatasetStorageConfig()
     )
     attrs = dataset.template_config.dataset_attributes
-    assert attrs.license == "other"
-    assert attrs.copyright == COPYRIGHT
-    assert attrs.terms_of_use == LEGALLY_BINDING_NOTICE
-    assert attrs.usage_restrictions == USAGE_RESTRICTIONS
+    assert attrs.license == "CC-BY-4.0"
     assert attrs.notice_files == tuple(
         f"{dataset.store_factory.primary_url(public=True)}/{name}"
         for name in dataset.repo_files()
@@ -168,34 +196,34 @@ def test_historical_license_and_attribution_are_unchanged() -> None:
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes
     )
     assert historical.license == "CC-BY-4.0"
-    assert historical.copyright is None
-    assert historical.terms_of_use is None
-    assert historical.usage_restrictions is None
     assert historical.notice_files is None
-    historic_attribution = historical.attribution.removeprefix(
-        "Google requires this attribution: "
+    assert (
+        "https://developers.google.com/earth-engine/datasets/catalog/"
+        in historical.attribution
     )
     assert operational.attribution == (
-        "Google requires this attribution for data relating to a time less than 1 hour ago "
-        f"and the future: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
-        "For data relating to a time 1 hour ago or more, Google requires this attribution: "
-        + historic_attribution
+        "Google WeatherNext 2 forecast data processed by dynamical.org "
+        "from Google's WeatherNext 2 experimental data. "
+        f"{COPYRIGHT}. {REAL_TIME_ATTRIBUTION}"
+    )
+    modifications = NOTICE_OPTIONS["modifications"]
+    assert "temperatures from kelvin to degrees Celsius" in modifications
+    assert "dividing by 9.80665 m s-2" in modifications
+    assert (
+        "6-hour total precipitation from metres of water equivalent to kg m-2"
+        in modifications
     )
     for config in (
         GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig(),
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(),
     ):
         attrs = config.dataset_attributes
-        assert attrs.modifications is not None
-        assert "temperatures from kelvin to degrees Celsius" in attrs.modifications
-        assert "dividing by 9.80665 m s-2" in attrs.modifications
-        assert (
-            "6-hour total precipitation from metres of water equivalent to kg m-2"
-            in attrs.modifications
-        )
-        assert ("moves the pressure-level axis" in attrs.modifications) == (
-            config.source_layout == "historical"
-        )
+        assert not {
+            "copyright",
+            "terms_of_use",
+            "usage_restrictions",
+            "modifications",
+        }.intersection(attrs.model_dump())
         for group in ("", "pressure_level"):
             path = config.template_path() / group / "zarr.json"
             assert json.loads(path.read_text())["attributes"] == attrs.model_dump(

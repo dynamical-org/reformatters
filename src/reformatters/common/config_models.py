@@ -47,8 +47,8 @@ type SpatialResolution = Literal[
     "4 km",
     "36 km",
 ]
-# Use "other" for terms not represented by a supported SPDX license identifier.
-type License = Literal["CC-BY-4.0", "other"]
+# Only SPDX license identifiers (https://spdx.org/licenses/) should be added to this type.
+type License = Literal["CC-BY-4.0"]
 
 
 class DatasetAttributes(FrozenBaseModel):
@@ -64,23 +64,10 @@ class DatasetAttributes(FrozenBaseModel):
     time_resolution: AttributeStr
     forecast_domain: AttributeStr | None = None
     forecast_resolution: AttributeStr | None = None
-    copyright: str | None = None
-    terms_of_use: str | None = None
-    usage_restrictions: str | None = None
-    modifications: Sentence | None = None
     notice_files: tuple[str, ...] | None = None
 
     @pydantic.model_validator(mode="after")
-    def validate_license_notices(self) -> DatasetAttributes:
-        notices = (
-            self.copyright,
-            self.terms_of_use,
-            self.usage_restrictions,
-            self.notice_files,
-        )
-        assert (self.license == "other") == all(notices), (
-            "license='other' if and only if all license notices are set"
-        )
+    def validate_notice_files(self) -> DatasetAttributes:
         for url in self.notice_files or ():
             parsed = urlsplit(url)
             assert parsed.scheme == "https", (
