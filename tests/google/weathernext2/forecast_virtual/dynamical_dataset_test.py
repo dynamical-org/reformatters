@@ -103,7 +103,9 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
     assert decode.max_positions == 2
     assert dataset.region_job_class.operational_update_window == timedelta(days=17)
     description = dataset.template_config.dataset_attributes.description
-    assert "recent initialization times are intentionally partial" in description
+    assert description == (
+        "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model."
+    )
     split = dataset.icechunk_virtual_config.manifest_split
     assert _resolved_split_size(split, "/pressure_level/temperature") == 4
     assert _resolved_split_size(split, "/temperature_2m") == 32
