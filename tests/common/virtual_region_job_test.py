@@ -27,6 +27,7 @@ import pytest
 import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
+from icechunk.store import IcechunkStore
 from pydantic import ValidationError, computed_field
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
@@ -46,6 +47,7 @@ from reformatters.common.region_job import (
     CoordinateValue,
     SourceFileCoord,
 )
+from reformatters.common.retry import DeadlineExceededError
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -354,6 +356,72 @@ def _process_virtual(
     readonly = primary_repo.readonly_session(branch).store
     remaining = job.filter_already_present(job.source_file_coords(), readonly)
     job.process_virtual(primary_repo, list(replica_repos), branch, remaining)
+
+
+@pytest.mark.parametrize("phase", ["build", "emit"])
+def test_expired_write_deadline_discards_uncommitted_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template = _create_template_ds(1)
+    template_utils.write_metadata(template, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    before = repo.lookup_branch("main")
+    deadline = pd.Timestamp("2026-10-20 19:08")
+    now = deadline - pd.Timedelta(seconds=1)
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, **kwargs: now))
+    job = _make_region_job(template, region=slice(0, 1)).model_copy(
+        update={"write_deadline": deadline}
+    )
+    if phase == "build":
+        original = VirtualTestRegionJob.process_virtual_refs
+
+        def build(
+            self: VirtualTestRegionJob, remaining: Sequence[VirtualTestSourceFileCoord]
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            nonlocal now
+            for batch in original(self, remaining):
+                now = deadline
+                yield batch
+
+        monkeypatch.setattr(VirtualTestRegionJob, "process_virtual_refs", build)
+    else:
+        original_emit = VirtualTestRegionJob._emit_refs
+
+        def emit(
+            self: VirtualTestRegionJob,
+            stores: Sequence[IcechunkStore],
+            refs: Sequence[VirtualRef],
+        ) -> None:
+            nonlocal now
+            original_emit(self, stores, refs)
+            now = deadline
+
+        monkeypatch.setattr(VirtualTestRegionJob, "_emit_refs", emit)
+    with pytest.raises(DeadlineExceededError):
+        _process_virtual(job, repo)
+    assert repo.lookup_branch("main") == before
+
+
+def test_expired_refresh_deadline_starts_no_metadata_write(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path)
+    template = _create_template_ds(1)
+    template_utils.write_metadata(template, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    before = repo.lookup_branch("main")
+    template.attrs["title"] = "changed"
+    with pytest.raises(DeadlineExceededError):
+        template_utils.refresh_store_metadata(
+            dataset.store_factory,
+            template,
+            "init_time",
+            tmp_path / "refresh.zarr",
+            consolidated=False,
+            deadline=pd.Timestamp("2000-01-01"),
+        )
+    assert repo.lookup_branch("main") == before
 
 
 def _assert_store_values(store: object, n_inits: int) -> None:
@@ -924,6 +992,7 @@ def test_partial_and_probe_missing_files_do_not_block_siblings(
             return [ref._replace(data_var=var) for var in variables]
 
     job = PartialFilesJob(
+        poll_deadline=pd.Timestamp.now(),
         tmp_store=Path("unused-tmp.zarr"),
         template_ds=template_ds,
         data_vars=[
