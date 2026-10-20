@@ -6,7 +6,7 @@ Operational updates revisit 17 days of initializations: the 15-day forecast hori
 
 The publication switch is `GoogleWeathernext2ForecastVirtualRegionJob.publication_holdback` in `src/reformatters/google/weathernext2/forecast_virtual/region_job.py`. `None` publishes every available step. Set it to `pd.Timedelta("1h")` to admit only steps with `init_time + lead_time <= scheduled_fire_time - 1h`; a zero holdback still excludes future valid times. Delayed backfills capture the current UTC time minus one hour once per `get_jobs()` call. Historical processing ignores the switch. Delayed mode also restores the template extent and `CheckNoRefsInsideHoldback` validator. That validator probes representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
 
-Unrestricted updates include initializations through `floor_6h(scheduled_fire_time - 7h)`. The seven-hour delay tracks source landing, independently of the publication policy: all leads arrive together, typically about 6–7.5 hours after initialization. It preserves the existing update extent while admitting all available leads. Manifest completeness requires at least 5% of the newest ingested initialization and all of every older initialization; delayed mode retains full completeness for its eligible steps.
+Unrestricted updates include initializations through `floor_6h(scheduled_fire_time - 7h)`. The seven-hour source-landing delay is a scheduling heuristic, not an availability guarantee, and is independent of forecast valid time: all 60 leads of that init are candidates. Source files typically arrive together about 6–7.5 hours after initialization. Manifest completeness requires at least 5% of the newest ingested initialization and all of every older initialization; delayed mode retains full completeness for its eligible steps. WN2 reserves five minutes of its 30-minute pod deadline for validation, ending polling at scheduled fire plus 25 minutes.
 
 Reinstating the delay also requires redeploying the valid-time gate in the `weathernext-proxy-worker` Worker in `dynamical-org/ops`. Removing Icechunk refs alone cannot block guessable source paths or listing routes. Follow the containment order below.
 
@@ -20,19 +20,42 @@ The daily `WeatherNext Terms check` workflow compares Google's live PDF with `sr
 
 ## Unrestricted rollout
 
-The operational update cron is suspended in code. Keep it suspended until the held-back backlog has been backfilled: an update builds every available source group in a tick into one batch, so this backlog would put millions of refs into one commit. Backfill mode splits work by manifest window.
+Keep the operational update cron suspended in code. Deploy the unrestricted reformatter and the Worker's unrestricted chunk and listing access, and drain active writers. Do not use the first operational update to fill the backlog. Unrestricted updates reject oversized pending sets before source discovery; use the fixed-range backfill below. Backfill mode splits work by manifest window. WN3 is not on main.
 
-1. Deploy the suspended cron and unrestricted reformatter, wait for running writers to finish, then deploy the proxy Worker's unrestricted chunk and listing access.
-2. Choose the scheduled fire `F` for the controlled update. Set `WINDOW_END = floor_6h(F - 7h) + 6h` and `WINDOW_START = WINDOW_END - 17 days`, using full ISO timestamps with seconds. The end is exclusive and must not precede the store's committed end. If a long suspension leaves older gaps, move the start back to include them. Run the targeted backfill with the sizing used below for withdrawal repairs:
+1. At suspension, record the last successful old-policy snapshot, its scheduled fire, and its `publication_cutoff` (fire minus one hour). In that pinned snapshot, record `WITHHELD_START`: the oldest init whose last lead was not yet past the old cutoff, using `init_time + expected_forecast_length > publication_cutoff`. For WN2 this is the first six-hour init strictly after `publication_cutoff - 360h`. Inventory any older outage gaps separately.
+2. Pin the rollout reference time `F`. The exclusive `ROLLOUT_END` is `floor_6h(F - 7h) + 6h`. This landing extent is a scheduling heuristic, not a guarantee. Backfill the fixed range `[WITHHELD_START, ROLLOUT_END)`. Keep that start if rollout is delayed; never replace it with a freshly computed `now - 17 days`. Extend the end for later landing inits as needed, and repair separately inventoried older outages. Use full ISO timestamps with seconds precision.
+3. Pilot one dense, fully landed four-init WN2 manifest window within that fixed range and the committed extent at `--jobs-per-pod 4 --max-parallelism 1`. Set `PILOT_START` on a four-init manifest boundary and `PILOT_END` one day later. A single worker processes all four one-init jobs and builds one four-init commit. Record peak RSS and commit duration for that commit before choosing concurrency.
 
 ```sh
-DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --overwrite-metadata --append-dim-end WINDOW_END --filter-start WINDOW_START --filter-end WINDOW_END --jobs-per-pod 30 --max-parallelism 10
+DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --filter-start PILOT_START --filter-end PILOT_END --jobs-per-pod 4 --max-parallelism 1
 ```
 
-The existing-store CLI requires overwrite flags. This command rewrites present refs as well as filling missing ones; it does not skip them. Manifest batching bounds each commit, while `--overwrite-metadata` permits extending the store through `WINDOW_END`. Keep other writers stopped until finalization.
+One full WN2 init is `60 × 64 × (8 + 6 × 13) = 330,240` refs. One init job per pod bounds newly built refs to that size; larger workers can build up to four inits per manifest batch (1,320,960 refs). [Backfill sizing](backfill.md#sizing-a-virtual-backfill) distinguishes added refs from manifests rewritten. Use the measured pilot to choose concurrency before running the fixed range:
 
-3. Verify the backfill completed, then run one controlled update while the cron remains suspended, just after the chosen scheduled fire. Inspect completeness, decode health, memory, and duration in the final pod. If the backfill misses that slot, advance the window and finish the corresponding backfill before the controlled update.
-4. Restore `suspend=False` in a follow-up PR only after the controlled update passes. Verify the deployment and subsequent scheduled fires. Keep the publication switch at `None`.
+```sh
+DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --filter-start WITHHELD_START --filter-end ROLLOUT_END --jobs-per-pod 1 --max-parallelism CHOSEN_PARALLELISM
+```
+
+Keep `--overwrite-chunks`: the existing-store CLI has no add-only worker mode. With unchanged source objects it rewrites byte-identical refs, so retrying the fixed range is idempotent and resumable. `--overwrite-metadata` alone launches no workers. Omitting `--append-dim-end` repairs the committed extent; if it ends before `ROLLOUT_END`, add `--overwrite-metadata --append-dim-end ROLLOUT_END`. Keep other writers stopped until finalization.
+
+4. Pin the resulting snapshot and run the manifest scan over the fixed coverage range, using its read-only snapshot session and the unrestricted publication switch. Use a fresh checkpoint directory for that snapshot. Inspect residual missing refs and repair older gaps before a controlled update; the newest init may still be mid-landing, but every older init must be complete. Run one controlled update with successful inline validation while the cron remains suspended, just after the chosen scheduled fire. Record its snapshot, pending count, peak RSS, commit duration, and validation duration. If the backfill misses that slot, advance the end and finish the corresponding backfill and pinned scan before the controlled update, without moving `WITHHELD_START`.
+5. Restore `suspend=False` in a follow-up PR only after these checks pass. Verify the deployment and subsequent scheduled fires. Keep the publication switch at `None`.
+
+### Update size limit
+
+Before discovery, an unrestricted operational update's missing candidates must not exceed `manifest_init_split × all product leads × all product variables`, counted as `(init, lead, variable)` coordinates. WN2's bound is `4 × 60 × 14 = 3,360`. A new landing init adds 840 candidates; one missed fire adds at most another 840, plus a typical one-lead straggler across all variables adds 14: 1,694 candidates. Even an entire additional late init totals 2,520, below the bound.
+
+Source delays can exceed these ordinary cases; an oversized backlog fails with its count, bound, and this rollout link instead of building a giant ref batch. The size guard applies only to unrestricted operational updates; delayed publication, historical processing, and backfill manifest batching retain their existing paths.
+
+## Termination
+
+This procedure is distinct from restoring delayed publication:
+
+1. Restore the Worker gate or block the route.
+2. Purge the `wn.dynamical.org` Cloudflare cache, including chunk responses served with `public, max-age=86400`.
+3. Suspend the cron and drain active writers.
+4. Purge WN2 refs with the existing tool or delete the operational repo prefix.
+5. Post a dated notice in the dataset description and catalog.
 
 ## Audit
 
