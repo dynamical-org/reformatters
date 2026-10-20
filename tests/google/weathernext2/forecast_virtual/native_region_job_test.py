@@ -10,6 +10,7 @@ import xarray as xr
 from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
+from reformatters.common.config_models import ROOT
 from reformatters.common.iterating import get_worker_jobs
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
@@ -66,28 +67,33 @@ def test_unrestricted_update_rejects_backlog_before_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     job = unrestricted_update_job
-    bound = (
-        job.manifest_init_split
-        * len(job.template_ds.to_dataset().lead_time)
-        * len(job.data_vars)
+    job = job.model_copy(
+        update={
+            "template_ds": OPERATIONAL.get_template(pd.Timestamp("2025-01-03")),
+            "region": slice(0, 8),
+        }
     )
-    assert bound == 3360
-    coord = job.source_file_coords()[0]
+    coords = job.source_file_coords()
+    newest = max(coord.init_time for coord in coords)
+    pending = [
+        coord
+        for coord in coords
+        if coord.init_time == newest or coord.data_vars[0].group is not ROOT
+    ]
+    assert len(pending) == 3360
     discovery = Mock(side_effect=AssertionError("discovery must not run"))
     monkeypatch.setattr(type(job), "discover_available", discovery)
     with pytest.raises(
         AssertionError,
-        match=rf"{bound + 1}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+        match=r"2426880.*1320960.*docs/weathernext2_holdback.md#unrestricted-rollout",
     ):
-        list(job.process_virtual_refs([coord] * (bound + 1)))
+        list(job.process_virtual_refs(pending))
     discovery.assert_not_called()
 
 
-@pytest.mark.parametrize("at_bound", [False, True])
-def test_unrestricted_update_admits_steady_state_and_batch_boundary(
+def test_unrestricted_update_admits_steady_state(
     unrestricted_update_job: GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     monkeypatch: pytest.MonkeyPatch,
-    at_bound: bool,
 ) -> None:
     job = unrestricted_update_job
     coords = job.source_file_coords()
@@ -100,12 +106,60 @@ def test_unrestricted_update_admits_steady_state_and_batch_boundary(
     ]
     per_init = len(job.template_ds.to_dataset().lead_time) * len(job.data_vars)
     assert len(pending) == 2 * per_init + len(job.data_vars) == 1694
-    if at_bound:
-        pending = [coords[0]] * (job.manifest_init_split * per_init)
     discovery = Mock(return_value=[])
     monkeypatch.setattr(type(job), "discover_available", discovery)
     assert list(job.process_virtual_refs(pending)) == []
     discovery.assert_called_once_with(pending)
+
+
+@pytest.mark.parametrize("members", [1, 64])
+def test_unrestricted_update_reference_bound(
+    unrestricted_update_job: GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+    monkeypatch: pytest.MonkeyPatch,
+    members: int,
+) -> None:
+    job = unrestricted_update_job.model_copy(
+        update={
+            "template_ds": OPERATIONAL.get_template(pd.Timestamp("2025-01-02")).isel(
+                ensemble_member=slice(0, members)
+            ),
+            "region": slice(0, 4),
+        }
+    )
+    pending = job.source_file_coords()
+    first_init = min(coord.init_time for coord in pending)
+    refs_per_init = sum(
+        len(job._source_chunks(coord))
+        for coord in pending
+        if coord.init_time == first_init
+    )
+    bound = job.manifest_init_split * refs_per_init
+    assert bound == 4 * 60 * members * (8 + 6 * 13)
+    discovery = Mock(return_value=[])
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    assert list(job.process_virtual_refs(pending)) == []
+    discovery.assert_called_once_with(pending)
+
+    extra = next(coord for coord in pending if coord.data_vars[0].group is ROOT)
+    assert len(job._source_chunks(extra)) == members
+    discovery.reset_mock()
+    with pytest.raises(
+        AssertionError,
+        match=rf"{bound + members}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+    ):
+        list(job.process_virtual_refs([*pending, extra]))
+    discovery.assert_not_called()
+
+
+def test_unrestricted_eligibility_does_not_compare_valid_time(
+    unrestricted_update_job: GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+) -> None:
+    job = unrestricted_update_job
+    region = job._processing_region_ds().isel(init_time=slice(0, 1))
+    region = region.assign_coords(init_time=[pd.Timestamp.max])
+    coords = job.generate_source_file_coords(region, job.data_vars)
+    assert len(coords) == 60 * len(job.data_vars)
+    assert job._step_coords(region, job.data_vars, publishable=False) == []
 
 
 def _var(

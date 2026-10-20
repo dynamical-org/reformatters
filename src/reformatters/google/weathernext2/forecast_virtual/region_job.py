@@ -2,6 +2,7 @@ from base64 import b64decode
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from math import prod
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
@@ -13,7 +14,6 @@ from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
-from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -257,7 +257,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
-                is_publishable = init_time + lead_time <= self.publication_cutoff
+                is_publishable = (
+                    self.publication_cutoff == pd.Timestamp.max
+                    or init_time + lead_time <= self.publication_cutoff
+                )
                 if is_publishable is not publishable:
                     continue
                 coords.extend(
@@ -271,25 +274,27 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 )
         return coords
 
+    def _source_chunk_axes(
+        self, var: GoogleWeathernext2DataVar
+    ) -> tuple[Sequence[int], Sequence[int | None]]:
+        ensemble_members = [
+            int(value)
+            for value in self.template_ds.to_dataset().get_index("ensemble_member")
+        ]
+        if self.source_layout == "historical":
+            return ensemble_members[::4], (
+                [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
+            )
+        return ensemble_members, [None] if var.group is ROOT else PRESSURE_LEVELS
+
     def _source_chunks(
         self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
     ) -> list[NativeSourceChunk]:
         assert coord.source_layout == self.source_layout
         store_key_prefix = _store_key(coord.get_url()) + "/"
-        ensemble_members = [
-            int(value)
-            for value in self.template_ds.to_dataset().get_index("ensemble_member")
-        ]
         chunks = []
         for var in coord.data_vars:
-            if self.source_layout == "historical":
-                members = ensemble_members[::4]
-                levels: Sequence[int | None] = (
-                    [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
-                )
-            else:
-                members = ensemble_members
-                levels = [None] if var.group is ROOT else PRESSURE_LEVELS
+            members, levels = self._source_chunk_axes(var)
             for member in members:
                 for level in levels:
                     key = coord.chunk_key(var, member, level)
@@ -391,12 +396,21 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 and self.publication_holdback is None
                 and self.publication_cutoff == pd.Timestamp.max
             ):
+                refs_per_var = {
+                    var.path: prod(len(axis) for axis in self._source_chunk_axes(var))
+                    for var in self.data_vars
+                }
                 bound = self.manifest_init_split * sum(
-                    array.sizes["lead_time"]
-                    for _, array in walk_data_arrays(self.template_ds)
+                    self.template_ds[path].sizes["lead_time"] * count
+                    for path, count in refs_per_var.items()
                 )
-                assert len(remaining) <= bound, (
-                    f"Unrestricted update has {len(remaining)} pending coordinates, exceeding bound {bound}; "
+                pending_refs = sum(
+                    refs_per_var[var.path]
+                    for coord in remaining
+                    for var in coord.data_vars
+                )
+                assert pending_refs <= bound, (
+                    f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
                     "run the rollout backfill in docs/weathernext2_holdback.md#unrestricted-rollout"
                 )
             yield from super().process_virtual_refs(remaining)

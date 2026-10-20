@@ -43,7 +43,7 @@ Keep `--overwrite-chunks`: the existing-store CLI has no add-only worker mode. W
 
 ### Update size limit
 
-Before discovery, an unrestricted operational update's missing candidates must not exceed `manifest_init_split × all product leads × all product variables`, counted as `(init, lead, variable)` coordinates. WN2's bound is `4 × 60 × 14 = 3,360`. A new landing init adds 840 candidates; one missed fire adds at most another 840, plus a typical one-lead straggler across all variables adds 14: 1,694 candidates. Even an entire additional late init totals 2,520, below the bound.
+Before discovery, an unrestricted operational update's missing candidates must not produce more refs than one dense manifest batch: `manifest_init_split × refs per complete init`. Count every member and pressure-level chunk produced by each candidate, using the same chunk axes as ref generation. WN2's bound is `4 × 330,240 = 1,320,960` refs. A new landing init adds 330,240 refs; one missed fire adds at most another 330,240, plus a one-lead straggler across all variables adds 5,504: 665,984 refs. Even an entire additional late init totals 990,720, below the bound.
 
 Source delays can exceed these ordinary cases; an oversized backlog fails with its count, bound, and this rollout link instead of building a giant ref batch. The size guard applies only to unrestricted operational updates; delayed publication, historical processing, and backfill manifest batching retain their existing paths.
 
@@ -52,7 +52,7 @@ Source delays can exceed these ordinary cases; an oversized backlog fails with i
 This procedure is distinct from restoring delayed publication:
 
 1. Restore the Worker gate or block the route.
-2. Purge the `wn.dynamical.org` Cloudflare cache, including chunk responses served with `public, max-age=86400`.
+2. Restoring the gate blocks access to cached bytes immediately because it runs before the Worker's `ChunkCache`. Cached copies expire within 24 hours; a restricted purge operation does not exist yet, and a Cloudflare zone or hostname purge does not reach this cache.
 3. Suspend the cron and drain active writers.
 4. Purge WN2 refs with the existing tool or delete the operational repo prefix.
 5. Post a dated notice in the dataset description and catalog.
