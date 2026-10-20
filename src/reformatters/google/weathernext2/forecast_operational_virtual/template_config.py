@@ -15,6 +15,7 @@ from reformatters.google.weathernext2.storage import (
 )
 from reformatters.google.weathernext_terms import (
     COPYRIGHT,
+    LICENSE,
     NON_ENDORSEMENT,
     REAL_TIME_ATTRIBUTION,
     USAGE_RESTRICTIONS,
@@ -55,6 +56,7 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
     def dataset_attributes(self) -> DatasetAttributes:
         attributes = replace(
             super().dataset_attributes,
+            license=LICENSE,
             attribution=(
                 "Google WeatherNext 2 forecast data processed by dynamical.org "
                 "from Google's WeatherNext 2 experimental data. "

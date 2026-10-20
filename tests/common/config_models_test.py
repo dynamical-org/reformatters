@@ -202,11 +202,20 @@ def test_mask_source_fill_value_requires_exact_float32_match() -> None:
 
 
 class TestDatasetAttributes:
-    @pytest.mark.parametrize("license_name", ["CC-BY-4.0", "other"])
+    @pytest.mark.parametrize(
+        "license_name",
+        [
+            "CC-BY-4.0",
+            "A test licence statement.",
+            "CC-BY-3.0",
+            "other",
+            "A test licence statement without a period",
+        ],
+    )
     @pytest.mark.parametrize(
         "notice_files", [None, (), ("https://example.com/notices/NOTICE.txt",)]
     )
-    def test_spdx_license_with_optional_notice_files(
+    def test_license_identifier_or_statement_with_optional_notice_files(
         self, license_name: str, notice_files: tuple[str, ...] | None
     ) -> None:
         attributes = {
@@ -222,8 +231,9 @@ class TestDatasetAttributes:
             "time_resolution": "1 hour",
             "notice_files": notice_files,
         }
-        if license_name == "CC-BY-4.0":
+        if license_name in ("CC-BY-4.0", "A test licence statement."):
             attrs = DatasetAttributes.model_validate(attributes)
+            assert attrs.license == license_name
             assert attrs.notice_files == notice_files
         else:
             with pytest.raises(ValidationError, match="license"):

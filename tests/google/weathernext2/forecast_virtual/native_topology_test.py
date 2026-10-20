@@ -11,7 +11,11 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
 )
-from reformatters.google.weathernext_terms import COPYRIGHT, REAL_TIME_ATTRIBUTION
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LICENSE,
+    REAL_TIME_ATTRIBUTION,
+)
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
@@ -40,7 +44,10 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
         assert len(config.data_vars) == 14
         assert sum(var.group is ROOT for var in config.data_vars) == 8
         assert sum(var.group == "pressure_level" for var in config.data_vars) == 6
-        assert config.dataset_attributes.license == "CC-BY-4.0"
+        expected_license = (
+            "CC-BY-4.0" if config.source_layout == "historical" else LICENSE
+        )
+        assert config.dataset_attributes.license == expected_license
         expected_attribution = (
             "Google requires this attribution: © 2025 DeepMind Technologies Limited's "
             "machine learning models used to create the experimental data made available "

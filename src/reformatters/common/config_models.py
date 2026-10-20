@@ -57,7 +57,7 @@ class DatasetAttributes(FrozenBaseModel):
     name: AttributeStr
     description: Sentence
     attribution: Sentence
-    license: License
+    license: License | Sentence
     spatial_domain: AttributeStr
     spatial_resolution: SpatialResolution
     time_domain: AttributeStr

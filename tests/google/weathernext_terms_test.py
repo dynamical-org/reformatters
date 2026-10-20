@@ -20,6 +20,7 @@ from reformatters.google.weathernext2.storage import (
 from reformatters.google.weathernext_terms import (
     COPYRIGHT,
     LEGALLY_BINDING_NOTICE,
+    LICENSE,
     NON_ENDORSEMENT,
     REAL_TIME_ATTRIBUTION,
     TERMS_SHA256,
@@ -48,6 +49,11 @@ def test_terms_constants_and_pdf_are_pinned() -> None:
         == "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654"
     )
     assert COPYRIGHT == "Copyright 2024-6 Google LLC"
+    assert LICENSE == (
+        "Real-Time Data & Forecasts: GDM Real-Time Weather Forecasting Experimental Data Terms of Use "
+        "(https://storage.googleapis.com/weathernext-public/terms-of-use.pdf). "
+        "Historical Data: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)."
+    )
     assert (
         LEGALLY_BINDING_NOTICE
         == "By using this information, you agree to the Terms of Use found at https://storage.googleapis.com/weathernext-public/terms-of-use.pdf"
@@ -172,7 +178,7 @@ def test_operational_notice_urls_use_canonical_public_storage(
         primary_storage_config=Weathernext2IcechunkDatasetStorageConfig()
     )
     attrs = dataset.template_config.dataset_attributes
-    assert attrs.license == "CC-BY-4.0"
+    assert attrs.license == LICENSE
     assert attrs.notice_files == tuple(
         f"{dataset.store_factory.primary_url(public=True)}/{name}"
         for name in dataset.repo_files()
