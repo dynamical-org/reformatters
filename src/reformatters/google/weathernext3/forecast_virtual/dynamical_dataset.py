@@ -50,7 +50,10 @@ class GoogleWeathernext3ForecastVirtualDataset(
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.05, 1.0)
+                min_present_fraction=(0.05, 0.05, 1.0)
+                if self.template_config.horizon_hours == 48
+                and self.region_job_class.publication_holdback is None
+                else (0.05, 1.0)
             ),
             *(
                 (CheckNoRefsInsideHoldback(),)
