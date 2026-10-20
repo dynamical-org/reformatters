@@ -25,7 +25,6 @@ from reformatters.common.virtual_region_job import _exists_many
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
     OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
-    PUBLICATION_HOLDBACK,
 )
 from scripts.validation.scan_common import resolve_virtual_dataset
 from scripts.validation.utils import _icechunk_storage
@@ -33,6 +32,7 @@ from scripts.validation.utils import _icechunk_storage
 _BATCH_SIZE = 20_000
 _OPERATIONAL_DATASET_ID = "google-weathernext2-forecast-operational-virtual"
 _PURGE_BRANCH = "holdback-purge"
+_WITHDRAWAL_HOLDBACK = pd.Timedelta("1h")
 
 log = get_logger(__name__)
 app = typer.Typer(
@@ -84,7 +84,7 @@ class HoldbackAudit:
     def last_age_out(self) -> pd.Timestamp | None:
         if self.max_present_valid_time is None:
             return None
-        return self.max_present_valid_time + PUBLICATION_HOLDBACK
+        return self.max_present_valid_time + _WITHDRAWAL_HOLDBACK
 
 
 def _arrays(group: zarr.Group) -> Iterator[zarr.Array]:
@@ -265,13 +265,7 @@ def _operational_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
     return resolve_virtual_dataset(dataset_id)
 
 
-def _default_cutoff() -> pd.Timestamp:
-    return pd.Timestamp.now(tz="UTC").tz_localize(None) - PUBLICATION_HOLDBACK
-
-
-def _parse_cutoff(value: str | None) -> pd.Timestamp:
-    if value is None:
-        return _default_cutoff()
+def _parse_cutoff(value: str) -> pd.Timestamp:
     cutoff = pd.Timestamp(value)
     if cutoff.tz is None:
         raise typer.BadParameter("--cutoff must include a UTC offset")
@@ -575,11 +569,11 @@ def _run_publish(
 def audit(
     store_url: Annotated[str, typer.Argument(help="Public Icechunk store URL")],
     cutoff: Annotated[
-        str | None,
+        str,
         typer.Option(
-            help="ISO timestamp with UTC offset; defaults to now minus one hour"
+            help="Recorded withdrawal cutoff as an ISO timestamp with UTC offset"
         ),
-    ] = None,
+    ],
     snapshot: Annotated[
         str | None,
         typer.Option(help="Snapshot ID; defaults to the tip of main"),

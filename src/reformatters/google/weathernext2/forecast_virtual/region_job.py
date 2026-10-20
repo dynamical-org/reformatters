@@ -2,6 +2,7 @@ from base64 import b64decode
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from math import prod
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
@@ -44,7 +45,7 @@ OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-PUBLICATION_HOLDBACK = pd.Timedelta("1h")
+OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("7h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
@@ -136,6 +137,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 ):
     source_layout: ClassVar[SourceLayout]
     manifest_init_split: ClassVar[int]
+    publication_holdback: ClassVar[Timedelta | None] = None
     publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
@@ -162,9 +164,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        if cls.source_layout == "historical":
+        if cls.source_layout == "historical" or cls.publication_holdback is None:
             return jobs
-        cutoff = _utc_now() - PUBLICATION_HOLDBACK
+        cutoff = _utc_now() - cls.publication_holdback
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -196,12 +198,19 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
-        latest_publishable_valid_time = (
-            publication_cutoff
-            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
-        )
-        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
+        job_fire_time = job_fire_time or _utc_now()
+        publication_cutoff = pd.Timestamp.max
+        if cls.publication_holdback is None:
+            newest_init = (job_fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+                INIT_TIME_FREQUENCY
+            )
+        else:
+            publication_cutoff = job_fire_time - cls.publication_holdback
+            latest_publishable_valid_time = (
+                publication_cutoff
+                - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+            )
+            newest_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -209,7 +218,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=newest_publishable_init + INIT_TIME_FREQUENCY,
+            job_fire_time=newest_init + INIT_TIME_FREQUENCY,
         )
         (job,) = jobs
         assert isinstance(job, cls)
@@ -248,7 +257,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 continue
             for lead_time_value in processing_region_ds["lead_time"].values:
                 lead_time = pd.Timedelta(lead_time_value)
-                is_publishable = init_time + lead_time <= self.publication_cutoff
+                is_publishable = (
+                    self.publication_cutoff == pd.Timestamp.max
+                    or init_time + lead_time <= self.publication_cutoff
+                )
                 if is_publishable is not publishable:
                     continue
                 coords.extend(
@@ -262,25 +274,27 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 )
         return coords
 
+    def _source_chunk_axes(
+        self, var: GoogleWeathernext2DataVar
+    ) -> tuple[Sequence[int], Sequence[int | None]]:
+        ensemble_members = [
+            int(value)
+            for value in self.template_ds.to_dataset().get_index("ensemble_member")
+        ]
+        if self.source_layout == "historical":
+            return ensemble_members[::4], (
+                [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
+            )
+        return ensemble_members, [None] if var.group is ROOT else PRESSURE_LEVELS
+
     def _source_chunks(
         self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
     ) -> list[NativeSourceChunk]:
         assert coord.source_layout == self.source_layout
         store_key_prefix = _store_key(coord.get_url()) + "/"
-        ensemble_members = [
-            int(value)
-            for value in self.template_ds.to_dataset().get_index("ensemble_member")
-        ]
         chunks = []
         for var in coord.data_vars:
-            if self.source_layout == "historical":
-                members = ensemble_members[::4]
-                levels: Sequence[int | None] = (
-                    [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
-                )
-            else:
-                members = ensemble_members
-                levels = [None] if var.group is ROOT else PRESSURE_LEVELS
+            members, levels = self._source_chunk_axes(var)
             for member in members:
                 for level in levels:
                     key = coord.chunk_key(var, member, level)
@@ -377,6 +391,28 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         ]
     ]:
         if self.processing_mode == "update":
+            if (
+                self.source_layout == "operational"
+                and self.publication_holdback is None
+                and self.publication_cutoff == pd.Timestamp.max
+            ):
+                refs_per_var = {
+                    var.path: prod(len(axis) for axis in self._source_chunk_axes(var))
+                    for var in self.data_vars
+                }
+                bound = self.manifest_init_split * sum(
+                    self.template_ds[path].sizes["lead_time"] * count
+                    for path, count in refs_per_var.items()
+                )
+                pending_refs = sum(
+                    refs_per_var[var.path]
+                    for coord in remaining
+                    for var in coord.data_vars
+                )
+                assert pending_refs <= bound, (
+                    f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
+                    "backfill the missing range with backfill-kubernetes before updating"
+                )
             yield from super().process_virtual_refs(remaining)
             return
 

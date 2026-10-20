@@ -13,6 +13,9 @@ from click import unstyle
 from typer import rich_utils
 from typer.testing import CliRunner
 
+from reformatters.google.weathernext2.forecast_virtual.region_job import (
+    GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+)
 from scripts import icechunk_utils, weathernext2_holdback
 from scripts.weathernext2_holdback import (
     _operational_dataset,
@@ -195,12 +198,17 @@ def test_parse_cutoff_requires_offset_and_normalizes_to_naive_utc() -> None:
     assert result.tz is None
 
 
-def test_delete_and_publish_require_explicit_cutoff(
+def test_audit_delete_and_publish_require_explicit_cutoff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", True)
     runner = CliRunner()
 
+    audit_result = runner.invoke(
+        weathernext2_holdback.app,
+        ["audit", "invalid"],
+        color=True,
+    )
     delete_result = runner.invoke(
         weathernext2_holdback.app,
         ["delete", "google-weathernext2-forecast-operational-virtual"],
@@ -217,6 +225,8 @@ def test_delete_and_publish_require_explicit_cutoff(
         color=True,
     )
 
+    assert audit_result.exit_code == 2
+    assert "--cutoff" in unstyle(audit_result.output)
     assert delete_result.exit_code == 2
     assert "--cutoff" in unstyle(delete_result.output)
     assert publish_result.exit_code == 2
@@ -237,7 +247,11 @@ def test_destructive_commands_reject_non_operational_dataset(
         _operational_dataset("google-weathernext2-forecast-historical-virtual")
 
 
+@pytest.mark.parametrize(
+    "live_holdback", [None, pd.Timedelta("1h"), pd.Timedelta("2h")]
+)
 def test_audit_reports_present_refs_timing_and_exits_one(
+    live_holdback: pd.Timedelta | None,
     holdback_repo: HoldbackRepo,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -246,6 +260,11 @@ def test_audit_reports_present_refs_timing_and_exits_one(
         weathernext2_holdback,
         "_icechunk_storage",
         lambda _url: holdback_repo.storage,
+    )
+    monkeypatch.setattr(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        "publication_holdback",
+        live_holdback,
     )
     output_dir = tmp_path / "audit"
 

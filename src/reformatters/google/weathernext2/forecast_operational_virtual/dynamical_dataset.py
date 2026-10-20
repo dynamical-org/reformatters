@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -38,6 +39,8 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         GoogleWeathernext2ForecastOperationalVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=weathernext2_virtual_chunk_containers(),
@@ -62,14 +65,22 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=False,
+            suspend=True,
         )
         return [update]
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
-            validation.CheckVirtualManifestCompleteness(),
-            CheckNoRefsInsideHoldback(),
+            validation.CheckVirtualManifestCompleteness(
+                min_present_fraction=(0.05, 1.0)
+                if self.region_job_class.publication_holdback is None
+                else (1.0,),
+            ),
+            *(
+                [CheckNoRefsInsideHoldback()]
+                if self.region_job_class.publication_holdback is not None
+                else []
+            ),
             validation.CheckVirtualDecodeHealth(positions="all", max_positions=2),
         )
