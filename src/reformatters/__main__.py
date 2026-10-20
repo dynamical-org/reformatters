@@ -74,6 +74,9 @@ from reformatters.google.weathernext3.forecast_48_hour_0_05_degree_virtual impor
 from reformatters.google.weathernext3.forecast_48_hour_0_1_degree_virtual import (
     GoogleWeathernext3Forecast48Hour01DegreeVirtualDataset,
 )
+from reformatters.google.weathernext3.storage import (
+    Weathernext3IcechunkDatasetStorageConfig,
+)
 from reformatters.nasa.imerg.analysis_early import NasaImergAnalysisEarlyDataset
 from reformatters.nasa.imerg.analysis_late import NasaImergAnalysisLateDataset
 from reformatters.noaa.gefs.analysis.dynamical_dataset import GefsAnalysisDataset
@@ -230,12 +233,6 @@ class UpstreamGriddedZarrsDatasetStorageConfig(StorageConfig):
     base_path: str = "s3://upstream-gridded-zarrs"
     k8s_secret_name: str = "upstream-gridded-zarrs-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ZARR3
-
-
-class Weathernext3IcechunkDatasetStorageConfig(StorageConfig):
-    base_path: str = "s3://dynamical-google-weathernext3"
-    k8s_secret_name: str = "weathernext3-storage-options-key"  # noqa: S105
-    format: DatasetFormat = DatasetFormat.ICECHUNK
 
 
 # Registry of all DynamicalDatasets.

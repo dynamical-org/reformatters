@@ -5,6 +5,7 @@ from typing import ClassVar
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.google.weathernext_terms import repo_notice_files
 from reformatters.google.weathernext_virtual.validation import CheckNoRefsInsideHoldback
 
 from .region_job import (
@@ -25,6 +26,12 @@ class GoogleWeathernext3ForecastVirtualDataset(
     template_config: GoogleWeathernext3ForecastVirtualTemplateConfig
     region_job_class: type[GoogleWeathernext3ForecastVirtualRegionJob]
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=15)
+
+    def repo_files(self) -> dict[str, bytes]:
+        return repo_notice_files(
+            self.template_config.dataset_attributes,
+            product=self.template_config.product,
+        )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         prefix = (

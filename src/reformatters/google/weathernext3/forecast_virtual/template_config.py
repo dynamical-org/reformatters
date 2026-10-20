@@ -18,11 +18,23 @@ from reformatters.common.config_models import (
     Encoding,
     StatisticsApproximate,
 )
+from reformatters.common.pydantic import replace
+from reformatters.common.storage import StoreFactory
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
+from reformatters.google.weathernext3.storage import (
+    Weathernext3IcechunkDatasetStorageConfig,
+)
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LEGALLY_BINDING_NOTICE,
+    REAL_TIME_ATTRIBUTION,
+    USAGE_RESTRICTIONS,
+    repo_notice_files,
+)
 
-ATTRIBUTION = "Google requires this attribution: © 2026 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_3_0_0_0p1deg under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use."
+_HISTORICAL_ATTRIBUTION = "© 2026 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_3_0_0_{grid} under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use."
 
 STATISTICS = ("mean", "p10", "p25", "p50", "p75", "p90")
 
@@ -38,6 +50,7 @@ class GoogleWeathernext3DataVar(DataVar[GoogleWeathernext3InternalAttrs]):
 class GoogleWeathernext3ForecastVirtualTemplateConfig(
     TemplateConfig[GoogleWeathernext3DataVar]
 ):
+    product: ClassVar[str] = "Google WeatherNext 3"
     horizon_hours: ClassVar[int]
     grid_degrees: ClassVar[float]
     dataset_id_value: ClassVar[str]
@@ -53,13 +66,21 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
         description = "Weather forecasts from the 64-member Google DeepMind WeatherNext 3 ensemble model."
         if self.grid_degrees == 0.05:
             description += " These variables are WeatherNext 3's station-trained head, defined everywhere."
-        return DatasetAttributes(
+        grid = "0p1deg" if self.grid_degrees == 0.1 else "0p05deg"
+        attributes = DatasetAttributes(
             dataset_id=self.dataset_id_value,
             dataset_version="0.1.0",
             name=self.dataset_name_value,
             description=description,
-            attribution=ATTRIBUTION,
+            attribution=(
+                "Google requires this attribution for data relating to a time less "
+                "than 1 hour ago and the future: Google WeatherNext 3, "
+                f"{REAL_TIME_ATTRIBUTION} For data relating to a time 1 hour ago "
+                "or more, Google requires this attribution: "
+                + _HISTORICAL_ATTRIBUTION.format(grid=grid)
+            ),
             license="CC-BY-4.0",
+            modifications=self.modifications,
             spatial_domain="Global",
             spatial_resolution="0.1 degrees (~10km)"
             if self.grid_degrees == 0.1
@@ -68,6 +89,46 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:g} hours",
             forecast_domain=f"Forecast lead time 1-{self.horizon_hours} hours ahead",
             forecast_resolution="Hourly",
+        )
+
+        public_url = StoreFactory(
+            primary_storage_config=Weathernext3IcechunkDatasetStorageConfig(),
+            dataset_id=attributes.dataset_id,
+            template_config_version=attributes.dataset_version,
+        ).primary_url(public=True)
+        return replace(
+            attributes,
+            license="other",
+            copyright=COPYRIGHT,
+            terms_of_use=LEGALLY_BINDING_NOTICE,
+            usage_restrictions=USAGE_RESTRICTIONS,
+            notice_files=tuple(
+                f"{public_url}/{path}"
+                for path in repo_notice_files(attributes, product=self.product)
+            ),
+        )
+
+    @property
+    def modifications(self) -> str:
+        renaming = (
+            "renamed its variables and dimensions"
+            if self.grid_degrees == 0.1
+            else "renamed the station-head temperature and dew point variables and spatial dimensions"
+        )
+        conversions = "temperatures from kelvin to degrees Celsius (subtracting 273.15)"
+        if self.grid_degrees == 0.1:
+            conversions += (
+                ", cloud-cover fractions to percent (multiplying by 100), "
+                "1-hour precipitation from metres of water equivalent to average "
+                "kg m-2 s-1 (dividing by 3.6), and 1-hour radiation from J m-2 "
+                "to average W m-2 (dividing by 3600)"
+            )
+        return (
+            "The publisher, dynamical.org, restructured the source data into an "
+            "Icechunk virtual Zarr dataset of references to the unmodified source "
+            "chunks, combined the source statistic arrays into a statistic "
+            f"dimension, {renaming}, and applies read-time filters that convert "
+            f"{conversions}. Values are otherwise the unchanged model output."
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
