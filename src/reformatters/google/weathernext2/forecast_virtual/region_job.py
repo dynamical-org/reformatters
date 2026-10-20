@@ -136,6 +136,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 ):
     source_layout: ClassVar[SourceLayout]
     manifest_init_split: ClassVar[int]
+    publication_holdback: ClassVar[Timedelta | None] = None
     publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
@@ -162,9 +163,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
         )
-        if cls.source_layout == "historical":
+        if cls.source_layout == "historical" or cls.publication_holdback is None:
             return jobs
-        cutoff = _utc_now() - PUBLICATION_HOLDBACK
+        cutoff = _utc_now() - cls.publication_holdback
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -196,12 +197,16 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
-        latest_publishable_valid_time = (
-            publication_cutoff
-            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
-        )
-        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
+        job_fire_time = job_fire_time or _utc_now()
+        publication_cutoff = pd.Timestamp.max
+        if cls.publication_holdback is not None:
+            publication_cutoff = job_fire_time - cls.publication_holdback
+            latest_publishable_valid_time = (
+                publication_cutoff
+                - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+            )
+            newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
+            job_fire_time = newest_publishable_init + INIT_TIME_FREQUENCY
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -209,7 +214,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=newest_publishable_init + INIT_TIME_FREQUENCY,
+            job_fire_time=job_fire_time,
         )
         (job,) = jobs
         assert isinstance(job, cls)

@@ -70,6 +70,10 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckVirtualManifestCompleteness(),
-            CheckNoRefsInsideHoldback(),
+            *(
+                [CheckNoRefsInsideHoldback()]
+                if self.region_job_class.publication_holdback is not None
+                else []
+            ),
             validation.CheckVirtualDecodeHealth(positions="all", max_positions=2),
         )

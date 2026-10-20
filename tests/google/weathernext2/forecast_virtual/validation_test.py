@@ -20,6 +20,15 @@ from reformatters.google.weathernext2.forecast_virtual.validation import (
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
 
 
+@pytest.fixture(autouse=True)
+def delayed_publication(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        "publication_holdback",
+        pd.Timedelta("1h"),
+    )
+
+
 def _job_and_repo() -> tuple[
     GoogleWeathernext2ForecastOperationalVirtualRegionJob, icechunk.Repository
 ]:

@@ -3,11 +3,13 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import httpx
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
 from zarr.storage import MemoryStore
 
+from reformatters.common import template_utils
 from reformatters.common.iterating import get_worker_jobs
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
@@ -21,7 +23,6 @@ from reformatters.google.weathernext2.forecast_virtual import (
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OBJECTS_LOCATION,
     PROXY_LOCATION_PREFIX,
-    PUBLICATION_HOLDBACK,
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
@@ -33,6 +34,16 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
+PUBLICATION_HOLDBACK = pd.Timedelta("1h")
+
+
+@pytest.fixture
+def delayed_publication(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        "publication_holdback",
+        PUBLICATION_HOLDBACK,
+    )
 
 
 def _var(
@@ -229,8 +240,13 @@ def _lead_times_published_at(
     return [coord.lead_time for coord in job.generate_source_file_coords(region, [var])]
 
 
-def test_publication_holdback_is_one_hour_after_valid_time() -> None:
-    assert PUBLICATION_HOLDBACK == pd.Timedelta("1h")
+def test_publication_holdback_is_one_hour_after_valid_time(
+    delayed_publication: None,
+) -> None:
+    assert (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.publication_holdback
+        == pd.Timedelta("1h")
+    )
     init_time = pd.Timestamp("2025-03-01T00:00")
     valid_time = init_time + pd.Timedelta("12h")
     one_second = pd.Timedelta("1s")
@@ -247,7 +263,9 @@ def test_publication_holdback_is_one_hour_after_valid_time() -> None:
     ) == [pd.Timedelta("6h"), pd.Timedelta("12h")]
 
 
-def test_publication_holdback_ignores_initialization_age() -> None:
+def test_publication_holdback_ignores_initialization_age(
+    delayed_publication: None,
+) -> None:
     init_time = pd.Timestamp("2025-03-01T00:00")
     all_lead_times = list(OPERATIONAL.dimension_coordinates()["lead_time"])
 
@@ -294,6 +312,7 @@ def test_source_file_coords_are_independent_per_variable() -> None:
 
 
 def test_backfill_jobs_apply_the_holdback_to_the_current_clock(
+    delayed_publication: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     init_time = pd.Timestamp("2025-01-01T00:00")
@@ -360,7 +379,9 @@ def test_historical_validation_job_uses_final_fixed_window(
     ] == list(HISTORICAL.dimension_coordinates()["lead_time"])
 
 
-def test_operational_update_publishes_diagonal_window() -> None:
+def test_operational_update_publishes_diagonal_window(
+    delayed_publication: None,
+) -> None:
     fire_time = pd.Timestamp("2025-03-20T13:05")
     var = _var(OPERATIONAL, "temperature_2m")
 
@@ -417,7 +438,7 @@ def test_operational_update_publishes_diagonal_window() -> None:
     ],
 )
 def test_operational_update_template_ends_at_newest_publishable_init(
-    fire_time: pd.Timestamp, newest_init: pd.Timestamp
+    delayed_publication: None, fire_time: pd.Timestamp, newest_init: pd.Timestamp
 ) -> None:
     var = _var(OPERATIONAL, "temperature_2m")
     jobs, template = (
@@ -443,6 +464,7 @@ def test_operational_update_template_ends_at_newest_publishable_init(
 
 
 def test_direct_operational_update_uses_utc_clock(
+    delayed_publication: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = pd.Timestamp("2025-03-20T12:00")
@@ -499,6 +521,7 @@ def test_object_listing_retries_transient_response() -> None:
 
 
 def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(
+    delayed_publication: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     before = pd.Timestamp("2025-01-02T00:59:59")
@@ -547,3 +570,101 @@ def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(
         before - PUBLICATION_HOLDBACK < init + lead <= after - PUBLICATION_HOLDBACK
         for init, lead, _ in coord_sets[1] - coord_sets[0]
     )
+
+
+def test_unrestricted_backfill_includes_all_leads_without_reading_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = Mock(side_effect=AssertionError("unrestricted backfill read the clock"))
+    monkeypatch.setattr(region_job_module, "_utc_now", clock)
+    init_time = pd.Timestamp("2025-01-01T00:00")
+    template = OPERATIONAL.get_template(init_time + pd.Timedelta("6h"))
+
+    [job] = GoogleWeathernext2ForecastOperationalVirtualRegionJob.get_jobs(
+        tmp_store=Path("unused.zarr"),
+        template_ds=template,
+        append_dim="init_time",
+        all_data_vars=OPERATIONAL.data_vars,
+        reformat_job_name="test",
+        filter_variable_names=["temperature_2m"],
+    )
+
+    assert job.publication_holdback is None
+    assert job.publication_cutoff == pd.Timestamp.max
+    assert [coord.lead_time for coord in job.source_file_coords()] == list(
+        OPERATIONAL.dimension_coordinates()["lead_time"]
+    )
+    assert not job.held_back_source_file_coords()
+    clock.assert_not_called()
+
+
+@pytest.mark.parametrize("hour", [1, 7, 13, 19])
+def test_unrestricted_update_includes_newest_init_and_revisits_withheld_steps(
+    hour: int,
+) -> None:
+    fire_time = pd.Timestamp("2025-03-20") + pd.Timedelta(hours=hour, minutes=5)
+    newest_init = fire_time.floor("6h")
+    older_init = newest_init - pd.Timedelta("2D")
+    var = _var(OPERATIONAL, "temperature_2m")
+    jobs, template = (
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
+            primary_store=MemoryStore(),
+            tmp_store=Path("unused.zarr"),
+            get_template_fn=OPERATIONAL.get_template,
+            append_dim="init_time",
+            all_data_vars=[var],
+            reformat_job_name="test",
+            job_fire_time=fire_time,
+        )
+    )
+    [job] = jobs
+    assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
+    assert job.publication_cutoff == pd.Timestamp.max
+    init_times = template.to_dataset().get_index("init_time")
+    assert init_times[-1] == newest_init
+    assert job.region == slice(
+        int(init_times.searchsorted(fire_time - pd.Timedelta("17D"))), len(init_times)
+    )
+    coords = job.source_file_coords()
+    expected_steps = {
+        (init_time, lead_time)
+        for init_time in init_times[job.region]
+        for lead_time in OPERATIONAL.dimension_coordinates()["lead_time"]
+    }
+    assert {(coord.init_time, coord.lead_time) for coord in coords} == expected_steps
+
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+    session = repo.writable_session("main")
+    template_utils.write_metadata(
+        template.isel(init_time=slice(0, -1)),
+        session.store,
+        "w-",
+        consolidated=False,
+        skip_icechunk_commit=True,
+    )
+    present_step = (older_init, pd.Timedelta("6h"))
+    present = next(
+        coord for coord in coords if (coord.init_time, coord.lead_time) == present_step
+    )
+    chunk_key = job.chunk_key(job.representative_probe_loc(present, var), var)
+    assert chunk_key is not None
+    session.store.set_virtual_refs(
+        var.path,
+        [
+            icechunk.VirtualChunkSpec(
+                index=list(chunk_key),
+                location="https://example.invalid/chunk",
+                offset=0,
+                length=1,
+            )
+        ],
+        validate_containers=False,
+    )
+    session.commit("existing short lead")
+
+    remaining = job.filter_already_present(coords, repo.readonly_session("main").store)
+    missing_steps = {(coord.init_time, coord.lead_time) for coord in remaining}
+    assert missing_steps == expected_steps - {present_step}
+    assert (newest_init, pd.Timedelta("360h")) in missing_steps
+    assert (older_init, pd.Timedelta("360h")) in missing_steps
+    assert older_init + pd.Timedelta("360h") > fire_time - PUBLICATION_HOLDBACK

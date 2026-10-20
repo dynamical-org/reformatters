@@ -4,6 +4,7 @@ from pathlib import Path
 
 import icechunk
 import pandas as pd
+import pytest
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
@@ -65,7 +66,7 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
     assert _resolved_split_size(split, "/temperature_2m") == 128
 
 
-def test_operational_product_has_holdback_aware_crons_and_splits(
+def test_operational_product_has_virtual_health_checks_and_splits(
     tmp_path: Path,
 ) -> None:
     dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
@@ -91,7 +92,7 @@ def test_operational_product_has_holdback_aware_crons_and_splits(
         if isinstance(item, validation.CheckCurrentData)
     ]
     assert current.max_delay == timedelta(hours=12)
-    assert any(
+    assert not any(
         isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
     )
     (decode,) = [
@@ -124,3 +125,17 @@ def test_both_products_use_the_raw_http_chunk_container(tmp_path: Path) -> None:
         (container,) = dataset.icechunk_virtual_config.containers
         assert container.url_prefix == "https://wn.dynamical.org/chunks/"
         assert isinstance(container.store, icechunk.ObjectStoreConfig.Http)
+
+
+@pytest.mark.parametrize("holdback", [None, pd.Timedelta("1h")])
+def test_operational_holdback_validator_follows_publication_policy(
+    holdback: pd.Timedelta | None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
+        primary_storage_config=_storage(tmp_path)
+    )
+    monkeypatch.setattr(dataset.region_job_class, "publication_holdback", holdback)
+
+    assert any(
+        isinstance(item, CheckNoRefsInsideHoldback) for item in dataset.validators()
+    ) == (holdback is not None)
