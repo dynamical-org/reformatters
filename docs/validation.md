@@ -61,7 +61,7 @@ Runtime scales roughly linearly with variable count: budget **~0.4 minutes per v
 
 ### Whole-archive scans (manifest completeness, decode health)
 
-For WeatherNext 2 publication restrictions, use the separate [holdback audit and remediation runbook](weathernext2_holdback.md). Completeness checks missing expected refs; it cannot establish the absence of extra restricted refs.
+For WeatherNext 2 withdrawal remediation, use the [publication policy and withdrawal runbook](weathernext2_holdback.md). Completeness checks missing expected refs; it cannot establish the absence of refs beyond a withdrawal cutoff.
 
 These are the thorough, post-backfill correctness pass for a virtual dataset, distinct from the bounded operational checks run by the final update pod. Both reach the dataset's own region job (for expected source files and manifest chunk-key logic) by resolving the registered dataset from the store's `dataset_id` attribute, so both take a store URL like every other command. `run-all` runs both automatically for a virtual store, so one command produces the complete report — the manifest scan runs alongside the decode + plot phases in the same process, but they contend for I/O, so its cost is not fully hidden; the standalone commands are the strict post-backfill gates (exit code).
 
