@@ -74,8 +74,8 @@ WeatherNext 3 withdrawal containment is the Worker gate plus suspending all four
 
 WN3 enablement is gated on readiness to carry out this procedure, distinct from restoring delayed publication:
 
-1. Restore the Worker gate or block the route.
-2. Restoring the gate blocks access to restricted cached bytes immediately because it runs before `ChunkCache`; cached copies are deleted only by expiry, within 24 hours. No restricted purge operation exists yet.
+1. Block the WeatherNext routes in the proxy Worker. Restoring the publication gate is not enough: it rejects only chunks that are currently ineligible, and already eligible chunks stay readable.
+2. Cached responses in the Worker's `ChunkCache` have a 24-hour freshness lifetime, which does not guarantee deletion. The Worker has no purge operation, and a Cloudflare zone or hostname purge does not reach this cache, so deleting cached copies needs a restricted Workers Cache purge, which does not exist yet.
 3. Suspend the crons and drain active writers.
 4. For WN2, purge refs with the existing tool or delete the operational repo prefix.
 5. For WN3, delete its repo prefixes; ref-removal tooling is not provided.
