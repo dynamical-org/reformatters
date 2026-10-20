@@ -926,6 +926,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
+        assert not (self.retry_late_sources and self.replica_storage_configs), (
+            "Late-source retries require a single store without replicas"
+        )
         # A virtual region job emits chunk refs into icechunk and needs the source
         # containers registered, so the virtual config is mandatory for it.
         if (

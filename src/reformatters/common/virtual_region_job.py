@@ -269,17 +269,42 @@ class VirtualRegionJob(
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        failed_attempts: dict[int, int] = {}
+        retry_after: dict[int, float] = {}
         last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
                 check_deadline(self.write_deadline)
                 tick_start = time.monotonic()
                 available = self.discover_available(pending)
+                available = [
+                    (coord, size)
+                    for coord, size in available
+                    if time.monotonic() >= retry_after.get(id(coord), 0)
+                ]
                 discover_s = time.monotonic() - tick_start
                 if available:
                     coords, sizes = zip(*available, strict=True)
                     build_start = time.monotonic()
-                    refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
+                    refs_per_file = list(
+                        pool.map(
+                            self._file_refs_or_skip,
+                            coords,
+                            sizes,
+                            (id(coord) not in failed_attempts for coord in coords),
+                        )
+                    )
+                    for coord, refs in zip(coords, refs_per_file, strict=True):
+                        if not refs:
+                            key = id(coord)
+                            attempt = failed_attempts.get(key, 0)
+                            retry_after[key] = (
+                                time.monotonic()
+                                + exponential_backoff_time(
+                                    attempt, max_delay_seconds=60
+                                )
+                            )
+                            failed_attempts[key] = attempt + 1
                     batch = [
                         (coord, refs)
                         for coord, refs in zip(coords, refs_per_file, strict=True)
@@ -324,23 +349,27 @@ class VirtualRegionJob(
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
     def _file_refs_or_skip(
-        self, coord: SOURCE_FILE_COORD, file_size: int
+        self, coord: SOURCE_FILE_COORD, file_size: int, log_failure: bool = True
     ) -> list[VirtualRef]:
         # Skip a file we can't build refs for rather than sink the job; AssertionError
         # is our own invariant, so let it propagate.
         try:
             refs = self.file_refs(coord, file_size)
             if refs and not self._refs_cover_probe_chunk(coord, refs):
-                log.error(
-                    f"Skipping {coord.get_url()}: refs do not cover representative "
-                    "chunk used to detect ingestion"
-                )
+                if log_failure:
+                    log.error(
+                        f"Skipping {coord.get_url()}: refs do not cover representative "
+                        "chunk used to detect ingestion"
+                    )
                 return []
             return refs
         except AssertionError:
             raise
         except Exception:
-            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
+            if log_failure:
+                log.exception(
+                    f"Skipping {coord.get_url()}: could not build virtual refs"
+                )
             return []
 
     @classmethod

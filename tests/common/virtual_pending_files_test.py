@@ -39,6 +39,11 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     monkeypatch.setattr(virtual_region_job, "time", clock)
     monkeypatch.setattr(
         virtual_region_job,
+        "exponential_backoff_time",
+        lambda attempt, *, max_delay_seconds: min(2**attempt, max_delay_seconds),
+    )
+    monkeypatch.setattr(
+        virtual_region_job,
         "pd",
         SimpleNamespace(Timestamp=SimpleNamespace(now=clock.now), Index=pd.Index),
     )
@@ -142,9 +147,53 @@ def test_update_stops_retrying_failed_refs_at_poll_deadline(
     with caplog.at_level("INFO"):
         assert list(job.process_virtual_refs([coord])) == []
 
-    assert build.call_args_list == [call(coord, BLOCK_NBYTES)] * 3
+    assert build.call_args_list == [call(coord, BLOCK_NBYTES)] * 2
     assert clock.elapsed == 2
     assert "Poll deadline reached with 1 source files" in caplog.text
+
+
+def test_unreadable_file_backoff_bounds_calls_and_logs(
+    monkeypatch: pytest.MonkeyPatch, clock: _Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    job = _job("update", clock).model_copy(
+        update={"poll_deadline": clock.now() + pd.Timedelta(minutes=10)}
+    )
+    coord = job.source_file_coords()[0]
+    build = Mock(side_effect=RuntimeError("unreadable source index"))
+    monkeypatch.setattr(_PendingFileJob, "file_refs", build)
+    with caplog.at_level("INFO"):
+        assert list(job.process_virtual_refs([coord])) == []
+    assert 10 <= build.call_count <= 20
+    assert sum(record.levelname == "ERROR" for record in caplog.records) == 1
+    assert clock.elapsed == 600
+    assert "Poll deadline reached with 1 source files" in caplog.text
+
+
+def test_file_recovers_after_backoff_without_blocking_new_files(
+    monkeypatch: pytest.MonkeyPatch, clock: _Clock
+) -> None:
+    job = _job("update", clock).model_copy(
+        update={"poll_deadline": clock.now() + pd.Timedelta(minutes=10)}
+    )
+    failed, healthy = job.source_file_coords()
+    failed_refs, healthy_refs = _refs(job, failed), _refs(job, healthy)
+    build_times: dict[int, list[float]] = {id(failed): [], id(healthy): []}
+
+    def build(
+        self: _PendingFileJob, coord: VirtualTestSourceFileCoord, size: int
+    ) -> list[VirtualRef]:
+        build_times[id(coord)].append(clock.elapsed)
+        if coord is failed and clock.elapsed < 30:
+            raise RuntimeError("index temporarily unreadable")
+        return failed_refs if coord is failed else healthy_refs
+
+    monkeypatch.setattr(_PendingFileJob, "file_refs", build)
+    assert list(job.process_virtual_refs([failed, healthy])) == [
+        [(healthy, healthy_refs)],
+        [(failed, failed_refs)],
+    ]
+    assert build_times[id(healthy)] == [0]
+    assert build_times[id(failed)] == [0, 1, 3, 7, 15, 31]
 
 
 @pytest.mark.parametrize("failure", [[], RuntimeError("index unavailable")])

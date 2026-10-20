@@ -996,9 +996,7 @@ def test_read_job_retry_timing_preserves_original_deadlines(
         )
     )
     assert (
-        read_job_retry_timing(
-            "retry-r7", _cron_job("0 */6 * * *"), timedelta(minutes=5)
-        )
+        read_job_retry_timing("retry-r7", _cron_job("0 * * * *"), timedelta(minutes=5))
         == retry_timing
     )
 
@@ -1016,6 +1014,17 @@ def test_read_job_retry_timing_caps_initial_polling_deadline(
     )
     timing = read_job_retry_timing("root-job", _cron_job("0 * * * *"), polling_duration)
     assert timing.poll_deadline == timing.next_fire_time - timedelta(seconds=120)
+
+
+@pytest.mark.parametrize("schedule", ["1 * * * *", "0 */6 * * *"])
+def test_read_job_retry_timing_rejects_wrong_schedule(
+    retry_batch: Mock, retry_timing: RetryTiming, schedule: str
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(annotations=retry_timing.to_annotations())
+    )
+    with pytest.raises(AssertionError, match="does not match the CronJob schedule"):
+        read_job_retry_timing("retry-r1", _cron_job(schedule), timedelta(minutes=30))
 
 
 def test_read_job_retry_timing_rejects_partial_metadata(retry_batch: Mock) -> None:

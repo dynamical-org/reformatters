@@ -451,6 +451,12 @@ def read_job_retry_timing(
     annotations = job.metadata.annotations or {}
     timing = RetryTiming.from_annotations(annotations)
     if timing is not None:
+        assert cron_job.previous_fire_time(timing.fire_time) == timing.fire_time, (
+            "Retry fire time does not match the CronJob schedule"
+        )
+        assert cron_job.next_fire_time(timing.fire_time) == timing.next_fire_time, (
+            "Retry next fire time does not match the CronJob schedule"
+        )
         return timing
     scheduled = annotations.get("batch.kubernetes.io/cronjob-scheduled-timestamp")
     anchor = scheduled if scheduled is not None else job.metadata.creation_timestamp

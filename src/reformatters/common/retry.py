@@ -16,10 +16,11 @@ def check_deadline(deadline: pd.Timestamp | None) -> None:
         raise DeadlineExceededError(f"Deadline {deadline} reached")
 
 
-def exponential_backoff_time(attempt: int) -> float:
-    """Seconds to sleep after the given 0-indexed failed attempt: 0.2s, then 1s
-    doubling to a 16s cap, each jittered down to as little as half its value."""
-    max_delay = 0.2 if attempt == 0 else min(2.0 ** (attempt - 1), _MAX_BACKOFF_SECONDS)
+def exponential_backoff_time(
+    attempt: int, *, max_delay_seconds: float = _MAX_BACKOFF_SECONDS
+) -> float:
+    """Jittered exponential delay after a zero-indexed failed attempt."""
+    max_delay = 0.2 if attempt == 0 else min(2 ** (attempt - 1), max_delay_seconds)
     return float(np.random.default_rng().uniform(0.5 * max_delay, max_delay))
 
 

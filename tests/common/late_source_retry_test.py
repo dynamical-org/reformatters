@@ -155,6 +155,14 @@ def test_only_missing_data_classification(
     )
 
 
+def test_late_source_retries_require_single_store(tmp_path: Path) -> None:
+    storage = StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK)
+    with pytest.raises(ValueError, match="single store without replicas"):
+        NoaaRefsForecastHourlyVirtualDataset(
+            primary_storage_config=storage, replica_storage_configs=[storage]
+        )
+
+
 def test_validation_keeps_snapshot_when_successor_commits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
