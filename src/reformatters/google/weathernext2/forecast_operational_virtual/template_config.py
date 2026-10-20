@@ -1,10 +1,18 @@
 from typing import ClassVar, Literal
 
 import pandas as pd
+from pydantic import computed_field
 
+from reformatters.common.config_models import DatasetAttributes
+from reformatters.common.pydantic import replace
 from reformatters.common.types import Timestamp
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2ForecastVirtualTemplateConfig,
+)
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LICENSE,
+    REAL_TIME_ATTRIBUTION,
 )
 
 
@@ -20,6 +28,18 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
     time_domain_end: ClassVar[str] = "Present"
     dataset_description: ClassVar[str] = (
         "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble "
-        "model. Forecast values are published once their valid time is at least one "
-        "hour in the past, so recent initialization times are intentionally partial."
+        "model."
     )
+
+    @computed_field
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        return replace(
+            super().dataset_attributes,
+            license=LICENSE,
+            attribution=(
+                "Google WeatherNext 2 forecast data processed by dynamical.org "
+                "from Google's WeatherNext 2 experimental data. "
+                f"{COPYRIGHT}. {REAL_TIME_ATTRIBUTION}"
+            ),
+        )

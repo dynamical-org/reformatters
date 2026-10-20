@@ -1,0 +1,27 @@
+name: WeatherNext Terms check
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/weathernext-terms-check.yml
+      - src/reformatters/google/weathernext_terms.py
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare Google's Terms with the pinned checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          terms_url=$(sed -n 's/^TERMS_URL = "\(.*\)"$/\1/p' src/reformatters/google/weathernext_terms.py)
+          curl --fail --location --retry 3 --max-time 120 "$terms_url" --output "$RUNNER_TEMP/terms-of-use.pdf"
+          expected=$(sed -n 's/^TERMS_SHA256 = "\(.*\)"$/\1/p' src/reformatters/google/weathernext_terms.py)
+          echo "$expected  $RUNNER_TEMP/terms-of-use.pdf" | sha256sum --check
