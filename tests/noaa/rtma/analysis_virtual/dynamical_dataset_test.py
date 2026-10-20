@@ -32,6 +32,7 @@ def test_active_single_writer_has_finite_polling_deadline(tmp_path: Path) -> Non
     dataset = make_dataset(tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     assert not cron.suspend
+    assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert cron.schedule == "45 * * * *"
     assert cron.pod_active_deadline == timedelta(minutes=50)

@@ -33,14 +33,26 @@ class NoaaRtmaAnalysisVirtualRegionJob(
     VirtualRegionJob[RtmaDataVar, NoaaRtmaAnalysisVirtualSourceFileCoord]
 ):
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    source_file_coord_class: ClassVar[type[NoaaRtmaAnalysisVirtualSourceFileCoord]] = (
+        NoaaRtmaAnalysisVirtualSourceFileCoord
+    )
 
     def generate_source_file_coords(
         self, processing_region_ds: xr.Dataset, data_var_group: Sequence[RtmaDataVar]
     ) -> Sequence[NoaaRtmaAnalysisVirtualSourceFileCoord]:
-        return [
-            NoaaRtmaAnalysisVirtualSourceFileCoord(time=time, data_vars=data_var_group)
-            for time in pd.to_datetime(processing_region_ds["time"].values)
-        ]
+        coords = []
+        for time in pd.to_datetime(processing_region_ds["time"].values):
+            available = [
+                var
+                for var in data_var_group
+                if var.internal_attrs.available_from is None
+                or time >= var.internal_attrs.available_from
+            ]
+            if available:
+                coords.append(
+                    self.source_file_coord_class(time=time, data_vars=available)
+                )
+        return coords
 
     def discover_available(
         self, pending: list[NoaaRtmaAnalysisVirtualSourceFileCoord]

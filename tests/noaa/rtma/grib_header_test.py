@@ -91,6 +91,7 @@ def test_real_headers_tile_exactly_and_select_by_identity(
         (16 + 17, b"\x01", "reference time"),
         (16 + 14, b"\x0d", "reference time"),
         (118 + 18, (1).to_bytes(4), "zero-lead"),
+        (118 + 17, b"\x02", "forecast time unit"),
         (152 + 9, b"\0\x02", "simple packing"),
         (173 + 5, b"\xfe", "without bitmap"),
         (179, (5).to_bytes(4), "Packed data size"),

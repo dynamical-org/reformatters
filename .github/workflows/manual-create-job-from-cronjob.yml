@@ -50,6 +50,7 @@ name: 'Manual: Create Job from CronJob'
         - noaa-rrfs-forecast-84-hour-virtual-update
         - noaa-rrfs-forecast-sub-hourly-virtual-update
         - noaa-rtma-analysis-virtual-update
+        - noaa-rtma-ru-analysis-virtual-update
         - u-arizona-swann-analysis-update
         - ucsb-chc-chirps-analysis-final-update
         - ucsb-chc-chirps-analysis-preliminary-update

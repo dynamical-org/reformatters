@@ -26,6 +26,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "4h"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "54m"),
     ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "90m"),
+    ("noaa-rtma-ru-analysis-virtual", "2026-09-27 00:15", "45m"),
     ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-rrfs-forecast-84-hour-virtual", "2026-09-27 00:00", "230m"),
