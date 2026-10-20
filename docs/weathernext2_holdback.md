@@ -6,6 +6,14 @@ Operational updates revisit 17 days of initializations: the 15-day forecast hori
 
 The update schedule is `5 1,7,13,19 * * *`; its final pod validates the result. Decode health samples both ends of the update window so a partial newest initialization does not eliminate long-lead coverage. `CheckNoRefsInsideHoldback` checks representative chunks in the update window; it is a regression alert, not an exhaustive remediation audit.
 
+## Terms notices
+
+The operational dataset uses `license="other"`: values relating to a time less than one hour ago or in the future fall under Google's Real-Time Experimental Data Terms; older values remain CC BY 4.0. This metadata does not change the publication holdback. Both products describe their transformations in `modifications`; the historical product retains its CC BY 4.0 attribution and license.
+
+Each operational Icechunk repository carries `notices/<revision>/TERMS_OF_USE.pdf`, `LEGALLY_BINDING_TERMS_OF_USE.txt`, and `NOTICE.txt`. Every group's `notice_files` attribute links to these files. Revisions are the first 12 SHA-256 hex characters of the sorted file names and bytes (each followed by a NUL). Bundles are immutable: an existing path must contain exactly the expected bytes. Writers publish and read back the files before committing metadata that links to them. Whole-prefix copies include them; Icechunk session exports do not.
+
+The daily `WeatherNext Terms check` workflow compares Google's live PDF with `src/reformatters/google/weathernext_terms_of_use.pdf` and fails on a fetch failure or changed bytes. On failure, distinguish download problems from changed terms. Review any new terms, replace the vendored PDF and `TERMS_SHA256` in `weathernext_terms.py`, update the notice wording as required, regenerate the operational template, and review its new bundle URLs before deploying. Keep prior bundle revisions available for older snapshots. Terms changes require an operator decision; the workflow does not alter publication.
+
 ## Audit
 
 `src/scripts/weathernext2_holdback.py audit` reads Icechunk metadata anonymously. It pins one snapshot and probes every chunk in every held-back `(init, lead, variable)` within the committed array grids, including all ensemble members and pressure levels. It reads no source weather chunks. The report identifies the snapshot and cutoff and lists counts for every affected step and variable. A nonzero count exits with status 1. This checks extra refs; the completeness scan in [validation.md](validation.md) checks missing expected refs.
