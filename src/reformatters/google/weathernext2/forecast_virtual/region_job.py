@@ -13,6 +13,7 @@ from pydantic import Field
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
+from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
@@ -385,6 +386,19 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         ]
     ]:
         if self.processing_mode == "update":
+            if (
+                self.source_layout == "operational"
+                and self.publication_holdback is None
+                and self.publication_cutoff == pd.Timestamp.max
+            ):
+                bound = self.manifest_init_split * sum(
+                    array.sizes["lead_time"]
+                    for _, array in walk_data_arrays(self.template_ds)
+                )
+                assert len(remaining) <= bound, (
+                    f"Unrestricted update has {len(remaining)} pending coordinates, exceeding bound {bound}; "
+                    "run the rollout backfill in docs/weathernext2_holdback.md#unrestricted-rollout"
+                )
             yield from super().process_virtual_refs(remaining)
             return
 

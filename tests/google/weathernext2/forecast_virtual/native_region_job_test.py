@@ -46,6 +46,68 @@ def delayed_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture
+def unrestricted_update_job() -> GoogleWeathernext2ForecastOperationalVirtualRegionJob:
+    return GoogleWeathernext2ForecastOperationalVirtualRegionJob(
+        tmp_store=Path("unused.zarr"),
+        template_ds=OPERATIONAL.get_template(pd.Timestamp("2025-01-01T18:00")),
+        data_vars=OPERATIONAL.data_vars,
+        append_dim="init_time",
+        region=slice(0, 3),
+        reformat_job_name="test",
+        processing_mode="update",
+        publication_cutoff=pd.Timestamp.max,
+        poll_deadline=pd.Timestamp("2000-01-01"),
+    )
+
+
+def test_unrestricted_update_rejects_backlog_before_discovery(
+    unrestricted_update_job: GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = unrestricted_update_job
+    bound = (
+        job.manifest_init_split
+        * len(job.template_ds.to_dataset().lead_time)
+        * len(job.data_vars)
+    )
+    assert bound == 3360
+    coord = job.source_file_coords()[0]
+    discovery = Mock(side_effect=AssertionError("discovery must not run"))
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    with pytest.raises(
+        AssertionError,
+        match=rf"{bound + 1}.*{bound}.*docs/weathernext2_holdback.md#unrestricted-rollout",
+    ):
+        list(job.process_virtual_refs([coord] * (bound + 1)))
+    discovery.assert_not_called()
+
+
+@pytest.mark.parametrize("at_bound", [False, True])
+def test_unrestricted_update_admits_steady_state_and_batch_boundary(
+    unrestricted_update_job: GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+    monkeypatch: pytest.MonkeyPatch,
+    at_bound: bool,
+) -> None:
+    job = unrestricted_update_job
+    coords = job.source_file_coords()
+    oldest = min(coord.init_time for coord in coords)
+    first_lead = min(coord.lead_time for coord in coords)
+    pending = [
+        coord
+        for coord in coords
+        if coord.init_time != oldest or coord.lead_time == first_lead
+    ]
+    per_init = len(job.template_ds.to_dataset().lead_time) * len(job.data_vars)
+    assert len(pending) == 2 * per_init + len(job.data_vars) == 1694
+    if at_bound:
+        pending = [coords[0]] * (job.manifest_init_split * per_init)
+    discovery = Mock(return_value=[])
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    assert list(job.process_virtual_refs(pending)) == []
+    discovery.assert_called_once_with(pending)
+
+
 def _var(
     config: GoogleWeathernext2ForecastVirtualTemplateConfig, path: str
 ) -> GoogleWeathernext2DataVar:
