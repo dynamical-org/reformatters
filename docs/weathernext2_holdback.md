@@ -6,39 +6,63 @@ Updates use the scheduled fire as `reference_time`; backfill workers and retries
 
 WeatherNext 2 operational updates revisit 17 days of initializations: the 15-day forecast horizon plus two days for late source files. All 60 leads are candidates for every initialization in the source-landing window; steps unavailable at the source read as NaN. `expected_forecast_length` describes the source horizon, not the number of leads currently published. A source step missing for longer than the retry window needs a whole-archive completeness scan and targeted backfill.
 
-The WeatherNext 2 update schedule is `5 1,7,13,19 * * *` and remains suspended for the rollout below; its final pod validates the result. The unrestricted update keeps the existing extent: `newest_init = floor_6h(reference_time - 7h)`. This is a source-landing delay, independent of forecast valid time: all 60 leads of that init are candidates. Source inits sampled in October 2026 landed at 6.1–7.5 hours after initialization (median 6.8 hours, excluding one 46-hour outlier). Decode health samples both ends of the update window. `CheckNoRefsInsideHoldback` runs only in delayed mode and checks representative chunks in that window; it is a regression alert, not an exhaustive remediation audit.
+The WeatherNext 2 update schedule is `5 1,7,13,19 * * *` and remains suspended for the rollout below; its final pod validates the result. The unrestricted update keeps the existing extent, using a scheduling heuristic: `newest_init = floor_6h(reference_time - 7h)`. The seven-hour source-landing delay predicts availability rather than guaranteeing it, and is independent of forecast valid time: all 60 leads of that init are candidates. Source inits sampled in October 2026 landed at 6.1–7.5 hours after initialization (median 6.8 hours, excluding one 46-hour outlier). Decode health samples both ends of the update window. `CheckNoRefsInsideHoldback` runs only in delayed mode and checks representative chunks in that window; it is a regression alert, not an exhaustive remediation audit.
 
 ## WeatherNext 3 release validation
 
-WeatherNext 3 crons remain suspended. Updates revisit the source horizon plus two days so previously withheld steps and late files are rediscovered. Unrestricted updates include initializations through `floor(reference_time - 6h, init_frequency)`; source listings determine which steps are available. The six-hour source-landing delay starts polling near the measured earliest arrivals: interim inits typically land at 6.4–6.7 hours, and synoptic inits at a median 7.2 hours (observed maximum 10.3 hours). All leads arrive in one burst. The hourly `10 * * * *` cadence and 25-minute poll window let later fires finish late arrivals without repeatedly listing inits too young to land.
+WeatherNext 3 crons remain suspended. Updates revisit the source horizon plus two days so previously withheld steps and late files are rediscovered. Unrestricted updates include initializations through `floor(reference_time - 6h, init_frequency)`; source listings determine which steps are available. The six-hour source-landing delay is a scheduling heuristic, not an availability guarantee. It starts polling near the measured earliest arrivals: interim inits typically land at 6.4–6.7 hours, and synoptic inits at a median 7.2 hours (observed maximum 10.3 hours). All leads arrive in one burst. The hourly `10 * * * *` cadence and 25-minute poll window let later fires finish late arrivals without repeatedly listing inits too young to land.
 
 Start a controlled update just after a scheduled fire. Before unsuspending updates, require a [completeness scan](validation.md) and a controlled update with successful inline validation. Scan the pinned snapshot using its recorded policy and reference time. Source completion markers alone are insufficient. If inline validation crosses a schedule boundary, repeat the run for the new launch scope.
 
-Completeness allows at least 5% of the newest WN2 init, then requires complete older inits. WN3 15-day products use the same two tiers. WN3 48-hour products allow 5% for each of the two newest hourly inits, then require 100%: a late synoptic init can still be landing when the following hourly init starts. Delayed mode retains its original thresholds.
+Unrestricted completeness allows at least 5% of the newest init and requires every older init to be complete, for WN2 and all WN3 products. An incomplete synoptic init displaced by a following hourly init fails validation and must be filled. WN2 reserves five minutes of its 30-minute pod deadline for validation; WN3 retains its 15-minute grace. Delayed mode retains its original thresholds.
 
 Measure the complete update, including commits and validation, within the configured memory and deadline. The first pod must succeed without restarts or replacements; stop replacements after a failure before repeating the timing run.
 
 ## Unrestricted rollout
 
-Keep WN2 and all four WN3 crons suspended in code. Deploy the Worker change before ingesting unrestricted refs, including support for unrestricted whole-variable listings. Wait for running writers to finish. Do not use the first operational update to fill the backlog: update mode builds every available pending ref in one tick, potentially about 9.7 million WN2 refs, whereas backfill mode commits by manifest window.
+Keep WN2 and all four WN3 crons suspended in code. Deploy the Worker change before ingesting unrestricted refs, including support for unrestricted whole-variable listings, and drain active writers. Do not use the first operational update to fill the backlog. Unrestricted updates reject oversized pending sets before source discovery; use the fixed-range backfill below.
 
-1. Pin a planned reference time `F`. For WN2, set `WINDOW_END = floor_6h(F - 7h) + 6h` and `WINDOW_START = WINDOW_END - 17 days`. Inspect the store's existing extent; if a suspension left older gaps, move the start earlier. Use full ISO timestamps with seconds precision for all placeholders.
-2. Run a bounded rewrite backfill over that window. The existing-store CLI requires `--overwrite-chunks`, which rewrites present refs too; `--overwrite-metadata` alone launches no workers. Begin with one job per pod and one concurrent pod:
+1. At suspension, record the last successful old-policy snapshot, its scheduled fire, and its `publication_cutoff` (fire minus one hour). In that pinned snapshot, record `WITHHELD_START`: the oldest init whose last lead was not yet past the old cutoff, using `init_time + expected_forecast_length > publication_cutoff`. For WN2 this is the first six-hour init strictly after `publication_cutoff - 360h`. Inventory any older outage gaps separately.
+2. Pin the rollout reference time `F`. WN2's exclusive `ROLLOUT_END` is `floor_6h(F - 7h) + 6h`; WN3's is `floor(F - 6h, init_frequency) + init_frequency`. These landing extents are scheduling heuristics, not guarantees. Backfill the fixed range `[WITHHELD_START, ROLLOUT_END)`. Keep that start if rollout is delayed; never replace it with a freshly computed `now - 17 days`. Extend the end for later landing inits as needed, and repair separately inventoried older outages. Use full ISO timestamps with seconds precision.
+3. Pilot one dense, fully landed four-init WN2 manifest window within that fixed range and the committed extent at `--jobs-per-pod 4 --max-parallelism 1`. Set `PILOT_START` on a four-init manifest boundary and `PILOT_END` one day later. A single worker processes all four one-init jobs and builds one four-init commit. Record peak RSS and commit duration for that commit before choosing concurrency.
 
 ```sh
-DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --filter-start WINDOW_START --filter-end WINDOW_END --reference-time F --jobs-per-pod 1 --max-parallelism 1
+DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --filter-start PILOT_START --filter-end PILOT_END --reference-time F --jobs-per-pod 4 --max-parallelism 1
 ```
 
-Omitting `--append-dim-end` repairs the committed extent. If it ends before `WINDOW_END`, add `--overwrite-metadata --append-dim-end WINDOW_END` to expand it. Preserve that reference time on retries. One full WN2 init is `60 × 64 × (8 + 6 × 13) = 330,240` refs; one init job per pod bounds added refs to that size. Larger workers still commit at most four inits per manifest batch (1,320,960 refs with all variables). This replaces a possible 9.7-million-ref update batch with bounded commits. Measure peak RSS and commit time on the pilot before increasing concurrency; [backfill sizing](backfill.md#sizing-a-virtual-backfill) separates added refs from manifests rewritten.
+One full WN2 init is `60 × 64 × (8 + 6 × 13) = 330,240` refs. One init job per pod bounds newly built refs to that size; larger workers can build up to four inits per manifest batch (1,320,960 refs). [Backfill sizing](backfill.md#sizing-a-virtual-backfill) distinguishes added refs from manifests rewritten. Use the measured pilot to choose concurrency before running the fixed range:
 
-3. WN3 first enablement also requires an initial backfill over each product's update window, ending at `floor(F - 6h, init_frequency) + init_frequency`. Use one job per pod and one concurrent pod for the pilot. For a new store omit overwrite flags; for an existing store use the bounded rewrite procedure above. Keep all four crons suspended while backfills complete. Backfills admit future-valid leads under the unrestricted policy.
-4. Run a pinned completeness scan and one controlled update with successful inline validation while schedules remain suspended. Record the snapshot, source-landing extent, peak RSS, commit duration, and validation duration. Release WN2 and WN3 schedules only in follow-up changes after these checks pass. If the next planned update window advances while preparing the release, backfill any resulting gaps before resuming.
+```sh
+DYNAMICAL_ENV=prod uv run main google-weathernext2-forecast-operational-virtual backfill-kubernetes --overwrite-chunks --filter-start WITHHELD_START --filter-end ROLLOUT_END --reference-time F --jobs-per-pod 1 --max-parallelism CHOSEN_PARALLELISM
+```
+
+Keep `--overwrite-chunks`: the existing-store CLI has no add-only worker mode. With unchanged source objects it rewrites byte-identical refs, so retrying the fixed range is idempotent and resumable. `--overwrite-metadata` alone launches no workers. Omitting `--append-dim-end` repairs the committed extent; if it ends before `ROLLOUT_END`, add `--overwrite-metadata --append-dim-end ROLLOUT_END`. Preserve `F` on retries.
+
+4. WN3 first enablement also requires an initial backfill through its fixed `ROLLOUT_END`, starting at the chosen initial archive start or recorded `WITHHELD_START` for an existing delayed store. Pilot at one job per pod and one concurrent pod. For a new store omit overwrite flags; for an existing store use the bounded rewrite procedure above. Backfills admit future-valid leads. WN3 enablement also requires the termination procedure below to be ready.
+5. Pin the resulting snapshot and run the manifest scan over the fixed coverage range. Inspect residual missing refs and repair older gaps before a controlled update; the newest init may still be mid-landing, but every older init must be complete. Run one controlled update with successful inline validation while schedules remain suspended. Record its snapshot, pending count, peak RSS, commit duration, and validation duration. Restore schedules only in follow-up changes after these checks pass. If the end advances, extend coverage without moving `WITHHELD_START`.
+
+### Update size limit
+
+Before discovery, an unrestricted update's missing candidates must not exceed `manifest_init_split × all product leads × all product variables`, counted as `(init, lead, variable)` coordinates. WN2's bound is `4 × 60 × 14 = 3,360`. A new landing init adds 840 candidates; one missed fire adds at most another 840, plus a typical one-lead straggler across all variables adds 14: 1,694 candidates. Even an entire additional late init totals 2,520, below the bound.
+
+WN3 15-day bounds are `64 × 360 × V` and 48-hour bounds are `384 × 48 × V`, with `V=19` or `2` for the grid. A newest init plus one missed-fire init plus one entire straggling init is at most `3 × leads × V`: 3/64 of the 15-day bound or 3/384 of the 48-hour bound. Source delays can exceed these ordinary cases; an oversized backlog fails with its count, bound, and this rollout link instead of building a giant ref batch. The size guard applies only to unrestricted updates; backfill batching is unchanged.
 
 ## Withdrawal containment
 
 If delayed publication must be restored, first enable the Worker valid-time gate for chunk and listing routes, including cached responses, and suspend the affected update crons durably in code. Wait for active update and backfill jobs to finish before inventorying snapshots. Then restore the family's one-hour switch. Changing the switch prevents new restricted refs; it does not remove existing refs.
 
 WeatherNext 3 withdrawal containment is the Worker gate plus suspending all four crons. WeatherNext 3 ref-removal tooling is not yet provided. The destructive commands below support only WeatherNext 2 operational.
+
+## Termination
+
+WN3 enablement is gated on readiness to carry out this procedure, distinct from restoring delayed publication:
+
+1. Restore the Worker gate or block the route.
+2. Purge the `wn.dynamical.org` Cloudflare cache, including chunk responses served with `public, max-age=86400`.
+3. Suspend the crons and drain active writers.
+4. For WN2, purge refs with the existing tool or delete the operational repo prefix.
+5. For WN3, delete its repo prefixes; ref-removal tooling is not provided.
+6. Post a dated notice in the dataset description and catalog.
 
 ## WeatherNext 2 withdrawal audit
 
