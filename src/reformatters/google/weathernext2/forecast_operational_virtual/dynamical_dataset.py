@@ -58,8 +58,11 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
         update = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
+            # A run usually lands as one burst around init+6h50m, before this
+            # init+7h05m fire; a 3h poll lands a late run within the same cycle and
+            # stops well before the next fire.
             schedule="5 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            pod_active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",

@@ -84,12 +84,12 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
     assert update.workers_total == 1
     assert update.parallelism == 1
-    assert update.pod_active_deadline < timedelta(hours=6)
+    assert update.pod_active_deadline == timedelta(hours=3)
     assert update.suspend is False
     fire = pd.Timestamp("2026-10-20T07:05")
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("1min")
-    ) == fire + pd.Timedelta("25min")
+    ) == fire + pd.Timedelta("2h55min")
     assert dataset.virtual_poll_deadline_grace == timedelta(minutes=5)
     (current,) = [
         item
@@ -114,6 +114,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     assert decode.positions == "all"
     assert decode.max_positions == 2
     assert dataset.region_job_class.operational_update_window == timedelta(days=17)
+    assert dataset.region_job_class.tick_interval == timedelta(minutes=1)
     description = dataset.template_config.dataset_attributes.description
     assert description == (
         "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model."
