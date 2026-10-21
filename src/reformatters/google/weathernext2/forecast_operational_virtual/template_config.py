@@ -23,7 +23,7 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
     append_dim_start: Timestamp = pd.Timestamp("2025-01-01T00:00")
     dataset_id_value: ClassVar[str] = "google-weathernext2-forecast-operational-virtual"
     dataset_name_value: ClassVar[str] = (
-        "Google WeatherNext 2 operational forecast, virtual"
+        "Google WeatherNext 2 forecast, operational, virtual"
     )
     time_domain_end: ClassVar[str] = "Present"
     dataset_description: ClassVar[str] = (
