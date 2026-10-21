@@ -25,6 +25,10 @@ MARS_OPEN_DATA_CUTOVER = pd.Timestamp("2024-04-01T00:00")
 # From the cutover, the control member lives in oper-fc; perturbed members remain in enfo-ef.
 IFS_CYCLE_50R1_CUTOVER = pd.Timestamp("2026-05-12T06:00")
 
+# ECMWF's MARS archive can't deliver part of these init times, so we read none of their
+# source and every variable stays NaN. To fill one, see docs/backfill.md.
+MARS_SOURCE_GAP_INIT_TIMES = frozenset({pd.Timestamp("2024-01-03T00:00")})
+
 DYNAMICAL_MARS_GRIB_BASE_URL = (
     "https://data.source.coop/dynamical/ecmwf-ifs-grib/ecmwf-ifs-ens"
 )

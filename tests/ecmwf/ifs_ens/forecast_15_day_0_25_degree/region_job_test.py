@@ -125,6 +125,33 @@ def test_region_job_generate_source_file_coords_mars() -> None:
     assert mars_coord.request_type == "cf_sfc"
 
 
+def test_region_job_generate_source_file_coords_skips_mars_source_gap_init() -> None:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    object.__setattr__(template_config, "append_dim_start", pd.Timestamp("2024-01-02"))
+    template_ds = template_config.get_template(pd.Timestamp("2024-01-05"))
+
+    region_job = EcmwfIfsEnsForecast15Day025DegreeRegionJob.model_construct(
+        tmp_store=Mock(),
+        template_ds=template_ds.isel(
+            ensemble_member=slice(0, 2), lead_time=slice(0, 3)
+        ),
+        data_vars=template_config.data_vars,
+        append_dim=template_config.append_dim,
+        region=slice(0, 3),
+        reformat_job_name="test",
+    )
+    processing_region_ds, _ = region_job._get_region_datasets()
+
+    t2m = item(v for v in template_config.data_vars if v.name == "temperature_2m")
+    coords = region_job.generate_source_file_coords(processing_region_ds, [t2m])
+
+    assert {c.init_time for c in coords} == {
+        pd.Timestamp("2024-01-02"),
+        pd.Timestamp("2024-01-04"),
+    }
+    assert len(coords) == 2 * 3 * 2
+
+
 def test_region_job_generate_source_file_coords_mars_date_available_vars() -> None:
     """Variables with date_available set should still produce coords for MARS-era init times.
 

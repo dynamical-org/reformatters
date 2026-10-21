@@ -34,6 +34,7 @@ from reformatters.ecmwf.ecmwf_utils import (
 
 from .source_file_coord import (
     MARS_OPEN_DATA_CUTOVER,
+    MARS_SOURCE_GAP_INIT_TIMES,
     IfsEnsSourceFileCoord,
     MarsSource,
     MarsSourceFileCoord,
@@ -84,6 +85,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             processing_region_ds["ensemble_member"].values,
         ):
             if not group_has_hour_0_values and lead_time == pd.Timedelta(0):
+                continue
+            if init_time in MARS_SOURCE_GAP_INIT_TIMES:
                 continue
 
             member = int(ensemble_member)
