@@ -73,11 +73,9 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
             name=self.dataset_name_value,
             description=description,
             attribution=(
-                "Google requires this attribution for data relating to a time less "
-                "than 1 hour ago and the future: Google WeatherNext 3, "
-                f"{REAL_TIME_ATTRIBUTION} For data relating to a time 1 hour ago "
-                "or more, Google requires this attribution: "
-                + _HISTORICAL_ATTRIBUTION.format(grid=grid)
+                "Data relating to a time less than 1 hour ago and the future: "
+                f"Google WeatherNext 3, {REAL_TIME_ATTRIBUTION} Data relating to a "
+                "time 1 hour ago or more: " + _HISTORICAL_ATTRIBUTION.format(grid=grid)
             ),
             license="CC-BY-4.0",
             modifications=self.modifications,

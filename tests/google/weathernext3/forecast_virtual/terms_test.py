@@ -19,10 +19,10 @@ DATASETS = [
     if isinstance(dataset, GoogleWeathernext3ForecastVirtualDataset)
 ]
 REVISIONS = {
-    "google-weathernext3-forecast-15-day-0-1-degree-virtual": "5179bf6155a6",
-    "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "d29aa5111a80",
-    "google-weathernext3-forecast-15-day-0-05-degree-virtual": "e6a15972119b",
-    "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "6d943fa1dca9",
+    "google-weathernext3-forecast-15-day-0-1-degree-virtual": "94f8ada70d9d",
+    "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "a6da0b8b6767",
+    "google-weathernext3-forecast-15-day-0-05-degree-virtual": "5f3120f82a16",
+    "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "489b22f9e6c9",
 }
 
 
@@ -39,11 +39,11 @@ def test_wn3_notices_match_the_product_grid_and_public_repository(
     assert attributes.modifications is not None
     assert attributes.modifications.startswith("The publisher, dynamical.org, ")
     real_time, historical = attributes.attribution.split(
-        " For data relating to a time 1 hour ago or more, Google requires this attribution: "
+        " Data relating to a time 1 hour ago or more: "
     )
     assert real_time == (
-        "Google requires this attribution for data relating to a time less than "
-        f"1 hour ago and the future: Google WeatherNext 3, {REAL_TIME_ATTRIBUTION}"
+        "Data relating to a time less than 1 hour ago and the future: "
+        f"Google WeatherNext 3, {REAL_TIME_ATTRIBUTION}"
     )
     expected_grid = "0p1deg" if config.grid_degrees == 0.1 else "0p05deg"
     assert historical.startswith("© 2026 DeepMind Technologies Limited's ")
