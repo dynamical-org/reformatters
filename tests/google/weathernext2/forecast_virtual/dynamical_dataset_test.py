@@ -14,6 +14,9 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
+from reformatters.google.weathernext2.forecast_virtual.region_job import (
+    OPERATIONAL_SOURCE_LANDING_DELAY,
+)
 from reformatters.google.weathernext2.forecast_virtual.validation import (
     CheckNoRefsInsideHoldback,
 )
@@ -75,21 +78,40 @@ def test_operational_product_has_virtual_health_checks_and_splits(
 
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
-    assert update.schedule == "5 1,7,13,19 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
-        "2026-09-04T01:05"
+        "2026-09-04T02:05"
     )
-    assert update.previous_fire_time(pd.Timestamp("2026-09-04T00:59")) == pd.Timestamp(
-        "2026-09-03T19:05"
+    assert update.previous_fire_time(pd.Timestamp("2026-09-04T06:59")) == pd.Timestamp(
+        "2026-09-04T04:05"
     )
+    day_start = pd.Timestamp("2026-10-20T00:00")
+    fires = []
+    fire = update.next_fire_time(day_start)
+    while fire < day_start + pd.Timedelta("1D"):
+        fires.append(fire)
+        fire = update.next_fire_time(fire)
+    fires_by_init: dict[pd.Timestamp, list[pd.Timedelta]] = {}
+    for fire in fires:
+        newest_init = (fire - OPERATIONAL_SOURCE_LANDING_DELAY).floor("6h")
+        fires_by_init.setdefault(newest_init, []).append(fire - newest_init)
+    assert all(
+        offsets == [pd.Timedelta(f"{hours}h5min") for hours in (7, 8, 9, 10)]
+        for init, offsets in fires_by_init.items()
+        if init >= day_start
+    )
+    assert len(fires) == 16
     assert update.workers_total == 1
     assert update.parallelism == 1
-    assert update.pod_active_deadline == timedelta(hours=3)
+    assert update.pod_active_deadline == timedelta(minutes=30)
     assert update.suspend is False
     fire = pd.Timestamp("2026-10-20T07:05")
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("1min")
-    ) == fire + pd.Timedelta("2h55min")
+    ) == fire + pd.Timedelta("25min")
+    catch_up = pd.Timestamp("2026-10-20T09:05")
+    assert dataset._virtual_poll_deadline(
+        catch_up + pd.Timedelta("1min")
+    ) == catch_up + pd.Timedelta("25min")
     assert dataset.virtual_poll_deadline_grace == timedelta(minutes=5)
     (current,) = [
         item
