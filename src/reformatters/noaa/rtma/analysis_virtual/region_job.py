@@ -33,6 +33,7 @@ class NoaaRtmaAnalysisVirtualRegionJob(
     VirtualRegionJob[RtmaDataVar, NoaaRtmaAnalysisVirtualSourceFileCoord]
 ):
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    source_prefix: ClassVar[str] = SOURCE_PREFIX
     source_file_coord_class: ClassVar[type[NoaaRtmaAnalysisVirtualSourceFileCoord]] = (
         NoaaRtmaAnalysisVirtualSourceFileCoord
     )
@@ -59,8 +60,8 @@ class NoaaRtmaAnalysisVirtualRegionJob(
     ) -> list[tuple[NoaaRtmaAnalysisVirtualSourceFileCoord, int]]:
         return discover_available_by_obstore_listing(
             pending,
-            store=s3_store(SOURCE_PREFIX, region=SOURCE_REGION),
-            location_prefix=SOURCE_PREFIX,
+            store=s3_store(self.source_prefix, region=SOURCE_REGION),
+            location_prefix=self.source_prefix,
             require_index=False,
         )
 
@@ -82,6 +83,11 @@ class NoaaRtmaAnalysisVirtualRegionJob(
             file_size,
             coord.time,
             set(variables),
+            bitmapped=frozenset(
+                identity
+                for identity, var in variables.items()
+                if var.internal_attrs.requires_bitmap
+            ),
         )
         refs = [
             VirtualRef(
