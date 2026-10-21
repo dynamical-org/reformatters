@@ -85,7 +85,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     assert update.workers_total == 1
     assert update.parallelism == 1
     assert update.pod_active_deadline < timedelta(hours=6)
-    assert update.suspend is True
+    assert update.suspend is False
     fire = pd.Timestamp("2026-10-20T07:05")
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("1min")

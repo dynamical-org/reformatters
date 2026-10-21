@@ -65,7 +65,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             cpu="1.7",
             memory="7G",
             secret_names=self.store_factory.k8s_secret_names(),
-            suspend=True,
+            suspend=False,
         )
         return [update]
 
