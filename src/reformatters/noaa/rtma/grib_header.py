@@ -28,6 +28,8 @@ def scan_analysis_messages(
     file_size: int,
     expected_time: Timestamp,
     selected: set[FieldIdentity],
+    *,
+    bitmapped: frozenset[FieldIdentity] = frozenset(),
 ) -> Iterator[AnalysisMessage]:
     """Validate a GRIB chain and yield selected, independently decodable analyses."""
     assert file_size > 0, "Empty GRIB file"
@@ -67,7 +69,9 @@ def scan_analysis_messages(
             seen.add(identity)
             _validate_identification(sections[1], expected_time)
             _validate_grid(sections[3])
-            _validate_payload(header, pos, length, product)
+            _validate_payload(
+                header, pos, length, product, identity in bitmapped, read_range, offset
+            )
             yield AnalysisMessage(identity, offset, length)
         offset += length
     assert read_range(file_size - 4, file_size) == b"7777", (
@@ -75,7 +79,15 @@ def scan_analysis_messages(
     )
 
 
-def _validate_payload(header: bytes, pos: int, length: int, product: bytes) -> None:
+def _validate_payload(
+    header: bytes,
+    pos: int,
+    length: int,
+    product: bytes,
+    requires_bitmap: bool,
+    read_range: Callable[[int, int], bytes],
+    offset: int,
+) -> None:
     assert product[11] == 0, "Expected zero-lead analysis"
     assert product[17] in (0, 1), "Expected minute or hour forecast time unit"
     assert int.from_bytes(product[18:22]) == 0, "Expected zero-lead analysis"
@@ -83,6 +95,11 @@ def _validate_payload(header: bytes, pos: int, length: int, product: bytes) -> N
     representation, pos = _section(header, pos, 5, length)
     assert len(representation) == 21, "Expected simple packing DRT 5.0"
     assert representation[9:11] == b"\x00\x00", "Expected simple packing DRT 5.0"
+    if requires_bitmap:
+        _validate_bitmapped_payload(
+            header, pos, length, representation, read_range, offset
+        )
+        return
     assert int.from_bytes(representation[5:9]) == GRID_NX * GRID_NY, (
         "Wrong packed point count"
     )
@@ -95,6 +112,33 @@ def _validate_payload(header: bytes, pos: int, length: int, product: bytes) -> N
     data_size = int.from_bytes(header[pos : pos + 4])
     packed_bytes = (GRID_NX * GRID_NY * representation[19] + 7) // 8
     assert data_size == packed_bytes + 5, "Packed data size does not match grid"
+    assert pos + data_size == length - 4, "GRIB sections do not tile message"
+
+
+def _validate_bitmapped_payload(
+    header: bytes,
+    pos: int,
+    length: int,
+    representation: bytes,
+    read_range: Callable[[int, int], bytes],
+    offset: int,
+) -> None:
+    npts = int.from_bytes(representation[5:9])
+    assert npts > 0, "All-missing bitmap fields are unsupported"
+    assert npts <= GRID_NX * GRID_NY, "Wrong packed point count"
+    assert pos + 6 <= len(header), "Truncated GRIB bitmap header"
+    assert header[pos + 4] == 6, "Expected GRIB section 6"
+    assert header[pos + 5] == 0, "Bitmap required with explicit indicator 0"
+    size = int.from_bytes(header[pos : pos + 4])
+    assert size == 6 + (GRID_NX * GRID_NY + 7) // 8, "Invalid bitmap section length"
+    pos += size
+    assert pos + 5 <= length - 4, "Invalid bitmap section length"
+    data_header = read_range(offset + pos, offset + pos + 5)
+    assert len(data_header) == 5, "Truncated GRIB section 7 header range"
+    assert data_header[4] == 7, "Expected GRIB section 7"
+    data_size = int.from_bytes(data_header[:4])
+    packed_bytes = (npts * representation[19] + 7) // 8
+    assert data_size == packed_bytes + 5, "Packed data size does not match bitmap"
     assert pos + data_size == length - 4, "GRIB sections do not tile message"
 
 

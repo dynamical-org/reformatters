@@ -28,6 +28,12 @@ def sparse_source(fixture: dict[str, Any]) -> Callable[[int, int], bytes]:
                     result[left - start : right - start] = content[
                         left - pos : right - pos
                     ]
+        for segment in fixture.get("extra_ranges", []):
+            pos = segment["start"]
+            content = bytes.fromhex(segment["bytes"])
+            left, right = max(start, pos), min(end, pos + len(content))
+            if left < right:
+                result[left - start : right - start] = content[left - pos : right - pos]
         return bytes(result)
 
     return read_range
@@ -93,6 +99,7 @@ def test_real_headers_tile_exactly_and_select_by_identity(
         (118 + 18, (1).to_bytes(4), "zero-lead"),
         (118 + 17, b"\x02", "forecast time unit"),
         (152 + 9, b"\0\x02", "simple packing"),
+        (173 + 5, b"\0", "without bitmap"),
         (173 + 5, b"\xfe", "without bitmap"),
         (179, (5).to_bytes(4), "Packed data size"),
     ],
@@ -220,3 +227,42 @@ def test_missing_terminator_raises(source_fixture: dict[str, Any]) -> None:
                 SELECTED,
             )
         )
+
+
+def assert_empty_bitmap_scans_equal(
+    source_fixture: dict[str, Any],
+) -> None:
+    calls: list[tuple[int, int]] = []
+    read = sparse_source(source_fixture)
+
+    def read_range(start: int, end: int) -> bytes:
+        calls.append((start, end))
+        return read(start, end)
+
+    expected = list(
+        scan_analysis_messages(
+            read_range,
+            source_fixture["size"],
+            pd.Timestamp(source_fixture["time"]),
+            SELECTED,
+        )
+    )
+    expected_calls = calls.copy()
+    calls.clear()
+    actual = list(
+        scan_analysis_messages(
+            read_range,
+            source_fixture["size"],
+            pd.Timestamp(source_fixture["time"]),
+            SELECTED,
+            bitmapped=frozenset(),
+        )
+    )
+    assert actual == expected
+    assert calls == expected_calls
+
+
+def test_explicit_empty_bitmap_selection_preserves_hourly_scanner_reads(
+    source_fixture: dict[str, Any],
+) -> None:
+    assert_empty_bitmap_scans_equal(source_fixture)

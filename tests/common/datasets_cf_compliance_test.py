@@ -1255,19 +1255,25 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("V component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
     ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
     ("V component of wind", "standard_name", "noaa-hrrr-analysis"),
-    # RTMA's component winds follow its projected grid axes.
+    # RTMA and URMA component winds follow their projected grid axes.
     ("wind_u_10m", "standard_name", "noaa-rtma-analysis-virtual"),
     ("wind_u_10m", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-urma-analysis-virtual"),
     ("wind_v_10m", "standard_name", "noaa-rtma-analysis-virtual"),
     ("wind_v_10m", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-urma-analysis-virtual"),
     ("10u", "standard_name", "noaa-rtma-analysis-virtual"),
     ("10u", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10u", "standard_name", "noaa-urma-analysis-virtual"),
     ("10v", "standard_name", "noaa-rtma-analysis-virtual"),
     ("10v", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10v", "standard_name", "noaa-urma-analysis-virtual"),
     ("10 metre U wind component", "standard_name", "noaa-rtma-analysis-virtual"),
     ("10 metre U wind component", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10 metre U wind component", "standard_name", "noaa-urma-analysis-virtual"),
     ("10 metre V wind component", "standard_name", "noaa-rtma-analysis-virtual"),
     ("10 metre V wind component", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10 metre V wind component", "standard_name", "noaa-urma-analysis-virtual"),
     # U Arizona SWANN uses mm for snow variables to match source data conventions,
     # while other datasets use CF-compliant meters.
     # Excepted by var_name, short_name, and long_name since all three groupings detect the conflict.
@@ -1291,17 +1297,20 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("ice_cover_surface", "flag_values", "noaa-gfs-forecast-virtual"),
     ("ice_cover_surface", "flag_meanings", "noaa-gfs-analysis-virtual"),
     ("ice_cover_surface", "flag_meanings", "noaa-gfs-forecast-virtual"),
-    # ECCC HRDPS and RTMA publish an instantaneous 10 m gust, while DWD and ECMWF publish the
+    # ECCC HRDPS, RTMA and URMA publish an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "step_type", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "short_name", "noaa-rtma-analysis-virtual"),
     ("wind_gust_10m", "short_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "short_name", "noaa-urma-analysis-virtual"),
     ("wind_gust_10m", "long_name", "noaa-rtma-analysis-virtual"),
     ("wind_gust_10m", "long_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "long_name", "noaa-urma-analysis-virtual"),
     ("wind_gust_10m", "step_type", "noaa-rtma-analysis-virtual"),
     ("wind_gust_10m", "step_type", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "step_type", "noaa-urma-analysis-virtual"),
     # GFS and GEFS report categorical precipitation presence over a source-defined
     # window, while HRRR reports presence at the valid time.
     ("categorical_snow_surface", "step_type", "noaa-gfs-forecast"),

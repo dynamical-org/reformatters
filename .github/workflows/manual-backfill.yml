@@ -47,6 +47,7 @@ name: 'Manual: Backfill'
         - noaa-rrfs-forecast-sub-hourly-virtual
         - noaa-rtma-analysis-virtual
         - noaa-rtma-ru-analysis-virtual
+        - noaa-urma-analysis-virtual
         - u-arizona-swann-analysis
         - ucsb-chc-chirps-analysis-final
         - ucsb-chc-chirps-analysis-preliminary
