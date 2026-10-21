@@ -59,9 +59,8 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
         )
         if config.source_layout == "operational":
             expected_attribution = (
-                "Google requires this attribution for data relating to a time less than "
-                f"1 hour ago and the future: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
-                "For data relating to a time 1 hour ago or more, Google requires this attribution: "
+                f"Real-Time Data & Forecasts: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
+                "Historical Data: "
                 + expected_attribution.removeprefix(
                     "Google requires this attribution: "
                 )

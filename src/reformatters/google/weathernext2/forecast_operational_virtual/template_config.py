@@ -44,10 +44,8 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
         attributes = replace(
             historical,
             attribution=(
-                "Google requires this attribution for data relating to a time less "
-                "than 1 hour ago and the future: Google WeatherNext 2, "
-                f"{REAL_TIME_ATTRIBUTION} For data relating to a time 1 hour ago "
-                "or more, Google requires this attribution: "
+                f"Real-Time Data & Forecasts: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
+                "Historical Data: "
                 + historical.attribution.removeprefix(
                     "Google requires this attribution: "
                 )

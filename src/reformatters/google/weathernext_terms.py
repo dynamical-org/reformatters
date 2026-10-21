@@ -18,7 +18,7 @@ def render_notice_files(
     paragraphs = (
         COPYRIGHT,
         f"{attributes.name} ({attributes.dataset_id}) is published by dynamical.org from {product} experimental forecast data.",
-        "Data relating to a time less than 1 hour ago and the future is Real-Time Experimental Data governed by the GDM Real-Time Weather Forecasting Experimental Data Terms of Use. TERMS_OF_USE.pdf beside this file is a copy of those terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice. Data relating to a time 1 hour ago or more is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). A forecast value relates to the time in its valid_time coordinate (init_time + lead_time).",
+        "This data is licensed under the GDM Real-Time Weather Forecasting Experimental Data Terms of Use and CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), as set out in those Terms. TERMS_OF_USE.pdf beside this file is a copy of the Terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice.",
         LEGALLY_BINDING_NOTICE,
         f"Modifications: {attributes.modifications}",
         f"Attribution: {attributes.attribution}",

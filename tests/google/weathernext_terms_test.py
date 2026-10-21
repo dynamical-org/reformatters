@@ -62,7 +62,7 @@ def test_notice_rendering_and_revision() -> None:
     assert {name: hashlib.sha256(data).hexdigest() for name, data in files.items()} == {
         "TERMS_OF_USE.pdf": "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654",
         "LEGALLY_BINDING_TERMS_OF_USE.txt": "35a0deb0a5a3c4436a7fffe6e7253baa4c43ec41804a449600e44b233d1b443d",
-        "NOTICE.txt": "43f80a1aff78f49c6b46fb51d4fced2fb769bc26b18507bb7f638a54673352de",
+        "NOTICE.txt": "93129d6352e91f6a0210d277eb3d51a30ff5211b74d41b0589a910e795374970",
     }
     assert set(files) == {
         "TERMS_OF_USE.pdf",
@@ -75,7 +75,7 @@ def test_notice_rendering_and_revision() -> None:
     expected_paragraphs = [
         COPYRIGHT,
         "Google WeatherNext 2 operational forecast, virtual (google-weathernext2-forecast-operational-virtual) is published by dynamical.org from Google WeatherNext 2 experimental forecast data.",
-        "Data relating to a time less than 1 hour ago and the future is Real-Time Experimental Data governed by the GDM Real-Time Weather Forecasting Experimental Data Terms of Use. TERMS_OF_USE.pdf beside this file is a copy of those terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice. Data relating to a time 1 hour ago or more is licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). A forecast value relates to the time in its valid_time coordinate (init_time + lead_time).",
+        "This data is licensed under the GDM Real-Time Weather Forecasting Experimental Data Terms of Use and CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), as set out in those Terms. TERMS_OF_USE.pdf beside this file is a copy of the Terms, and LEGALLY_BINDING_TERMS_OF_USE.txt carries Google's notice.",
         LEGALLY_BINDING_NOTICE,
         f"Modifications: {attributes.modifications}",
         f"Attribution: {attributes.attribution}",
@@ -93,7 +93,7 @@ def test_notice_rendering_and_revision() -> None:
         + b"\0"
     ).hexdigest()[:12]
     assert notice_revision(files) == expected_revision
-    assert expected_revision == "efd4af63229a"
+    assert expected_revision == "3063f11e3c58"
     assert notice_revision(dict(reversed(list(files.items())))) == expected_revision
     assert notice_revision(files | {"NOTICE.txt": b"Changed\n"}) != expected_revision
     assert repo_notice_files(attributes, product="Google WeatherNext 2") == {
@@ -162,10 +162,8 @@ def test_historical_license_and_attribution_are_unchanged() -> None:
         "Google requires this attribution: "
     )
     assert operational.attribution == (
-        "Google requires this attribution for data relating to a time less than 1 hour ago "
-        f"and the future: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
-        "For data relating to a time 1 hour ago or more, Google requires this attribution: "
-        + historic_attribution
+        f"Real-Time Data & Forecasts: Google WeatherNext 2, {REAL_TIME_ATTRIBUTION} "
+        "Historical Data: " + historic_attribution
     )
     for config in (
         GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig(),

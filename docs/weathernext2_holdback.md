@@ -10,7 +10,7 @@ The WeatherNext 2 update schedule is `5 1,7,13,19 * * *` and remains suspended f
 
 ## Terms notices
 
-WeatherNext 2 operational and all four WeatherNext 3 datasets use `license="other"`: values relating to a time less than one hour ago or in the future fall under Google's Real-Time Experimental Data Terms; older values remain CC BY 4.0. Every WeatherNext product describes its transformations in `modifications`; WeatherNext 2 historical retains its CC BY 4.0 attribution and license. WeatherNext 3 historical attribution cites the Earth Engine page for its grid.
+WeatherNext 2 operational and all four WeatherNext 3 datasets use `license="other"`: Google's Real-Time Terms of Use and CC BY 4.0, as set out in those Terms. Every WeatherNext product describes its transformations in `modifications`; WeatherNext 2 historical retains its CC BY 4.0 attribution and license. WeatherNext 3 historical attribution cites the Earth Engine page for its grid.
 
 Each of these five Icechunk repositories carries `notices/<revision>/TERMS_OF_USE.pdf`, `LEGALLY_BINDING_TERMS_OF_USE.txt`, and `NOTICE.txt`. Every group's `notice_files` attribute links to these files. The shared renderer takes the source product name from the operational template config. Revisions are the first 12 SHA-256 hex characters of the sorted file names and bytes (each followed by a NUL). Bundles are immutable: an existing path must contain exactly the expected bytes. Writers publish and read back the files before committing metadata that links to them. Whole-prefix copies include them; Icechunk session exports do not.
 
