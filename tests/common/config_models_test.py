@@ -203,7 +203,7 @@ def test_mask_source_fill_value_requires_exact_float32_match() -> None:
 
 class TestDatasetAttributes:
     @pytest.mark.parametrize("license_name", ["CC-BY-4.0", "other"])
-    @pytest.mark.parametrize("notice_bits", range(16))
+    @pytest.mark.parametrize("notice_bits", range(8))
     def test_complete_license_notices_if_and_only_if_other_license(
         self, license_name: str, notice_bits: int
     ) -> None:
@@ -222,7 +222,6 @@ class TestDatasetAttributes:
         notices = {
             "copyright": "Test copyright",
             "terms_of_use": "Test terms",
-            "usage_restrictions": "Test restrictions",
             "notice_files": ("https://example.com/notices/NOTICE.txt",),
         }
         attributes.update(
@@ -230,7 +229,7 @@ class TestDatasetAttributes:
             for index, (name, value) in enumerate(notices.items())
             if notice_bits & (1 << index)
         )
-        if (license_name == "other") == (notice_bits == 15):
+        if (license_name == "other") == (notice_bits == 7):
             DatasetAttributes.model_validate(attributes)
         else:
             with pytest.raises(ValidationError, match=r"license|License"):
@@ -261,7 +260,6 @@ class TestDatasetAttributes:
                     "time_resolution": "1 hour",
                     "copyright": "Test copyright",
                     "terms_of_use": "Test terms",
-                    "usage_restrictions": "Test restrictions",
                     "notice_files": (url,),
                 }
             )

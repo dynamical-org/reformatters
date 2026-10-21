@@ -17,7 +17,6 @@ from reformatters.google.weathernext_terms import (
     COPYRIGHT,
     LEGALLY_BINDING_NOTICE,
     REAL_TIME_ATTRIBUTION,
-    USAGE_RESTRICTIONS,
     repo_notice_files,
 )
 
@@ -64,7 +63,6 @@ class GoogleWeathernext2ForecastOperationalVirtualTemplateConfig(
             license="other",
             copyright=COPYRIGHT,
             terms_of_use=LEGALLY_BINDING_NOTICE,
-            usage_restrictions=USAGE_RESTRICTIONS,
             notice_files=tuple(
                 f"{public_url}/{path}"
                 for path in repo_notice_files(attributes, product=self.product)

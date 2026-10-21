@@ -14,12 +14,11 @@
     "forecast_resolution": "Hourly",
     "copyright": "Copyright 2024-6 Google LLC",
     "terms_of_use": "By using this information, you agree to the Terms of Use found at https://storage.googleapis.com/weathernext-public/terms-of-use.pdf",
-    "usage_restrictions": "The GDM Real-Time Weather Forecasting Experimental Data Terms of Use (Section 1(c), and Section 4: Use Restrictions (b)) do not permit making real-time data available in a Restricted Country. Section 1(c) lists them as \u201cJapan, South Korea, Indonesia, Cuba, Iran, North Korea, Crimea and the so-called Donetsk People\u2019s Republic and Luhansk People\u2019s Republic\u201d. The data service at wn.dynamical.org refuses all WeatherNext data in those locations, whatever its age, and also refuses requests whose location cannot be determined, including requests over Tor.",
     "modifications": "The publisher, dynamical.org, restructured the source data into an Icechunk virtual Zarr dataset of references to the unmodified source chunks, combined the source statistic arrays into a statistic dimension, renamed its variables and dimensions, and applies read-time filters that convert temperatures from kelvin to degrees Celsius (subtracting 273.15), cloud-cover fractions to percent (multiplying by 100), 1-hour precipitation from metres of water equivalent to average kg m-2 s-1 (dividing by 3.6), and 1-hour radiation from J m-2 to average W m-2 (dividing by 3600). Values are otherwise the unchanged model output.",
     "notice_files": [
-      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/94f8ada70d9d/TERMS_OF_USE.pdf",
-      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/94f8ada70d9d/LEGALLY_BINDING_TERMS_OF_USE.txt",
-      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/94f8ada70d9d/NOTICE.txt"
+      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/8b2c6ed68d91/TERMS_OF_USE.pdf",
+      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/8b2c6ed68d91/LEGALLY_BINDING_TERMS_OF_USE.txt",
+      "https://google-weathernext3.r2.dynamical.org/google-weathernext3-forecast-15-day-0-1-degree-virtual/v0.1.0.icechunk/notices/8b2c6ed68d91/NOTICE.txt"
     ]
   },
   "zarr_format": 3,

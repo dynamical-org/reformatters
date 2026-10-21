@@ -20,11 +20,9 @@ from reformatters.google.weathernext2.storage import (
 from reformatters.google.weathernext_terms import (
     COPYRIGHT,
     LEGALLY_BINDING_NOTICE,
-    NON_ENDORSEMENT,
     REAL_TIME_ATTRIBUTION,
     TERMS_SHA256,
     TERMS_URL,
-    USAGE_RESTRICTIONS,
     notice_revision,
     render_notice_files,
     repo_notice_files,
@@ -49,14 +47,6 @@ def test_terms_constants_and_pdf_are_pinned() -> None:
         REAL_TIME_ATTRIBUTION
         == "© 2024-6 Google LLC, whose machine learning models were used to create the experimental data made available under the following licence terms https://storage.googleapis.com/weathernext-public/terms-of-use.pdf. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use."
     )
-    assert (
-        USAGE_RESTRICTIONS
-        == "The GDM Real-Time Weather Forecasting Experimental Data Terms of Use (Section 1(c), and Section 4: Use Restrictions (b)) do not permit making real-time data available in a Restricted Country. Section 1(c) lists them as “Japan, South Korea, Indonesia, Cuba, Iran, North Korea, Crimea and the so-called Donetsk People’s Republic and Luhansk People’s Republic”. The data service at wn.dynamical.org refuses all WeatherNext data in those locations, whatever its age, and also refuses requests whose location cannot be determined, including requests over Tor."  # noqa: RUF001
-    )
-    assert (
-        NON_ENDORSEMENT
-        == "dynamical.org and this dataset are not sponsored, endorsed, or granted official status by Google or any meteorological agency or department. Unless otherwise stated, the Real-Time Experimental Data (i) is not based on data published by; (ii) has not been produced in collaboration with; and (iii) has not been endorsed by any government meteorological agency or department and in no way replaces official alerts, warnings or notices published by such agencies or departments."
-    )
     files = render_notice_files(
         GoogleWeathernext2ForecastOperationalVirtualTemplateConfig().dataset_attributes,
         product="Google WeatherNext 2",
@@ -72,7 +62,7 @@ def test_notice_rendering_and_revision() -> None:
     assert {name: hashlib.sha256(data).hexdigest() for name, data in files.items()} == {
         "TERMS_OF_USE.pdf": "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654",
         "LEGALLY_BINDING_TERMS_OF_USE.txt": "35a0deb0a5a3c4436a7fffe6e7253baa4c43ec41804a449600e44b233d1b443d",
-        "NOTICE.txt": "13a2c7ad25d7365b797d145a643f14007760e855617e5aba9eeba3c997bd7587",
+        "NOTICE.txt": "43f80a1aff78f49c6b46fb51d4fced2fb769bc26b18507bb7f638a54673352de",
     }
     assert set(files) == {
         "TERMS_OF_USE.pdf",
@@ -89,8 +79,6 @@ def test_notice_rendering_and_revision() -> None:
         LEGALLY_BINDING_NOTICE,
         f"Modifications: {attributes.modifications}",
         f"Attribution: {attributes.attribution}",
-        USAGE_RESTRICTIONS,
-        NON_ENDORSEMENT,
     ]
     assert files["NOTICE.txt"] == ("\n\n".join(expected_paragraphs) + "\n").encode(
         "utf-8"
@@ -105,7 +93,7 @@ def test_notice_rendering_and_revision() -> None:
         + b"\0"
     ).hexdigest()[:12]
     assert notice_revision(files) == expected_revision
-    assert expected_revision == "9d27d0777f75"
+    assert expected_revision == "efd4af63229a"
     assert notice_revision(dict(reversed(list(files.items())))) == expected_revision
     assert notice_revision(files | {"NOTICE.txt": b"Changed\n"}) != expected_revision
     assert repo_notice_files(attributes, product="Google WeatherNext 2") == {
@@ -144,7 +132,6 @@ def test_operational_notice_urls_use_canonical_public_storage(
     assert attrs.license == "other"
     assert attrs.copyright == COPYRIGHT
     assert attrs.terms_of_use == LEGALLY_BINDING_NOTICE
-    assert attrs.usage_restrictions == USAGE_RESTRICTIONS
     assert attrs.notice_files == tuple(
         f"{dataset.store_factory.primary_url(public=True)}/{name}"
         for name in dataset.repo_files()
@@ -170,7 +157,6 @@ def test_historical_license_and_attribution_are_unchanged() -> None:
     assert historical.license == "CC-BY-4.0"
     assert historical.copyright is None
     assert historical.terms_of_use is None
-    assert historical.usage_restrictions is None
     assert historical.notice_files is None
     historic_attribution = historical.attribution.removeprefix(
         "Google requires this attribution: "

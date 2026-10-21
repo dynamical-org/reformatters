@@ -9,8 +9,6 @@ TERMS_SHA256 = "5fe155ace6bb11737f15bc735913c5739d31d27374269a8cbfa5f338c4d40654
 COPYRIGHT = "Copyright 2024-6 Google LLC"
 LEGALLY_BINDING_NOTICE = "By using this information, you agree to the Terms of Use found at https://storage.googleapis.com/weathernext-public/terms-of-use.pdf"
 REAL_TIME_ATTRIBUTION = "© 2024-6 Google LLC, whose machine learning models were used to create the experimental data made available under the following licence terms https://storage.googleapis.com/weathernext-public/terms-of-use.pdf. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use."
-USAGE_RESTRICTIONS = "The GDM Real-Time Weather Forecasting Experimental Data Terms of Use (Section 1(c), and Section 4: Use Restrictions (b)) do not permit making real-time data available in a Restricted Country. Section 1(c) lists them as “Japan, South Korea, Indonesia, Cuba, Iran, North Korea, Crimea and the so-called Donetsk People’s Republic and Luhansk People’s Republic”. The data service at wn.dynamical.org refuses all WeatherNext data in those locations, whatever its age, and also refuses requests whose location cannot be determined, including requests over Tor."  # noqa: RUF001
-NON_ENDORSEMENT = "dynamical.org and this dataset are not sponsored, endorsed, or granted official status by Google or any meteorological agency or department. Unless otherwise stated, the Real-Time Experimental Data (i) is not based on data published by; (ii) has not been produced in collaboration with; and (iii) has not been endorsed by any government meteorological agency or department and in no way replaces official alerts, warnings or notices published by such agencies or departments."
 
 
 def render_notice_files(
@@ -24,8 +22,6 @@ def render_notice_files(
         LEGALLY_BINDING_NOTICE,
         f"Modifications: {attributes.modifications}",
         f"Attribution: {attributes.attribution}",
-        USAGE_RESTRICTIONS,
-        NON_ENDORSEMENT,
     )
     return {
         "TERMS_OF_USE.pdf": Path(__file__)

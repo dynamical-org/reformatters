@@ -8,7 +8,6 @@ from reformatters.google.weathernext_terms import (
     COPYRIGHT,
     LEGALLY_BINDING_NOTICE,
     REAL_TIME_ATTRIBUTION,
-    USAGE_RESTRICTIONS,
     notice_revision,
     render_notice_files,
 )
@@ -19,10 +18,10 @@ DATASETS = [
     if isinstance(dataset, GoogleWeathernext3ForecastVirtualDataset)
 ]
 REVISIONS = {
-    "google-weathernext3-forecast-15-day-0-1-degree-virtual": "94f8ada70d9d",
-    "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "a6da0b8b6767",
-    "google-weathernext3-forecast-15-day-0-05-degree-virtual": "5f3120f82a16",
-    "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "489b22f9e6c9",
+    "google-weathernext3-forecast-15-day-0-1-degree-virtual": "8b2c6ed68d91",
+    "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "04a3d7024750",
+    "google-weathernext3-forecast-15-day-0-05-degree-virtual": "7de6abc12ada",
+    "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "be88b623f507",
 }
 
 
@@ -35,7 +34,6 @@ def test_wn3_notices_match_the_product_grid_and_public_repository(
     assert attributes.license == "other"
     assert attributes.copyright == COPYRIGHT
     assert attributes.terms_of_use == LEGALLY_BINDING_NOTICE
-    assert attributes.usage_restrictions == USAGE_RESTRICTIONS
     assert attributes.modifications is not None
     assert attributes.modifications.startswith("The publisher, dynamical.org, ")
     real_time, historical = attributes.attribution.split(

@@ -66,7 +66,6 @@ class DatasetAttributes(FrozenBaseModel):
     forecast_resolution: AttributeStr | None = None
     copyright: str | None = None
     terms_of_use: str | None = None
-    usage_restrictions: str | None = None
     modifications: Sentence | None = None
     notice_files: tuple[str, ...] | None = None
 
@@ -75,7 +74,6 @@ class DatasetAttributes(FrozenBaseModel):
         notices = (
             self.copyright,
             self.terms_of_use,
-            self.usage_restrictions,
             self.notice_files,
         )
         assert (self.license == "other") == all(notices), (
