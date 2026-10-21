@@ -2,7 +2,7 @@
   "attributes": {
     "dataset_id": "google-weathernext2-forecast-operational-virtual",
     "dataset_version": "0.1.0",
-    "name": "Google WeatherNext 2 operational forecast, virtual",
+    "name": "Google WeatherNext 2 forecast, operational, virtual",
     "description": "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
     "attribution": "Google WeatherNext 2 forecast data processed by dynamical.org from Google's WeatherNext 2 experimental data. Copyright 2024-6 Google LLC. \u00a9 2024-6 Google LLC, whose machine learning models were used to create the experimental data made available under the following licence terms https://storage.googleapis.com/weathernext-public/terms-of-use.pdf. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use.",
     "license": "Real-Time Data & Forecasts: GDM Real-Time Weather Forecasting Experimental Data Terms of Use (https://storage.googleapis.com/weathernext-public/terms-of-use.pdf). Historical Data: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",
@@ -239,7 +239,7 @@
         "attributes": {
           "dataset_id": "google-weathernext2-forecast-operational-virtual",
           "dataset_version": "0.1.0",
-          "name": "Google WeatherNext 2 operational forecast, virtual",
+          "name": "Google WeatherNext 2 forecast, operational, virtual",
           "description": "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model.",
           "attribution": "Google WeatherNext 2 forecast data processed by dynamical.org from Google's WeatherNext 2 experimental data. Copyright 2024-6 Google LLC. \u00a9 2024-6 Google LLC, whose machine learning models were used to create the experimental data made available under the following licence terms https://storage.googleapis.com/weathernext-public/terms-of-use.pdf. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use.",
           "license": "Real-Time Data & Forecasts: GDM Real-Time Weather Forecasting Experimental Data Terms of Use (https://storage.googleapis.com/weathernext-public/terms-of-use.pdf). Historical Data: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).",

@@ -119,7 +119,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
             name=self.dataset_name_value,
             description=self.dataset_description,
             attribution=(
-                "Google requires this attribution: © 2025 DeepMind Technologies "
+                "Google WeatherNext 2 forecast data processed by dynamical.org from "
+                "Google's WeatherNext 2 experimental data. © 2025 DeepMind Technologies "
                 "Limited's machine learning models "
                 "used to create the experimental data made available at "
                 "https://developers.google.com/earth-engine/datasets/catalog/"

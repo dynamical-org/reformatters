@@ -49,7 +49,8 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
         )
         assert config.dataset_attributes.license == expected_license
         expected_attribution = (
-            "Google requires this attribution: © 2025 DeepMind Technologies Limited's "
+            "Google WeatherNext 2 forecast data processed by dynamical.org from "
+            "Google's WeatherNext 2 experimental data. © 2025 DeepMind Technologies Limited's "
             "machine learning models used to create the experimental data made available "
             "at https://developers.google.com/earth-engine/datasets/catalog/"
             "projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY "
