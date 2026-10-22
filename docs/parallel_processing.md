@@ -69,7 +69,13 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
+Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`.
+
+### Materialized update plan
+
+Production materialized updates opt into planning with `materialized_source_availability`. Worker 0 freezes `plan/ready.json` before branch or metadata writes; workers and replacement pods reuse it, including in single-worker Jobs. The plan selects new inits through the newest source-ready candidate. Updates yield to older unfinished sibling Jobs on a best-effort basis: Icechunk checks concurrent primary publication; deprecated Zarr replicas retain some exposure.
+
+Empty plans still run validation. Validation retries and `reprocess_materialized_frontier` may include the latest stored init. Use a repair backfill for older holes.
 
 ### Setup signal
 
