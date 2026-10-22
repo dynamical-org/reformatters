@@ -8,17 +8,24 @@ from reformatters.common.kubernetes import (
     CronJob,
     ReformatCronJob,
 )
+from reformatters.common.source_availability import SourceAvailability
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
 
 from .region_job import NoaaHrrrForecast48HourRegionJob
 from .template_config import NoaaHrrrForecast48HourTemplateConfig
 
+SOURCE_AVAILABILITY = SourceAvailability(
+    product_id="external-noaa-hrrr-aws", lead_hours=48, components=("conus/sfc",)
+)
+
 
 class NoaaHrrrForecast48HourDataset(
     DynamicalDataset[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]
 ):
     """DynamicalDataset implementation for NOAA HRRR 48-hour forecast data."""
+
+    materialized_source_availability: SourceAvailability = SOURCE_AVAILABILITY
 
     template_config: NoaaHrrrForecast48HourTemplateConfig = (
         NoaaHrrrForecast48HourTemplateConfig()

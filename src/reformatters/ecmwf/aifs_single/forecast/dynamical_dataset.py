@@ -4,6 +4,7 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.source_availability import SourceAvailability
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .region_job import (
@@ -12,10 +13,16 @@ from .region_job import (
 )
 from .template_config import EcmwfAifsSingleForecastTemplateConfig
 
+SOURCE_AVAILABILITY = SourceAvailability(
+    product_id="external-ecmwf-aifs-gcs", lead_hours=360, components=()
+)
+
 
 class EcmwfAifsSingleForecastDataset(
     DynamicalDataset[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
 ):
+    materialized_source_availability: SourceAvailability = SOURCE_AVAILABILITY
+
     template_config: EcmwfAifsSingleForecastTemplateConfig = (
         EcmwfAifsSingleForecastTemplateConfig()
     )

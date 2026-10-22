@@ -4,16 +4,24 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.source_availability import SourceAvailability
 from reformatters.noaa.gefs.gefs_config_models import NoaaGefsDataVar
 
 from .region_job import GefsForecast35DayRegionJob, GefsForecast35DaySourceFileCoord
 from .template_config import GefsForecast35DayTemplateConfig
+
+SOURCE_AVAILABILITY = SourceAvailability(
+    product_id="external-noaa-gefs-long-aws", lead_hours=384, components=()
+)
 
 
 class GefsForecast35DayDataset(
     DynamicalDataset[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]
 ):
     """GEFS 35-day forecast dataset implementation."""
+
+    materialized_source_availability: SourceAvailability = SOURCE_AVAILABILITY
+    reprocess_materialized_frontier: bool = True
 
     template_config: GefsForecast35DayTemplateConfig = GefsForecast35DayTemplateConfig()
     region_job_class: type[GefsForecast35DayRegionJob] = GefsForecast35DayRegionJob
