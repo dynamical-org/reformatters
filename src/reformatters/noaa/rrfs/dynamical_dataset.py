@@ -64,7 +64,11 @@ class NoaaRrfsDataset(
                 name=f"{self.dataset_id}-update",
                 schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
                 pod_active_deadline=self.update_deadline,
-                active_deadline=self.update_deadline,
+                active_deadline=(
+                    timedelta(hours=cadence, minutes=-1)
+                    if self.retry_late_sources
+                    else self.update_deadline
+                ),
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.5",

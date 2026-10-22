@@ -168,25 +168,25 @@ def test_operational_configuration_requires_complete_manifests(
     assert update.as_kubernetes_object()["spec"]["suspend"] is False
     assert update.schedule == "45 1,7,13,19 * * *"
     assert dataset.update_offset_minutes == 105
-    assert dataset.update_deadline == pd.Timedelta("135min")
-    assert (
-        update.pod_active_deadline == update.active_deadline == pd.Timedelta("135min")
-    )
+    assert dataset.update_deadline == pd.Timedelta("163min")
+    assert update.pod_active_deadline == pd.Timedelta("163min")
+    assert update.active_deadline == pd.Timedelta("359min")
     spec = update.as_kubernetes_object()["spec"]
     assert spec["concurrencyPolicy"] == "Replace"
     job = spec["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
-    assert job["activeDeadlineSeconds"] == pod["activeDeadlineSeconds"] == 8100
+    assert job["activeDeadlineSeconds"] == 359 * 60
+    assert pod["activeDeadlineSeconds"] == 163 * 60
     init = pd.Timestamp("2026-10-11T18")
     fire = init + pd.Timedelta("105min")
-    cutoff = init + pd.Timedelta("235min")
-    assert dataset.virtual_poll_deadline_grace == pd.Timedelta("5min")
+    cutoff = init + pd.Timedelta("262min")
+    assert dataset.virtual_poll_deadline_grace == pd.Timedelta("6min")
     assert dataset._virtual_poll_deadline(fire) == cutoff
     assert (
         update.next_fire_time(fire)
         - (fire + dataset.update_deadline)
         - pd.Timedelta(seconds=pod["terminationGracePeriodSeconds"])
-    ) == pd.Timedelta("224min30s")
+    ) == pd.Timedelta("196min30s")
     assert update.cpu == "1.5"
     assert update.memory == "3.7G"
     assert dataset.icechunk_virtual_config is not None
@@ -196,7 +196,7 @@ def test_operational_configuration_requires_complete_manifests(
     )
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == pd.Timedelta("235min")
+    assert current.max_delay == pd.Timedelta("262min")
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (1.0,)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
