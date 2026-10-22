@@ -21,8 +21,6 @@ uv run main <DATASET_ID> update-template
 
 1e. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
 
-For proxied virtual sources, confirm the proxy serves the new variable for both discovery and chunk reads; deploy any required proxy changes before publishing references to it.
-
 ## Next
 
 Once the PR is merged to `main`, backfill the new variable (an `overwrite-chunks-and-metadata` backfill filtered to it — see [backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).
