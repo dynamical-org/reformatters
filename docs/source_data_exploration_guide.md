@@ -124,41 +124,13 @@ Download files from:
 
 Data structure, file naming, variable availability, and metadata all change over time. You must examine files from different periods to catch these changes.
 
-### 3. Use rasterio to examine files
+### 3. Examine files with a format-appropriate reader
 
-```python
-import rasterio
-
-with rasterio.open("path/to/file.grib2") as src:
-    print(src.profile)  # CRS, dimensions, dtype
-    print(src.tags())  # Metadata
-    print(src.indexes)  # Band/variable indexes
-
-    # Read a band
-    data = src.read(1)
-
-    # Get coordinate bounds
-    print(src.bounds)
-    print(src.transform)
-
-    # Get per-band metadata
-    for i in src.indexes:
-        print(f"Band {i}: {src.tags(i)}")
-```
+Use a format-appropriate reader such as `rasterio` or `xarray` to inspect coordinates, metadata, and values.
 
 ### 4. Download GRIB index files (if available)
 
-If the source provides GRIB index files (`.idx`), download samples. Index files list which bytes contain which variables, enabling efficient partial downloads.
-
-**Identify index style**:
-- **NOAA style**: Each line is colon-separated values
-  ```
-  1:0:d=2024010100:TMP:2 m above ground:anl:
-  ```
-- **ECMWF style**: Each line is a JSON object
-  ```
-  {"_type":"field","stream":"oper","levtype":"sfc","param":"2t",...}
-  ```
+Inspect sample indexes to identify byte ranges for partial downloads. NOAA indexes use colon-separated fields; ECMWF indexes use a JSON object per line.
 
 ### 5. Trust only what you see
 

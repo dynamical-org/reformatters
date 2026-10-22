@@ -195,6 +195,7 @@ Optimize the codebase you leave behind, not the size of your diff. Every change 
 * Follow ruff format
 * Test each module with pytest
 * Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`
+* Dataset-specific details never go in evergreen docs except to note an exception to a general rule; the code is the source of truth.
 * Keep documentation up to date. After making a change that would update any .md file in the repo (CLAUDE.md, docs/*, etc.), always update relevant docs, regardless of if you have been explicitly asked.
 * CLAUDE.md is an alias for AGENTS.md
 
