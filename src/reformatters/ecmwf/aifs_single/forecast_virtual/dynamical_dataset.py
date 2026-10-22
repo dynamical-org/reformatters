@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -36,6 +37,8 @@ class EcmwfAifsSingleForecastVirtualDataset(
         EcmwfAifsSingleForecastVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=aifs_single_virtual_chunk_containers(),
@@ -55,14 +58,12 @@ class EcmwfAifsSingleForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Run once per 6h cycle just before the files publish: all 61 leads land in
-        # a ~2 minute burst ~init+5h25m to init+6h03m (p99 ~init+6h10m). Fire at
-        # init+5h20m and poll; the 1h deadline covers p99, bounds waiting on a cycle
-        # that never publishes, and keeps fires from overlapping.
+        # Poll through init+10h30m to cover staggered delivery and delayed runs;
+        # complete runs exit early, with five minutes reserved for validation.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="20 5,11,17,23 * * *",
-            pod_active_deadline=timedelta(hours=1),
+            pod_active_deadline=timedelta(hours=5, minutes=15),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",
@@ -74,8 +75,8 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=11)),
-            # All 61 leads land in a ~2 minute burst, so an ingested init is a whole one.
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=45)),
+            # Polling waits for all 61 leads before validating a complete run.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

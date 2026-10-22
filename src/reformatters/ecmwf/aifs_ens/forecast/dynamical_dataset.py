@@ -27,11 +27,8 @@ class EcmwfAifsEnsForecastDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # AIFS-ENS full completion (wxopticon external-ecmwf-aifs-ens-aws, 365d):
-            # last file p50 H+5h56m, p95 H+7h11m. Fire at H+7h00m (01/07/13/19 UTC);
-            # late leads download last, so they land before the run reaches them.
-            # The rare p99 (H+13h+) tail is left to validation-failure reruns.
-            schedule="0 1,7,13,19 * * *",
+            # The 18z source GRIB/index pairs finish near init+8h41m.
+            schedule="50 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -48,6 +45,6 @@ class EcmwfAifsEnsForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=30)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=20)),
             validation.CheckRecentNans(append_dim_window=3),
         )

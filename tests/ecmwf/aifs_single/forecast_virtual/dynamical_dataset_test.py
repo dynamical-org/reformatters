@@ -204,8 +204,7 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
         for v in validators
         if isinstance(v, validation.CheckVirtualManifestCompleteness)
     ]
-    # The source publishes all 61 leads in a ~2 minute burst, so an ingested init is
-    # never half-published and the default whole-position threshold holds.
+    # A completed polling run must contain every expected source file.
     assert completeness.min_present_fraction == (1.0,)
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
@@ -216,7 +215,21 @@ def test_current_data_validator_due_at_update_fire(
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=6, minutes=11)
+    assert current_data.max_delay == timedelta(hours=7, minutes=45)
+
+
+@pytest.mark.parametrize("hour", [0, 6, 12, 18])
+def test_polling_covers_late_delivery_without_reaching_next_fire(
+    dataset: EcmwfAifsSingleForecastVirtualDataset, hour: int
+) -> None:
+    init = pd.Timestamp("2026-10-20") + timedelta(hours=hour)
+    fire = init + timedelta(hours=5, minutes=20)
+    (cron,) = dataset.operational_kubernetes_resources("test-image-tag")
+    cutoff = dataset._virtual_poll_deadline(fire + timedelta(minutes=1))
+
+    assert cutoff == init + timedelta(hours=10, minutes=30)
+    assert cutoff > init + timedelta(hours=10, minutes=25, seconds=45)
+    assert cutoff + dataset.virtual_poll_deadline_grace < cron.next_fire_time(fire)
 
 
 def _resolved_split_size(
