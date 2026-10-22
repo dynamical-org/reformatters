@@ -209,7 +209,7 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_due_at_update_fire(
+def test_current_data_validator_allows_normal_delivery(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
