@@ -1,10 +1,28 @@
-# Add a new variable
+# Add new variable
 
-Follow the shared stages in the [dataset development guide](dataset_development_guide.md), with these implementation steps:
+How to add a new data variable to an existing dataset. This is the Implement stage of the add-a-variable branch of the [dataset development guide](dataset_development_guide.md); backfill, validate, and publish are the shared stages there.
 
-1. Inspect a real source file: quantity, units, grid, CRS, missing values, and spatial coverage.
-2. Add the `DataVar` to `TemplateConfig.data_vars`. Match equivalent variables and the metadata, naming, missing-value, and rounding conventions in [AGENTS.md](../AGENTS.md); derive source selectors from the file and its index.
-3. Run `uv run main <dataset-id> update-template` and the template checks listed in AGENTS.md.
-4. Exercise the variable in the dataset's local backfill and operational-update integration test and inspect the values. Revert these temporary test changes afterward.
-5. For proxied virtual sources, confirm the proxy serves the new variable before publishing references to it.
-6. Merge the reviewed template changes, then [backfill the variable alone](backfill.md), [validate](validation.md), and publish through the shared guide.
+## Add the variable to the template
+
+1a. Download a real, recent source file for the new variable. Open it (e.g. with `rasterio`, `gdalinfo`, or `xarray`) to inspect its attributes (units, grid dimensions, CRS, nodata/sentinel values) and data values (range, NaN/missing coverage, geographic distribution). This grounds the variable configuration in observed data rather than assumptions.
+
+1b. Add a new `DataVar` to your dataset’s `TemplateConfig.data_vars` (usually in `src/reformatters/<provider>/<model>/<variant>/template_config.py`).
+   - **Name + externally visible attrs**: match existing naming/attrs used in this repo where possible; otherwise follow CF Conventions. Variable names generally follow the format `<long name>_<level>`.
+   - **Internal attrs**: derive from `gdalinfo` output on a representative source file (and GRIB index if relevant)
+   - **Encoding**: match existing variables, and follow the `keep_mantissa_bits` guidance in AGENTS.md.
+
+1c. Regenerate the checked-in Zarr template metadata:
+
+```bash
+uv run main <DATASET_ID> update-template
+```
+
+1d. Edit the `test_backfill_local_and_operational_update` test in the dataset's dynamical_dataset_test.py to add the new variable. Run the test and add a quick print or plot to confirm data is successfully being processed for the new variable. Abandon these test changes after confirming to keep our integration tests from getting slow.
+
+1e. Open and merge a PR containing the template changes (`template_config.py` and zarr metadata in `templates/latest.zarr/`)
+
+For proxied virtual sources, confirm the proxy serves the new variable for both discovery and chunk reads; deploy any required proxy changes before publishing references to it.
+
+## Next
+
+Once the PR is merged to `main`, backfill the new variable (an `overwrite-chunks-and-metadata` backfill filtered to it — see [backfill.md](backfill.md)), then validate and publish — the remaining stages of the [dataset development guide](dataset_development_guide.md).
