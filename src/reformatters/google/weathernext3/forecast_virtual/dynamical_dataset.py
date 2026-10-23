@@ -27,6 +27,7 @@ class GoogleWeathernext3ForecastVirtualDataset(
     template_config: GoogleWeathernext3ForecastVirtualTemplateConfig
     region_job_class: type[GoogleWeathernext3ForecastVirtualRegionJob]
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=15)
+    retry_late_sources: ClassVar[bool] = True
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         prefix = (
@@ -38,7 +39,8 @@ class GoogleWeathernext3ForecastVirtualDataset(
             ReformatCronJob(
                 name=f"{prefix}-update",
                 schedule="10 * * * *",
-                pod_active_deadline=timedelta(minutes=40),
+                pod_active_deadline=timedelta(minutes=55),
+                active_deadline=timedelta(minutes=59),
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.7",

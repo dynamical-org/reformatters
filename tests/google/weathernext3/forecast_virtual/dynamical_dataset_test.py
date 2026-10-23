@@ -7,8 +7,10 @@ import pandas as pd
 import pytest
 import typer
 import zarr
+from zarr.storage import MemoryStore
 
 from reformatters.common import kubernetes, validation
+from reformatters.common.config import Config
 from reformatters.common.storage import StoreFactory
 from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import (
     GoogleWeathernext3ForecastVirtualDataset,
@@ -27,9 +29,92 @@ def test_update_reserves_time_for_inline_validation(
 ) -> None:
     fire = pd.Timestamp("2026-10-05T12:10:00Z").tz_localize(None)
     now = fire + pd.Timedelta(minutes=minutes_after_fire)
-    assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=25)
+    assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=40)
     (update,) = dataset.operational_kubernetes_resources("test")
-    assert update.pod_active_deadline == pd.Timedelta(minutes=40)
+    assert update.pod_active_deadline == pd.Timedelta(minutes=55)
+    assert update.active_deadline == pd.Timedelta(minutes=59)
+    assert dataset.retry_late_sources
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.parametrize(
+    ("failed_checks", "retries"),
+    [
+        (["CheckVirtualManifestCompleteness"], True),
+        (["CheckCurrentData"], True),
+        (["CheckVirtualDecodeHealth"], False),
+    ],
+)
+def test_missing_source_retry_polls_until_next_fire_with_frozen_cycle(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    failed_checks: list[str],
+    retries: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fire = pd.Timestamp("2026-10-20T07:10")
+    dataset._retry_timing = kubernetes.RetryTiming(
+        fire, fire + pd.Timedelta("1h"), fire + pd.Timedelta(minutes=40)
+    )
+    now = fire + pd.Timedelta(minutes=46)
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: now))
+    monkeypatch.setattr(type(Config), "is_prod", property(lambda self: True))
+    monkeypatch.setenv("CRON_JOB_NAME", "wn3-update")
+    failure = validation.OperationalValidationError("missing", failed_checks)
+    monkeypatch.setattr(type(dataset), "validate_dataset", Mock(side_effect=failure))
+    create = Mock(return_value=True)
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", create)
+
+    with pytest.raises(typer.Exit):
+        dataset._validate_after_update("wn3-update-123")
+
+    if not retries:
+        assert "retry_timing" not in create.call_args.kwargs
+        return
+    args, kwargs = create.call_args
+    assert args == ("wn3-update", "wn3-update-123-r1")
+    timing = kwargs["retry_timing"]
+    assert timing == kubernetes.RetryTiming(
+        fire, fire + pd.Timedelta("1h"), fire + pd.Timedelta(minutes=58)
+    )
+    assert kwargs["active_deadline"] == pd.Timedelta(minutes=27)
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+def test_retry_after_next_fire_keeps_original_reference_time(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fire = pd.Timestamp("2026-10-20T07:10")
+    dataset._retry_timing = kubernetes.RetryTiming(
+        fire, fire + pd.Timedelta("1h"), fire + pd.Timedelta(minutes=58)
+    )
+    now = fire + pd.Timedelta(minutes=63)
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: now))
+    monkeypatch.setattr(
+        type(dataset.store_factory), "primary_store", lambda self: MemoryStore()
+    )
+    expected, _ = dataset.region_job_class.operational_update_jobs(
+        MemoryStore(),
+        Path("unused"),
+        dataset.template_config.get_template,
+        "init_time",
+        dataset.template_config.data_vars,
+        "wn3-update-123-r1",
+        fire,
+    )
+    (expected_job,) = expected
+    assert isinstance(expected_job, GoogleWeathernext3ForecastVirtualRegionJob)
+    jobs, _ = dataset._operational_update_jobs("wn3-update-123-r1", Path("unused"))
+    validation_job = dataset._virtual_validation_region_job(
+        dataset.validators(), "wn3-update-123-r1"
+    )
+    assert validation_job is not None
+    for job in (*jobs, validation_job):
+        assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
+        assert job.reference_time == fire
+        assert job.launch_scope == expected_job.launch_scope
+        assert job.commit_metadata() == expected_job.commit_metadata()
+    assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=58)
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
