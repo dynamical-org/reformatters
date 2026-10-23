@@ -11,7 +11,8 @@ from .template_config import NoaaRrfsEnsForecastVirtualTemplateConfig
 class NoaaRrfsEnsForecastVirtualDataset(NoaaRrfsDataset):
     # Poll before early leads while preserving late-cycle coverage.
     update_offset_minutes: NonNegativeInt = 70
-    update_deadline: timedelta = timedelta(minutes=165)
+    # Poll until init + 6 h to cover late cycles, ending before the next fire.
+    update_deadline: timedelta = timedelta(minutes=295)
     template_config: NoaaRrfsEnsForecastVirtualTemplateConfig = (
         NoaaRrfsEnsForecastVirtualTemplateConfig()
     )

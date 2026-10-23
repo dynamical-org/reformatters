@@ -71,23 +71,25 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
 
 
 @pytest.mark.parametrize(
-    ("cls", "offset", "duration", "grace", "schedule", "cutoff_minutes"),
+    ("cls", "offset", "duration", "grace", "schedule", "cutoff_minutes", "max_delay"),
     [
         (
             NoaaRrfsForecast84HourVirtualDataset,
             65,
-            timedelta(minutes=170),
+            timedelta(minutes=300),
             timedelta(minutes=5),
             "5 1,7,13,19 * * *",
-            230,
+            360,
+            timedelta(minutes=360),
         ),
         (
             NoaaRrfsForecast18HourVirtualDataset,
             65,
-            timedelta(minutes=95),
+            timedelta(minutes=170),
             timedelta(minutes=5),
             "5 1,4,7,10,13,16,19,22 * * *",
-            155,
+            230,
+            timedelta(minutes=230),
         ),
         (
             NoaaRrfsForecastSubHourlyVirtualDataset,
@@ -96,14 +98,16 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(seconds=60),
             "15 * * * *",
             133,
+            timedelta(minutes=160),
         ),
         (
             NoaaRrfsEnsForecastVirtualDataset,
             70,
-            timedelta(minutes=165),
+            timedelta(minutes=295),
             timedelta(minutes=5),
             "10 1,7,13,19 * * *",
-            230,
+            360,
+            timedelta(minutes=360),
         ),
     ],
 )
@@ -114,6 +118,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     grace: timedelta,
     schedule: str,
     cutoff_minutes: int,
+    max_delay: timedelta,
     tmp_path: Path,
 ) -> None:
     dataset = cls(
@@ -160,7 +165,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     )
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == pd.Timedelta(minutes=cutoff_minutes)
+    assert current.max_delay == max_delay
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (
         (6 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
@@ -241,13 +246,13 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
 @pytest.mark.parametrize(
     ("variant", "retry_minute", "created", "poll_minutes_remaining"),
     [
-        ("rrfs-forecast-18-hour", 146, True, 9),
-        ("rrfs-forecast-18-hour", 150, False, 5),
-        ("rrfs-forecast-18-hour", 158, False, -3),
-        ("rrfs-forecast-84-hour", 233, True, -3),
-        ("rrfs-ens-forecast", 233, True, -3),
-        ("refs-forecast-hourly", 238, True, -3),
-        ("refs-forecast-3-hourly", 238, True, -3),
+        ("rrfs-forecast-18-hour", 70, True, 160),
+        ("rrfs-forecast-18-hour", 80, False, 150),
+        ("rrfs-forecast-18-hour", 233, False, -3),
+        ("rrfs-forecast-84-hour", 363, False, -3),
+        ("rrfs-ens-forecast", 363, False, -3),
+        ("refs-forecast-hourly", 363, False, -3),
+        ("refs-forecast-3-hourly", 363, False, -3),
         ("rrfs-forecast-sub-hourly", 134, False, -1),
     ],
 )
