@@ -200,11 +200,14 @@ def test_operational_update_jobs_reach_back_past_the_extension(
     assert now - swept.min() > pd.Timedelta("28h")
 
 
-def test_file_refs_refuses_an_index_missing_a_requested_variable(
-    template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_file_refs_logs_an_index_missing_a_requested_variable(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """At lead 846 the accumulation window is 840-846, so an 834-846 line is a different
-    message. Committing the file anyway would leave a NaN column nothing ever retries."""
+    message. The unmatched cell stays absent and is reported as an error."""
 
     stub_grib_source_file_reads(
         monkeypatch,
@@ -226,8 +229,10 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AssertionError, match="has no message for"):
-        job.file_refs(coord, file_size=1200)
+    assert job.file_refs(coord, file_size=1200) == []
+    assert "GRIB messages absent from index" in caplog.text
+    assert "total_precipitation_surface" in caplog.text
+    assert caplog.records[-1].levelname == "ERROR"
 
 
 _IDX_FIXTURE_NAME = re.compile(r"^(\d{8}T\d{2})_([cp]\d{2})_([ab])_f(\d{3})\.idx$")
@@ -256,6 +261,7 @@ def test_every_requested_variable_maps_to_a_real_message(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     fixture_name: str,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Run the real coord generation and ref building against real archived indexes.
 
@@ -301,8 +307,9 @@ def test_every_requested_variable_maps_to_a_real_message(
     last_start = max(int(line.split(":")[1]) for line in index_text.splitlines())
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(coord, file_size=last_start + 1_000_000)
+    assert "GRIB messages absent from index" not in caplog.text
 
-    # file_refs asserts nothing was requested but absent; this pins the other direction,
+    # Completeness reports missing messages; this pins the other direction,
     # that every message the file offers was taken exactly once. Counting the file's own
     # messages rather than the requested variables keeps both sides from moving together
     # if a variable silently stopped being requested in an era that publishes it.

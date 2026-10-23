@@ -1,6 +1,10 @@
 import obstore
+from obstore.exceptions import BaseError
 
+from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SOURCE_FILE_COORD
+
+log = get_logger(__name__)
 
 
 def discover_available_by_obstore_listing(
@@ -36,9 +40,11 @@ def _list_objects(
     store: obstore.store.ObjectStore, prefixes: list[str]
 ) -> dict[str, int]:
     """All object keys under each prefix in `store`, mapped to size in bytes."""
-    return {
-        meta["path"]: meta["size"]
-        for prefix in prefixes
-        for batch in obstore.list(store, prefix=prefix, chunk_size=10_000)
-        for meta in batch
-    }
+    listed = {}
+    for prefix in prefixes:
+        try:
+            for batch in obstore.list(store, prefix=prefix, chunk_size=10_000):
+                listed.update((meta["path"], meta["size"]) for meta in batch)
+        except OSError, BaseError:
+            log.exception(f"Could not finish listing source prefix {prefix}")
+    return listed

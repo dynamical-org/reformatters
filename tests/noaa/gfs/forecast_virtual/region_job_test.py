@@ -16,7 +16,7 @@ from reformatters.noaa.gfs.forecast_virtual.region_job import (
 from reformatters.noaa.gfs.forecast_virtual.template_config import (
     NoaaGfsForecastVirtualTemplateConfig,
 )
-from reformatters.noaa.gfs.virtual_region_job import NoaaGfsFileType
+from reformatters.noaa.gfs.virtual_region_job import NoaaGfsFileType, carried_by
 from reformatters.noaa.gfs.virtual_template_config import (
     PRESSURE_LEVEL_INDEX_FORMAT,
     PRESSURE_LEVELS,
@@ -407,6 +407,7 @@ def test_every_source_message_reaches_an_array(
     file_type: NoaaGfsFileType,
     lead_hours: int,
     expected_refs: int,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Run the whole catalog against a real index at the leads that stress it.
 
@@ -425,7 +426,9 @@ def test_every_source_message_reaches_an_array(
     )
     init_time = pd.Timestamp(f"{era[:4]}-{era[4:6]}-{era[6:]}T12:00")
     data_vars = [
-        v for v in TEMPLATE_CONFIG.data_vars if lead_hours > 0 or v.has_hour_0_values()
+        v
+        for v in TEMPLATE_CONFIG.data_vars
+        if carried_by(v, file_type) and (lead_hours > 0 or v.has_hour_0_values())
     ]
     assert data_vars
     job = make_job(template_ds, TEMPLATE_CONFIG.data_vars)
@@ -443,6 +446,19 @@ def test_every_source_message_reaches_an_array(
         (ref.data_var.path, tuple(sorted(ref.out_loc.items()))) for ref in refs
     }
     assert len(positions) == len(refs)
+    assert "GRIB messages absent from index" not in caplog.text
+
+    if file_type == "pgrb2b":
+        cloud_refs = [
+            ref
+            for ref in refs
+            if ref.data_var.path == "pressure_level/cloud_cover"
+            and ref.out_loc["pressure_level"] == 70
+        ]
+        assert len(cloud_refs) == 1
+        job._check_refs_complete(coord, [ref for ref in refs if ref not in cloud_refs])
+        assert "pressure_level/cloud_cover" in caplog.text
+        assert "('pressure_level', 70.0)" in caplog.text
 
 
 @pytest.mark.slow

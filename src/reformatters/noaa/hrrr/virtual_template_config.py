@@ -28,6 +28,7 @@ from reformatters.common.types import (
 )
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
 from reformatters.noaa.hrrr.hrrr_config_models import (
+    HRRR_V3_FIRST_INIT,
     NoaaHrrrDataVar,
     NoaaHrrrFileType,
     NoaaHrrrInternalAttrs,
@@ -2079,7 +2080,7 @@ def _model_data_vars(chunks: tuple[int, ...]) -> list[NoaaHrrrDataVar]:
             standard_name="specific_turbulent_kinetic_energy_of_air",
             # Identically zero until HRRRv2, then a boundary-layer scheme that blows up
             # aloft (domain maxima near 3000 J kg-1 at ~10 km) until HRRRv3.
-            analysis_usable_from=pd.Timestamp("2018-07-12T12:00"),
+            analysis_usable_from=HRRR_V3_FIRST_INIT,
         ),
         model_var(
             "cloud_mixing_ratio",

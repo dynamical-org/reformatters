@@ -9,7 +9,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from obstore.exceptions import GenericError
 
+from reformatters.common import template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta, Timestamp
@@ -29,6 +31,7 @@ from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
 )
+from tests.common import virtual_region_job_test as virtual_fixtures
 from tests.noaa.grib_index_fixtures import (
     grib_section_0,
     stub_grib_source_file_reads,
@@ -650,3 +653,332 @@ def test_float_levels_render_and_resolve_for_a_non_hrrr_data_var(
         (0, 6, 0, 0, 0),
         (0, 6, 0, 0, 38),
     ]
+
+
+@pytest.mark.parametrize(
+    "message", ["2:1000:d=2018071312", "2:1000:d=2018071312::surface:6 hour fcst:"]
+)
+def test_malformed_message_retains_healthy_refs_and_exact_boundaries(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    message: str,
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        f"{message}\n"
+        "3:2000:d=2018071312:RH:2 m above ground:6 hour fcst:\n",
+    )
+    variables = [get_var("temperature_2m"), get_var("relative_humidity_2m")]
+    refs = make_job(template_ds, variables).file_refs(coord("sfc", variables), 3000)
+    assert [(r.data_var.name, r.offset, r.length) for r in refs] == [
+        ("temperature_2m", 0, 1000),
+        ("relative_humidity_2m", 2000, 1000),
+    ]
+    assert "malformed GRIB index message" in caplog.text
+    assert "GRIB messages absent" not in caplog.text
+
+
+@pytest.mark.parametrize("offset", ["unreadable", ""])
+def test_unreadable_offset_never_extends_the_preceding_ref(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    offset: str,
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        f"2:{offset}:d=2018071312:RH:2 m above ground:6 hour fcst:\n"
+        "3:2000:d=2018071312:REFC:entire atmosphere:6 hour fcst:\n",
+    )
+    variables = [get_var("temperature_2m")]
+    assert (
+        make_job(template_ds, variables).file_refs(coord("sfc", variables), 3000) == []
+    )
+    assert "message boundaries cannot be inferred safely" in caplog.text
+
+
+@pytest.mark.parametrize("offset", [-1000, 4000])
+def test_isolated_out_of_range_row_recovers_preceding_message_length(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    offset: int,
+) -> None:
+    fake_index(
+        monkeypatch,
+        tmp_path,
+        "1:0:d=2018071312:TMP:2 m above ground:6 hour fcst:\n"
+        f"2:{offset}:d=2018071312:REFC:entire atmosphere:6 hour fcst:\n"
+        "3:2000:d=2018071312:RH:2 m above ground:6 hour fcst:\n",
+    )
+    monkeypatch.setattr(
+        shared_region_job_module,
+        "s3_read_bytes",
+        lambda *args, **kwargs: grib_section_0(1000),
+    )
+    variables = [get_var("temperature_2m"), get_var("relative_humidity_2m")]
+    refs = make_job(template_ds, variables).file_refs(coord("sfc", variables), 3000)
+    assert [(r.data_var.name, r.offset, r.length) for r in refs] == [
+        ("temperature_2m", 0, 1000),
+        ("relative_humidity_2m", 2000, 1000),
+    ]
+    assert f"skipping index row at offset {offset}" in caplog.text
+
+
+def test_completeness_reports_each_missing_vertical_cell(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake_index(monkeypatch, tmp_path, "1:0:d=2018071312:TMP:1000 mb:6 hour fcst:\n")
+    variables = [get_var("pressure_level/temperature")]
+    refs = make_job(template_ds, variables).file_refs(coord("prs", variables), 1000)
+    assert len(refs) == 1
+    assert "pressure_level/temperature" in caplog.text
+    assert "('pressure_level', 975)" in caplog.text
+    assert "('pressure_level', 1000)" not in caplog.text
+    assert caplog.records[-1].levelname == "ERROR"
+
+
+def _noaa_index_for_failure(
+    failure: str, window: str, block_bytes: int
+) -> tuple[str, int]:
+    middle = f"2:{block_bytes}:d=2024010100:BAD:2 m above ground:{window}:"
+    if failure == "missing_message":
+        middle = middle.replace(":BAD:", ":UNKNOWN:")
+    elif failure == "malformed_message":
+        middle = f"2:{block_bytes}:unreadable message"
+    elif failure == "malformed_offset":
+        middle = middle.replace(f":{block_bytes}:", ":unreadable:")
+    elif failure == "out_of_range":
+        middle = middle.replace(f":{block_bytes}:", ":99999:")
+    blocks = 4 if failure == "recovery_read_error" else 3
+    if failure == "recovery_read_error":
+        middle += f"\n3:99999:d=2024010100:UNKNOWN:surface:{window}:"
+    return (
+        (
+            f"1:0:d=2024010100:TMP:2 m above ground:{window}:\n"
+            f"{middle}\n"
+            f"4:{(blocks - 1) * block_bytes}:d=2024010100:RH:2 m above ground:{window}:\n"
+        ),
+        blocks,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("processing_mode", ["backfill", "update"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "missing_message",
+        "malformed_message",
+        "malformed_offset",
+        "out_of_range",
+        "stale_tail",
+        "tail_read_error",
+        "download_error",
+        "recovery_read_error",
+    ],
+)
+def test_noaa_source_failures_commit_healthy_siblings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    processing_mode: Literal["backfill", "update"],
+    failure: str,
+) -> None:
+    dataset = virtual_fixtures._make_dataset(tmp_path)
+    tree = virtual_fixtures._create_template_ds(2)
+    for name in ("bad", "other"):
+        tree[name] = tree["temperature_2m"].copy(deep=True)
+    template_utils.write_metadata(tree, dataset.store_factory)
+    repo = virtual_fixtures._primary_repo(dataset.store_factory)
+    block_bytes = virtual_fixtures.BLOCK_NBYTES
+    prototype = virtual_fixtures.VirtualTestDataVar(name="temperature_2m")
+    variables = [
+        OtherDataVar(
+            name=name,
+            encoding=prototype.encoding,
+            attrs=prototype.attrs,
+            internal_attrs=OtherInternalAttrs(
+                grib_element=element,
+                grib_description=name,
+                grib_index_level="2 m above ground",
+                index_position=0,
+                keep_mantissa_bits="no-rounding",
+            ),
+        )
+        for name, element in (
+            ("temperature_2m", "TMP"),
+            ("bad", "BAD"),
+            ("other", "RH"),
+        )
+    ]
+
+    class LocalCoord(OtherSourceFileCoord):
+        source_path: Path
+
+        def get_url(self) -> str:
+            return self.source_path.as_uri()
+
+    class LocalJob(OtherVirtualRegionJob):
+        def generate_source_file_coords(
+            self,
+            processing_region_ds: xr.Dataset,
+            data_var_group: Sequence[OtherDataVar],
+        ) -> Sequence[OtherSourceFileCoord]:
+            return [
+                LocalCoord(
+                    init_time=init,
+                    lead_time=lead,
+                    data_vars=data_var_group,
+                    source_path=tmp_path / f"source-{init.value}-{lead.value}.bin",
+                )
+                for init in pd.to_datetime(processing_region_ds.init_time.values)
+                for lead in pd.to_timedelta(processing_region_ds.lead_time.values)
+            ]
+
+        def discover_available(
+            self, pending: list[OtherSourceFileCoord]
+        ) -> list[tuple[OtherSourceFileCoord, int]]:
+            return [
+                (coord, Path(coord.get_url().removeprefix("file://")).stat().st_size)
+                for coord in pending
+            ]
+
+        def grib_message_length_at(
+            self, coord: OtherSourceFileCoord, offset: int, file_size: int
+        ) -> int | None:
+            if (
+                failure == "stale_tail"
+                and coord.init_time == virtual_fixtures.APPEND_DIM_START
+                and coord.lead_time == pd.Timedelta(0)
+                and offset == 2 * block_bytes
+            ):
+                return None
+            if (
+                failure == "tail_read_error"
+                and coord.init_time == virtual_fixtures.APPEND_DIM_START
+                and coord.lead_time == pd.Timedelta(0)
+                and offset == 2 * block_bytes
+            ):
+                raise OSError("unreadable source tail header")
+            if (
+                failure == "recovery_read_error"
+                and coord.init_time == virtual_fixtures.APPEND_DIM_START
+                and coord.lead_time == pd.Timedelta(0)
+                and offset == block_bytes
+            ):
+                raise OSError("unreadable source header")
+            assert offset + block_bytes <= file_size
+            return block_bytes
+
+    job = LocalJob(
+        tmp_store=tmp_path / "unused",
+        template_ds=tree,
+        data_vars=variables,
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+        processing_mode=processing_mode,
+    )
+    coords = job.source_file_coords()
+    indices = {}
+    for i, coord in enumerate(coords):
+        assert isinstance(coord, LocalCoord)
+        block = virtual_fixtures._block_values(i // 2, i % 2)
+        window = "anl" if coord.lead_time == pd.Timedelta(0) else "6 hour fcst"
+        index, blocks = _noaa_index_for_failure(
+            failure if i == 0 else "", window, block_bytes
+        )
+        coord.source_path.write_bytes(block.tobytes() * blocks)
+        indices[coord.get_index_url()] = index
+
+    def download(url: str, dataset_id: str, **kwargs: object) -> Path:
+        if failure == "download_error" and url == coords[0].get_index_url():
+            raise OSError("unreadable source index")
+        path = tmp_path / url.rsplit("/", 1)[-1]
+        path.write_text(indices[url])
+        return path
+
+    monkeypatch.setattr(shared_region_job_module, "s3_download_to_disk", download)
+    branch = "main"
+    if processing_mode == "backfill":
+        branch = "backfill"
+        repo.create_branch(branch, repo.lookup_branch("main"))
+    job.process_virtual(repo, [], branch, coords)
+    assert virtual_fixtures._snapshot_count(repo, branch) > 1
+    result = xr.open_zarr(repo.readonly_session(branch).store, decode_timedelta=True)
+    whole_file_skipped = failure in {
+        "malformed_offset",
+        "stale_tail",
+        "tail_read_error",
+        "download_error",
+    }
+    for name in ("temperature_2m", "bad", "other"):
+        if whole_file_skipped or name == "bad":
+            assert np.isnan(result[name].isel(init_time=0, lead_time=0)).all()
+        else:
+            np.testing.assert_array_equal(
+                result[name].isel(init_time=0, lead_time=0),
+                virtual_fixtures._block_values(0, 0),
+            )
+        for init_idx, lead_idx in ((0, 1), (1, 0), (1, 1)):
+            np.testing.assert_array_equal(
+                result[name].isel(init_time=init_idx, lead_time=lead_idx),
+                virtual_fixtures._block_values(init_idx, lead_idx),
+            )
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    if failure == "recovery_read_error":
+        assert "failed to read its length" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("error", "fatal"),
+    [
+        (OSError, False),
+        (shared_region_job_module.HTTPError, False),
+        (GenericError, False),
+        (AssertionError, True),
+        (ValueError, True),
+    ],
+)
+def test_length_recovery_isolates_source_read_errors_and_preserves_invariants(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    error: type[Exception],
+    fatal: bool,
+) -> None:
+    variables = [get_var("temperature_2m")]
+    job = make_job(template_ds, variables)
+
+    def read_length(
+        self: NoaaHrrrForecast48HourVirtualRegionJob,
+        source: NoaaHrrrForecastVirtualSourceFileCoord,
+        offset: int,
+        file_size: int,
+    ) -> int:
+        if offset == 0:
+            raise error("unreadable source header")
+        return 1000
+
+    monkeypatch.setattr(type(job), "grib_message_length_at", read_length)
+    if fatal:
+        with pytest.raises(error, match="unreadable source header"):
+            job._message_lengths(coord("sfc", variables), [0, 9999, 2000], 3000)
+    else:
+        assert job._message_lengths(coord("sfc", variables), [0, 9999, 2000], 3000) == {
+            2000: 1000
+        }
+        assert "failed to read its length" in caplog.text
+        assert caplog.records[0].levelname == "ERROR"

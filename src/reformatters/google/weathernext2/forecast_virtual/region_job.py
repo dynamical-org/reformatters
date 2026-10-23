@@ -358,25 +358,20 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         for coord in pending:
             coord_objects: dict[str, NativeObjectMetadata] = {}
             for query in self._listing_queries(coord):
-                objects = listed[query]
-                if objects is None:
-                    break
-                coord_objects.update(objects)
-            else:
-                locations = {chunk.location for chunk in self._source_chunks(coord)}
-                if locations <= coord_objects.keys():
-                    coord.chunk_metadata.clear()
-                    coord.chunk_metadata.update(
-                        {location: coord_objects[location] for location in locations}
-                    )
-                    available.append((coord, 0))
-                else:
-                    missing = locations - coord_objects.keys()
-                    log.debug(
-                        f"{len(missing)} source chunks unavailable for "
-                        f"{coord.get_url()} {coord.data_vars[0].path}; "
-                        f"first: {min(missing)}"
-                    )
+                coord_objects.update(listed[query])
+            locations = {chunk.location for chunk in self._source_chunks(coord)}
+            coord.chunk_metadata.clear()
+            if locations <= coord_objects.keys():
+                coord.chunk_metadata.update(
+                    {location: coord_objects[location] for location in locations}
+                )
+                available.append((coord, 0))
+            if missing := locations - coord_objects.keys():
+                log.debug(
+                    f"{len(missing)} source chunks unavailable for "
+                    f"{coord.get_url()} {coord.data_vars[0].path}; "
+                    f"first: {min(missing)}"
+                )
         return available
 
     def process_virtual_refs(
@@ -476,9 +471,10 @@ def _utc_now() -> Timestamp:
 
 def _list_objects(
     client: httpx.Client, query: ObjectListingQuery
-) -> dict[str, NativeObjectMetadata] | None:
+) -> dict[str, NativeObjectMetadata]:
     objects: dict[str, NativeObjectMetadata] = {}
     page_token: str | None = None
+    seen_tokens: set[str] = set()
     while True:
         params = {"prefix": query.prefix, "maxResults": "1000"}
         if query.match_glob is not None:
@@ -492,28 +488,62 @@ def _list_objects(
                 response.raise_for_status()
             return response
 
-        response = retry(
-            get_page,
-            retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
-        )
-        if response.status_code in {403, 404}:
-            return None
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response = retry(
+                get_page,
+                retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
+            )
+            if response.status_code in {403, 404}:
+                log.debug(
+                    f"Listing unavailable for {query} page {page_token!r}: HTTP {response.status_code}"
+                )
+                return objects
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("items", []), list
+            ):
+                raise ValueError("object listing must contain an items list")
+        except (httpx.HTTPError, ValueError) as exc:
+            log.error(f"Could not list {query} page {page_token!r}: {exc}")
+            return objects
         for item in payload.get("items", []):
-            key = str(item["name"])
-            assert key.startswith(query.prefix), (
-                f"listed object escaped prefix {query.prefix}: {key}"
-            )
-            size = int(item["size"])
-            assert size > 0, f"invalid object size for {key}: {size}"
-            location = f"{PROXY_LOCATION_PREFIX}{key}"
-            assert location not in objects, f"duplicate listed object: {key}"
-            md5 = b64decode(str(item["md5Hash"]), validate=True)
-            assert len(md5) == 16, f"invalid object MD5 for {key}"
-            objects[location] = NativeObjectMetadata(
-                size=size, etag_checksum=f'"{md5.hex()}"'
-            )
+            try:
+                location, metadata = _object_metadata(item, query.prefix)
+                if location in objects:
+                    raise ValueError(f"duplicate listed object: {location}")
+            except (KeyError, TypeError, ValueError) as exc:
+                log.error(f"Skipping object in {query}: {item!r}: {exc}")
+                continue
+            objects[location] = metadata
         page_token = payload.get("nextPageToken")
         if page_token is None:
             return objects
+        if (
+            not isinstance(page_token, str)
+            or not page_token
+            or page_token in seen_tokens
+        ):
+            log.error(f"Invalid next page token for {query}: {page_token!r}")
+            return objects
+        seen_tokens.add(page_token)
+
+
+def _object_metadata(item: object, prefix: str) -> tuple[str, NativeObjectMetadata]:
+    if not isinstance(item, dict):
+        raise ValueError("object metadata must be a JSON object")
+    key = item["name"]
+    if not isinstance(key, str) or not key.startswith(prefix):
+        raise ValueError(f"listed object escaped prefix {prefix}: {key!r}")
+    raw_size = item["size"]
+    if isinstance(raw_size, bool) or not isinstance(raw_size, int | str):
+        raise ValueError(f"invalid object size for {key}: {raw_size!r}")
+    size = int(raw_size)
+    if size <= 0:
+        raise ValueError(f"invalid object size for {key}: {size}")
+    md5 = b64decode(item["md5Hash"], validate=True)
+    if len(md5) != 16:
+        raise ValueError(f"invalid object MD5 for {key}")
+    return f"{PROXY_LOCATION_PREFIX}{key}", NativeObjectMetadata(
+        size=size, etag_checksum=f'"{md5.hex()}"'
+    )

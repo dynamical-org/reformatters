@@ -1,5 +1,9 @@
 from collections.abc import Sequence
+from itertools import pairwise
 from typing import Any, ClassVar, Generic, TypeVar
+
+from httpx import HTTPError
+from obstore.exceptions import BaseError
 
 from reformatters.common.config_models import ROOT, DataVar
 from reformatters.common.download import s3_download_to_disk, s3_read_bytes, s3_store
@@ -37,7 +41,8 @@ class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]
     def message_lead_times(self) -> Sequence[Timedelta]:
         return (self.lead_time,)
 
-    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...] | None:
+        """The matching identity, or None to skip a malformed source message."""
         return selectors
 
 
@@ -92,12 +97,12 @@ class NoaaVirtualRegionJob(
             coord.get_index_url(), self.dataset_id, region=self.source_bucket_region
         )
         try:
-            index_lines = parse_grib_index_lines(index_path)
+            index_lines = parse_grib_index_lines(index_path, tolerate_malformed=True)
         finally:
             index_path.unlink()
 
         if not index_lines:
-            log.warning(f"Skipping {coord.get_url()}: empty or unparseable grib index")
+            log.error(f"Skipping {coord.get_url()}: empty or unparseable grib index")
             return []
 
         lookup = {}
@@ -116,41 +121,24 @@ class NoaaVirtualRegionJob(
                     )
                     for var, labels in matches
                 )
-        # Each message's end byte is the next message's start; the last is the file end.
-        starts = [start for start, *_ in index_lines]
-        ends = [*starts[1:], file_size]
-
-        location = coord.get_url()
-        # A message that changed size shifts every offset after it, so the last entry is
-        # where any staleness shows: bounds alone cannot see it. Not an equality against
-        # the file end - a healthy index may omit trailing messages the object still has.
-        declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
-        if declared_length is None or declared_length > file_size - starts[-1]:
-            log.error(
-                f"Skipping {location}: the index's last offset {starts[-1]} does not "
-                f"begin a GRIB message that fits the {file_size}-byte data file; "
-                f"stale or mismatched index"
-            )
+        lengths = self._message_lengths(
+            coord, [start for start, *_ in index_lines], file_size
+        )
+        if not lengths:
             return []
-
+        location = coord.get_url()
         out_loc_base = dict(coord.out_loc())
         refs = []
         filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
-        for (start, element, level, window, selectors), end in zip(
-            index_lines, ends, strict=True
-        ):
-            # Byte ranges past the data file mean a stale/mismatched index; skip it.
-            # Checked for every message, matched or not: the whole file is discarded,
-            # so a corrupt range anywhere in the index condemns all of it.
-            if end > file_size or end <= start:
-                log.error(
-                    f"Skipping {location}: index byte ranges fall outside the "
-                    f"{file_size}-byte data file; stale or mismatched index"
-                )
-                return []
+        for start, element, level, window, selectors in index_lines:
+            length = lengths.get(start)
+            if length is None or not element:
+                continue
             if not self.owns_index_message(coord, element, level):
                 continue
             exact_selectors = coord.index_selectors(selectors)
+            if exact_selectors is None:
+                continue
             matches = [
                 *lookup.get((element, level, window, exact_selectors), []),
                 *lookup.get((element, level, window, None), []),
@@ -172,19 +160,97 @@ class NoaaVirtualRegionJob(
                         out_loc=out_loc,
                         location=location,
                         offset=start,
-                        length=end - start,
+                        length=length,
                     )
                 )
         self._check_refs_complete(coord, refs)
         return refs
 
+    def _message_lengths(
+        self, coord: NOAA_VIRTUAL_COORD, starts: Sequence[int], file_size: int
+    ) -> dict[int, int]:
+        location = coord.get_url()
+        # A message that changed size shifts every offset after it, so the last entry is
+        # where any staleness shows: bounds alone cannot see it. Not an equality against
+        # the file end - a healthy index may omit trailing messages the object still has.
+        declared_length = self.grib_message_length_at(coord, starts[-1], file_size)
+        if declared_length is None or not 0 < declared_length <= file_size - starts[-1]:
+            log.error(
+                f"Skipping {location}: the index's last offset {starts[-1]} does not "
+                f"begin a GRIB message that fits the {file_size}-byte data file; "
+                f"stale or mismatched index"
+            )
+            return {}
+
+        valid_starts = [start for start in starts if 0 <= start < file_size]
+        if any(a >= b for a, b in pairwise(valid_starts)):
+            log.error(
+                f"Skipping {location}: non-increasing index offsets; "
+                "stale or mismatched index"
+            )
+            return {}
+
+        lengths = {}
+        # Each message's end byte is the next message's start; the last is the file end.
+        for start, end in pairwise([*starts, file_size]):
+            if not 0 <= start < file_size:
+                log.error(
+                    f"{location}: skipping index row at offset {start} outside the "
+                    f"{file_size}-byte data file"
+                )
+                continue
+            length = end - start
+            if not 0 < length <= file_size - start:
+                try:
+                    length = self.grib_message_length_at(coord, start, file_size)
+                except OSError, HTTPError, BaseError:
+                    log.exception(
+                        f"{location}: skipping message at {start}: failed to read "
+                        "its length beside an out-of-range index offset"
+                    )
+                    continue
+                next_start = next((s for s in valid_starts if s > start), file_size)
+                if length is None or not 0 < length <= next_start - start:
+                    log.error(
+                        f"{location}: skipping message at {start}: cannot recover "
+                        "its length beside an out-of-range index offset"
+                    )
+                    continue
+            lengths[start] = length
+        return lengths
+
     def _check_refs_complete(
         self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
     ) -> None:
-        """Hook for a subclass to report or reject an index matching only some of the
-        coord's variables. Reached only once the index parsed and every byte range
-        checked out, so an empty `refs` here means nothing matched, not a skipped file.
-        """
+        expected = set()
+        for lead in coord.message_lead_times():
+            for (_, level, _, _), matches in self._message_lookup(
+                coord.data_vars, lead.total_seconds() / 3600
+            ).items():
+                for var, labels in matches:
+                    if not self.expects_index_message(coord, var, level):
+                        continue
+                    loc = {**coord.out_loc(), **labels}
+                    if len(coord.message_lead_times()) > 1:
+                        loc["lead_time"] = lead
+                    expected.add((var.path, tuple(sorted(loc.items()))))
+        actual = [
+            (ref.data_var.path, tuple(sorted(ref.out_loc.items()))) for ref in refs
+        ]
+        assert len(actual) == len(set(actual)), (
+            f"{coord.get_url()}: duplicate output references"
+        )
+        if missing := expected - set(actual):
+            log.error(
+                f"{coord.get_url()}: GRIB messages absent from index: "
+                f"{sorted(missing, key=str)}; ingesting available messages"
+            )
+
+    def expects_index_message(
+        self, coord: NOAA_VIRTUAL_COORD, var: NOAA_DATA_VAR, level: str
+    ) -> bool:
+        """Whether this source product publishes an owned message at this level."""
+        return self.owns_index_message(coord, var.internal_attrs.grib_element, level)
 
     def grib_message_length_at(
         self, coord: NOAA_VIRTUAL_COORD, offset: int, file_size: int
@@ -193,7 +259,7 @@ class NoaaVirtualRegionJob(
         object itself and so independent of the index, or None if no such message starts
         there. A stale index can put `offset` past the end, which a ranged GET rejects.
         """
-        if offset + GRIB_SECTION_0_BYTES > file_size:
+        if offset < 0 or offset + GRIB_SECTION_0_BYTES > file_size:
             return None
         header = s3_read_bytes(
             coord.get_url(),

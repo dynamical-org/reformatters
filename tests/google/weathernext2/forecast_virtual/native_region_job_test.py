@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock
 
 import httpx
@@ -12,6 +14,11 @@ from zarr.storage import MemoryStore
 from reformatters.common import template_utils
 from reformatters.common.config_models import ROOT
 from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.storage import (
+    IcechunkVirtualConfig,
+    _repository_config_and_credentials,
+    manifest_append_dim_split,
+)
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -27,6 +34,7 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
     GoogleWeathernext2ForecastVirtualSourceFileCoord,
+    weathernext2_virtual_chunk_containers,
 )
 from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
@@ -634,6 +642,215 @@ def test_object_listing_retries_transient_response() -> None:
         )
     }
     assert client.get.call_count == 2
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_object_listing_keeps_prior_pages_when_next_page_is_unavailable(
+    status: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG", logger=region_job_module.__name__)
+    prefix = "weathernext_2_0_0/zarr/store/temperature/"
+    request = httpx.Request("GET", OBJECTS_LOCATION)
+    client = Mock()
+    client.get.side_effect = [
+        httpx.Response(
+            200,
+            request=request,
+            json={
+                "items": [
+                    {
+                        "name": f"{prefix}0.1.0.0",
+                        "size": "100",
+                        "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA==",
+                    }
+                ],
+                "nextPageToken": "next",
+            },
+        ),
+        httpx.Response(status, request=request),
+    ]
+
+    objects = region_job_module._list_objects(
+        client, region_job_module.ObjectListingQuery(prefix)
+    )
+
+    assert objects == {
+        f"{PROXY_LOCATION_PREFIX}{prefix}0.1.0.0": region_job_module.NativeObjectMetadata(
+            100, '"00000000000000000000000000000000"'
+        )
+    }
+    assert client.get.call_count == 2
+    assert "Listing unavailable" in caplog.text
+    assert not [record for record in caplog.records if record.levelname == "ERROR"]
+
+
+@pytest.mark.parametrize("processing_mode", ["update", "backfill"])
+@pytest.mark.parametrize("source_layout", ["historical", "operational"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "query",
+        "page",
+        "query404",
+        "page404",
+        "transport",
+        "server",
+        "json",
+        "payload",
+        "items",
+        "token",
+        "missing",
+        "metadata",
+        "checksum",
+        "size",
+        "prefix",
+        "shape",
+        "duplicate",
+    ],
+)
+def test_source_listing_errors_preserve_committed_siblings(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    processing_mode: Literal["update", "backfill"],
+    source_layout: Literal["historical", "operational"],
+    failure: str,
+) -> None:
+    caplog.set_level("DEBUG", logger=region_job_module.__name__)
+    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda seconds: None)
+    config = HISTORICAL if source_layout == "historical" else OPERATIONAL
+    cls = (
+        GoogleWeathernext2ForecastHistoricalVirtualRegionJob
+        if source_layout == "historical"
+        else GoogleWeathernext2ForecastOperationalVirtualRegionJob
+    )
+    init_time = pd.Timestamp(
+        "2022-01-02T12:00" if source_layout == "historical" else "2025-03-01T06:00"
+    )
+    data_vars = [_var(config, "temperature_2m"), _var(config, "wind_u_10m")]
+    template = xr.DataTree(
+        config.get_template(init_time + pd.Timedelta("6h"))
+        .to_dataset()[[var.name for var in data_vars]]
+        .sel(init_time=[init_time])
+    )
+    job = _job(cls, config, template, data_vars).model_copy(
+        update={"processing_mode": processing_mode, "poll_deadline": pd.Timestamp.min}
+    )
+    coords = [_coord(config, [var], init_time) for var in data_vars]
+    healthy_chunks = job._source_chunks(coords[0])
+    partial_chunks = job._source_chunks(coords[1])
+    client = Mock()
+    client.__enter__ = Mock(return_value=client)
+    client.__exit__ = Mock(return_value=False)
+
+    def get(url: str, *, params: dict[str, str]) -> httpx.Response:
+        partial = f"/{data_vars[1].internal_attrs.source_name}/" in params["prefix"]
+        return _listing_failure_response(
+            url,
+            params,
+            partial_chunks if partial else healthy_chunks,
+            failure if partial else None,
+        )
+
+    client.get.side_effect = get
+    monkeypatch.setattr(region_job_module.httpx, "Client", lambda **kwargs: client)
+    repo_config, credentials = _repository_config_and_credentials(
+        IcechunkVirtualConfig(
+            containers=weathernext2_virtual_chunk_containers(),
+            manifest_split=manifest_append_dim_split(split_size=32, dim="init_time"),
+        )
+    )
+    repo = icechunk.Repository.create(
+        icechunk.in_memory_storage(),
+        config=repo_config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    session = repo.writable_session("main")
+    template.to_zarr(session.store, compute=False, consolidated=False)
+    session.commit("template")
+
+    job.process_virtual(repo, [], "main", coords)
+
+    store = repo.readonly_session("main").store
+    for chunk in healthy_chunks:
+        chunk_index = job.chunk_key(chunk.out_loc, chunk.data_var)
+        assert chunk_index is not None
+        assert asyncio.run(
+            store.exists(f"{chunk.data_var.path}/c/" + "/".join(map(str, chunk_index)))
+        )
+    for chunk in partial_chunks:
+        chunk_index = job.chunk_key(chunk.out_loc, chunk.data_var)
+        assert chunk_index is not None
+        exists = asyncio.run(
+            store.exists(f"{chunk.data_var.path}/c/" + "/".join(map(str, chunk_index)))
+        )
+        assert not exists
+    assert job.filter_already_present([coords[0]], store) == []
+    assert job.filter_already_present([coords[1]], store) == [coords[1]]
+    assert any(record.levelname == "ERROR" for record in caplog.records) == (
+        failure not in {"missing", "query", "page", "query404", "page404"}
+    )
+    assert "source chunks unavailable" in caplog.text
+
+
+def _listing_failure_response(
+    url: str,
+    params: dict[str, str],
+    chunks: Sequence[region_job_module.NativeSourceChunk],
+    failure: str | None,
+) -> httpx.Response:
+    request = httpx.Request("GET", url)
+    if failure == "transport":
+        raise httpx.ReadError("listing unavailable", request=request)
+    if failure in {"query", "query404", "server"} or "pageToken" in params:
+        status = (
+            503
+            if failure == "server"
+            else 404
+            if failure in {"query404", "page404"}
+            else 403
+        )
+        return httpx.Response(status, request=request)
+    items: list[object] = [
+        {
+            "name": chunk.location.removeprefix(PROXY_LOCATION_PREFIX),
+            "size": "100",
+            "md5Hash": "AAAAAAAAAAAAAAAAAAAAAA==",
+        }
+        for chunk in chunks
+    ]
+    payload: object = {"items": items}
+    if failure in {"page", "page404", "token"}:
+        items.pop()
+        payload = {
+            "items": items,
+            "nextPageToken": [] if failure == "token" else "next",
+        }
+    elif failure == "json":
+        return httpx.Response(200, request=request, content=b"{bad")
+    elif failure == "payload":
+        payload = []
+    elif failure == "items":
+        payload = {"items": {}}
+    elif failure == "missing":
+        items.pop()
+    elif failure == "shape":
+        items[-1] = []
+    elif failure == "duplicate":
+        items[-1] = items[0]
+    elif failure is not None:
+        bad_item = items[-1]
+        assert isinstance(bad_item, dict)
+        if failure == "metadata":
+            del bad_item["size"]
+        else:
+            field, value = {
+                "checksum": ("md5Hash", "AAAA"),
+                "size": ("size", -1),
+                "prefix": ("name", "elsewhere/chunk"),
+            }[failure]
+            bad_item[field] = value
+    return httpx.Response(200, request=request, json=payload)
 
 
 def test_backfill_process_cutoffs_preserve_partitions_and_eligibility(

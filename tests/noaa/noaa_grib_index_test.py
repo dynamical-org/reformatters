@@ -447,3 +447,69 @@ def test_trailing_selectors_preserve_aerosol_and_process_identity(
         ("process=193",),
         (),
     ]
+
+
+@pytest.mark.parametrize(
+    "message", ["2:100:d=2026091500", "2:100:d=2026091500::surface:anl:"]
+)
+def test_malformed_message_keeps_its_offset(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, message: str
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text(
+        "1:0:d=2026091500:TMP:2 m above ground:anl:\n"
+        f"{message}\n"
+        "3:200:d=2026091500:RH:2 m above ground:anl:\n"
+    )
+    records = parse_grib_index_lines(path, tolerate_malformed=True)
+    assert records == [
+        (0, "TMP", "2 m above ground", "anl", ()),
+        (100, "", "", "", ()),
+        (200, "RH", "2 m above ground", "anl", ()),
+    ]
+    assert "retaining its boundary" in caplog.text
+    assert caplog.records[-1].levelname == "ERROR"
+
+
+@pytest.mark.parametrize("tolerate_malformed", [False, True])
+def test_empty_window_in_historical_hrrr_index_is_valid(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    tolerate_malformed: bool,
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text("614:295146787:d=2016011506:APCP:surface::\n")
+    assert parse_grib_index_lines(path, tolerate_malformed=tolerate_malformed) == [
+        (295146787, "APCP", "surface", "", ()),
+    ]
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    "message", ["2:unreadable:d=2026091500:TMP:surface:anl:", "garbage"]
+)
+def test_unreadable_offset_invalidates_index(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, message: str
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text(
+        "1:0:d=2026091500:TMP:2 m above ground:anl:\n"
+        f"{message}\n"
+        "3:200:d=2026091500:RH:2 m above ground:anl:\n"
+    )
+    assert parse_grib_index_lines(path, tolerate_malformed=True) == []
+    assert "message boundaries cannot be inferred safely" in caplog.text
+    assert caplog.records[-1].levelname == "ERROR"
+
+
+@pytest.mark.parametrize(
+    ("message", "error"),
+    [("1:unreadable:d=2026091500:TMP:surface:anl:", ValueError), ("1:100", IndexError)],
+)
+def test_parser_is_strict_by_default(
+    tmp_path: Path, message: str, error: type[Exception]
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text(message + "\n")
+    with pytest.raises(error):
+        parse_grib_index_lines(path)

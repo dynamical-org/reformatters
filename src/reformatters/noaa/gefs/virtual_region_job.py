@@ -9,7 +9,6 @@ from reformatters.common.config_models import ROOT
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
-from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.gefs.gefs_config_models import (
     FILE_RESOLUTIONS,
     GEFSSourceFileType,
@@ -22,6 +21,15 @@ from reformatters.noaa.noaa_virtual_region_job import (
 
 S3_LOCATION_PREFIX = "s3://noaa-gefs-pds/"
 S3_BUCKET_REGION = "us-east-1"
+
+_A_PRESSURE_LEVELS: dict[str, frozenset[int]] = {
+    "HGT": frozenset({10, 50, 100, 200, 250, 300, 500, 700, 850, 925, 1000}),
+    "TMP": frozenset({10, 50, 100, 200, 250, 500, 700, 850, 925, 1000}),
+    "RH": frozenset({10, 50, 100, 200, 250, 500, 700, 850, 925, 1000}),
+    "UGRD": frozenset({10, 50, 100, 200, 250, 300, 400, 500, 700, 850, 925, 1000}),
+    "VGRD": frozenset({10, 50, 100, 200, 250, 300, 400, 500, 700, 850, 925, 1000}),
+    "VVEL": frozenset({850}),
+}
 
 
 def gefs_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
@@ -58,62 +66,39 @@ class NoaaGefsVirtualSourceFileCoord(
 
 GEFS_VIRTUAL_COORD = TypeVar("GEFS_VIRTUAL_COORD", bound=NoaaGefsVirtualSourceFileCoord)
 
-_5WAVH_500MB = frozenset({"five_wave_geopotential_height_500mb"})
-
-# Source files NOAA published without a record, and the variables that record filled.
-KNOWN_MISSING_MESSAGES: Mapping[
-    tuple[pd.Timestamp, pd.Timedelta, int, GEFSSourceFileType], frozenset[str]
-] = {
-    **{
-        (
-            pd.Timestamp("2023-04-26T12"),
-            pd.Timedelta(hours=240),
-            member,
-            "b",
-        ): _5WAVH_500MB
-        for member in (11, 12, 16, 18, 20, 22)
-    },
-    (pd.Timestamp("2023-04-26T12"), pd.Timedelta(hours=288), 0, "b"): _5WAVH_500MB,
-    (pd.Timestamp("2025-07-01T18"), pd.Timedelta(hours=24), 28, "b"): _5WAVH_500MB,
-}
-
 
 class NoaaGefsVirtualRegionJob(
     NoaaVirtualRegionJob[NoaaGefsVirtualDataVar, GEFS_VIRTUAL_COORD],
     Generic[GEFS_VIRTUAL_COORD],
 ):
-    """The GEFS source bucket and the checks specific to its archive. A subclass adds
-    generate_source_file_coords and operational_update_window."""
+    """The GEFS source bucket and product-specific message availability."""
 
     source_location_prefix: ClassVar[str] = S3_LOCATION_PREFIX
     source_bucket_region: ClassVar[str] = S3_BUCKET_REGION
 
-    def _check_refs_complete(
-        self, coord: GEFS_VIRTUAL_COORD, refs: list[VirtualRef]
-    ) -> None:
-        """A variable with no matching message would otherwise be committed as a silent
-        NaN column: the file counts as ingested through its representative variable, so
-        nothing ever retries it."""
-        filled = {ref.data_var.path for ref in refs}
-        known_missing = KNOWN_MISSING_MESSAGES.get(
-            (
-                coord.init_time,
-                coord.lead_time,
-                coord.ensemble_member,
-                coord.source_file_type,
-            ),
-            frozenset(),
-        )
-        unmatched = sorted(
-            var.name
-            for var in coord.data_vars
-            if var.path not in filled and var.name not in known_missing
-        )
-        assert not unmatched, (
-            f"{coord.get_url()} has no message for {unmatched}; "
-            "the source era is not modelled by this catalog, or the file belongs in "
-            "KNOWN_MISSING_MESSAGES"
-        )
+    def expects_index_message(
+        self, coord: GEFS_VIRTUAL_COORD, var: NoaaGefsVirtualDataVar, level: str
+    ) -> bool:
+        if not level.endswith(" mb") or coord.source_file_type == "s":
+            return super().expects_index_message(coord, var, level)
+        element = var.internal_attrs.grib_element
+        pressure = float(level.removesuffix(" mb"))
+        if element in {"RH", "ABSV", "CLMR", "CLWMR"} and pressure < 10:
+            return False
+        if element == "O3MR" and pressure > 400:
+            return False
+        if element in {"ICIP", "ICSEV"} and pressure not in {
+            800,
+            700,
+            600,
+            500,
+            400,
+            300,
+        }:
+            return False
+        if a_levels := _A_PRESSURE_LEVELS.get(element):
+            return (pressure in a_levels) == (coord.source_file_type == "a")
+        return coord.source_file_type == "b"
 
     def representative_var(self, coord: GEFS_VIRTUAL_COORD) -> NoaaGefsVirtualDataVar:
         """Return a variable suitable for probing whether the source file is available."""

@@ -27,10 +27,11 @@ from reformatters.common.virtual_source_listing import (
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
-from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
+from reformatters.ecmwf.ecmwf_grib_index import iter_index_file_rows
 from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
 
 from .template_config import (
+    AIFS_2026_UPGRADE_DATE,
     EcmwfAifsSingleVirtualDataVar,
 )
 
@@ -208,46 +209,74 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
                 )
             case _ as unreachable:
                 assert_never(unreachable)
-        try:
-            index_df = parse_index_file(index_path, ensemble=False)
-        finally:
-            index_path.unlink()
-
         lookup = self._message_lookup(coord.data_vars)
         out_loc_base = dict(coord.out_loc())
         location = coord.get_url()
         refs = []
-        entries = index_df.reset_index()
-        for param, levtype, levelist, raw_offset, raw_length in zip(
-            entries["param"],
-            entries["levtype"],
-            entries["levelist"],
-            entries["_offset"],
-            entries["_length"],
-            strict=True,
-        ):
-            level = None if pd.isna(levelist) else int(levelist)
-            matches = lookup.get((str(param), str(levtype), level))
-            if not matches:
-                continue
-            offset, length = int(raw_offset), int(raw_length)
-            # Byte ranges past the data file mean a stale/mismatched index; skip it.
-            if length <= 0 or offset + length > file_size:
-                log.warning(
-                    f"Skipping {location}: index byte range falls outside the "
-                    f"{file_size}-byte data file; stale or mismatched index"
-                )
-                return []
-            for var, level_label in matches:
-                refs.append(
-                    VirtualRef(
-                        data_var=var,
-                        out_loc={**out_loc_base, **level_label},
-                        location=location,
-                        offset=offset,
-                        length=length,
+        found = set()
+        previous_end = 0
+        try:
+            for row in iter_index_file_rows(index_path):
+                try:
+                    offset = _index_integer(row["_offset"])
+                    length = _index_integer(row["_length"])
+                    if (
+                        offset < previous_end
+                        or length <= 0
+                        or offset + length > file_size
+                    ):
+                        raise ValueError(
+                            f"byte range {offset}+{length} overlaps or precedes "
+                            f"previous end {previous_end}, or falls outside {file_size}-byte file"
+                        )
+                except (KeyError, TypeError, ValueError) as exc:
+                    log.error(
+                        f"Skipping {location}: untrustworthy index byte geometry: {row!r}: {exc}"
                     )
-                )
+                    return []
+                previous_end = offset + length
+                try:
+                    param, levtype = row["param"], row["levtype"]
+                    if not isinstance(param, str) or not isinstance(levtype, str):
+                        raise ValueError("param and levtype must be strings")
+                    raw_level = row.get("levelist")
+                    level = None if raw_level is None else _index_integer(raw_level)
+                    if (
+                        not param
+                        or not levtype
+                        or (levtype in {"pl", "sol"} and level is None)
+                    ):
+                        raise ValueError("missing message selector")
+                except (KeyError, TypeError, ValueError) as exc:
+                    log.error(f"Skipping index row for {location}: {row!r}: {exc}")
+                    continue
+                key = (param, levtype, level)
+                for var, level_label in lookup.get(key, []):
+                    refs.append(
+                        VirtualRef(
+                            data_var=var,
+                            out_loc={**out_loc_base, **level_label},
+                            location=location,
+                            offset=offset,
+                            length=length,
+                        )
+                    )
+                    found.add(key)
+        finally:
+            index_path.unlink()
+        missing = {
+            key
+            for key in lookup.keys() - found
+            if not (
+                key[1] == "pl"
+                and key[2] == 10
+                and (key[0] == "q" or coord.init_time < AIFS_2026_UPGRADE_DATE)
+            )
+        }
+        if missing:
+            log.error(
+                f"Missing {len(missing)} expected messages in {location}: {sorted(missing, key=str)}"
+            )
         return refs
 
     def _message_lookup(
@@ -278,3 +307,9 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
                         (var, {dim: int(level)})
                     )
         return lookup
+
+
+def _index_integer(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        raise ValueError(f"expected integer, got {value!r}")
+    return int(value)

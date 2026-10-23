@@ -14,10 +14,26 @@ from reformatters.common.config_models import (
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
 from reformatters.ecmwf.ecmwf_grib_index import (
     grib_message_byte_ranges_from_index,
+    iter_index_file_rows,
     parse_index_file,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def test_iter_index_rows_isolates_malformed_json(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "partial.index"
+    path.write_bytes(b'{"param":"2t"}\n{bad\n[]\n\xff\n{"param":"10u"}\n')
+    assert list(iter_index_file_rows(path)) == [{"param": "2t"}, {"param": "10u"}]
+    assert (
+        len([record for record in caplog.records if record.levelname == "ERROR"]) == 3
+    )
+    path.write_text('{"param":"2t"}\n{bad\n')
+    with pytest.raises(ValueError, match="Expected object or value"):
+        parse_index_file(path, ensemble=False)
+
 
 # ---------------------------------------------------------------------------
 # Minimal JSONL index fixture (open data format)

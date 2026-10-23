@@ -20,8 +20,10 @@ from typing import Any, ClassVar, Literal, cast
 from unittest.mock import Mock
 
 import dask.array
+import httpx
 import icechunk
 import numpy as np
+import obstore
 import pandas as pd
 import pytest
 import xarray as xr
@@ -31,7 +33,7 @@ from pydantic import ValidationError, computed_field
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
 
-from reformatters.common import template_utils, validation
+from reformatters.common import template_utils, validation, virtual_source_listing
 from reformatters.common.config_models import (
     ROOT,
     BaseInternalAttrs,
@@ -890,10 +892,13 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("processing_mode", ["backfill", "update"])
+@pytest.mark.parametrize("failure", ["probe", "read", "parse", "http", "listing"])
 def test_partial_and_probe_missing_files_do_not_block_siblings(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     processing_mode: Literal["backfill", "update"],
+    failure: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     dataset = _make_dataset(tmp_path)
     template_ds = _create_template_ds(2)
@@ -901,12 +906,36 @@ def test_partial_and_probe_missing_files_do_not_block_siblings(
     template_utils.write_metadata(template_ds, dataset.store_factory)
     repo = _primary_repo(dataset.store_factory)
 
+    def source_prefix(coord: VirtualTestSourceFileCoord) -> str:
+        return f"{coord.init_time.isoformat()}/{coord.lead_time.value}/"
+
+    def list_source(
+        store: obstore.store.ObjectStore,
+        *,
+        prefix: str,
+        chunk_size: int,
+    ) -> Iterator[list[dict[str, Any]]]:
+        if prefix == f"{APPEND_DIM_START.isoformat()}/{LEAD_TIMES[1].value}/":
+            raise OSError("source prefix unavailable")
+        yield [{"path": prefix + "data", "size": BLOCK_NBYTES}]
+
+    monkeypatch.setattr(obstore, "list", list_source)
+
     class PartialFilesJob(VirtualTestRegionJob):
         process_virtual_refs = VirtualRegionJob.process_virtual_refs
 
         def discover_available(
             self, pending: list[VirtualTestSourceFileCoord]
         ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+            if failure == "listing":
+                listed = virtual_source_listing._list_objects(
+                    obstore.store.MemoryStore(), [source_prefix(c) for c in pending]
+                )
+                return [
+                    (c, listed[key])
+                    for c in pending
+                    if (key := source_prefix(c) + "data") in listed
+                ]
             return [(coord, BLOCK_NBYTES) for coord in pending]
 
         def file_refs(
@@ -914,6 +943,17 @@ def test_partial_and_probe_missing_files_do_not_block_siblings(
             coord: VirtualTestSourceFileCoord,
             file_size: int,  # noqa: ARG002
         ) -> list[VirtualRef]:
+            if coord.init_time == APPEND_DIM_START and coord.lead_time == LEAD_TIMES[1]:
+                if failure == "read":
+                    raise OSError("unreadable source")
+                if failure == "parse":
+                    raise ValueError("malformed source index")
+                if failure == "http":
+                    raise httpx.HTTPStatusError(
+                        "index unavailable",
+                        request=httpx.Request("GET", "https://source.example/index"),
+                        response=httpx.Response(404),
+                    )
             batch = next(VirtualTestRegionJob.process_virtual_refs(self, [coord]))
             ref = batch[0][1][0]
             variables = self.data_vars
@@ -934,6 +974,7 @@ def test_partial_and_probe_missing_files_do_not_block_siblings(
         region=slice(0, 2),
         reformat_job_name="test",
         processing_mode=processing_mode,
+        poll_deadline=pd.Timestamp("2000-01-01"),
     )
     _process_virtual(job, repo)
 
@@ -953,7 +994,12 @@ def test_partial_and_probe_missing_files_do_not_block_siblings(
     assert job.filter_already_present(job.source_file_coords(), store) == [
         job.source_file_coords()[1]
     ]
-    assert "refs do not cover representative chunk" in caplog.text
+    message = {
+        "probe": "refs do not cover representative chunk",
+        "listing": "Could not finish listing source prefix",
+    }.get(failure, "could not build virtual refs")
+    assert message in caplog.text
+    assert any(record.levelname == "ERROR" for record in caplog.records)
 
 
 def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> None:

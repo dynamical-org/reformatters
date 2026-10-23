@@ -90,6 +90,7 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
     config: NoaaRrfsForecastTemplateConfig,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     job = make_job(config)
     pattern = "rrfsens.*/12/m001/*.idx" if config.members else "rrfs.*/00/*.idx"
@@ -145,7 +146,9 @@ def test_every_census_message_is_referenced_or_explicitly_accounted_for(
             lambda *a, local=local, **k: local,
         )
         monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *a: 217)
+        caplog.clear()
         refs = job.file_refs(coord, lines[-1][0] + 10_000_000)
+        assert "GRIB messages absent from index" not in caplog.text
         assert refs
         used_offsets = {r.offset for r in refs}
         seen: set[tuple[str, str, str, tuple[str, ...]]] = set()
@@ -282,11 +285,10 @@ def test_member_selector_stripping_preserves_process_and_aerosol_selectors() -> 
     assert coord.get_url().endswith(
         "rrfsens.20260915/12/m005/rrfs.t12z.m005.2dfldnomads.3km.f006.conus.grib2"
     )
-    with pytest.raises(AssertionError):
-        coord.index_selectors(("ENS=+1",))
+    assert coord.index_selectors(("ENS=+1",)) is None
 
 
-def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
+def test_missing_required_messages_log_errors(caplog: pytest.LogCaptureFixture) -> None:
     config = CONFIGS[0]
     var = next(v for v in config.data_vars if v.name == "temperature_2m")
     coord = NoaaRrfsSourceFileCoord(
@@ -295,10 +297,10 @@ def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> Non
         source_family="2dfld",
         data_vars=[var],
     )
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         make_job(config)._check_refs_complete(coord, [])
     (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
+    assert warning.levelname == "ERROR"
     assert coord.get_url() in warning.message
     assert "GRIB messages absent from index" in warning.message
     assert "temperature_2m" in warning.message
@@ -348,7 +350,7 @@ def test_post_retirement_index_contains_all_configured_messages(
     assert not {"FRZR", "FROZR"} & {line[1] for line in lines}
     file_size = lines[-1][0] + 1000
     local.write_bytes(path.read_bytes())
-    with caplog.at_level("WARNING"):
+    with caplog.at_level("ERROR"):
         refs = job.file_refs(coord, file_size)
     assert refs
     assert not any(
@@ -569,7 +571,10 @@ def test_subhourly_update_selects_through_the_due_init(
 
 @pytest.mark.parametrize("family", ["2dfld", "prslev"])
 def test_member_control_source_has_all_required_fields(
-    family: RrfsSourceFamily, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    family: RrfsSourceFamily,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     config = CONFIGS[3]
     job = make_job(config)
@@ -597,5 +602,92 @@ def test_member_control_source_has_all_required_fields(
         monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *a: 217)
         lines = parse_grib_index_lines(path)
         refs = job.file_refs(coord, lines[-1][0] + 10_000_000)
+        assert not [record for record in caplog.records if record.levelname == "ERROR"]
         assert refs
         assert all(ref.out_loc["ensemble_member"] == 0 for ref in refs)
+
+
+@pytest.mark.parametrize(
+    "selectors", [(), ("ENS=+2",), ("ENS=+1", "ENS=+1"), ("ENS=+1", "ENS=+2")]
+)
+def test_malformed_member_selector_isolated_to_its_message(
+    selectors: tuple[str, ...],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = CONFIGS[3]
+    variables = [
+        next(v for v in config.data_vars if v.name == name)
+        for name in ("temperature_2m", "relative_humidity_2m")
+    ]
+    coord = NoaaRrfsEnsSourceFileCoord(
+        init_time=pd.Timestamp("2026-09-15T12"),
+        lead_time=pd.Timedelta("6h"),
+        ensemble_member=1,
+        source_family="2dfld",
+        data_vars=variables,
+    )
+    local = tmp_path / "index.idx"
+    local.write_text(
+        "1:0:d=2026091512:TMP:2 m above ground:6 hour fcst:ENS=+1:\n"
+        "2:1000:d=2026091512:RH:2 m above ground:6 hour fcst:"
+        + ":".join(selectors)
+        + "\n"
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *args, **kwargs: local,
+    )
+    monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *args: 1000)
+    refs = make_job(config).file_refs(coord, 2000)
+    assert [(ref.data_var.name, ref.offset, ref.length) for ref in refs] == [
+        ("temperature_2m", 0, 1000)
+    ]
+    assert "skipping malformed selectors" in caplog.text
+    assert "GRIB messages absent from index" in caplog.text
+    assert "relative_humidity_2m" in caplog.text
+    assert all(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_subhourly_completeness_reports_missing_lead_and_respects_supported_leads(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    config = CONFIGS[2]
+    temperature = next(v for v in config.data_vars if v.name == "temperature_2m")
+    hourly = replace(
+        temperature,
+        name="only_hourly",
+        internal_attrs=replace(
+            temperature.internal_attrs,
+            grib_element="HOUR",
+            supported_lead_times=(pd.Timedelta("1h"),),
+        ),
+    )
+    coord = NoaaRrfsSubHourlySourceFileCoord(
+        init_time=pd.Timestamp("2026-09-15T12"),
+        lead_time=pd.Timedelta("1h"),
+        data_vars=[temperature, hourly],
+    )
+    local = tmp_path / "index.idx"
+    local.write_text(
+        "1:0:d=2026091512:TMP:2 m above ground:15 min fcst:\n"
+        "2:1000:d=2026091512:TMP:2 m above ground:30 min fcst:\n"
+        "3:2000:d=2026091512:TMP:2 m above ground:1 hour fcst:\n"
+        "4:3000:d=2026091512:HOUR:2 m above ground:1 hour fcst:\n"
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *args, **kwargs: local,
+    )
+    monkeypatch.setattr(NoaaRrfsRegionJob, "grib_message_length_at", lambda *args: 1000)
+    refs = make_job(config).file_refs(coord, 4000)
+    assert len(refs) == 4
+    (error,) = caplog.records
+    assert error.levelname == "ERROR"
+    assert "temperature_2m" in error.message
+    assert "Timedelta('0 days 00:45:00')" in error.message
+    assert "only_hourly" not in error.message
+    assert "Timedelta('0 days 00:15:00')" not in error.message
