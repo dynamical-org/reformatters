@@ -23,7 +23,7 @@ from reformatters.common.config import Config, Env
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
-from reformatters.common.types import AppendDim
+from reformatters.common.types import AppendDim, Timestamp
 
 log = get_logger(__name__)
 
@@ -486,7 +486,9 @@ def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
+    *,
     metadata: dict[str, str] | None = None,
+    deadline: Timestamp | None = None,
 ) -> None:
     """Conveience function to handle committing to icechunk stores.
 
@@ -518,12 +520,14 @@ def commit_if_icechunk(
             retry(
                 functools.partial(_commit, store),
                 max_attempts=10,
+                deadline=deadline,
             )
 
     if isinstance(primary_store, IcechunkStore):
         retry(
             functools.partial(_commit, primary_store),
             max_attempts=10,
+            deadline=deadline,
         )
 
 

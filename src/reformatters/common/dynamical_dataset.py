@@ -15,7 +15,7 @@ import typer
 import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field, PrivateAttr, computed_field, model_validator
 
 from reformatters.common import (
     kubernetes,
@@ -39,6 +39,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
+from reformatters.common.retry import DeadlineExceededError, check_deadline
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -67,6 +68,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
+    retry_late_sources: ClassVar[bool] = False
+    _retry_timing: kubernetes.RetryTiming | None = PrivateAttr(default=None)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -145,6 +148,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")] = 1,
     ) -> None:
         """Update an existing dataset with the latest data."""
+        self._retry_timing = None
+        if self.retry_late_sources and Config.is_prod:
+            cron = self._operational_cron_job(ReformatCronJob)
+            self._retry_timing = kubernetes.read_job_retry_timing(
+                reformat_job_name,
+                cron,
+                cron.pod_active_deadline - self.virtual_poll_deadline_grace,
+            )
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         with self._monitor(
@@ -193,6 +204,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 isinstance(error, validation.OperationalValidationError)
                 and Config.is_prod
             ):
+                if (
+                    self._retry_timing is not None
+                    and error.only_missing_data
+                    and pd.Timestamp.now() >= self._retry_timing.poll_deadline
+                ):
+                    self._retry_late_source_update(reformat_job_name)
+                    raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
                 should_retry, retry_job_name = kubernetes.retry_job_name(
                     reformat_job_name
                 )
@@ -207,6 +225,37 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                         log.exception("Could not submit %s", retry_job_name)
             # Stop with exit code that fails the job rather than having this pod retry
             raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
+
+    def _retry_late_source_update(self, reformat_job_name: str) -> None:
+        timing = self._retry_timing
+        assert timing is not None
+        cron = self._operational_cron_job(ReformatCronJob)
+        now = pd.Timestamp.now().floor("s")
+        final_cutoff = timing.next_fire_time - timedelta(minutes=2)
+        if now >= final_cutoff:
+            log.info("No polling time remains before %s", timing.next_fire_time)
+            return
+        poll_deadline = min(
+            now + cron.pod_active_deadline - self.virtual_poll_deadline_grace,
+            final_cutoff,
+        )
+        retry_timing = kubernetes.RetryTiming(
+            fire_time=timing.fire_time,
+            next_fire_time=timing.next_fire_time,
+            poll_deadline=poll_deadline,
+        )
+        _, retry_job_name = kubernetes.retry_job_name(
+            reformat_job_name, max_retries=None
+        )
+        try:
+            kubernetes.create_job_from_cronjob(
+                os.environ["CRON_JOB_NAME"],
+                retry_job_name,
+                retry_timing=retry_timing,
+                active_deadline=poll_deadline - now + self.virtual_poll_deadline_grace,
+            )
+        except Exception:
+            log.exception("Could not submit %s", retry_job_name)
 
     def backfill_kubernetes(
         self,
@@ -620,14 +669,26 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
         job = job.model_copy(
-            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
+            update={
+                "poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now()),
+                "write_deadline": (
+                    self._retry_timing.poll_deadline
+                    if self._retry_timing is not None
+                    else None
+                ),
+            }
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
-        job.refresh_metadata(self.store_factory, self._tmp_store())
-        self.region_job_class.process_worker_jobs(
-            [job], self.store_factory, "main", worker_index, overwrite_chunks=False
-        )
+        try:
+            check_deadline(job.write_deadline)
+            job.refresh_metadata(self.store_factory, self._tmp_store())
+            check_deadline(job.write_deadline)
+            self.region_job_class.process_worker_jobs(
+                [job], self.store_factory, "main", worker_index, overwrite_chunks=False
+            )
+        except DeadlineExceededError:
+            log.info("Write deadline reached; continuing to validation")
 
     def validate_dataset(
         self,
@@ -715,9 +776,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         operational_update_jobs = self.region_job_class.operational_update_jobs
         fire_time_kwarg: dict[str, Any] = {}
         if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
-            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
-                ReformatCronJob
-            ).previous_fire_time(pd.Timestamp.now())
+            fire_time_kwarg["job_fire_time"] = (
+                self._retry_timing.fire_time
+                if self._retry_timing is not None
+                else self._operational_cron_job(ReformatCronJob).previous_fire_time(
+                    pd.Timestamp.now()
+                )
+            )
 
         return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
@@ -885,6 +950,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         the next fire and being killed mid-poll. Lands a grace period before the pod's
         own active deadline, leaving room to validate, exit and check in.
         """
+        if self._retry_timing is not None:
+            return self._retry_timing.poll_deadline
         cron_job = self._operational_cron_job(ReformatCronJob)
         assert (
             timedelta(0)
@@ -899,6 +966,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
+        assert not (self.retry_late_sources and self.replica_storage_configs), (
+            "Late-source retries require a single store without replicas"
+        )
         # A virtual region job emits chunk refs into icechunk and needs the source
         # containers registered, so the virtual config is mandatory for it.
         if (

@@ -1,9 +1,37 @@
 from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 
 from reformatters.common import retry as retry_module
 from reformatters.common.retry import exponential_backoff_time, retry
+
+
+def test_deadline_prevents_retrying_an_inflight_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = pd.Timestamp("2026-10-20 19:07:59")
+    deadline = pd.Timestamp("2026-10-20 19:08:00")
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: now))
+    calls = 0
+
+    def operation() -> None:
+        nonlocal now, calls
+        calls += 1
+        now = deadline
+        raise OSError("transient storage failure")
+
+    monkeypatch.setattr(retry_module.time, "sleep", lambda seconds: None)
+    with pytest.raises(retry_module.DeadlineExceededError):
+        retry(operation, max_attempts=10, deadline=deadline)
+    assert calls == 1
+
+
+def test_expired_deadline_starts_no_operation() -> None:
+    operation = Mock()
+    with pytest.raises(retry_module.DeadlineExceededError):
+        retry(operation, deadline=pd.Timestamp("2000-01-01"))
+    operation.assert_not_called()
 
 
 @pytest.fixture

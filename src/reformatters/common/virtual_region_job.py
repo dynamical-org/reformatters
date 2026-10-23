@@ -29,7 +29,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.retry import exponential_backoff_time
+from reformatters.common.retry import check_deadline, exponential_backoff_time
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
 log = get_logger(__name__)
@@ -80,6 +80,7 @@ class VirtualRegionJob(
 
     # Stop polling after this time, leaving unpublished files to the next fire.
     poll_deadline: Timestamp = pd.Timestamp.max
+    write_deadline: Timestamp | None = None
 
     # The newest append-dim label the store covers when the run starts, or None when it
     # is empty. Set by process_worker_jobs; lets discover_available tell a coord that
@@ -278,29 +279,57 @@ class VirtualRegionJob(
         batching policy. See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
+        failed_attempts: dict[int, int] = {}
+        retry_after: dict[int, float] = {}
         last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
             while pending:
+                check_deadline(self.write_deadline)
                 tick_start = time.monotonic()
                 available = self.discover_available(pending)
+                available = [
+                    (coord, size)
+                    for coord, size in available
+                    if time.monotonic() >= retry_after.get(id(coord), 0)
+                ]
                 discover_s = time.monotonic() - tick_start
                 if available:
                     coords, sizes = zip(*available, strict=True)
                     build_start = time.monotonic()
-                    refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
-                    # Drop files that yielded no refs (skipped as unreadable).
+                    refs_per_file = list(
+                        pool.map(
+                            self._file_refs_or_skip,
+                            coords,
+                            sizes,
+                            (id(coord) not in failed_attempts for coord in coords),
+                        )
+                    )
+                    for coord, refs in zip(coords, refs_per_file, strict=True):
+                        if not refs:
+                            key = id(coord)
+                            attempt = failed_attempts.get(key, 0)
+                            retry_after[key] = (
+                                time.monotonic()
+                                + exponential_backoff_time(
+                                    attempt, max_delay_seconds=60
+                                )
+                            )
+                            failed_attempts[key] = attempt + 1
                     batch = [
                         (coord, refs)
                         for coord, refs in zip(coords, refs_per_file, strict=True)
                         if refs
                     ]
                     build_s = time.monotonic() - build_start
-                    ready = {id(coord) for coord in coords}
+                    # Backfills skip unreadable files; updates keep them pending.
+                    ready = {id(coord) for coord, _ in batch}
+                    if self.processing_mode == "backfill":
+                        ready.update(id(coord) for coord in coords)
                     pending = [coord for coord in pending if id(coord) not in ready]
-                    skipped = len(coords) - len(batch)
+                    without_refs = len(coords) - len(batch)
                     log.info(
-                        f"Ingesting {len(batch)} files"
-                        f"{f' ({skipped} skipped)' if skipped else ''}, "
+                        f"Built refs for {len(batch)} files"
+                        f"{f' ({without_refs} without refs)' if without_refs else ''}, "
                         f"{len(pending)} still pending "
                         f"(discover {discover_s:.1f}s, build {build_s:.1f}s)"
                     )
@@ -330,23 +359,27 @@ class VirtualRegionJob(
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
 
     def _file_refs_or_skip(
-        self, coord: SOURCE_FILE_COORD, file_size: int
+        self, coord: SOURCE_FILE_COORD, file_size: int, log_failure: bool = True
     ) -> list[VirtualRef]:
         # Skip a file we can't build refs for rather than sink the job; AssertionError
         # is our own invariant, so let it propagate.
         try:
             refs = self.file_refs(coord, file_size)
             if refs and not self._refs_cover_probe_chunk(coord, refs):
-                log.error(
-                    f"Skipping {coord.get_url()}: refs do not cover representative "
-                    "chunk used to detect ingestion"
-                )
+                if log_failure:
+                    log.error(
+                        f"Skipping {coord.get_url()}: refs do not cover representative "
+                        "chunk used to detect ingestion"
+                    )
                 return []
             return refs
         except AssertionError:
             raise
         except Exception:
-            log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")
+            if log_failure:
+                log.exception(
+                    f"Skipping {coord.get_url()}: could not build virtual refs"
+                )
             return []
 
     @classmethod
@@ -428,6 +461,7 @@ class VirtualRegionJob(
         current_size = self._committed_append_dim_size(readonly_store)
 
         for file_refs_batch in self.process_virtual_refs(remaining):
+            check_deadline(self.write_deadline)
             prepare_start = time.monotonic()
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
@@ -440,11 +474,13 @@ class VirtualRegionJob(
             needed_size = self._needed_append_dim_size(refs)
             resized = needed_size > current_size
             if resized:
+                check_deadline(self.write_deadline)
                 self.sync_dims_to(stores, needed_size)
                 current_size = needed_size
 
             emit_start = time.monotonic()
             prepare_s = emit_start - prepare_start
+            check_deadline(self.write_deadline)
             self._emit_refs(stores, refs)
             emit_s = time.monotonic() - emit_start
 
@@ -455,6 +491,7 @@ class VirtualRegionJob(
                 primary_session.store,
                 [s.store for s in replica_sessions],
                 metadata=self.commit_metadata(),
+                deadline=self.write_deadline,
             )
             log.info(
                 f"Committed {len(refs)} refs "
@@ -608,6 +645,7 @@ class VirtualRegionJob(
             tmp_store,
             consolidated=self.consolidated_metadata,
             metadata=self.commit_metadata(),
+            deadline=self.write_deadline,
         )
 
     def sync_dims_to(
