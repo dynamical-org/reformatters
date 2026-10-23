@@ -1,5 +1,6 @@
 import concurrent.futures
 import os
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
@@ -36,6 +37,44 @@ from reformatters.common.types import ArrayND
 from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
+
+_COMMIT_METADATA_DIMS = ("init_time", "lead_time", "time")
+
+
+def worker_commit_metadata(
+    worker_results: Mapping[str, Sequence[SourceFileResult]],
+    template_ds: xr.DataTree,
+    worker_index: int,
+    now: pd.Timestamp,
+) -> dict[str, Any]:
+    """JSON-serializable icechunk commit metadata describing what a worker wrote.
+
+    Each of init_time / lead_time / time found in the succeeded source files'
+    out_loc is an ISO 8601 scalar if a single value was written, else a [min, max] range.
+    """
+    results = [r for var_results in worker_results.values() for r in var_results]
+    succeeded = [r for r in results if r.status == SourceFileStatus.Succeeded]
+    metadata: dict[str, Any] = {
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "worker": worker_index,
+        "data_vars": sorted(
+            var_path
+            for var_path, var_results in worker_results.items()
+            if any(r.status == SourceFileStatus.Succeeded for r in var_results)
+        ),
+        "source_files": dict(Counter(r.status.name for r in results)),
+    }
+    for dim in _COMMIT_METADATA_DIMS:
+        values = sorted({r.out_loc[dim] for r in succeeded if dim in r.out_loc})
+        if not values:
+            continue
+        to_iso = pd.Timedelta if dim == "lead_time" else pd.Timestamp
+        first, last = to_iso(values[0]).isoformat(), to_iso(values[-1]).isoformat()
+        metadata[dim] = first if len(values) == 1 else [first, last]
+        if dim == "lead_time":
+            metadata["leads_written"] = len(values)
+            metadata["leads_expected"] = template_ds.sizes["lead_time"]
+    return metadata
 
 
 class MaterializedRegionJob(
@@ -169,6 +208,9 @@ class MaterializedRegionJob(
             f"Update worker {worker_index} at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
             primary_store,
             replica_stores,
+            metadata=worker_commit_metadata(
+                worker_results, jobs[0].template_ds, worker_index, now
+            ),
         )
         return worker_results
 
