@@ -21,10 +21,6 @@ from reformatters.google.weathernext2.forecast_virtual.region_job import (
     OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
     OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT,
 )
-from reformatters.google.weathernext_virtual.holdback import (
-    PUBLICATION_HOLDBACK,
-    utc_now,
-)
 from reformatters.google.weathernext_virtual.holdback_audit import (
     ForbiddenChunk,
     HoldbackAudit,
@@ -113,13 +109,7 @@ def _operational_dataset(dataset_id: str) -> DynamicalDataset[Any, Any]:
     return resolve_virtual_dataset(dataset_id)
 
 
-def _default_cutoff() -> pd.Timestamp:
-    return utc_now() - PUBLICATION_HOLDBACK
-
-
-def _parse_cutoff(value: str | None) -> pd.Timestamp:
-    if value is None:
-        return _default_cutoff()
+def _parse_cutoff(value: str) -> pd.Timestamp:
     cutoff = pd.Timestamp(value)
     if cutoff.tz is None:
         raise typer.BadParameter("--cutoff must include a UTC offset")
@@ -327,11 +317,11 @@ def _run_publish(
 def audit(
     store_url: Annotated[str, typer.Argument(help="Public Icechunk store URL")],
     cutoff: Annotated[
-        str | None,
+        str,
         typer.Option(
-            help="ISO timestamp with UTC offset; defaults to now minus one hour"
+            help="Recorded withdrawal cutoff as an ISO timestamp with UTC offset"
         ),
-    ] = None,
+    ],
     snapshot: Annotated[
         str | None,
         typer.Option(help="Snapshot ID; defaults to the tip of main"),

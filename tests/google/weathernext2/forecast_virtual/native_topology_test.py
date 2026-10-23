@@ -11,6 +11,11 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
     GoogleWeathernext2ForecastVirtualTemplateConfig,
 )
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LICENSE,
+    REAL_TIME_ATTRIBUTION,
+)
 
 HISTORICAL = GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig()
 OPERATIONAL = GoogleWeathernext2ForecastOperationalVirtualTemplateConfig()
@@ -39,9 +44,13 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
         assert len(config.data_vars) == 14
         assert sum(var.group is ROOT for var in config.data_vars) == 8
         assert sum(var.group == "pressure_level" for var in config.data_vars) == 6
-        assert config.dataset_attributes.license == "CC-BY-4.0"
-        assert config.dataset_attributes.attribution == (
-            "Google requires this attribution: © 2025 DeepMind Technologies Limited's "
+        expected_license = (
+            "CC-BY-4.0" if config.source_layout == "historical" else LICENSE
+        )
+        assert config.dataset_attributes.license == expected_license
+        expected_attribution = (
+            "Google WeatherNext 2 forecast data processed by dynamical.org from "
+            "Google's WeatherNext 2 experimental data. © 2025 DeepMind Technologies Limited's "
             "machine learning models used to create the experimental data made available "
             "at https://developers.google.com/earth-engine/datasets/catalog/"
             "projects_gcp-public-data-weathernext_assets_weathernext_2_0_0 under CC BY "
@@ -53,6 +62,13 @@ def test_each_product_contains_all_variables_and_required_attribution() -> None:
             "check that you can comply with any applicable restrictions or terms and "
             "conditions before use."
         )
+        if config.source_layout == "operational":
+            expected_attribution = (
+                "Google WeatherNext 2 forecast data processed by dynamical.org "
+                "from Google's WeatherNext 2 experimental data. "
+                f"{COPYRIGHT}. {REAL_TIME_ATTRIBUTION}"
+            )
+        assert config.dataset_attributes.attribution == expected_attribution
 
 
 def test_historical_coordinate_statistics_are_fixed() -> None:

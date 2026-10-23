@@ -55,7 +55,7 @@ def _round_float32_inplace_numba(
 
     flat_bits = bits.ravel()  # modify 1D view in place
 
-    for i in prange(len(flat_bits)):  # ty: ignore[not-iterable]
+    for i in prange(len(flat_bits)):
         mantissa = flat_bits[i] & mantissa_mask
         round_bit = flat_bits[i] & np.uint32(1 << drop_bits)
         half_bit = flat_bits[i] & np.uint32(1 << (drop_bits - 1))

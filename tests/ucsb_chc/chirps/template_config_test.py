@@ -86,7 +86,9 @@ def test_precipitation_surface_metadata() -> None:
 
 
 @pytest.fixture(scope="session")
-def example_source_file_paths() -> dict[ChirpsProduct, Path]:
+def example_source_file_paths(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[ChirpsProduct, Path]:
     config = UcsbChcChirpsAnalysisFinalTemplateConfig()
     region_job = UcsbChcChirpsAnalysisFinalRegionJob.model_construct(
         tmp_store=Mock(),
@@ -96,18 +98,23 @@ def example_source_file_paths() -> dict[ChirpsProduct, Path]:
         region=slice(0, 1),
         reformat_job_name="test",
     )
-    return {
-        product: region_job.download_file(
-            UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "reformatters.common.download.DOWNLOAD_DIR",
+            tmp_path_factory.mktemp("chirps-source"),
         )
-        for product, time in (
-            ("final", UcsbChcChirpsAnalysisFinalTemplateConfig().append_dim_start),
-            (
-                "preliminary",
-                UcsbChcChirpsAnalysisPreliminaryTemplateConfig().append_dim_start,
-            ),
-        )
-    }
+        return {
+            product: region_job.download_file(
+                UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time)
+            )
+            for product, time in (
+                ("final", UcsbChcChirpsAnalysisFinalTemplateConfig().append_dim_start),
+                (
+                    "preliminary",
+                    UcsbChcChirpsAnalysisPreliminaryTemplateConfig().append_dim_start,
+                ),
+            )
+        }
 
 
 @pytest.mark.slow

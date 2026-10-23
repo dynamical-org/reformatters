@@ -56,7 +56,7 @@ class DatasetAttributes(FrozenBaseModel):
     name: AttributeStr
     description: Sentence
     attribution: Sentence
-    license: License
+    license: License | Sentence
     spatial_domain: AttributeStr
     spatial_resolution: SpatialResolution
     time_domain: AttributeStr
@@ -154,7 +154,10 @@ def codecs_to_dicts(
             # converted on first construction); pass through so this is idempotent.
             result.append(codec)
         elif hasattr(codec, "to_dict"):
-            result.append(codec.to_dict())  # ty: ignore[call-non-callable]
+            assert callable(codec.to_dict)
+            codec_config = codec.to_dict()
+            assert isinstance(codec_config, dict)
+            result.append(codec_config)
         else:
             result.append(dict(codec.__dict__))
     return result
@@ -169,7 +172,7 @@ class Encoding(pydantic.BaseModel):
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
     # It's fine to add any valid dtype string to this literal.
-    dtype: Literal["float32", "float64", "uint16", "int16", "int64", "bool", "str"]
+    dtype: Literal["float32", "float64", "uint16", "int16", "int64", "bool", "object"]
     chunks: tuple[int, ...] | int
     shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 
@@ -200,8 +203,8 @@ class Encoding(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_string_fill_value(self) -> Encoding:
-        if (self.dtype == "str") != isinstance(self.fill_value, str):
-            raise ValueError("String dtype and string fill_value must be used together")
+        if (self.dtype == "object") != isinstance(self.fill_value, str):
+            raise ValueError("Object dtype and string fill_value must be used together")
         return self
 
     filters: Annotated[
@@ -249,8 +252,8 @@ class DataVar(FrozenBaseModel, Generic[INTERNAL_ATTRS_co]):
 
     @pydantic.model_validator(mode="after")
     def validate_numeric_dtype(self) -> DataVar[INTERNAL_ATTRS_co]:
-        if self.encoding.dtype == "str":
-            raise ValueError("String dtype is supported only for coordinates")
+        if self.encoding.dtype == "object":
+            raise ValueError("Object dtype is supported only for coordinates")
         return self
 
     @property

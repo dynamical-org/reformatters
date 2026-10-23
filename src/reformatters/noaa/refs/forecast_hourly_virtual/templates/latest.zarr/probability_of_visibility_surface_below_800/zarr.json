@@ -1,0 +1,55 @@
+{
+  "shape": [
+    1,
+    60,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "VIS",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Probability of visibility (surface) below 800 m",
+    "short_name": "probability_of_visibility_surface_below_800",
+    "units": "percent",
+    "comment": "Probability of visibility (surface) below 800 m.",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

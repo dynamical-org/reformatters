@@ -1,0 +1,58 @@
+1:0:d=2026091512:REFC:entire atmosphere (considered as a single layer):60 hour fcst:ENS=+1
+2:948073:d=2026091512:VIS:surface:60 hour fcst:ENS=+1
+3:3828380:d=2026091512:GUST:surface:60 hour fcst:ENS=+1
+4:4961395:d=2026091512:RETOP:entire atmosphere (considered as a single layer):60 hour fcst:ENS=+1
+5:5256292:d=2026091512:MAXUVV:100-1000 mb:59-60 hour max fcst:ENS=+1
+6:5824823:d=2026091512:MAXDVV:100-1000 mb:59-60 hour max fcst:ENS=+1
+7:6329293:d=2026091512:MSLET:mean sea level:60 hour fcst:ENS=+1
+8:8328137:d=2026091512:MXUPHL:5000-2000 m above ground:59-60 hour max fcst:ENS=+1
+9:8400253:d=2026091512:MNUPHL:5000-2000 m above ground:59-60 hour min fcst:ENS=+1
+10:8551131:d=2026091512:MXUPHL:3000-0 m above ground:59-60 hour max fcst:ENS=+1
+11:8714222:d=2026091512:MNUPHL:3000-0 m above ground:59-60 hour min fcst:ENS=+1
+12:8884617:d=2026091512:LTNG:entire atmosphere:59-60 hour max fcst:ENS=+1
+13:8938463:d=2026091512:PRES:surface:60 hour fcst:ENS=+1
+14:10998210:d=2026091512:HGT:surface:60 hour fcst:ENS=+1
+15:12704676:d=2026091512:ASNOW:surface:0-60 hour acc fcst:ENS=+1
+16:12715669:d=2026091512:TMP:2 m above ground:60 hour fcst:ENS=+1
+17:14457891:d=2026091512:DPT:2 m above ground:60 hour fcst:ENS=+1
+18:16233161:d=2026091512:RH:2 m above ground:60 hour fcst:ENS=+1
+19:17818196:d=2026091512:MAXRH:2 m above ground:59-60 hour max fcst:ENS=+1
+20:19082898:d=2026091512:MINRH:2 m above ground:59-60 hour min fcst:ENS=+1
+21:20338624:d=2026091512:UGRD:10 m above ground:60 hour fcst:ENS=+1
+22:22166378:d=2026091512:VGRD:10 m above ground:60 hour fcst:ENS=+1
+23:23962563:d=2026091512:WIND:10 m above ground:59-60 hour max fcst:ENS=+1
+24:25125654:d=2026091512:CPOFP:surface:60 hour fcst:ENS=+1
+25:25309843:d=2026091512:APCP:surface:59-60 hour acc fcst:ENS=+1
+26:25483065:d=2026091512:APCP:surface:0-60 hour acc fcst:ENS=+1
+27:26545229:d=2026091512:FRZR:surface:0-60 hour acc fcst:ENS=+1
+28:26546277:d=2026091512:FRZR:surface:59-60 hour acc fcst:ENS=+1
+29:26546523:d=2026091512:CSNOW:surface:60 hour fcst:ENS=+1
+30:26546756:d=2026091512:CICEP:surface:60 hour fcst:ENS=+1
+31:26546978:d=2026091512:CFRZR:surface:60 hour fcst:ENS=+1
+32:26547200:d=2026091512:CRAIN:surface:60 hour fcst:ENS=+1
+33:26642254:d=2026091512:CAPE:surface:60 hour fcst:ENS=+1
+34:27946849:d=2026091512:CIN:surface:60 hour fcst:ENS=+1
+35:29271431:d=2026091512:PWAT:entire atmosphere (considered as a single layer):60 hour fcst:ENS=+1
+36:30392450:d=2026091512:AOTK:entire atmosphere (considered as a single layer):60 hour fcst:ENS=+1
+37:30392670:d=2026091512:TCDC:boundary layer cloud layer:60 hour fcst:ENS=+1
+38:30805934:d=2026091512:LCDC:low cloud layer:60 hour fcst:ENS=+1
+39:31364923:d=2026091512:MCDC:middle cloud layer:60 hour fcst:ENS=+1
+40:31879845:d=2026091512:HCDC:high cloud layer:60 hour fcst:ENS=+1
+41:32378022:d=2026091512:TCDC:entire atmosphere (considered as a single layer):60 hour fcst:ENS=+1
+42:33079683:d=2026091512:TCDC:entire atmosphere (considered as a single layer):59-60 hour ave fcst:ENS=+1
+43:34009192:d=2026091512:CEIL:cloud ceiling:60 hour fcst:ENS=+1
+44:35319945:d=2026091512:DSWRF:surface:59-60 hour ave fcst:ENS=+1
+45:35807799:d=2026091512:DSWRF:surface:60 hour fcst:ENS=+1
+46:36972685:d=2026091512:var discipline=2 master_table=2 parmcat=4 parm=26:surface:59-60 hour ave fcst:ENS=+1
+47:36972929:d=2026091512:HLCY:3000-0 m above ground:60 hour fcst:ENS=+1
+48:38190193:d=2026091512:HLCY:1000-0 m above ground:60 hour fcst:ENS=+1
+49:40129665:d=2026091512:VUCSH:0-1000 m above ground:60 hour fcst:ENS=+1
+50:41198873:d=2026091512:VVCSH:0-1000 m above ground:60 hour fcst:ENS=+1
+51:42229293:d=2026091512:VUCSH:0-6000 m above ground:60 hour fcst:ENS=+1
+52:43342681:d=2026091512:VVCSH:0-6000 m above ground:60 hour fcst:ENS=+1
+53:44439072:d=2026091512:UGRD:80 m above ground:60 hour fcst:ENS=+1
+54:46297942:d=2026091512:VGRD:80 m above ground:60 hour fcst:ENS=+1
+55:48132322:d=2026091512:UGRD:160 m above ground:60 hour fcst:ENS=+1
+56:49977851:d=2026091512:VGRD:160 m above ground:60 hour fcst:ENS=+1
+57:51798583:d=2026091512:UGRD:320 m above ground:60 hour fcst:ENS=+1
+58:53589838:d=2026091512:VGRD:320 m above ground:60 hour fcst:ENS=+1

@@ -202,6 +202,36 @@ def test_mask_source_fill_value_requires_exact_float32_match() -> None:
 
 
 class TestDatasetAttributes:
+    @pytest.mark.parametrize(
+        "license_name",
+        [
+            "CC-BY-4.0",
+            "A test licence statement.",
+            "CC-BY-3.0",
+            "other",
+            "A test licence statement without a period",
+        ],
+    )
+    def test_license_identifier_or_statement(self, license_name: str) -> None:
+        attributes = {
+            "dataset_id": "test-dataset",
+            "dataset_version": "1.0",
+            "name": "Test Dataset",
+            "description": "A test dataset.",
+            "attribution": "Test attribution.",
+            "license": license_name,
+            "spatial_domain": "Global",
+            "spatial_resolution": "0.25 degrees (~20km)",
+            "time_domain": "2020-01-01 to present",
+            "time_resolution": "1 hour",
+        }
+        if license_name in ("CC-BY-4.0", "A test licence statement."):
+            attrs = DatasetAttributes.model_validate(attributes)
+            assert attrs.license == license_name
+        else:
+            with pytest.raises(ValidationError, match="license"):
+                DatasetAttributes.model_validate(attributes)
+
     def test_valid_attributes(self) -> None:
         attrs = DatasetAttributes(
             dataset_id="test-dataset",
@@ -308,19 +338,19 @@ class TestDataVarAttrs:
 
 @pytest.mark.parametrize(
     ("dtype", "fill_value"),
-    [("str", 0), ("str", np.nan), ("float32", ""), ("bool", "missing")],
+    [("object", 0), ("object", np.nan), ("float32", ""), ("bool", "missing")],
 )
 def test_string_encoding_requires_string_fill_value(
     dtype: str, fill_value: str | float
 ) -> None:
-    with pytest.raises(ValidationError, match="String dtype and string fill_value"):
+    with pytest.raises(ValidationError, match="Object dtype and string fill_value"):
         Encoding.model_validate(
             {"dtype": dtype, "chunks": 1, "shards": None, "fill_value": fill_value}
         )
 
 
 def test_string_encoding_supported_only_for_coordinates() -> None:
-    encoding = Encoding(dtype="str", chunks=1, shards=None, fill_value="")
+    encoding = Encoding(dtype="object", chunks=1, shards=None, fill_value="")
     assert encoding.fill_value == ""
     with pytest.raises(ValidationError, match="only for coordinates"):
         DataVar(

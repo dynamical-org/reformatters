@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from reformatters.common import iterating, validation
+from reformatters.common import iterating
 from reformatters.common.dynamical_dataset import DynamicalDataset
 
 _LEGACY_MATERIALIZED_FILL_VALUE_EXCEPTIONS = {
@@ -35,9 +35,6 @@ def test_template_fill_values_are_correct(
 
     # Flattened so vertical-group vars (keyed by path) are visible; xr.open_zarr
     # would expose only the root group.
-    ds = validation.open_flattened_dataset(
-        template_config.template_path(), consolidated=False
-    )
     raw_ds = iterating.flatten_groups(
         xr.open_datatree(
             template_config.template_path(),
@@ -47,6 +44,7 @@ def test_template_fill_values_are_correct(
             decode_cf=False,
         )
     )
+    ds = xr.decode_cf(raw_ds, decode_timedelta=True)
     for var in template_config.data_vars:
         var_da = ds[var.path]
         raw_var_da = raw_ds[var.path]

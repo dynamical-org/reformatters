@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from reformatters.common.rclone import RCLONE, _tidy_stats, copy_urls, list_files
+from reformatters.common.retry import retry
 
 
 def test_tidy_stats_valid() -> None:
@@ -53,13 +54,58 @@ def test_env_vars_extend_the_environment_rather_than_replace_it(
 
 
 @patch("subprocess.run")
-def test_list_files_directory_not_found(mock_run: MagicMock) -> None:
+@pytest.mark.parametrize("stdout", [None, "", b""])
+def test_list_files_directory_not_found(
+    mock_run: MagicMock, stdout: str | bytes | None
+) -> None:
     mock_run.side_effect = subprocess.CalledProcessError(
-        returncode=3, cmd="rclone", stderr="directory not found"
+        returncode=3, cmd="rclone", output=stdout, stderr="directory not found"
     )
 
     result = list_files(path="/non/existent", checkers=4)
     assert result == []
+
+
+@pytest.mark.parametrize("stdout", ["file.grib2\n", b"file.grib2\n", "\n"])
+@patch("subprocess.run")
+def test_list_files_partial_directory_not_found_raises(
+    mock_run: MagicMock, stdout: str | bytes
+) -> None:
+    error = subprocess.CalledProcessError(
+        returncode=3,
+        cmd="rclone",
+        output=stdout,
+        stderr="MH/r/2026-10-06T09:00/s: error listing: directory not found",
+    )
+    mock_run.side_effect = error
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        list_files(path="/partial/path", checkers=4)
+
+    assert raised.value is error
+    assert raised.value.stdout == stdout
+    assert raised.value.stderr == error.stderr
+
+
+@patch("subprocess.run")
+def test_list_files_partial_listing_is_retried(mock_run: MagicMock) -> None:
+    mock_run.side_effect = [
+        subprocess.CalledProcessError(
+            returncode=3,
+            cmd="rclone",
+            output="file1.grib2\n",
+            stderr="MH/r/2026-10-06T09:00/s: directory not found",
+        ),
+        MagicMock(stdout="file1.grib2\nfile2.grib2\n", stderr="", returncode=0),
+    ]
+
+    with patch("reformatters.common.retry.time.sleep"):
+        paths = retry(
+            lambda: list_files(path="/partial/path", checkers=4), max_attempts=2
+        )
+
+    assert paths == [PurePosixPath("file1.grib2"), PurePosixPath("file2.grib2")]
+    assert mock_run.call_count == 2
 
 
 @patch("subprocess.run")

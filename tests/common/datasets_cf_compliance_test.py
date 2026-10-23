@@ -15,6 +15,7 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.types import Dim
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.noaa.rrfs.template_config import NoaaRrfsForecastTemplateConfig
 from tests.dataset_helpers import IMPLEMENTED_DATASETS
 
 # Downloaded from https://codes.ecmwf.int/parameter-database/api/v1/param/?format=json
@@ -336,6 +337,7 @@ DIM_EXPECTED_AXIS: dict[str, str | None] = {
     "pressure_level": "Z",
     "model_level": "Z",
     "height_above_mean_sea_level": "Z",
+    "depth_below_ground": "Z",
 }
 # Force a decision here whenever a new dimension is added to the Dim type.
 assert set(DIM_EXPECTED_AXIS) == set(get_args(Dim.__value__))
@@ -448,6 +450,58 @@ CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
 }
 
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
+    # RRFS ceiling requires cloud-cover criteria; CF cloud_base_altitude does not.
+    # CF condensed soil water includes ice; WTMP includes inland water as well as sea water.
+    # CF surface_snow_density is snow cover; RRFS SDEN is the density of falling snow.
+    # Remaining local diagnostics and size-restricted aerosol species lack exact CF quantities.
+    "aerosol_emission_flux_atmosphere_dust_dry_below_10um",
+    "aerosol_emission_flux_atmosphere_particulate_organic_matter_dry_below_2p5um",
+    "average_mass_density_8m_total_aerosol_below_10um",
+    "average_mass_density_8m_total_aerosol_below_2p5um",
+    "categorical_precipitation_exceeding_100_year_average_recurrence_interval_run_total_surface",
+    "categorical_precipitation_exceeding_100_year_average_recurrence_interval_surface",
+    "categorical_precipitation_exceeding_10_year_average_recurrence_interval_run_total_surface",
+    "categorical_precipitation_exceeding_10_year_average_recurrence_interval_surface",
+    "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface",
+    "categorical_precipitation_exceeding_2_year_average_recurrence_interval_surface",
+    "categorical_precipitation_exceeding_5_year_average_recurrence_interval_run_total_surface",
+    "categorical_precipitation_exceeding_5_year_average_recurrence_interval_surface",
+    "cloud_ceiling_height",
+    "column_integrated_mass_density_atmosphere_dust_dry_below_10um",
+    "column_integrated_mass_density_atmosphere_dust_dry_below_2p5um",
+    "column_integrated_mass_density_atmosphere_dust_dry_from_2p5_to_10um",
+    "column_integrated_mass_density_atmosphere_particulate_organic_matter_dry_below_2p5um",
+    "direct_evaporation_cease_soil_moisture_surface",
+    "downdraft_convective_available_potential_energy_400_0mb",
+    "effective_layer_shear_u_level_of_free_convection",
+    "effective_layer_shear_v_level_of_free_convection",
+    "effective_layer_storm_motion_u_level_of_free_convection",
+    "effective_layer_storm_motion_v_level_of_free_convection",
+    "exchange_coefficient_surface",
+    "horizontal_moisture_convergence_30_0mb",
+    "horizontal_moisture_convergence_850mb",
+    "horizontal_moisture_convergence_950mb",
+    "horizontal_moisture_convergence_atmosphere",
+    "liquid_volumetric_soil_moisture",
+    "mass_density_8m_dust_dry_below_2p5um",
+    "mass_density_8m_dust_dry_from_2p5_to_10um",
+    "mass_density_8m_particulate_organic_matter_dry_below_2p5um",
+    "mass_density_height_atmosphere",
+    "mass_density_height_base",
+    "mass_density_height_top",
+    "mass_grid_levels_surface",
+    "maximum_lightning_atmosphere",
+    "maximum_lightning_threat_1m",
+    "maximum_lightning_threat_2m",
+    "maximum_snow_albedo_surface",
+    "minimal_stomatal_resistance_surface",
+    "new_snow_density_surface",
+    "number_of_soil_layers_in_root_zone_surface",
+    "sublimation_evaporation_from_snow_surface",
+    "updraft_helicity_5000_2000m",
+    "velocity_grid_levels_surface",
+    "water_temperature_surface",
+    "wildfire_potential_surface",
     # GEFS aviation icing fields and two derived diagnostics; CF names none of them.
     # The 5-wave height is a zonally filtered field, not geopotential_height itself.
     "icing_probability",
@@ -582,7 +636,10 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
 # (standard_name, units) pairs that are intentionally non-canonical but allowed for all datasets.
 
 CF_UNITS_VARIANCES_ALLOWLIST: set[tuple[str, str]] = {
+    # Numeric CF soil classes carry dimensionless codes and flag labels.
+    ("soil_type", "1"),
     ("air_temperature", "degree_Celsius"),
+    ("air_temperature_at_cloud_top", "degree_Celsius"),
     ("tropopause_air_temperature", "degree_Celsius"),
     ("dew_point_temperature", "degree_Celsius"),
     ("surface_temperature", "degree_Celsius"),
@@ -621,7 +678,7 @@ def test_cf_standard_name_and_units(
 ) -> None:
     """
     For each data variable:
-    1. standard_name must be set (or the variable must be in ALLOWED_MISSING_STANDARD_NAME)
+    1. standard_name must be set unless covered by a missing-name allowlist
     2. If standard_name is set, it must exist in the CF Standard Name Table
     3. If standard_name is set, units must match CF canonical units (with allowlist)
     4. standard_name must be properly written to and recognized in the zarr template
@@ -641,7 +698,11 @@ def test_cf_standard_name_and_units(
         units = var_config.attrs.units
 
         if standard_name is None:
-            if var_config.name not in ALLOWED_MISSING_STANDARD_NAME:
+            if (
+                var_config.name not in ALLOWED_MISSING_STANDARD_NAME
+                and (dataset.dataset_id, var_config.name)
+                not in DATASET_MISSING_STANDARD_NAME_EXEMPT
+            ):
                 errors.append(
                     f"Variable '{var_config.name}' does not have a standard_name defined, "
                     f"but is not in ALLOWED_MISSING_STANDARD_NAME. "
@@ -721,6 +782,36 @@ def test_cf_standard_name_and_units(
 
 # Variables that don't have ECMWF parameter database entries and are exempt from ECMWF validation.
 ECMWF_SHORTNAME_EXEMPT: set[str] = {
+    # NOAA local table products without an ECMWF equivalent.
+    "aemflx",
+    "dcape",
+    "elmelt",
+    "hgtmd",
+    "qpfari",
+    "sbta1610",
+    "sbta1611",
+    "sbta1612",
+    "sbta1613",
+    "sbta1614",
+    "sbta1615",
+    "sbta1616",
+    "sbta167",
+    "sbta168",
+    "sbta169",
+    "sbta1810",
+    "sbta1811",
+    "sbta1812",
+    "sbta1813",
+    "sbta1814",
+    "sbta1815",
+    "sbta1816",
+    "sbta188",
+    "sbta189",
+    "ueid",
+    "uesh",
+    "veid",
+    "vesh",
+    "wfirepot",
     # NCEP icing probability; the ECMWF database names icing severity but no probability
     "icip",
     # NOAA NDVI CDR variables
@@ -778,6 +869,41 @@ ECMWF_SHORTNAME_EXEMPT: set[str] = {
 }
 
 ECMWF_LONGNAME_EXEMPT: set[str] = {
+    # NOAA local table products without an ECMWF equivalent.
+    "Aerosol emission flux",
+    "Downdraft convective available potential energy",
+    "Effective layer U storm motion",
+    "Effective layer V storm motion",
+    "Effective layer U shear",
+    "Effective layer V shear",
+    "Equilibrium level temperature",
+    "Height of aerosol mass density",
+    "Number of mass grid levels",
+    "Number of velocity grid levels",
+    "Precipitation exceeding 10-year average recurrence interval",
+    "Precipitation exceeding 100-year average recurrence interval",
+    "Precipitation exceeding 2-year average recurrence interval",
+    "Precipitation exceeding 5-year average recurrence interval",
+    "Simulated brightness temperature for ABI GOES-16, band 10",
+    "Simulated brightness temperature for ABI GOES-16, band 11",
+    "Simulated brightness temperature for ABI GOES-16, band 12",
+    "Simulated brightness temperature for ABI GOES-16, band 13",
+    "Simulated brightness temperature for ABI GOES-16, band 14",
+    "Simulated brightness temperature for ABI GOES-16, band 15",
+    "Simulated brightness temperature for ABI GOES-16, band 16",
+    "Simulated brightness temperature for ABI GOES-16, band 7",
+    "Simulated brightness temperature for ABI GOES-16, band 8",
+    "Simulated brightness temperature for ABI GOES-16, band 9",
+    "Simulated brightness temperature for ABI GOES-18, band 10",
+    "Simulated brightness temperature for ABI GOES-18, band 11",
+    "Simulated brightness temperature for ABI GOES-18, band 12",
+    "Simulated brightness temperature for ABI GOES-18, band 13",
+    "Simulated brightness temperature for ABI GOES-18, band 14",
+    "Simulated brightness temperature for ABI GOES-18, band 15",
+    "Simulated brightness temperature for ABI GOES-18, band 16",
+    "Simulated brightness temperature for ABI GOES-18, band 8",
+    "Simulated brightness temperature for ABI GOES-18, band 9",
+    "Wildfire potential",
     # NCEP icing probability; the ECMWF database names icing severity but no probability
     "Icing probability",
     # Non-meteorological or dataset-specific variables
@@ -880,8 +1006,22 @@ def test_ecmwf_parameter_compliance(
     for var_config in template_config.data_vars:
         short_name = var_config.attrs.short_name
         long_name = var_config.attrs.long_name
-        short_exempt = short_name in ECMWF_SHORTNAME_EXEMPT
-        long_exempt = long_name in ECMWF_LONGNAME_EXEMPT
+        short_exempt = (
+            short_name in ECMWF_SHORTNAME_EXEMPT
+            or (
+                dataset.dataset_id,
+                short_name,
+            )
+            in DATASET_ECMWF_SHORTNAME_EXEMPT
+        )
+        long_exempt = (
+            long_name in ECMWF_LONGNAME_EXEMPT
+            or (
+                dataset.dataset_id,
+                long_name,
+            )
+            in DATASET_ECMWF_LONGNAME_EXEMPT
+        )
 
         # Check short_name
         if not short_exempt and short_name not in ecmwf_shortnames:
@@ -1119,6 +1259,25 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("V component of wind", "standard_name", "noaa-hrrr-forecast-18-hour-virtual"),
     ("V component of wind", "standard_name", "noaa-hrrr-forecast-48-hour"),
     ("V component of wind", "standard_name", "noaa-hrrr-analysis"),
+    # RTMA and URMA component winds follow their projected grid axes.
+    ("wind_u_10m", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_u_10m", "standard_name", "noaa-urma-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_v_10m", "standard_name", "noaa-urma-analysis-virtual"),
+    ("10u", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("10u", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10u", "standard_name", "noaa-urma-analysis-virtual"),
+    ("10v", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("10v", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10v", "standard_name", "noaa-urma-analysis-virtual"),
+    ("10 metre U wind component", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("10 metre U wind component", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10 metre U wind component", "standard_name", "noaa-urma-analysis-virtual"),
+    ("10 metre V wind component", "standard_name", "noaa-rtma-analysis-virtual"),
+    ("10 metre V wind component", "standard_name", "noaa-rtma-ru-analysis-virtual"),
+    ("10 metre V wind component", "standard_name", "noaa-urma-analysis-virtual"),
     # U Arizona SWANN uses mm for snow variables to match source data conventions,
     # while other datasets use CF-compliant meters.
     # Excepted by var_name, short_name, and long_name since all three groupings detect the conflict.
@@ -1142,11 +1301,20 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     ("ice_cover_surface", "flag_values", "noaa-gfs-forecast-virtual"),
     ("ice_cover_surface", "flag_meanings", "noaa-gfs-analysis-virtual"),
     ("ice_cover_surface", "flag_meanings", "noaa-gfs-forecast-virtual"),
-    # ECCC HRDPS publishes an instantaneous 10 m gust, while DWD and ECMWF publish the
+    # ECCC HRDPS, RTMA and URMA publish an instantaneous 10 m gust, while DWD and ECMWF publish the
     # maximum since the previous post-processing; each names the quantity it carries.
     ("wind_gust_10m", "short_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "long_name", "eccc-hrdps-forecast"),
     ("wind_gust_10m", "step_type", "eccc-hrdps-forecast"),
+    ("wind_gust_10m", "short_name", "noaa-rtma-analysis-virtual"),
+    ("wind_gust_10m", "short_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "short_name", "noaa-urma-analysis-virtual"),
+    ("wind_gust_10m", "long_name", "noaa-rtma-analysis-virtual"),
+    ("wind_gust_10m", "long_name", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "long_name", "noaa-urma-analysis-virtual"),
+    ("wind_gust_10m", "step_type", "noaa-rtma-analysis-virtual"),
+    ("wind_gust_10m", "step_type", "noaa-rtma-ru-analysis-virtual"),
+    ("wind_gust_10m", "step_type", "noaa-urma-analysis-virtual"),
     # GFS and GEFS report categorical precipitation presence over a source-defined
     # window, while HRRR reports presence at the valid time.
     ("categorical_snow_surface", "step_type", "noaa-gfs-forecast"),
@@ -1575,6 +1743,151 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
 }
 
 type MetadataValue = str | tuple[int, ...] | None
+
+
+_RRFS_DATASETS = [
+    d
+    for d in IMPLEMENTED_DATASETS
+    if isinstance(d.template_config, NoaaRrfsForecastTemplateConfig)
+]
+
+# RRFS ice is fractional, and atmospheric MCONV is a column integral.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, attribute, dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    if dataset.dataset_id
+    in {
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "noaa-rrfs-forecast-84-hour-virtual",
+    }
+    for key, attribute in {
+        ("ice_cover_surface", "long_name"),
+        ("icec", "long_name"),
+        ("ice_cover_surface", "flag_values"),
+        ("ice_cover_surface", "flag_meanings"),
+        ("horizontal_moisture_convergence_atmosphere", "units"),
+        ("mconv", "units"),
+        ("Horizontal moisture convergence", "units"),
+    }
+}
+
+# Grid-relative winds and vertical subsets share GRIB/ECMWF quantity labels.
+# Coded RUC soil types support CF soil_type, unlike interpolated GFS classes.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, "standard_name", dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.attrs.standard_name
+    in {
+        "x_wind",
+        "y_wind",
+        "mass_content_of_water_vapor_in_atmosphere_layer",
+        "geopotential_height_at_cloud_top",
+        "sea_ice_area_fraction",
+        "soil_type",
+    }
+    for key in (var.name, var.attrs.short_name, var.attrs.long_name)
+}
+# Source averages and instantaneous albedo differ from other windows.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (var.name, "step_type", dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.attrs.step_type == "avg" or var.name == "albedo_surface"
+}
+# RUC's STATSGO and modified IGBP tables have their own category sets.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (var.name, attribute, dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.name in {"soil_type_surface", "vegetation_type_surface"}
+    for attribute in ("flag_values", "flag_meanings")
+}
+
+
+_REFS_PRODUCTS_DATASET_IDS = (
+    "noaa-refs-forecast-hourly-virtual",
+    "noaa-refs-forecast-3-hourly-virtual",
+)
+_REFS_PRODUCTS_DATASETS = tuple(
+    d for d in IMPLEMENTED_DATASETS if d.dataset_id in _REFS_PRODUCTS_DATASET_IDS
+)
+_REFS_TEMPERATURE_STANDARD_DEVIATIONS = {
+    var.name
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
+    if not var.has_statistic
+    and var.internal_attrs.source_families == ("sprd",)
+    and var.name.endswith("_standard_deviation")
+}
+_REFS_DERIVED_FAMILIES = {"prob", "eas", "ffri", "pmmn", "lpmm", "avrg"}
+_REFS_LOCAL_QUANTITIES = {
+    "CRAIN",
+    "CFRZR",
+    "CICEP",
+    "CSNOW",
+    "VWSH",
+    "var discipline=0 center=7 local_table=1 parmcat=6 parm=202",
+}
+# Threshold probabilities and product-specific statistics lack ECMWF parameters.
+DATASET_ECMWF_SHORTNAME_EXEMPT = {
+    (dataset.dataset_id, var.attrs.short_name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+}
+DATASET_ECMWF_LONGNAME_EXEMPT = {
+    (dataset.dataset_id, var.attrs.long_name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in _REFS_DERIVED_FAMILIES
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+}
+# These derived ensemble quantities have no matching CF standard name.
+DATASET_MISSING_STANDARD_NAME_EXEMPT = {
+    (dataset.dataset_id, var.name)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.name in _REFS_TEMPERATURE_STANDARD_DEVIATIONS
+    or var.internal_attrs.source_families[0] in {"prob", "eas", "ffri"}
+    or var.internal_attrs.grib_element in _REFS_LOCAL_QUANTITIES
+    or (
+        var.internal_attrs.source_families[0] == "pmmn"
+        and var.internal_attrs.grib_element in {"MXUPHL", "RETOP"}
+    )
+}
+# RRFS column soil water lacks a specified integration depth.
+DATASET_MISSING_STANDARD_NAME_EXEMPT |= {
+    (
+        "noaa-rrfs-forecast-18-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
+    (
+        "noaa-rrfs-forecast-84-hour-virtual",
+        "column_integrated_soil_moisture_0m_underground",
+    ),
+}
+# Grid-relative component winds retain the projected-grid quantity.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, "standard_name", dataset.dataset_id)
+    for dataset in _REFS_PRODUCTS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.attrs.standard_name in {"x_wind", "y_wind"}
+    for key in (var.name, var.attrs.short_name, var.attrs.long_name)
+}
+
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (long_name, "short_name", dataset_id)
+    for long_name in (
+        "Probability-matched mean of total precipitation",
+        "Localized probability-matched mean of total precipitation",
+        "Average of the ensemble mean and probability-matched mean of total precipitation",
+    )
+    for dataset_id in _REFS_PRODUCTS_DATASET_IDS
+}
 
 
 def _format_conflict(

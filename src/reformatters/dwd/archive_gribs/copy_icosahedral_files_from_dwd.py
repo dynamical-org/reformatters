@@ -63,7 +63,8 @@ def copy_icosahedral_files_from_dwd_https(
 
     Raises if DWD lists no files, or if `time_budget` runs out before the listing or a
     run starts. After copying, also raises if a selected run between `MIN_RUN_AGE` and
-    `MAX_EXPECTED_RUN_AGE` old is missing, or a run is incomplete (see `incomplete_runs`).
+    `MAX_EXPECTED_RUN_AGE` old is missing from DWD, or an archived run is incomplete
+    (see `incomplete_runs`).
 
     Args:
         dst_root_path: The destination root directory, in the format `rclone` expects,
@@ -123,8 +124,8 @@ def copy_icosahedral_files_from_dwd_https(
         ((src_path, icosahedral_dst_path(src_path)) for src_path in src_paths),
         key=lambda src_and_dst_path: src_and_dst_path[1],
     )
-    copied_runs: list[list[PurePosixPath]] = []
-    # Oldest run first: DWD deletes the oldest run when it publishes the next one.
+    archived_runs: list[list[PurePosixPath]] = []
+    # Oldest run first to preserve files before they expire from DWD.
     for run in group_by(src_and_dst_paths, lambda src_and_dst: src_and_dst[1].parts[0]):
         run_dir = run[0][1].parts[0]
         if run_dir > newest_run_dir:
@@ -132,7 +133,7 @@ def copy_icosahedral_files_from_dwd_https(
             continue
 
         raise_if_out_of_time(f"run {run_dir}")
-        retry(
+        archived_paths = retry(
             partial(
                 _copy_run_files_missing_from_dst,
                 run,
@@ -144,16 +145,16 @@ def copy_icosahedral_files_from_dwd_https(
             ),
             max_attempts=3,
         )
-        copied_runs.append([dst_path for _src_path, dst_path in run])
+        archived_runs.append(archived_paths)
 
-    listed_run_dirs = {run[0].parts[0] for run in copied_runs}
+    listed_run_dirs = {run[0].parts[0] for run in archived_runs}
     missing_runs = [
         f"{run_dir} is not on DWD's server"
         for run_dir in sorted(expected_run_dirs - listed_run_dirs)
     ]
-    if problems := missing_runs + incomplete_runs(copied_runs, level_types, params):
+    if problems := missing_runs + incomplete_runs(archived_runs, level_types, params):
         raise RuntimeError(
-            "Incomplete icosahedral runs on DWD's server: " + "; ".join(problems)
+            "Icosahedral archive completeness check failed: " + "; ".join(problems)
         )
 
 
@@ -164,7 +165,7 @@ def _copy_run_files_missing_from_dst(
     checkers: int,
     stats_logging_freq: str,
     env_vars: dict[str, Any] | None,
-) -> None:
+) -> list[PurePosixPath]:
     run_dir = run[0][1].parts[0]
     already_on_dst = set(
         list_files(
@@ -188,6 +189,22 @@ def _copy_run_files_missing_from_dst(
             stats_logging_freq=stats_logging_freq,
             env_vars=env_vars,
         )
+        already_on_dst = set(
+            list_files(
+                path=f"{dst_root_path}{run_dir}/",
+                checkers=checkers,
+                env_vars=env_vars,
+            )
+        )
+        missing = {
+            dst_path.relative_to(run_dir) for _src_path, dst_path in run
+        } - already_on_dst
+        if missing:
+            raise RuntimeError(
+                f"Archived run {run_dir} lacks {len(missing):,d} source-listed files"
+                f" after copying, e.g. {min(missing)}"
+            )
+    return sorted(PurePosixPath(run_dir, path) for path in already_on_dst)
 
 
 def incomplete_runs(
@@ -195,11 +212,30 @@ def incomplete_runs(
     level_types: Sequence[int],
     params: Sequence[str],
 ) -> list[str]:
-    """Describe each run that lacks files another run of its kind (main 00/06/12/18 UTC, or
-    intermediate) has, or that lacks any file of an explicitly requested parameter or, when
-    every parameter is requested, of single-level parameters or of a requested level type."""
+    """Describe selected archive paths missing compared with runs of the same kind
+    (main 00/06/12/18 UTC, or intermediate), or a missing explicitly requested parameter.
+    When all parameters are requested, also report missing single-level files or level types.
+    """
+    selected_level_types = {str(level_type) for level_type in level_types}
+
+    def is_selected_file(path: PurePosixPath) -> bool:
+        match path.parts:
+            case (param, step):
+                pass
+            case (param, "lvt1", level_type, "lv1", _level, step) if (
+                level_type in selected_level_types
+            ):
+                pass
+            case _:
+                return False
+        return step.endswith(".grib2") and (not params or param in params)
+
     files_by_run_dir = {
-        paths[0].parts[0]: {path.relative_to(path.parts[0]) for path in paths}
+        paths[0].parts[0]: {
+            relative_path
+            for path in paths
+            if is_selected_file(relative_path := path.relative_to(path.parts[0]))
+        }
         for paths in dst_paths_by_run
     }
 
@@ -214,8 +250,8 @@ def incomplete_runs(
     for run_dir, files in files_by_run_dir.items():
         if missing := files_by_kind[is_main_run(run_dir)] - files:
             problems.append(
-                f"{run_dir} lacks {len(missing):,d} files that other runs of its kind"
-                f" have, e.g. {min(missing)}"
+                f"{run_dir} lacks {len(missing):,d} files archived for other runs of its"
+                f" kind, e.g. {min(missing)}"
             )
         present_params = {file.parts[0] for file in files}
         problems += [

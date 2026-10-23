@@ -75,6 +75,10 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         """Returns a dictionary of dimension names to coordinates for the dataset."""
         raise NotImplementedError("Implement `dimension_coordinates` in your subclass")
 
+    def data_var_dims(self, var: DATA_VAR) -> tuple[Dim, ...]:
+        """Dimensions of an array, in encoding order, drawn from its group's dims."""
+        return self.dims[var.group]
+
     def derive_coordinates(
         self,
         ds: xr.Dataset,  # noqa: ARG002
@@ -186,7 +190,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         group_dims = self.dims[group]
         data_vars = {
             var.name: template_utils.make_empty_variable(
-                group_dims, coords, var.encoding.dtype
+                self.data_var_dims(var), coords, var.encoding.dtype
             )
             for var in self.data_vars
             if var.group == group
@@ -244,23 +248,40 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             f"root data var name(s) {root_var_names & group_names} collide with a group name"
         )
 
-        append_dim_chunks = {self._append_dim_chunk_size(var) for var in self.data_vars}
-        assert len(append_dim_chunks) <= 1, (
-            f"all data vars must share one append-dim chunk size, got {append_dim_chunks}"
-        )
-
         for var in self.data_vars:
-            n_dims = len(self.dims[var.group])
+            var_dims = self.data_var_dims(var)
+            assert self.append_dim in var_dims, (
+                f"{var.path} must include the append dimension"
+            )
+            assert len(var_dims) == len(set(var_dims)), (
+                f"{var.path} dims must be unique"
+            )
+            assert set(var_dims) <= set(self.dims[var.group]), (
+                f"{var.path} dims must belong to its group dimensions"
+            )
+            assert var_dims == tuple(
+                dim for dim in self.dims[var.group] if dim in var_dims
+            ), f"{var.path} dims must be an ordered subset of its group's dims"
+            if var.group is not ROOT:
+                assert var.group in var_dims, (
+                    f"{var.path} must include its vertical group dimension {var.group!r}"
+                )
+            n_dims = len(var_dims)
             for kind in ("chunks", "shards"):
                 value = getattr(var.encoding, kind)
                 if isinstance(value, tuple):
                     assert len(value) == n_dims, (
                         f"{var.path} encoding {kind} has {len(value)} entries, "
-                        f"expected {n_dims} (the dims of group {var.group!r})"
+                        f"expected {n_dims} (the dims of {var.path!r})"
                     )
 
-    def _append_dim_chunk_size(self, var: DataVar[Any]) -> int:
-        dims = self.dims[var.group]
+        append_dim_chunks = {self._append_dim_chunk_size(var) for var in self.data_vars}
+        assert len(append_dim_chunks) <= 1, (
+            f"all data vars must share one append-dim chunk size, got {append_dim_chunks}"
+        )
+
+    def _append_dim_chunk_size(self, var: DATA_VAR) -> int:
+        dims = self.data_var_dims(var)
         chunks = var.encoding.chunks
         if isinstance(chunks, int):
             return chunks

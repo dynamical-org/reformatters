@@ -44,6 +44,7 @@ type Dim = Literal[
     "pressure_level",
     "model_level",
     "height_above_mean_sea_level",
+    "depth_below_ground",
 ]
 type AppendDim = Literal["init_time", "time"]
 assert set(get_args(AppendDim.__value__)) <= set(get_args(Dim.__value__))
@@ -58,7 +59,7 @@ ROOT = RootGroup.ROOT
 # A variable on a dense, comparable vertical dimension lives in a zarr group named
 # after that dimension (group name == dimension name). Expand as new types are added.
 type VerticalGroup = Literal[
-    "pressure_level", "model_level", "height_above_mean_sea_level"
+    "pressure_level", "model_level", "height_above_mean_sea_level", "depth_below_ground"
 ]
 # A variable's group: ROOT (single-level, lives at the dataset root) or a vertical group.
 type Group = VerticalGroup | RootGroup

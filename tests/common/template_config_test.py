@@ -208,7 +208,7 @@ class StringCoordinateConfig(TemplateConfig[DataVar[BaseInternalAttrs]]):
             ),
             Coordinate(
                 name="statistic",
-                encoding=Encoding(dtype="str", chunks=6, shards=None, fill_value=""),
+                encoding=Encoding(dtype="object", chunks=6, shards=None, fill_value=""),
                 attrs=CoordinateAttrs(units=None, statistics_approximate=None),
             ),
         ]

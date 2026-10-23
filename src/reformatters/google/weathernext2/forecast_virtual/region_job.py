@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
+from math import prod
 from pathlib import Path
 from typing import ClassVar, Self
 
@@ -17,9 +18,6 @@ from reformatters.common.types import (
     Dim,
     Timedelta,
     Timestamp,
-)
-from reformatters.google.weathernext_virtual.holdback import (
-    PUBLICATION_HOLDBACK,
 )
 from reformatters.google.weathernext_virtual.holdback import (
     utc_now as _utc_now,
@@ -47,6 +45,7 @@ SOURCE_LOCATION_PREFIX = "gs://weathernext/"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
+OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("7h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
@@ -109,7 +108,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
 ):
     requires_scan_provenance: ClassVar[bool] = False
     source_layout: ClassVar[SourceLayout]
-    publication_cutoff: Timestamp = pd.Timestamp.max
 
     @classmethod
     def get_jobs(
@@ -139,9 +137,9 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             reference_time=reference_time,
             append_dim_end=append_dim_end,
         )
-        if cls.source_layout == "historical":
+        if cls.source_layout == "historical" or cls.publication_holdback is None:
             return jobs
-        cutoff = (reference_time or _utc_now()) - PUBLICATION_HOLDBACK
+        cutoff = (reference_time or _utc_now()) - cls.publication_holdback
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
@@ -173,12 +171,19 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 reformat_job_name=reformat_job_name,
                 job_fire_time=PER_INIT_STORE_DATE,
             )
-        publication_cutoff = (job_fire_time or _utc_now()) - PUBLICATION_HOLDBACK
-        latest_publishable_valid_time = (
-            publication_cutoff
-            - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
-        )
-        newest_publishable_init = latest_publishable_valid_time - LEAD_TIMES[0]
+        job_fire_time = job_fire_time or _utc_now()
+        publication_cutoff = pd.Timestamp.max
+        if cls.publication_holdback is None:
+            newest_init = (job_fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+                INIT_TIME_FREQUENCY
+            )
+        else:
+            publication_cutoff = job_fire_time - cls.publication_holdback
+            latest_publishable_valid_time = (
+                publication_cutoff
+                - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
+            )
+            newest_init = latest_publishable_valid_time - LEAD_TIMES[0]
         jobs, template_ds = super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
@@ -186,7 +191,7 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             append_dim=append_dim,
             all_data_vars=all_data_vars,
             reformat_job_name=reformat_job_name,
-            job_fire_time=newest_publishable_init + INIT_TIME_FREQUENCY,
+            job_fire_time=newest_init + INIT_TIME_FREQUENCY,
         )
         (job,) = jobs
         assert isinstance(job, cls)
@@ -219,25 +224,30 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             for data_var in data_var_group
         ]
 
+    def _source_chunk_axes(
+        self, var: GoogleWeathernext2DataVar
+    ) -> tuple[Sequence[int], Sequence[int | None]]:
+        ensemble_members = [
+            int(value)
+            for value in self.template_ds.to_dataset().get_index("ensemble_member")
+        ]
+        if self.source_layout == "historical":
+            return ensemble_members[::4], (
+                [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
+            )
+        return ensemble_members, [None] if var.group is ROOT else PRESSURE_LEVELS
+
+    def _refs_per_step(self, var: GoogleWeathernext2DataVar) -> int:
+        return prod(len(axis) for axis in self._source_chunk_axes(var))
+
     def _source_chunks(
         self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
     ) -> list[NativeSourceChunk[GoogleWeathernext2DataVar]]:
         assert coord.source_layout == self.source_layout
         store_key_prefix = _store_key(coord.get_url()) + "/"
-        ensemble_members = [
-            int(value)
-            for value in self.template_ds.to_dataset().get_index("ensemble_member")
-        ]
         chunks = []
         for var in coord.data_vars:
-            if self.source_layout == "historical":
-                members = ensemble_members[::4]
-                levels: Sequence[int | None] = (
-                    [None] if var.group is ROOT else [PRESSURE_LEVELS[0]]
-                )
-            else:
-                members = ensemble_members
-                levels = [None] if var.group is ROOT else PRESSURE_LEVELS
+            members, levels = self._source_chunk_axes(var)
             for member in members:
                 for level in levels:
                     key = coord.chunk_key(var, member, level)

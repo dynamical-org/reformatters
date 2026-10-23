@@ -542,6 +542,15 @@ def _cron_job(schedule: str) -> ReformatCronJob:
     [
         ("50 * * * *", "2026-08-02T23:55", "2026-08-02T23:50"),
         ("50 * * * *", "2026-08-02T23:50", "2026-08-02T23:50"),
+        ("*/15 * * * *", "2026-08-02T23:59:59", "2026-08-02T23:45"),
+        ("*/15 * * * *", "2026-08-03T00:00", "2026-08-03T00:00"),
+        ("*/15 * * * *", "2026-08-03T00:14:59", "2026-08-03T00:00"),
+        ("*/15 * * * *", "2026-08-03T00:15", "2026-08-03T00:15"),
+        ("*/15 */6 * * *", "2026-08-03T05:59", "2026-08-03T00:45"),
+        ("*/15 0,12 * * *", "2026-08-03T11:59", "2026-08-03T00:45"),
+        ("*/15 23 */3 * *", "2026-09-01T22:00", "2026-08-31T23:45"),
+        ("*/15 23 */3 * *", "2026-10-01T22:00", "2026-09-28T23:45"),
+        ("*/7 * * * *", "2026-08-02T23:59", "2026-08-02T23:56"),
         # Before this hour's fire, so the previous hour's.
         ("50 * * * *", "2026-08-02T23:12", "2026-08-02T22:50"),
         ("53 1,7,13,19 * * *", "2026-08-02T03:00", "2026-08-02T01:53"),
@@ -564,7 +573,7 @@ def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
 @pytest.mark.parametrize(
     "schedule",
     [
-        "*/5 * * * *",  # a stepped minute field selects more than one fire an hour
+        "*/0 * * * *",  # zero step
         "0 0 * * 1",  # day of week
         "0 0 1 * *",  # day of month
         "5 1,2/2 * * *",  # a step within a list
@@ -581,6 +590,14 @@ def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
     ("schedule", "now", "expected"),
     [
         ("0 * * * *", "2026-08-02T12:00", "2026-08-02T13:00"),
+        ("*/15 * * * *", "2026-08-02T23:45", "2026-08-03T00:00"),
+        ("*/15 * * * *", "2026-08-03T00:00", "2026-08-03T00:15"),
+        ("*/15 * * * *", "2026-08-03T00:14:59", "2026-08-03T00:15"),
+        ("*/15 */6 * * *", "2026-08-03T00:45", "2026-08-03T06:00"),
+        ("*/15 0,12 * * *", "2026-08-03T11:59", "2026-08-03T12:00"),
+        ("*/15 23 */3 * *", "2026-08-31T23:45", "2026-09-01T23:00"),
+        ("*/15 23 */3 * *", "2026-09-28T23:45", "2026-10-01T23:00"),
+        ("*/7 * * * *", "2026-08-02T23:56", "2026-08-03T00:00"),
         ("53 1,7,13,19 * * *", "2026-08-02T19:53", "2026-08-03T01:53"),
         ("0 23 */3 * *", "2026-09-28T23:00", "2026-10-01T23:00"),
     ],
@@ -589,6 +606,16 @@ def test_next_fire_time(schedule: str, now: str, expected: str) -> None:
     assert _cron_job(schedule).next_fire_time(pd.Timestamp(now)) == pd.Timestamp(
         expected
     )
+
+
+@pytest.mark.parametrize("minute", [0, 15, 30, 45])
+@pytest.mark.parametrize("seconds", [0, 1, 59])
+def test_quarter_hour_fire_boundaries(minute: int, seconds: int) -> None:
+    cron = _cron_job("*/15 * * * *")
+    fire = pd.Timestamp("2026-08-02T23:00Z") + timedelta(minutes=minute)
+    now = fire + timedelta(seconds=seconds)
+    assert cron.previous_fire_time(now) == fire
+    assert cron.next_fire_time(now) == fire + timedelta(minutes=15)
 
 
 def test_update_cronjob_has_service_account_and_validation_failure_policy() -> None:
@@ -626,12 +653,13 @@ def _deployed_cronjob(*, suspend: bool = False) -> Mock:
         labels={"template-label": "value"}, annotations={"template-note": "value"}
     )
     cronjob.spec.job_template.spec = client.V1JobSpec(
+        active_deadline_seconds=600,
         template=client.V1PodTemplateSpec(
             spec=client.V1PodSpec(
                 containers=[client.V1Container(name="worker")],
                 active_deadline_seconds=600,
             )
-        )
+        ),
     )
     return cronjob
 
@@ -670,6 +698,8 @@ def test_create_job_clones_live_template_without_owner_reference(
     }
     assert job.spec == cronjob.spec.job_template.spec
     assert job.spec is not cronjob.spec.job_template.spec
+    assert job.spec.active_deadline_seconds == 600
+    assert job.spec.template.spec.active_deadline_seconds == 600
 
 
 @pytest.mark.parametrize(

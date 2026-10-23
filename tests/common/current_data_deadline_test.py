@@ -9,6 +9,7 @@ from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
 from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
 _FRESHNESS_DEADLINES = [
     ("noaa-gfs-forecast", "2026-09-27 00:00", "5h48m"),
@@ -24,8 +25,17 @@ _FRESHNESS_DEADLINES = [
     ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h03m"),
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "4h"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "54m"),
+    ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "90m"),
+    ("noaa-rtma-ru-analysis-virtual", "2026-09-27 00:15", "45m"),
+    ("noaa-urma-analysis-virtual", "2026-09-27 00:00", "7h40m"),
     ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:00", "52m"),
+    ("noaa-rrfs-forecast-84-hour-virtual", "2026-09-27 00:00", "230m"),
+    ("noaa-rrfs-forecast-18-hour-virtual", "2026-09-27 00:00", "155m"),
+    ("noaa-rrfs-forecast-sub-hourly-virtual", "2026-09-27 00:00", "133m"),
+    ("noaa-rrfs-ens-forecast-virtual", "2026-09-27 00:00", "230m"),
+    ("noaa-refs-forecast-hourly-virtual", "2026-09-27 00:00", "235m"),
+    ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "235m"),
     ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "4D"),
@@ -170,3 +180,28 @@ def test_virtual_polling_starts_before_freshness_deadline() -> None:
             assert update.next_fire_time(init) < init + check.max_delay, (
                 dataset.dataset_id
             )
+
+
+@pytest.mark.parametrize(
+    "dataset_id",
+    [
+        case[0]
+        for case in _FRESHNESS_DEADLINES
+        if case[0].startswith(("noaa-rrfs-", "noaa-refs-"))
+    ],
+)
+def test_rrfs_and_refs_current_init_is_due_at_poll_deadline(
+    dataset_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)
+    due = pd.Timestamp("2026-09-27 00:00")
+    (update,) = dataset.operational_kubernetes_resources("test-image")
+    assert isinstance(dataset, NoaaRrfsDataset)
+    fire = due + timedelta(minutes=dataset.update_offset_minutes)
+    assert update.previous_fire_time(fire) == fire
+    deadline = dataset._virtual_poll_deadline(fire)
+    previous = due - dataset.template_config.append_dim_frequency
+    stale = _check_at_time(dataset_id, deadline, previous, monkeypatch)
+    assert not stale.passed
+    assert due.isoformat() in stale.message
+    assert _check_at_time(dataset_id, deadline, due, monkeypatch).passed

@@ -890,6 +890,73 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
         _process_virtual(job, repo)
 
 
+@pytest.mark.parametrize("processing_mode", ["backfill", "update"])
+def test_partial_and_probe_missing_files_do_not_block_siblings(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    processing_mode: Literal["backfill", "update"],
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_ds = _create_template_ds(2)
+    template_ds["other"] = template_ds["temperature_2m"].copy(deep=True)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+
+    class PartialFilesJob(VirtualTestRegionJob):
+        process_virtual_refs = VirtualRegionJob.process_virtual_refs
+
+        def discover_available(
+            self, pending: list[VirtualTestSourceFileCoord]
+        ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+            return [(coord, BLOCK_NBYTES) for coord in pending]
+
+        def file_refs(
+            self,
+            coord: VirtualTestSourceFileCoord,
+            file_size: int,  # noqa: ARG002
+        ) -> list[VirtualRef]:
+            batch = next(VirtualTestRegionJob.process_virtual_refs(self, [coord]))
+            ref = batch[0][1][0]
+            variables = self.data_vars
+            if coord.init_time == APPEND_DIM_START:
+                variables = (
+                    variables[:1] if coord.lead_time == LEAD_TIMES[0] else variables[1:]
+                )
+            return [ref._replace(data_var=var) for var in variables]
+
+    job = PartialFilesJob(
+        tmp_store=Path("unused-tmp.zarr"),
+        template_ds=template_ds,
+        data_vars=[
+            VirtualTestDataVar(name="temperature_2m"),
+            VirtualTestDataVar(name="other"),
+        ],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="test",
+        processing_mode=processing_mode,
+    )
+    _process_virtual(job, repo)
+
+    store = repo.readonly_session("main").store
+    result = xr.open_zarr(store, decode_timedelta=True)
+    np.testing.assert_array_equal(
+        result.temperature_2m.isel(init_time=0, lead_time=0), _block_values(0, 0)
+    )
+    assert np.isnan(result.other.isel(init_time=0)).all()
+    assert np.isnan(result.temperature_2m.isel(init_time=0, lead_time=1)).all()
+    for name in ("temperature_2m", "other"):
+        for lead_idx in range(N_LEADS):
+            np.testing.assert_array_equal(
+                result[name].isel(init_time=1, lead_time=lead_idx),
+                _block_values(1, lead_idx),
+            )
+    assert job.filter_already_present(job.source_file_coords(), store) == [
+        job.source_file_coords()[1]
+    ]
+    assert "refs do not cover representative chunk" in caplog.text
+
+
 def test_emit_refs_rejects_unregistered_container_location(tmp_path: Path) -> None:
     # icechunk silently reports (rather than raises on) refs outside every registered
     # VirtualChunkContainer prefix; _emit_refs must fail loudly on them, or the
@@ -1998,6 +2065,7 @@ def test_refresh_metadata_applies_to_replica_repos(
 
     fixed = _create_template_ds(2)
     fixed["temperature_2m"].attrs["comment"] = "deployed metadata fix"
+    fixed["temperature_2m"].encoding.update(fill_value=-9999.0, _FillValue=-9999.0)
     job = _make_region_job(fixed, region=slice(0, 2), processing_mode="update")
     replica_snapshots_before = _snapshot_count(replica_repo)
     job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
@@ -2006,6 +2074,8 @@ def test_refresh_metadata_applies_to_replica_repos(
     for repo in (primary_repo, replica_repo):
         ds = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
         assert ds["temperature_2m"].attrs["comment"] == "deployed metadata fix"
+        assert ds["temperature_2m"].encoding["fill_value"] == -9999.0
+        assert ds["temperature_2m"].encoding["_FillValue"] == -9999.0
 
 
 def test_refresh_metadata_empty_store_returns_without_commit(tmp_path: Path) -> None:
@@ -2095,8 +2165,7 @@ def test_serializer_threads_through_expansion_without_decoding(tmp_path: Path) -
     and ref emit without ever being invoked. We never decode here (no real GRIB) -
     we assert the codec persists in metadata and the ref lands in the manifest."""
     dataset = _make_dataset(tmp_path)
-    # Remove the ignore once gribberish implements Zarr's abstract compute_encoded_size.
-    serializer = GribberishCodec(var="TMP").to_dict()  # ty: ignore[call-non-callable]
+    serializer = GribberishCodec(var="TMP").to_dict()
     template_utils.write_metadata(
         _create_template_ds(1, serializer=serializer), dataset.store_factory
     )

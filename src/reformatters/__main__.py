@@ -112,6 +112,27 @@ from reformatters.noaa.hrrr.nomads_mirror import NoaaHrrrNomadsMirror
 from reformatters.noaa.mrms.conus_analysis_hourly.dynamical_dataset import (
     NoaaMrmsConusAnalysisHourlyDataset,
 )
+from reformatters.noaa.refs.forecast_3_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecast3HourlyVirtualDataset,
+)
+from reformatters.noaa.refs.forecast_hourly_virtual.dynamical_dataset import (
+    NoaaRefsForecastHourlyVirtualDataset,
+)
+from reformatters.noaa.rrfs.forecast_18_hour_virtual.dynamical_dataset import (
+    NoaaRrfsForecast18HourVirtualDataset,
+)
+from reformatters.noaa.rrfs.forecast_84_hour_virtual.dynamical_dataset import (
+    NoaaRrfsForecast84HourVirtualDataset,
+)
+from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.dynamical_dataset import (
+    NoaaRrfsForecastSubHourlyVirtualDataset,
+)
+from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
+    NoaaRrfsEnsForecastVirtualDataset,
+)
+from reformatters.noaa.rtma.analysis_virtual import NoaaRtmaAnalysisVirtualDataset
+from reformatters.noaa.rtma_ru.analysis_virtual import NoaaRtmaRuAnalysisVirtualDataset
+from reformatters.noaa.urma.analysis_virtual import NoaaUrmaAnalysisVirtualDataset
 from reformatters.ucsb_chc.chirps.analysis_final import (
     UcsbChcChirpsAnalysisFinalDataset,
 )
@@ -126,6 +147,36 @@ class NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
     """Configuration for the storage of a AWS Open Data dataset."""
 
     base_path: str = "s3://dynamical-noaa-hrrr"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-rtma"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaUrmaIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-urma"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-rrfs"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-rrfs-ens"
+    k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
+    format: DatasetFormat = DatasetFormat.ICECHUNK
+
+
+class NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(StorageConfig):
+    base_path: str = "s3://dynamical-noaa-refs"
     k8s_secret_name: str = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
     format: DatasetFormat = DatasetFormat.ICECHUNK
 
@@ -307,11 +358,38 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     NoaaHrrrAnalysisVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
+    NoaaRtmaAnalysisVirtualDataset(
+        primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRtmaRuAnalysisVirtualDataset(
+        primary_storage_config=NoaaRtmaIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaUrmaAnalysisVirtualDataset(
+        primary_storage_config=NoaaUrmaIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
     NoaaHrrrForecast48HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaHrrrForecast18HourVirtualDataset(
         primary_storage_config=NoaaHrrrIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRrfsForecast84HourVirtualDataset(
+        primary_storage_config=NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRrfsForecast18HourVirtualDataset(
+        primary_storage_config=NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRrfsForecastSubHourlyVirtualDataset(
+        primary_storage_config=NoaaRrfsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRrfsEnsForecastVirtualDataset(
+        primary_storage_config=NoaaRrfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRefsForecastHourlyVirtualDataset(
+        primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    NoaaRefsForecast3HourlyVirtualDataset(
+        primary_storage_config=NoaaRefsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     NoaaMrmsConusAnalysisHourlyDataset(
         primary_storage_config=NoaaMrmsIcechunkAwsOpenDataDatasetStorageConfig(),

@@ -6,7 +6,9 @@ from scripts.validation.utils import (
     RunContext,
     VariableStats,
     dataset_id_and_version,
+    deterministic_reference_allowed,
     is_forecast_dataset,
+    level_label,
     vertical_dims,
 )
 
@@ -75,6 +77,8 @@ def _metadata_table(stats: VariableStats) -> list[str]:
         rows.append(f"| flag_meanings | {stats.flag_meanings} |")
     if stats.level_dim is not None:
         rows.append(f"| sampled level | {stats.level_dim}={stats.level_value:g} |")
+    if stats.label_dim is not None:
+        rows.append(f"| sampled statistic | {stats.label_dim}={stats.label_value} |")
     if stats.comment is not None:
         rows.append(f"| comment | {stats.comment} |")
     rows.append("")
@@ -85,7 +89,11 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     if stats.ref_available_spatial:
         ref_clause = f"reference at {ctx.ref_spatial_time_label or 'n/a'}"
     else:
-        ref_clause = "reference not available"
+        ref_clause = (
+            "reference not available"
+            if deterministic_reference_allowed(stats)
+            else "validation only; deterministic reference not comparable"
+        )
     lines = [
         f"**Spatial** — {stats.spatial_time_label or 'n/a'} ({ref_clause})",
         "",
@@ -214,7 +222,7 @@ def _availability_line(stats: VariableStats) -> str:
 
 
 def _variable_section(stats: VariableStats, ctx: RunContext) -> str:
-    lines = [f"### `{stats.name}`", ""]
+    lines = [f"### `{stats.name}`{level_label(stats)}", ""]
     lines += _metadata_table(stats)
     lines += _value_ts_table(stats, ctx)
     lines += _spatial_table(stats, ctx)

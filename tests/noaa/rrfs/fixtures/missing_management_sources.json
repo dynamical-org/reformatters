@@ -1,0 +1,58 @@
+{
+  "pevpr-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260813/00/rrfs.t00z.2dfld.3km.f023.conus.grib2",
+    "message": 70,
+    "length": 217,
+    "sha256": "ceff58adb906ad24593924f1f8e7690bdd44abdd860061e34069b4d5140f6df0",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "pevap-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260813/00/rrfs.t00z.2dfld.3km.f023.conus.grib2",
+    "message": 126,
+    "length": 241,
+    "sha256": "5905f9e58d88a4d6bf116f62559386f8662e34554c8f7ff58a0d4f2489622084",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "aotk-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfsens.20260915/12/m001/rrfs.t12z.m001.2dfldnomads.3km.f000.conus.grib2",
+    "message": 21,
+    "length": 220,
+    "sha256": "72dd7017ad845dc33a30469c517de264d64f0ecd20bff4205312805b430af042",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "wildfire-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfsens.20260915/12/m001/rrfs.t12z.m001.2dfldnomads.3km.f000.conus.grib2",
+    "message": 29,
+    "length": 244,
+    "sha256": "133af1f5366ce31b812299ba14ba89fce2d8ce9c2683f5cd74d03d06ac0eb364",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "spfh-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/00/rrfs.t00z.2dfld.3km.f002.conus.grib2",
+    "offset": 33050291,
+    "length": 217,
+    "sha256": "c61f5327be49f40764bd8c321e52df63454205780b39e946c577b9307b12551e",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "vegmin-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/00/rrfs.t00z.2dfld.3km.f000.conus.grib2",
+    "offset": 91518716,
+    "length": 217,
+    "sha256": "a1e901604cbf1675ad815559abf600c0452ebf4a0e157e802c6354d1fec74fca",
+    "drt": 2,
+    "missing_management": 1
+  },
+  "vegmax-all-missing.grib2": {
+    "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/00/rrfs.t00z.2dfld.3km.f000.conus.grib2",
+    "offset": 91518933,
+    "length": 217,
+    "sha256": "591a2765daa40245ca2a9b9c03114be9c3e60a25ee2fd1e852fdbf6116903de9",
+    "drt": 2,
+    "missing_management": 1
+  }
+}

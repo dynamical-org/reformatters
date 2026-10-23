@@ -1,0 +1,89 @@
+from collections.abc import Sequence
+from datetime import timedelta
+from typing import Any, ClassVar, Generic, TypeVar
+
+from pydantic import Field, NonNegativeInt
+
+from reformatters.common import validation
+from reformatters.common.config_models import DataVar
+from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
+from reformatters.noaa.noaa_virtual_region_job import NoaaVirtualSourceFileCoord
+from reformatters.noaa.projected_forecast_template_config import (
+    NoaaProjectedForecastTemplateConfig,
+)
+from reformatters.noaa.rrfs.region_job import (
+    rrfs_virtual_chunk_containers,
+)
+
+DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
+SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=NoaaVirtualSourceFileCoord[Any])
+
+
+class NoaaRrfsDataset(
+    DynamicalDataset[DATA_VAR, SOURCE_FILE_COORD], Generic[DATA_VAR, SOURCE_FILE_COORD]
+):
+    template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
+    update_offset_minutes: NonNegativeInt
+    update_deadline: timedelta
+    min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
+    allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
+    icechunk_virtual_config: IcechunkVirtualConfig = Field(
+        default_factory=lambda: IcechunkVirtualConfig(
+            containers=rrfs_virtual_chunk_containers(),
+            manifest_split=manifest_append_dim_split(
+                # At ~16 B/ref, pressure manifests are ~5.3 MiB deterministic / ~7.0 MiB ensemble;
+                # 300-init AMSL/depth manifests are ~3.9/3.5 MiB, with fewer root manifests.
+                split_size={
+                    r"^/pressure_level/": 90,
+                    r"^/height_above_mean_sea_level/": 300,
+                    r"^/depth_below_ground/": 300,
+                    None: 300,
+                },
+                dim="init_time",
+            ),
+        )
+    )
+
+    def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
+        cadence = int(self.template_config.append_dim_frequency.total_seconds() / 3600)
+
+        fire_hours = {
+            (h + self.update_offset_minutes // 60) % 24 for h in range(0, 24, cadence)
+        }
+        hours = (
+            "*"
+            if fire_hours == set(range(24))
+            else ",".join(str(h) for h in sorted(fire_hours))
+        )
+
+        return (
+            ReformatCronJob(
+                name=f"{self.dataset_id}-update",
+                schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
+                pod_active_deadline=self.update_deadline,
+                active_deadline=self.update_deadline,
+                image=image_tag,
+                dataset_id=self.dataset_id,
+                cpu="1.5",
+                memory="3.7G",
+                secret_names=self.store_factory.k8s_secret_names(),
+            ),
+        )
+
+    def validators(self) -> Sequence[validation.Validator]:
+        return (
+            validation.CheckCurrentData(
+                max_delay=timedelta(minutes=self.update_offset_minutes)
+                + self.update_deadline
+                - self.virtual_poll_deadline_grace
+            ),
+            validation.CheckVirtualManifestCompleteness(
+                min_present_fraction=self.min_present_fraction
+            ),
+            validation.CheckVirtualDecodeHealth(
+                max_workers=2, allow_all_nan_vars=self.allow_all_nan_vars
+            ),
+        )

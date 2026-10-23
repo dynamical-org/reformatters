@@ -56,6 +56,7 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
 ):
     init_frequency: ClassVar[Timedelta]
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
+    publication_holdback: ClassVar[Timedelta | None] = PUBLICATION_HOLDBACK
 
     @classmethod
     def operational_update_jobs(
@@ -130,6 +131,9 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord, var: DataVar[Any]
     ) -> Mapping[Dim, CoordinateValue]:
         return {**super().representative_probe_loc(coord, var), "statistic": "mean"}
+
+    def _refs_per_step(self, var: GoogleWeathernext3DataVar) -> int:  # noqa: ARG002
+        return len(STATISTICS)
 
     def _source_chunks(
         self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord

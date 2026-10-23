@@ -84,7 +84,7 @@ class UcsbChcChirpsAnalysisTemplateConfig(TemplateConfig[DataVar[BaseInternalAtt
                 "718 (2026), data https://doi.org/10.15780/G2JQ0P."
             ),
             license="CC-BY-4.0",
-            spatial_domain="Global land, 60 degrees north to 60 degrees south",
+            spatial_domain="Global land, 60N-60S",
             spatial_resolution="0.05 degrees (~5km)",
             time_domain=f"{self.append_dim_start} UTC to Present",
             time_resolution="1 day",

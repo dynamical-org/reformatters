@@ -146,7 +146,8 @@ def list_files(
 
     Returns:
         paths: A sorted list of all the files found in `path`. Returns an empty list if the
-        directory does not exist.
+        directory does not exist and rclone produced no file listing. Partial listings
+        from a failed command raise with the original stdout and stderr.
     """
     log.info("Listing files on '%s'...", path)
     cmd = (
@@ -172,6 +173,7 @@ def list_files(
     except subprocess.CalledProcessError as e:
         if (
             e.returncode == 3
+            and not e.stdout
             and isinstance(e.stderr, str)
             and "directory not found" in e.stderr.lower()
         ):
@@ -181,7 +183,7 @@ def list_files(
             log.exception(
                 "stderr: %s; stdout: %s",
                 _convert_called_process_error_output_to_str(e.stderr),
-                _convert_called_process_error_output_to_str(e.stdout),
+                _convert_called_process_error_output_to_str(e.stdout)[:2000],
             )
             raise
     else:

@@ -1,0 +1,55 @@
+{
+  "shape": [
+    1,
+    19,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "LTNGSD",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Maximum lightning threat 2 (vertically integrated ice)",
+    "short_name": "ltngsd",
+    "units": "1",
+    "comment": "GSD maximum lightning threat 2 derived from vertically integrated ice, in flashes km-2 (5 min)-1. Encoded in GRIB as LTNGSD (lightning strike density) at the pseudo-level 2 m above ground. Maximum value over the preceding hour.",
+    "step_type": "max",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

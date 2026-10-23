@@ -1,0 +1,10 @@
+{
+  "url": "https://noaa-rrfs-ops-pds.s3.amazonaws.com/rrfs.20260915/12/rrfs.t12z.2dfld.3km.f060.conus.grib2",
+  "message": 11,
+  "length": 401875,
+  "sha256": "a5b340c7e20534031de452e1c9fcf62d84325a036d833f100c2522e1c3a7db79",
+  "no_echo_value": -5000.0,
+  "no_echo_cells": 1816132,
+  "gdal_nodata": null,
+  "description": "Both GDAL and gribberish decode no echo as -5000 m. Declaring this value as the Zarr and CF fill value masks exactly those cells while preserving positive echo heights."
+}

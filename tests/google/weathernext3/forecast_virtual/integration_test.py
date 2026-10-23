@@ -6,7 +6,6 @@ from unittest.mock import Mock
 import icechunk
 import pandas as pd
 import pytest
-from pydantic import ValidationError
 from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
@@ -83,9 +82,6 @@ def test_reference_time_survives_clock_boundary_and_retry(
     assert [job.source_file_coords() for job in jobs] == [
         job.source_file_coords() for job in retry
     ]
-    kwargs["reference_time"] = None
-    with pytest.raises(ValidationError, match="publication_cutoff"):
-        dataset.region_job_class.get_jobs(**kwargs)
 
 
 def test_exact_source_paths() -> None:

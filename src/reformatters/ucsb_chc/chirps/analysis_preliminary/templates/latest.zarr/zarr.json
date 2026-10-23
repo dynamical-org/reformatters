@@ -6,7 +6,7 @@
     "description": "Daily precipitation from the Climate Hazards Center Infrared Precipitation with Stations (CHIRPS) version 3.0 preliminary product.",
     "attribution": "UCSB Climate Hazards Center CHIRPS version 3.0 data processed by dynamical.org from the Climate Hazards Center data archive. Funk, C., Peterson, P., Harrison, L. et al. The Climate Hazards Center Infrared Precipitation with Stations, Version 3. Sci Data 13, 718 (2026), data https://doi.org/10.15780/G2JQ0P.",
     "license": "CC-BY-4.0",
-    "spatial_domain": "Global land, 60 degrees north to 60 degrees south",
+    "spatial_domain": "Global land, 60N-60S",
     "spatial_resolution": "0.05 degrees (~5km)",
     "time_domain": "2025-01-01 00:00:00 UTC to Present",
     "time_resolution": "1 day"

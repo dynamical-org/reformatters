@@ -1,0 +1,242 @@
+{
+  "noaa-rrfs-forecast-84-hour-virtual": {
+    "2026-09-15T12:00:00": {
+      "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface": 0.0,
+      "geopotential_height_cloud_ceiling": null,
+      "total_precipitation_run_total_surface": 0.0,
+      "wind_u_10m": 0.150269775390625,
+      "temperature_2m": 26.160000000000025,
+      "mass_density_8m_particulate_organic_matter_dry_below_2p5um": 2.7520000000010067e-09,
+      "height_above_mean_sea_level/temperature": 24.950000000000045,
+      "depth_below_ground/soil_temperature": [
+        26.77998046875001,
+        26.55998046875004,
+        26.089980468750014,
+        26.000000000000057,
+        26.220000000000027,
+        24.350000000000023,
+        23.690000000000055,
+        21.82000000000005,
+        16.02998046875001
+      ],
+      "pressure_level/temperature": -5.949999999999989
+    },
+    "2026-09-15T18:00:00": {
+      "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface": 0.0,
+      "geopotential_height_cloud_ceiling": null,
+      "total_precipitation_run_total_surface": 0.125,
+      "wind_u_10m": 1.246737060546875,
+      "temperature_2m": 31.220000000000027,
+      "mass_density_8m_particulate_organic_matter_dry_below_2p5um": 6.24000000000942e-10,
+      "height_above_mean_sea_level/temperature": 32.450000000000045,
+      "depth_below_ground/soil_temperature": [
+        23.08000000000004,
+        22.970019531250045,
+        22.920019531250034,
+        23.440000000000055,
+        24.200000000000045,
+        24.330019531250002,
+        23.650000000000034,
+        21.810000000000002,
+        16.02998046875001
+      ],
+      "pressure_level/temperature": -3.349999999999966
+    }
+  },
+  "noaa-rrfs-forecast-18-hour-virtual": {
+    "2026-09-15T00:00:00": {
+      "mass_density_8m_particulate_organic_matter_dry_below_2p5um": 1.7600000000008912e-09,
+      "geopotential_height_cloud_ceiling": 7337.0,
+      "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface": 0.0,
+      "temperature_2m": 29.450000000000045,
+      "total_precipitation_run_total_surface": 0.0625,
+      "wind_u_10m": -0.70259521484375,
+      "depth_below_ground/soil_temperature": [
+        30.340000000000032,
+        30.560000000000002,
+        31.060000000000002,
+        31.260000000000048,
+        25.720000000000027,
+        23.83000000000004,
+        23.770019531250057,
+        21.860000000000014,
+        16.02998046875001
+      ],
+      "height_above_mean_sea_level/temperature": 30.950000000000045,
+      "pressure_level/temperature": -4.5499999999999545
+    },
+    "2026-09-15T03:00:00": {
+      "mass_density_8m_particulate_organic_matter_dry_below_2p5um": 1.1728000000000893e-08,
+      "geopotential_height_cloud_ceiling": null,
+      "categorical_precipitation_exceeding_2_year_average_recurrence_interval_run_total_surface": 0.0,
+      "temperature_2m": 28.640000000000043,
+      "total_precipitation_run_total_surface": 0.0,
+      "wind_u_10m": 0.4964599609375,
+      "depth_below_ground/soil_temperature": [
+        27.850000000000023,
+        28.07001953125001,
+        28.620000000000005,
+        29.170000000000016,
+        25.83000000000004,
+        23.949980468750027,
+        23.750000000000057,
+        21.850000000000023,
+        16.02998046875001
+      ],
+      "height_above_mean_sea_level/temperature": 28.850000000000023,
+      "pressure_level/temperature": -3.749999999999943
+    }
+  },
+  "noaa-rrfs-forecast-sub-hourly-virtual": {
+    "2026-09-15T00:00:00": {
+      "wind_u_10m": [
+        -3.12547119140625,
+        -3.448309326171875,
+        -2.513232421875,
+        -1.6025244140625001,
+        -0.72145263671875,
+        -1.449908447265625,
+        -0.188106689453125,
+        -0.70259521484375
+      ],
+      "total_precipitation_run_total_surface": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0625
+      ],
+      "temperature_2m": [
+        30.639980468750025,
+        30.370000000000005,
+        30.28000000000003,
+        30.189980468750036,
+        30.140000000000043,
+        29.750000000000057,
+        29.510000000000048,
+        29.450000000000045
+      ]
+    },
+    "2026-09-15T01:00:00": {
+      "wind_u_10m": [
+        -0.51712158203125,
+        -1.259189453125,
+        -0.066658935546875,
+        -0.410081787109375,
+        -2.233653564453125,
+        -1.2295178222656251,
+        -0.91801513671875,
+        -1.324141845703125
+      ],
+      "total_precipitation_run_total_surface": [
+        0.0,
+        0.0,
+        0.0,
+        0.0625,
+        0.125,
+        0.125,
+        0.125,
+        0.125
+      ],
+      "temperature_2m": [
+        30.120000000000005,
+        29.900000000000034,
+        29.480019531250036,
+        29.450000000000045,
+        29.399980468750016,
+        29.350000000000023,
+        29.220000000000027,
+        29.08000000000004
+      ]
+    }
+  },
+  "noaa-rrfs-ens-forecast-virtual": {
+    "2026-09-15T12:00:00": {
+      "cloud_ceiling_height": [
+        null,
+        null,
+        11450.0,
+        null,
+        null,
+        319.0
+      ],
+      "temperature_2m": [
+        26.160000000000025,
+        26.370019531250023,
+        26.170000000000016,
+        25.940000000000055,
+        26.160000000000025,
+        26.170019531250034
+      ],
+      "wind_u_10m": [
+        0.150269775390625,
+        0.30260986328125,
+        0.375264892578125,
+        -0.58339599609375,
+        -0.190264892578125,
+        0.9732763671875
+      ],
+      "total_precipitation_run_total_surface": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "pressure_level/temperature": [
+        -5.949999999999989,
+        -6.249999999999943,
+        -6.249999999999943,
+        -5.649999999999977,
+        -6.0499999999999545,
+        -5.449999999999989
+      ]
+    },
+    "2026-09-15T18:00:00": {
+      "cloud_ceiling_height": [
+        null,
+        null,
+        null,
+        1903.0,
+        1671.0,
+        null
+      ],
+      "temperature_2m": [
+        31.220000000000027,
+        30.920000000000016,
+        31.04000000000002,
+        31.110000000000014,
+        30.450000000000045,
+        31.460000000000036
+      ],
+      "wind_u_10m": [
+        1.246737060546875,
+        -1.08649658203125,
+        0.32116333007812503,
+        -0.153712158203125,
+        0.752625732421875,
+        0.456728515625
+      ],
+      "total_precipitation_run_total_surface": [
+        0.125,
+        0.0,
+        0.0625,
+        0.0,
+        0.5,
+        0.0
+      ],
+      "pressure_level/temperature": [
+        -3.349999999999966,
+        -4.449999999999989,
+        -3.5499999999999545,
+        -4.0499999999999545,
+        -4.249999999999943,
+        -3.6499999999999773
+      ]
+    }
+  }
+}

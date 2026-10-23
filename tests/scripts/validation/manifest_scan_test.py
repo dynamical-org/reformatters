@@ -17,6 +17,10 @@ from zarr.storage import MemoryStore
 
 from reformatters.common import validation
 from reformatters.common.region_job import LaunchScope
+from reformatters.noaa.refs.forecast_hourly_virtual.template_config import (
+    NoaaRefsForecastHourlyVirtualTemplateConfig,
+)
+from reformatters.noaa.refs.region_job import NoaaRefsRegionJob
 from scripts.validation import manifest_scan
 from scripts.validation.decode_scan import _reference_presence
 from scripts.validation.manifest_scan import (
@@ -37,6 +41,7 @@ from scripts.validation.manifest_scan import (
     result_availability_series,
 )
 from scripts.validation.scan_common import evenly_spaced_subset
+from scripts.validation.utils import RunContext, choose_statistic
 
 
 def test_find_registered_dataset_from_worker_thread() -> None:
@@ -57,6 +62,43 @@ assert dataset is not None
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_plot_statistic_selection_preserves_source_family_scan_coverage(
+    statistic_context: RunContext,
+) -> None:
+    config = NoaaRefsForecastHourlyVirtualTemplateConfig()
+    variables = [
+        v
+        for v in config.data_vars
+        if v.name
+        in (
+            "wind_u_10m",
+            "temperature_2m",
+            "derived_radar_reflectivity_1000m",
+            "temperature_2m_standard_deviation",
+        )
+    ]
+    region = statistic_context.validation_ds.isel(
+        init_time=slice(0, 1), lead_time=slice(1, 2)
+    )
+    before = NoaaRefsRegionJob.generate_source_file_coords(Mock(), region, variables)
+    for var in variables:
+        choose_statistic(statistic_context.validation_ds, var.path)
+    after = NoaaRefsRegionJob.generate_source_file_coords(Mock(), region, variables)
+    assert before == after
+    assert {c.source_family for c in after} == {"mean", "sprd"}
+    mean = next(c for c in after if c.source_family == "mean")
+    spread = next(c for c in after if c.source_family == "sprd")
+    assert {v.name for v in mean.data_vars} == {"wind_u_10m", "temperature_2m"}
+    assert {v.name for v in spread.data_vars} == {
+        "wind_u_10m",
+        "temperature_2m_standard_deviation",
+        "derived_radar_reflectivity_1000m",
+    }
+    counts: dict[pd.Timestamp, list[int]] = {}
+    _fold_file_availability([(mean, True), (spread, False)], {}, counts)
+    assert list(counts.values()) == [[1, 2]]
 
 
 class _Coord:

@@ -129,7 +129,7 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
             ),
             Coordinate(
                 name="statistic",
-                encoding=Encoding(dtype="str", fill_value="", chunks=6, shards=None),
+                encoding=Encoding(dtype="object", fill_value="", chunks=6, shards=None),
                 attrs=CoordinateAttrs(
                     long_name="Ensemble statistic",
                     units="1",

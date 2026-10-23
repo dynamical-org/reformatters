@@ -46,23 +46,27 @@ class WeatherNextVirtualRegionJob(
 ):
     requires_scan_provenance: ClassVar[bool] = True
     manifest_init_split: ClassVar[int]
-    publication_cutoff: Timestamp
+    publication_holdback: ClassVar[Timedelta | None] = None
+    publication_cutoff: Timestamp = pd.Timestamp.max
 
     @model_validator(mode="before")
     @classmethod
     def _backfill_cutoff(cls, values: Any) -> Any:  # noqa: ANN401
-        if isinstance(values, dict) and values.get("reference_time") is not None:
+        if (
+            cls.publication_holdback is not None
+            and isinstance(values, dict)
+            and values.get("reference_time") is not None
+        ):
             values = dict(values)
             values.setdefault(
                 "publication_cutoff",
-                pd.Timestamp(values["reference_time"]) - PUBLICATION_HOLDBACK,
+                pd.Timestamp(values["reference_time"]) - cls.publication_holdback,
             )
         return values
 
     def commit_metadata(self) -> dict[str, str]:
         metadata = {"reformat_job_name": self.reformat_job_name}
         if self.publication_cutoff == pd.Timestamp.max:
-            assert not self.requires_scan_provenance
             metadata["publication_policy"] = "unrestricted"
         else:
             metadata["publication_cutoff"] = self.publication_cutoff.tz_localize(
@@ -100,6 +104,10 @@ class WeatherNextVirtualRegionJob(
 
     @abstractmethod
     def _listing_queries(self, coord: SOURCE_COORD) -> Sequence[ObjectListingQuery]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _refs_per_step(self, var: DATA_VAR) -> int:
         raise NotImplementedError
 
     def generate_source_file_coords(
@@ -198,6 +206,8 @@ class WeatherNextVirtualRegionJob(
         ]
     ]:
         if self.processing_mode == "update":
+            if self.publication_cutoff == pd.Timestamp.max:
+                self._assert_pending_refs_bounded(remaining)
             yield from super().process_virtual_refs(remaining)
             return
 
@@ -211,6 +221,20 @@ class WeatherNextVirtualRegionJob(
         for coords in coords_by_manifest.values():
             coords.sort(key=lambda coord: (coord.init_time, coord.lead_time))
             yield from super().process_virtual_refs(coords)
+
+    def _assert_pending_refs_bounded(self, remaining: Sequence[SOURCE_COORD]) -> None:
+        refs_per_var = {var.path: self._refs_per_step(var) for var in self.data_vars}
+        bound = self.manifest_init_split * sum(
+            self.template_ds[path].sizes["lead_time"] * count
+            for path, count in refs_per_var.items()
+        )
+        pending_refs = sum(
+            refs_per_var[var.path] for coord in remaining for var in coord.data_vars
+        )
+        assert pending_refs <= bound, (
+            f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
+            "backfill the missing range with backfill-kubernetes before updating"
+        )
 
     def file_refs(
         self,

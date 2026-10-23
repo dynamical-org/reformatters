@@ -4,9 +4,11 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 import pytest
+import rasterio
 import requests
 import xarray as xr
 
+from reformatters.common.download import is_not_found
 from reformatters.common.pydantic import replace
 from reformatters.nasa.imerg.analysis_early.region_job import (
     NasaImergAnalysisEarlyRegionJob,
@@ -151,6 +153,7 @@ def _patch_sessions(
     earthdata: MagicMock,
 ) -> None:
     monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("rasterio.open", MagicMock())
     monkeypatch.setattr("reformatters.common.download.DOWNLOAD_DIR", tmp_path)
     monkeypatch.setattr(
         "reformatters.nasa.imerg.region_job.get_pps_session", lambda: pps
@@ -161,7 +164,7 @@ def _patch_sessions(
 
 
 def test_download_file_falls_through_connection_error_to_archive(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # jsimpson resets the connection for a not-yet-published granule; the GES DISC
     # archive candidate must still be tried rather than the whole attempt aborting.
@@ -176,19 +179,25 @@ def test_download_file_falls_through_connection_error_to_archive(
     assert path.read_bytes().startswith(_HDF5_MAGIC)
     assert jsimpson.get.called
     assert gesdisc.get.called
+    assert not caplog.records
 
 
+@pytest.mark.parametrize("status", [200, 404])
 def test_download_file_rejects_non_hdf5_body(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, status: int
 ) -> None:
     # GES DISC returns an HTML/JSON error body (not a 404) for a not-yet-published
     # granule; a non-HDF5 body must never be handed to the reader as a granule.
     session = MagicMock()
     session.get.return_value = _fake_response(b"<html>not found</html>")
+    session.get.return_value.status_code = status
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
 
-    with pytest.raises(FileNotFoundError):
-        _job().download_file(_recent_coord())
+    coord = _recent_coord()
+    with pytest.raises(FileNotFoundError) as caught:
+        _job().download_file(coord)
+    assert coord.candidate_urls()[-1][1] in str(caught.value)
+    assert ("404 Not Found" if status == 404 else "Non-HDF5 body") in str(caught.value)
 
 
 def test_download_file_all_sources_connection_error_raises_file_not_found(
@@ -200,8 +209,54 @@ def test_download_file_all_sources_connection_error_raises_file_not_found(
     session.get.side_effect = requests.ConnectionError("Connection reset by peer")
     _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
 
-    with pytest.raises(FileNotFoundError):
+    coord = _recent_coord()
+    with pytest.raises(FileNotFoundError) as caught:
+        _job().download_file(coord)
+    assert coord.candidate_urls()[-1][1] in str(caught.value)
+    assert "Connection reset by peer" in str(caught.value)
+
+
+def test_download_file_falls_through_unreadable_hdf5_to_archive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    session = MagicMock()
+    session.get.return_value = _fake_response(_HDF5_MAGIC + b"granule-bytes")
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    reader = MagicMock()
+    reader.side_effect = [
+        MagicMock(),
+        rasterio.errors.RasterioIOError("bad object header version number"),
+        MagicMock(),
+        rasterio.errors.RasterioIOError("bad object header version number"),
+        MagicMock(),
+        MagicMock(),
+    ]
+    monkeypatch.setattr("rasterio.open", reader)
+
+    coord = _recent_coord()
+    path = _job().download_file(coord)
+
+    assert path.suffix == ".HDF5"
+    assert session.get.call_args.args[0] == coord.get_url("gesdisc")
+    assert reader.call_count == 6
+
+
+@pytest.mark.parametrize("fallback_status", [200, 404])
+def test_download_file_rejects_magic_valid_unreadable_hdf5(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fallback_status: int
+) -> None:
+    open_raster = rasterio.open
+    session = MagicMock()
+    unreadable = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    fallback = _fake_response(_HDF5_MAGIC + b"invalid-hdf5")
+    fallback.status_code = fallback_status
+    session.get.side_effect = [unreadable, fallback, fallback, fallback] * 6
+    _patch_sessions(monkeypatch, tmp_path, pps=session, earthdata=session)
+    monkeypatch.setattr("rasterio.open", open_raster)
+
+    with pytest.raises(ValueError, match="Unreadable HDF5 body") as caught:
         _job().download_file(_recent_coord())
+    assert not is_not_found(caught.value)
 
 
 def test_read_data_masks_exact_sentinel_and_scales(

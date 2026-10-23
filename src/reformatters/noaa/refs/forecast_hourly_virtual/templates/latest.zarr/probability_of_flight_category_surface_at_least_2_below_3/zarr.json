@@ -1,0 +1,55 @@
+{
+  "shape": [
+    1,
+    60,
+    1059,
+    1799
+  ],
+  "data_type": "float64",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1059,
+        1799
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "gribberish",
+      "configuration": {
+        "var": "FLGHT",
+        "adjust_longitude_range": true,
+        "north_up": true
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Probability of flight category (surface) at least 2 and below 3",
+    "short_name": "probability_of_flight_category_surface_at_least_2_below_3",
+    "units": "percent",
+    "comment": "Probability of flight category (surface) at least 2 and below 3. Flight categories are 1 = LIFR (low instrument flight rules), 2 = IFR (instrument flight rules), 3 = MVFR (marginal visual flight rules), and 4 = VFR (visual flight rules). Lower categories indicate greater restriction.",
+    "step_type": "instant",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

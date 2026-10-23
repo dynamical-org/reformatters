@@ -15,7 +15,7 @@ class GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig(
     append_dim_start: Timestamp = pd.Timestamp("2022-01-01T00:00")
     dataset_id_value: ClassVar[str] = "google-weathernext2-forecast-historical-virtual"
     dataset_name_value: ClassVar[str] = (
-        "Google WeatherNext 2 historical forecast, virtual"
+        "Google WeatherNext 2 forecast, historical, virtual"
     )
     time_domain_end: ClassVar[str] = "2024-12-31 18:00:00"
     init_time_statistics_max: ClassVar[str] = "2024-12-31T18:00:00"

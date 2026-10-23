@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,6 +12,7 @@ import zarr.storage
 from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common import validation
+from reformatters.common.download import RateLimiter
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.ucsb_chc.chirps import region_job as chirps_region_job
 from reformatters.ucsb_chc.chirps.analysis_final import (
@@ -138,6 +140,7 @@ def _patch_source(
     dataset: UcsbChcChirpsAnalysisMaterializedDataset,
     available: Callable[[pd.Timestamp], bool],
     requested_urls: list[str],
+    failed_days: set[pd.Timestamp] | None = None,
 ) -> None:
     """Serve a small constant grid for available days and report all others missing."""
     original_get_template = type(dataset.template_config).get_template
@@ -151,14 +154,38 @@ def _patch_source(
     monkeypatch.setattr(chirps_region_job, "GRID_LAT_SIZE", _MOCK_GRID_SHAPE[0])
     monkeypatch.setattr(chirps_region_job, "GRID_LON_SIZE", _MOCK_GRID_SHAPE[1])
 
-    def fake_download(url: str, dataset_id: str) -> Path:
+    def fake_download(url: str, dataset_id: str, *, rate_limiter: RateLimiter) -> Path:
         requested_urls.append(url)
         day = pd.Timestamp(url.removesuffix(".tif")[-10:].replace(".", "-"))
+        if failed_days is not None and day in failed_days:
+            raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
         if not available(day):
             raise FileNotFoundError(url)
         path = tmp_path / f"{day:%Y%m%d}.tif"
         path.touch()
         return path
+
+    def fake_listing(url: str, *, rate_limiter: RateLimiter) -> httpx.Response:
+        if not url.rstrip("/").rsplit("/", 1)[-1].isdigit():
+            return httpx.Response(
+                200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
+            )
+        year = int(url.rstrip("/").rsplit("/", 1)[-1])
+        product = dataset.region_job_class.model_fields["product"].default
+        links = [
+            chirps_region_job.UcsbChcChirpsAnalysisSourceFileCoord(
+                product=product, time=day
+            ).get_url()
+            for day in pd.date_range(f"{year}-01-01", f"{year}-12-31")
+            if available(day)
+        ]
+        return httpx.Response(
+            200,
+            text='<a href="../">Parent</a>'
+            + "".join(f'<a href="{link}">file</a>' for link in links),
+        )
+
+    monkeypatch.setattr(chirps_region_job, "httpx_get", fake_listing)
 
     values = np.full(_MOCK_GRID_SHAPE, 24.0, dtype=np.float32)
     values[0, 0] = np.float32(SOURCE_FILL_VALUE)
@@ -168,7 +195,7 @@ def _patch_source(
     reader.__exit__ = lambda self, *args: None
 
     monkeypatch.setattr(
-        "reformatters.ucsb_chc.chirps.region_job.http_download_to_disk", fake_download
+        "reformatters.ucsb_chc.chirps.region_job.httpx_download_to_disk", fake_download
     )
     monkeypatch.setattr("rasterio.open", lambda _path: reader)
 
@@ -195,11 +222,9 @@ def _icechunk_dataset_with_three_days(
     failed_days: set[pd.Timestamp] = set()
 
     def available(day: pd.Timestamp) -> bool:
-        if day in failed_days:
-            raise RuntimeError(f"failed to download {day:%Y-%m-%d}")
         return day <= pd.Timestamp("2025-01-03")
 
-    _patch_source(monkeypatch, tmp_path, dataset, available, [])
+    _patch_source(monkeypatch, tmp_path, dataset, available, [], failed_days)
     dataset.backfill_local(append_dim_end=pd.Timestamp("2025-01-04"))
     return dataset, failed_days
 
@@ -224,8 +249,7 @@ def test_update_trims_to_last_day_with_data(
         _open_store(dataset)["time"], pd.date_range("2025-01-01", "2025-01-02")
     )
 
-    # The update window runs from the store's newest day through now, so it asks for
-    # 2025-01-06 and 2025-01-07 which the source has not published.
+    # The update window includes days the source has not published.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -239,17 +263,13 @@ def test_update_trims_to_last_day_with_data(
     _assert_constant_land_values(updated_ds)
 
     requested_days = sorted(url.removesuffix(".tif")[-10:] for url in requested_urls)
-    # Every day from the store's newest through now is requested outright; nothing
-    # lists what the source holds.
-    assert set(requested_days) >= {
+    assert set(requested_days) == {
+        "2025.01.01",
         "2025.01.02",
         "2025.01.03",
         "2025.01.04",
-        "2025.01.05",
-        "2025.01.06",
-        "2025.01.07",
     }
-    assert requested_days[-1] == "2025.01.07"
+    assert requested_days[-1] == "2025.01.04"
     assert all("/prelim/sat/" in url for url in requested_urls)
 
 

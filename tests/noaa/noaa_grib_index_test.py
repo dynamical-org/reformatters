@@ -16,6 +16,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
 from reformatters.noaa.noaa_grib_index import (
     grib_index_window_str,
     grib_message_byte_ranges_from_index,
+    parse_grib_index_lines,
 )
 
 IDX_FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -422,3 +423,27 @@ class TestLeadTimeStr:
         )
         with pytest.raises(ValueError, match="Unhandled grib lead/accumulation hours"):
             grib_index_window_str(var_with_avg, lead_hours=5)
+
+
+@pytest.mark.parametrize(
+    ("lead_hours", "expected"),
+    [(0.25, "15 min fcst"), (1.25, "75 min fcst"), (2, "2 hour fcst")],
+)
+def test_fractional_lead_time_labels(lead_hours: float, expected: str) -> None:
+    cfg = NoaaHrrrForecast48HourTemplateConfig()
+    var = next(v for v in cfg.data_vars if v.name == "temperature_2m")
+    assert grib_index_window_str(var, lead_hours) == expected
+
+
+def test_trailing_selectors_preserve_aerosol_and_process_identity(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "source.idx"
+    path.write_text(
+        "1:0:d=2026091500:MASSDEN:8 m above ground:2 hour fcst:aerosol=Dust dry:aerosol_size <2.5e-06:\n2:100:d=2026091500:HGT:surface:2 hour fcst:process=193:\n3:200:d=2026091500:HGT:surface:2 hour fcst:\n"
+    )
+    assert [record[4] for record in parse_grib_index_lines(path)] == [
+        ("aerosol=Dust dry", "aerosol_size <2.5e-06"),
+        ("process=193",),
+        (),
+    ]

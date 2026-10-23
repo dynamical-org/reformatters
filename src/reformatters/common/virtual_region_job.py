@@ -335,7 +335,14 @@ class VirtualRegionJob(
         # Skip a file we can't build refs for rather than sink the job; AssertionError
         # is our own invariant, so let it propagate.
         try:
-            return self.file_refs(coord, file_size)
+            refs = self.file_refs(coord, file_size)
+            if refs and not self._refs_cover_probe_chunk(coord, refs):
+                log.error(
+                    f"Skipping {coord.get_url()}: refs do not cover representative "
+                    "chunk used to detect ingestion"
+                )
+                return []
+            return refs
         except AssertionError:
             raise
         except Exception:
@@ -462,17 +469,22 @@ class VirtualRegionJob(
         """A file's refs must cover the chunk filter_already_present probes
         (representative_var at the file's representative_probe_loc)."""
         assert file_refs, f"empty refs for source file {coord}"
+        assert self._refs_cover_probe_chunk(coord, file_refs), (
+            f"refs for {coord} do not cover representative chunk; "
+            "the filter would re-ingest this file forever. Override "
+            "representative_var or representative_probe_loc to name a cell "
+            "the file actually contains."
+        )
+
+    def _refs_cover_probe_chunk(
+        self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
+    ) -> bool:
         rep = self.representative_var(coord)
         probe_loc = self.representative_probe_loc(coord, rep)
         probe = self.chunk_key(probe_loc, rep)
-        assert any(
+        return any(
             ref.data_var.path == rep.path and self.chunk_key(ref.out_loc, rep) == probe
             for ref in file_refs
-        ), (
-            f"refs for {coord} do not cover representative chunk "
-            f"({rep.name}, {dict(probe_loc)}); the filter would re-ingest "
-            "this file forever. Override representative_var or "
-            "representative_probe_loc to name a cell the file actually contains."
         )
 
     def _emit_refs(

@@ -1,0 +1,48 @@
+[
+  {
+    "name": "categorical_rain_surface",
+    "filename": "rain.grib2",
+    "source": "s3://noaa-rrfs-ops-pds/refs.20261008/00/ensprod/refs.t00z.mean.f24.conus.grib2",
+    "offset": 65317352,
+    "length": 134314,
+    "sha256": "860567377e0eca2c1b107934a9c6c2001eb2c571947ac87a3f7f59a758b830c3",
+    "unique_values": [
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "name": "categorical_freezing_rain_surface",
+    "filename": "freezing_rain.grib2",
+    "source": "s3://noaa-rrfs-ops-pds/refs.20261008/00/ensprod/refs.t00z.mean.f24.conus.grib2",
+    "offset": 65451666,
+    "length": 218,
+    "sha256": "6fa8b7f93aeea6d673f2fbdee34c7dffe9033c1ef80b07fde92c29a1b0ae361d",
+    "unique_values": [
+      0.0
+    ]
+  },
+  {
+    "name": "categorical_ice_pellets_surface",
+    "filename": "ice_pellets.grib2",
+    "source": "s3://noaa-rrfs-ops-pds/refs.20261008/00/ensprod/refs.t00z.mean.f24.conus.grib2",
+    "offset": 65451884,
+    "length": 218,
+    "sha256": "ed5992f37ec37166a0d6d5dc3b017de9a364246f0ea73884f17a07e07ca84845",
+    "unique_values": [
+      0.0
+    ]
+  },
+  {
+    "name": "categorical_snow_surface",
+    "filename": "snow.grib2",
+    "source": "s3://noaa-rrfs-ops-pds/refs.20261008/00/ensprod/refs.t00z.mean.f24.conus.grib2",
+    "offset": 65452102,
+    "length": 348,
+    "sha256": "866c0be062f2cf450e9167ca1fd3d97cb2cf3e037a84b3ed452f2277259f2894",
+    "unique_values": [
+      0.0,
+      1.0
+    ]
+  }
+]

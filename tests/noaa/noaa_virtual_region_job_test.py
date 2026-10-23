@@ -170,7 +170,7 @@ def test_file_refs_one_message_fills_two_variables_sharing_a_window(
 def test_file_refs_duplicate_messages_keep_the_first_and_still_fill_every_variable(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # A source may publish the same field twice, byte-distinct but identical in value.
+    # A source may publish the same field twice, with distinct byte ranges.
     # Each variable takes the first message; the two variables that legitimately share
     # this window must still both be filled.
     fake_index(

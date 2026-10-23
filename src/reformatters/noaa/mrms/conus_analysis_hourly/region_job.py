@@ -73,7 +73,12 @@ class NoaaMrmsSourceFileCoord(SourceFileCoord):
                 return f"https://mtarchive.geol.iastate.edu/{year}/{month}/{day}/mrms/ncep/{self.product}/{filename}"
             case "ncep":
                 filename = f"MRMS_{self.product}_{self.level}_{time_str}.grib2.gz"
-                return f"https://mrms.ncep.noaa.gov/2D/{self.product}/{filename}"
+                directory = (
+                    "FLASH/QPE_FFGMAX"
+                    if self.product == "FLASH_QPE_FFGMAX"
+                    else self.product
+                )
+                return f"https://mrms.ncep.noaa.gov/2D/{directory}/{filename}"
             case _ as unreachable:
                 assert_never(unreachable)
 

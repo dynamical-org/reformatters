@@ -1,0 +1,41 @@
+1:0:d=2026091512:REFC:entire atmosphere (considered as a single layer):anl:ENS=+1
+2:742975:d=2026091512:VIS:surface:anl:ENS=+1
+3:3694297:d=2026091512:GUST:surface:anl:ENS=+1
+4:4967749:d=2026091512:RETOP:entire atmosphere (considered as a single layer):anl:ENS=+1
+5:5146613:d=2026091512:MSLET:mean sea level:anl:ENS=+1
+6:7058319:d=2026091512:PRES:surface:anl:ENS=+1
+7:9188829:d=2026091512:HGT:surface:anl:ENS=+1
+8:10895295:d=2026091512:TMP:2 m above ground:anl:ENS=+1
+9:12652528:d=2026091512:DPT:2 m above ground:anl:ENS=+1
+10:13705450:d=2026091512:RH:2 m above ground:anl:ENS=+1
+11:15367532:d=2026091512:UGRD:10 m above ground:anl:ENS=+1
+12:17306437:d=2026091512:VGRD:10 m above ground:anl:ENS=+1
+13:19231843:d=2026091512:CPOFP:surface:anl:ENS=+1
+14:19322929:d=2026091512:CSNOW:surface:anl:ENS=+1
+15:19323809:d=2026091512:CICEP:surface:anl:ENS=+1
+16:19324340:d=2026091512:CFRZR:surface:anl:ENS=+1
+17:19324651:d=2026091512:CRAIN:surface:anl:ENS=+1
+18:19375284:d=2026091512:CAPE:surface:anl:ENS=+1
+19:20714049:d=2026091512:CIN:surface:anl:ENS=+1
+20:21454787:d=2026091512:PWAT:entire atmosphere (considered as a single layer):anl:ENS=+1
+21:22605913:d=2026091512:AOTK:entire atmosphere (considered as a single layer):anl:ENS=+1
+22:22606133:d=2026091512:TCDC:boundary layer cloud layer:anl:ENS=+1
+23:22989947:d=2026091512:LCDC:low cloud layer:anl:ENS=+1
+24:23463485:d=2026091512:MCDC:middle cloud layer:anl:ENS=+1
+25:23661906:d=2026091512:HCDC:high cloud layer:anl:ENS=+1
+26:23806834:d=2026091512:TCDC:entire atmosphere (considered as a single layer):anl:ENS=+1
+27:24369970:d=2026091512:CEIL:cloud ceiling:anl:ENS=+1
+28:25257807:d=2026091512:DSWRF:surface:anl:ENS=+1
+29:25945061:d=2026091512:var discipline=2 master_table=2 parmcat=4 parm=26:surface:0-0 day ave fcst:ENS=+1
+30:25945305:d=2026091512:HLCY:3000-0 m above ground:anl:ENS=+1
+31:27291317:d=2026091512:HLCY:1000-0 m above ground:anl:ENS=+1
+32:28608249:d=2026091512:VUCSH:0-1000 m above ground:anl:ENS=+1
+33:29749035:d=2026091512:VVCSH:0-1000 m above ground:anl:ENS=+1
+34:30877909:d=2026091512:VUCSH:0-6000 m above ground:anl:ENS=+1
+35:32056697:d=2026091512:VVCSH:0-6000 m above ground:anl:ENS=+1
+36:33235010:d=2026091512:UGRD:80 m above ground:anl:ENS=+1
+37:35181567:d=2026091512:VGRD:80 m above ground:anl:ENS=+1
+38:37133882:d=2026091512:UGRD:160 m above ground:anl:ENS=+1
+39:39056329:d=2026091512:VGRD:160 m above ground:anl:ENS=+1
+40:40997516:d=2026091512:UGRD:320 m above ground:anl:ENS=+1
+41:42882147:d=2026091512:VGRD:320 m above ground:anl:ENS=+1
