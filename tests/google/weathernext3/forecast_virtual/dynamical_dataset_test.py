@@ -114,6 +114,10 @@ def test_retry_after_next_fire_keeps_original_reference_time(
         assert job.reference_time == fire
         assert job.launch_scope == expected_job.launch_scope
         assert job.commit_metadata() == expected_job.commit_metadata()
+        assert (
+            job.commit_metadata()["reference_time"]
+            == fire.tz_localize("UTC").isoformat()
+        )
     assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=58)
 
 

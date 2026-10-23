@@ -391,6 +391,12 @@ def _scan_reference_time(
     snapshot_metadata: Mapping[str, Any] | None,
 ) -> pd.Timestamp | None:
     metadata = snapshot_metadata or {}
+    if (
+        reference_time is None
+        and publication_cutoff is None
+        and metadata.get("publication_policy") == "unrestricted"
+    ):
+        return None
     if reference_time is None:
         if publication_cutoff is None and "publication_cutoff" in metadata:
             publication_cutoff = pd.Timestamp(metadata["publication_cutoff"])

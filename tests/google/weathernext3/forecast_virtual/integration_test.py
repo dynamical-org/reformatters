@@ -213,13 +213,23 @@ def test_source_audit_catches_future_source_under_eligible_target(
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
 @pytest.mark.parametrize("route", ["direct", "availability"])
+@pytest.mark.parametrize("unrestricted", [False, True])
 def test_scan_defaults_probe_every_statistic_and_count_each_lead(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     route: str,
+    unrestricted: bool,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     job = job_for(dataset, "2026-01-01T03:00")
+    if unrestricted:
+        # A recorded reference time must not be replayed as a holdback cutoff.
+        job = job.model_copy(
+            update={
+                "publication_cutoff": pd.Timestamp.max,
+                "reference_time": pd.Timestamp("2026-01-01T01:30"),
+            }
+        )
     repo = icechunk.Repository.create(icechunk.in_memory_storage())
     session = repo.writable_session("main")
     template_utils.write_metadata(
@@ -275,9 +285,13 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
         monkeypatch.setattr(availability, "open_icechunk_repository", lambda url: repo)
         counts = availability.run_manifest_scan(ctx)
         assert (tmp_path / ctx.unavailable_timestamps_file).exists()
-    expected = {start: (1, 3)}
-    if dataset.template_config.horizon_hours == 48:
-        expected[start + pd.Timedelta("1h")] = (0, 2)
+    horizon = dataset.template_config.horizon_hours
+    expected = {start: (1, horizon if unrestricted else 3)}
+    second = start + dataset.template_config.append_dim_frequency
+    if unrestricted:
+        expected[second] = (0, horizon)
+    elif horizon == 48:
+        expected[second] = (0, 2)
     assert counts == expected
 
 

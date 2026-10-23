@@ -68,6 +68,10 @@ class WeatherNextVirtualRegionJob(
         metadata = {"reformat_job_name": self.reformat_job_name}
         if self.publication_cutoff == pd.Timestamp.max:
             metadata["publication_policy"] = "unrestricted"
+            if self.reference_time is not None:
+                metadata["reference_time"] = self.reference_time.tz_localize(
+                    "UTC"
+                ).isoformat()
         else:
             metadata["publication_cutoff"] = self.publication_cutoff.tz_localize(
                 "UTC"

@@ -353,9 +353,13 @@ def test_unrestricted_update_window(
     assert metadata.keys() == {
         "reformat_job_name",
         "publication_policy",
+        "reference_time",
         "launch_scope",
     }
     assert metadata["publication_policy"] == "unrestricted"
+    assert (
+        metadata["reference_time"] == pd.Timestamp(fire).tz_localize("UTC").isoformat()
+    )
     assert job.launch_scope is not None
     assert job.launch_scope.append_dim_end == newest + config.append_dim_frequency
 
