@@ -42,7 +42,7 @@ _FRESHNESS_DEADLINES = [
     ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "2026-09-23 00:00", "4D"),
     ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "7h55m"),
     ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "5h42m"),
-    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "8h20m"),
+    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "8h"),
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "4h02m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "5h"),
     ("google-weathernext2-forecast-operational-virtual", "2026-09-26 12:00", "12h"),
@@ -135,9 +135,11 @@ def test_current_data_cases_cover_registered_datasets() -> None:
         ("ecmwf-aifs-single-forecast-virtual", "5h42m"),
         ("ecmwf-aifs-single-forecast-virtual", "7h35m"),
         ("ecmwf-aifs-single-forecast-virtual", "8h38m"),
+        ("ecmwf-aifs-ens-forecast", "8h"),
+        ("ecmwf-aifs-ens-forecast", "8h08m"),
     ],
 )
-def test_aifs_single_validation_requires_the_current_init(
+def test_aifs_validation_requires_the_current_init(
     dataset_id: str,
     validation_delay: str,
     hour: int,

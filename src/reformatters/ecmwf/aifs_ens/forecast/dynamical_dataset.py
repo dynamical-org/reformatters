@@ -28,7 +28,7 @@ class EcmwfAifsEnsForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # The control and perturbed GRIB/index pairs finish near init+7h40m.
-            schedule="50 1,7,13,19 * * *",
+            schedule="0 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -45,6 +45,6 @@ class EcmwfAifsEnsForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=20)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=8)),
             validation.CheckRecentNans(append_dim_window=3),
         )
