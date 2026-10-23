@@ -40,9 +40,9 @@ _FRESHNESS_DEADLINES = [
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "4D"),
     ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "2026-09-23 00:00", "4D"),
-    ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "6h23m"),
-    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "6h11m"),
-    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "7h30m"),
+    ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "7h55m"),
+    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "5h42m"),
+    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "8h"),
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "4h02m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "5h"),
     ("google-weathernext2-forecast-operational-virtual", "2026-09-26 12:00", "12h"),
@@ -127,6 +127,32 @@ def test_current_data_cases_cover_registered_datasets() -> None:
     assert {case[0] for case in _FRESHNESS_DEADLINES} == registered
 
 
+@pytest.mark.parametrize("hour", [0, 6, 12, 18])
+@pytest.mark.parametrize(
+    ("dataset_id", "validation_delay"),
+    [
+        ("ecmwf-aifs-single-forecast", "8h15m"),
+        ("ecmwf-aifs-single-forecast-virtual", "5h42m"),
+        ("ecmwf-aifs-single-forecast-virtual", "7h35m"),
+        ("ecmwf-aifs-single-forecast-virtual", "8h38m"),
+        ("ecmwf-aifs-ens-forecast", "8h"),
+        ("ecmwf-aifs-ens-forecast", "8h08m"),
+    ],
+)
+def test_aifs_validation_requires_the_current_init(
+    dataset_id: str,
+    validation_delay: str,
+    hour: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init = pd.Timestamp("2026-10-21") + timedelta(hours=hour)
+    now = init + pd.Timedelta(validation_delay)
+    assert not _check_at_time(
+        dataset_id, now, init - timedelta(hours=6), monkeypatch
+    ).passed
+    assert _check_at_time(dataset_id, now, init, monkeypatch).passed
+
+
 @pytest.mark.parametrize(
     ("dataset_id", "now", "latest"),
     [
@@ -144,7 +170,7 @@ def test_current_data_allows_source_and_processing_time(
     ).passed
 
 
-def test_virtual_polling_starts_before_freshness_deadline() -> None:
+def test_virtual_polling_starts_by_freshness_deadline() -> None:
     init = pd.Timestamp("2026-09-27")
     for dataset in DYNAMICAL_DATASETS:
         if not issubclass(dataset.region_job_class, VirtualRegionJob):
@@ -157,7 +183,7 @@ def test_virtual_polling_starts_before_freshness_deadline() -> None:
                 for job in dataset.operational_kubernetes_resources("test-image")
                 if isinstance(job, ReformatCronJob)
             )
-            assert update.next_fire_time(init) < init + check.max_delay, (
+            assert update.next_fire_time(init) <= init + check.max_delay, (
                 dataset.dataset_id
             )
 

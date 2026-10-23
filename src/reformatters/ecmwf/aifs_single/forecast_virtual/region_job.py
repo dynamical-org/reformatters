@@ -108,9 +108,8 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         EcmwfAifsSingleVirtualDataVar, EcmwfAifsSingleForecastVirtualSourceFileCoord
     ]
 ):
-    # Files publish ~init+5.5-6h, so at fire time (init+5h20m) the newest init plus
-    # the two prior cycles sit 5h20m/11h20m/17h20m back; 20h covers all three so a
-    # couple of missed runs still self-heal.
+    # At the init+5h42m fire, 20h covers the newest init and two prior cycles
+    # so a couple of missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("20h")
 
     def generate_source_file_coords(

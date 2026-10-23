@@ -113,7 +113,7 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T11:20")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-03-01T11:42")),
     )
     orig_update_jobs = (
         EcmwfAifsSingleForecastVirtualRegionJob.operational_update_jobs.__func__  # type: ignore[attr-defined]
@@ -151,7 +151,7 @@ def test_backfill_local_and_operational_update(
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False
     )
-    # The update window (6h before the 11:20 fire) ingests the 06z init.
+    # The update window (6h before the 11:42 fire) ingests the 06z init.
     assert updated.init_time.values[-1] == np.datetime64("2025-03-01T06:00")
     new_cell = updated.sel(
         latitude=_LAT,
@@ -204,19 +204,32 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
         for v in validators
         if isinstance(v, validation.CheckVirtualManifestCompleteness)
     ]
-    # The source publishes all 61 leads in a ~2 minute burst, so an ingested init is
-    # never half-published and the default whole-position threshold holds.
+    # A completed polling run must contain every expected source file.
     assert completeness.min_present_fraction == (1.0,)
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_due_at_update_fire(
+def test_current_data_validator_is_due_at_fire(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=6, minutes=11)
+    assert current_data.max_delay == timedelta(hours=5, minutes=42)
+
+
+@pytest.mark.parametrize("hour", [0, 6, 12, 18])
+def test_polling_covers_late_delivery_without_reaching_next_fire(
+    dataset: EcmwfAifsSingleForecastVirtualDataset, hour: int
+) -> None:
+    init = pd.Timestamp("2026-10-20") + timedelta(hours=hour)
+    fire = init + timedelta(hours=5, minutes=42)
+    (cron,) = dataset.operational_kubernetes_resources("test-image-tag")
+    cutoff = dataset._virtual_poll_deadline(fire + timedelta(minutes=1))
+
+    assert cutoff == init + timedelta(hours=8, minutes=38)
+    assert cron.previous_fire_time(fire) == fire
+    assert cutoff + dataset.virtual_poll_deadline_grace < cron.next_fire_time(fire)
 
 
 def _resolved_split_size(
