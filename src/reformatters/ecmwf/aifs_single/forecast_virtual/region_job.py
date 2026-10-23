@@ -108,7 +108,7 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         EcmwfAifsSingleVirtualDataVar, EcmwfAifsSingleForecastVirtualSourceFileCoord
     ]
 ):
-    # At the init+5h20m fire, 20h covers the newest init and two prior cycles
+    # At the init+5h42m fire, 20h covers the newest init and two prior cycles
     # so a couple of missed runs still self-heal.
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("20h")
 

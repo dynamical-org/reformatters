@@ -28,7 +28,7 @@ class EcmwfAifsSingleForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # Source GRIB/index pairs normally finish near init+7h35m.
-            schedule="45 1,7,13,19 * * *",
+            schedule="15 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=10),  # runs take ~1 min
             image=image_tag,
             dataset_id=self.dataset_id,
