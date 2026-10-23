@@ -33,6 +33,7 @@ from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS, j
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.usefixtures("delayed_publication")
 def test_reference_time_survives_clock_boundary_and_retry(
     dataset: GoogleWeathernext3ForecastVirtualDataset, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -286,7 +287,7 @@ def test_wn3_scan_requires_provenance(
 ) -> None:
     assert dataset.region_job_class.requires_scan_provenance is True
     repo = icechunk.Repository.create(icechunk.in_memory_storage())
-    with pytest.raises(AssertionError, match="require a recorded cutoff"):
+    with pytest.raises(AssertionError, match="require a recorded publication policy"):
         scan_manifest(
             dataset,
             repo.readonly_session("main").store,
@@ -297,6 +298,7 @@ def test_wn3_scan_requires_provenance(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.usefixtures("delayed_publication")
 def test_update_metadata_records_reference_and_launch_scope(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:

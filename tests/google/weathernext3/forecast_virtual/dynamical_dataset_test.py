@@ -93,12 +93,10 @@ def test_inline_validation_rebuilds_wn3_provenance_without_moving_tip(
     assert isinstance(checked_job, GoogleWeathernext3ForecastVirtualRegionJob)
     validation_fire = fire + pd.Timedelta(hours=validation_minutes_after_fire // 60)
     assert checked_job.reference_time == validation_fire
-    assert checked_job.publication_cutoff == validation_fire - pd.Timedelta(hours=1)
+    assert checked_job.publication_cutoff == pd.Timestamp.max
     assert checked_job.launch_scope is not None
     if validation_fire == fire:
         assert checked_job.commit_metadata() == write_jobs[0].commit_metadata()
-    else:
-        assert checked_job.commit_metadata() != write_jobs[0].commit_metadata()
     assert snapshot_ids == [repo.lookup_branch("main")]
     assert (
         repo.lookup_snapshot(snapshot_ids[0]).metadata

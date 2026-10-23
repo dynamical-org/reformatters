@@ -10,11 +10,7 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue, LaunchScope, RegionJob
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
-from reformatters.google.weathernext_virtual.holdback import (
-    PUBLICATION_HOLDBACK,
-    is_publishable,
-    utc_now,
-)
+from reformatters.google.weathernext_virtual.holdback import is_publishable, utc_now
 from reformatters.google.weathernext_virtual.listing import (
     PROXY_LOCATION_PREFIX,
     ObjectListingQuery,
@@ -27,6 +23,9 @@ from reformatters.google.weathernext_virtual.region_job import (
 
 from .source import source_horizon, source_store_key, source_store_url
 from .template_config import STATISTICS, GoogleWeathernext3DataVar
+
+# Source inits start landing about 6h20m after init time.
+OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("6h")
 
 
 class GoogleWeathernext3ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoord):
@@ -56,7 +55,6 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
 ):
     init_frequency: ClassVar[Timedelta]
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
-    publication_holdback: ClassVar[Timedelta | None] = PUBLICATION_HOLDBACK
 
     @classmethod
     def operational_update_jobs(
@@ -78,8 +76,16 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         xr.DataTree,
     ]:
         reference_time = job_fire_time or utc_now()
-        cutoff = reference_time - PUBLICATION_HOLDBACK
-        newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(cls.init_frequency)
+        if cls.publication_holdback is None:
+            cutoff = pd.Timestamp.max
+            newest_init = (reference_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+                cls.init_frequency
+            )
+        else:
+            cutoff = reference_time - cls.publication_holdback
+            newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
+                cls.init_frequency
+            )
         append_dim_end = newest_init + cls.init_frequency
         template = get_template_fn(append_dim_end)
         inits = template.to_dataset().get_index(append_dim)

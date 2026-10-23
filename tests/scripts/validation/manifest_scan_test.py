@@ -833,7 +833,7 @@ def test_weathernext_scan_rejects_missing_provenance() -> None:
         region_job_class=manifest_scan.WeatherNextVirtualRegionJob,
         template_config=SimpleNamespace(all_dims=()),
     )
-    with pytest.raises(AssertionError, match="require a recorded cutoff"):
+    with pytest.raises(AssertionError, match="require a recorded publication policy"):
         manifest_scan.scan_manifest(dataset, None, start=None, end=None)  # ty: ignore[invalid-argument-type]
 
 
@@ -889,28 +889,33 @@ def test_scan_reconstructs_filtered_repair(
     assert scan.call_args.kwargs["filter_contains"] == scope.filter_contains
 
 
-@pytest.mark.parametrize(
-    "metadata",
-    [
-        {"launch_scope": "{}"},
-        {"publication_policy": "unrestricted"},
-        {"publication_cutoff": pd.Timestamp.max.tz_localize("UTC").isoformat()},
-    ],
-)
-def test_strict_weathernext_scan_rejects_incomplete_provenance(
-    metadata: dict[str, str],
-) -> None:
+def test_strict_weathernext_scan_rejects_incomplete_provenance() -> None:
     dataset = SimpleNamespace(
         region_job_class=manifest_scan.WeatherNextVirtualRegionJob
     )
-    with pytest.raises(AssertionError, match="require a recorded cutoff"):
+    with pytest.raises(AssertionError, match="require a recorded publication policy"):
         manifest_scan.scan_manifest(
             dataset,  # ty: ignore[invalid-argument-type]
             None,  # ty: ignore[invalid-argument-type]
             start=None,
             end=None,
-            snapshot_metadata=metadata,
+            snapshot_metadata={"launch_scope": "{}"},
         )
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"publication_policy": "unrestricted"},
+        {"publication_cutoff": pd.Timestamp.max.tz_localize("UTC").isoformat()},
+    ],
+)
+def test_strict_weathernext_scan_accepts_recorded_unrestricted_policy(
+    metadata: dict[str, str],
+) -> None:
+    manifest_scan._validate_scan_provenance(
+        manifest_scan.WeatherNextVirtualRegionJob, metadata, reference_time=None
+    )
 
 
 def test_filtered_repair_skips_unselected_checkpoint_windows(

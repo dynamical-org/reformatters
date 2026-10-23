@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import ClassVar
 
+import pandas as pd
+
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
@@ -46,13 +48,26 @@ class GoogleWeathernext3ForecastVirtualDataset(
             ),
         ]
 
+    def _min_present_fraction(self) -> tuple[float, ...]:
+        if self.region_job_class.publication_holdback is not None:
+            return (0.05, 1.0)
+        # Hourly inits keep landing while the next one starts, and a synoptic init can
+        # finish after the off-synoptic init after it, so two positions may be partial.
+        if self.region_job_class.init_frequency == pd.Timedelta("1h"):
+            return (0.0, 0.0, 1.0)
+        return (0.0, 1.0)
+
     def validators(self) -> Sequence[validation.Validator]:
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=12)),
             validation.CheckVirtualManifestCompleteness(
-                min_present_fraction=(0.05, 1.0)
+                min_present_fraction=self._min_present_fraction()
             ),
-            CheckNoRefsInsideHoldback(),
+            *(
+                [CheckNoRefsInsideHoldback()]
+                if self.region_job_class.publication_holdback is not None
+                else []
+            ),
             validation.CheckVirtualDecodeHealth(
                 positions="all",
                 max_positions=2,

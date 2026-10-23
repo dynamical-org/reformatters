@@ -468,26 +468,20 @@ def _validate_scan_provenance(
         recorded_cutoff is not None
         and pd.Timestamp(recorded_cutoff).tz_localize(None) == pd.Timestamp.max
     )
-    strict = region_job_class.requires_scan_provenance
-    if strict or (
-        any(
-            key in metadata
-            for key in (
-                "publication_cutoff",
-                "reference_time",
-                "launch_scope",
-                "publication_policy",
-                "reformat_job_name",
-            )
+    if unrestricted:
+        return
+    if region_job_class.requires_scan_provenance or any(
+        key in metadata
+        for key in (
+            "publication_cutoff",
+            "reference_time",
+            "launch_scope",
+            "publication_policy",
+            "reformat_job_name",
         )
-        and not unrestricted
     ):
         assert reference_time is not None, (
-            "WeatherNext scans require a recorded cutoff or explicit reference_time"
-        )
-    if unrestricted:
-        assert not strict, (
-            "Unrestricted publication is only supported for legacy WeatherNext"
+            "WeatherNext scans require a recorded publication policy or explicit reference_time"
         )
 
 
@@ -741,6 +735,11 @@ def _scan_window(
             filter_contains=filter_contains,
         ),
     )
+    if reference_time is not None and issubclass(
+        dataset.region_job_class, WeatherNextVirtualRegionJob
+    ):
+        cutoff = reference_time - PUBLICATION_HOLDBACK
+        jobs = [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
     log.info(f"Probing manifest across {len(jobs)} region jobs (no decode)")
     lead_limits = expected_lead_limits(store)
     group = zarr.open_group(store, mode="r")

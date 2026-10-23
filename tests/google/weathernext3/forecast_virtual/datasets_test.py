@@ -242,6 +242,7 @@ def test_listing_admission_and_restart(
 @pytest.mark.parametrize(
     "fire", ["2026-02-01T00:10", "2026-02-01T05:10", "2026-02-04T19:10"]
 )
+@pytest.mark.usefixtures("delayed_publication")
 def test_update_window(
     dataset: GoogleWeathernext3ForecastVirtualDataset, fire: str
 ) -> None:
@@ -276,6 +277,121 @@ def test_update_window(
     assert final[-1].init_time == (
         job.publication_cutoff.floor("h") - pd.Timedelta(hours=config.horizon_hours)
     ).floor(config.append_dim_frequency)
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+@pytest.mark.parametrize(
+    ("fire", "newest_hourly", "newest_synoptic"),
+    [
+        ("2026-02-01T00:10", "2026-01-31T18:00", "2026-01-31T18:00"),
+        ("2026-02-01T05:10", "2026-01-31T23:00", "2026-01-31T18:00"),
+        ("2026-02-01T06:10", "2026-02-01T00:00", "2026-02-01T00:00"),
+        ("2026-02-04T19:10", "2026-02-04T13:00", "2026-02-04T12:00"),
+    ],
+)
+def test_unrestricted_update_window(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    fire: str,
+    newest_hourly: str,
+    newest_synoptic: str,
+) -> None:
+    config = dataset.template_config
+    jobs, template = dataset.region_job_class.operational_update_jobs(
+        MemoryStore(),
+        Path("unused"),
+        config.get_template,
+        "init_time",
+        config.data_vars[:1],
+        "test",
+        pd.Timestamp(fire),
+    )
+    (job,) = jobs
+    assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
+    assert job.publication_holdback is None
+    assert job.publication_cutoff == pd.Timestamp.max
+    assert job.reference_time == pd.Timestamp(fire)
+    newest = pd.Timestamp(
+        newest_hourly
+        if config.append_dim_frequency == pd.Timedelta("1h")
+        else newest_synoptic
+    )
+    inits = template.to_dataset().get_index("init_time")
+    assert inits[-1] == newest
+    window = inits[job.region]
+    assert window[0] == newest + config.append_dim_frequency - (
+        job.operational_update_window
+    )
+    leads = pd.timedelta_range("1h", periods=config.horizon_hours, freq="1h")
+    coords = job.source_file_coords()
+    assert {(coord.init_time, coord.lead_time) for coord in coords} == {
+        (init, lead) for init in window for lead in leads
+    }
+    assert all(query.match_glob is None for query in job._listing_queries(coords[-1]))
+    metadata = job.commit_metadata()
+    assert metadata.keys() == {
+        "reformat_job_name",
+        "publication_policy",
+        "launch_scope",
+    }
+    assert metadata["publication_policy"] == "unrestricted"
+    assert job.launch_scope is not None
+    assert job.launch_scope.append_dim_end == newest + config.append_dim_frequency
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+def test_unrestricted_backfill_ignores_reference_time(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+) -> None:
+    config = dataset.template_config
+    jobs = dataset.region_job_class.get_jobs(
+        tmp_store=Path("unused"),
+        template_ds=config.get_template(pd.Timestamp("2026-01-02")),
+        append_dim="init_time",
+        all_data_vars=config.data_vars,
+        reformat_job_name="backfill",
+        filter_variable_names=[config.data_vars[0].name],
+        reference_time=pd.Timestamp("2026-01-01T01:00"),
+    )
+    assert jobs
+    assert all(job.publication_cutoff == pd.Timestamp.max for job in jobs)
+    assert {
+        coord.lead_time for job in jobs for coord in job.source_file_coords()
+    } == set(pd.timedelta_range("1h", periods=config.horizon_hours, freq="1h"))
+    assert not any(job.held_back_source_file_coords() for job in jobs)
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+def test_unrestricted_update_rejects_backlog_before_discovery(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = dataset.template_config
+    split = dataset.region_job_class.manifest_init_split
+    template = config.get_template(
+        config.append_dim_start + (split + 1) * config.append_dim_frequency
+    )
+    job = dataset.region_job_class(
+        tmp_store=Path("unused"),
+        template_ds=template,
+        data_vars=config.data_vars,
+        append_dim="init_time",
+        region=slice(0, split + 1),
+        reformat_job_name="test",
+        processing_mode="update",
+        poll_deadline=pd.Timestamp("2000-01-01"),
+    )
+    coords = job.source_file_coords()
+    bound = split * config.horizon_hours * len(config.data_vars) * len(STATISTICS)
+    assert len(coords) * len(STATISTICS) > bound
+    discovery = Mock(side_effect=AssertionError("discovery must not run"))
+    monkeypatch.setattr(type(job), "discover_available", discovery)
+    with pytest.raises(AssertionError, match=rf"exceeding bound {bound}"):
+        list(job.process_virtual_refs(coords))
+    discovery.assert_not_called()
+
+    steady = [coord for coord in coords if coord.init_time == coords[-1].init_time]
+    monkeypatch.setattr(type(job), "discover_available", Mock(return_value=[]))
+    assert list(job.process_virtual_refs(steady)) == []
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
