@@ -421,3 +421,21 @@ def test_root_and_scalar_presence_labels_are_validated(
     assert var_path in message
     assert f"missing={missing}" in message
     assert f"unexpected={unexpected}" in message
+
+
+@pytest.mark.parametrize("sample_all", [False, True])
+def test_sample_levels_string_dimension(sample_all: bool) -> None:
+    labels = ["mean", "p10", "p25", "p50", "p75", "p90"]
+    da = xr.DataArray(
+        np.ones((6, 5, 1, 1)),
+        dims=("statistic", "pressure_level", "latitude", "longitude"),
+        coords={"statistic": labels, "pressure_level": [100, 200, 300, 400, 500]},
+    )
+    check = validation.CheckVirtualDecodeHealth(
+        sample_all_dims=("statistic",) if sample_all else ()
+    )
+    sampled = check._sample_levels(da)
+    assert sampled.statistic.values.tolist() == (
+        labels if sample_all else ["mean", "p25", "p90"]
+    )
+    assert sampled.pressure_level.values.tolist() == [100, 300, 500]

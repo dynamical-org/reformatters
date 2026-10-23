@@ -24,6 +24,9 @@ from matplotlib.colors import LinearSegmentedColormap
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
 from reformatters.common.validation import stores_hour_0_values
+from reformatters.google.weathernext_virtual.region_job import (
+    WeatherNextVirtualRegionJob,
+)
 from scripts.validation.manifest_scan import (
     result_availability_series,
     scan_manifest,
@@ -40,6 +43,7 @@ from scripts.validation.utils import (
     level_option,
     load_retried,
     load_zarr_dataset,
+    open_icechunk_repository,
     output_dir_option,
     probe_workers_option,
     resolve_output_dir,
@@ -476,6 +480,10 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
     availability so callers can gate on it.
     """
     dataset, store, start, end = resolve_scan_window(ctx)
+    snapshot_metadata = None
+    if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
+        repo = open_icechunk_repository(ctx.validation_url)
+        snapshot_metadata = repo.lookup_snapshot(store.session.snapshot_id).metadata
     result = scan_manifest(
         dataset,
         store,
@@ -484,6 +492,7 @@ def run_manifest_scan(ctx: RunContext) -> dict[pd.Timestamp, tuple[int, int]]:
         variables=ctx.variables,
         checkpoint_dir=ctx.checkpoint_dir,
         probe_workers=ctx.probe_workers,
+        snapshot_metadata=snapshot_metadata,
     )
     series = result_availability_series(result)
     ctx.availability = {var: series[var] for var in ctx.variables if var in series}

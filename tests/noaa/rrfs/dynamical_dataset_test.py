@@ -100,10 +100,10 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
         (
             NoaaRrfsEnsForecastVirtualDataset,
             70,
-            timedelta(minutes=165),
-            timedelta(minutes=5),
+            timedelta(minutes=192),
+            timedelta(minutes=6),
             "10 1,7,13,19 * * *",
-            230,
+            256,
         ),
     ],
 )
@@ -129,10 +129,9 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert spec["concurrencyPolicy"] == "Replace"
     job = spec["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
-    assert (
-        job["activeDeadlineSeconds"]
-        == pod["activeDeadlineSeconds"]
-        == int(duration.total_seconds())
+    assert pod["activeDeadlineSeconds"] == int(duration.total_seconds())
+    assert job["activeDeadlineSeconds"] == (
+        359 * 60 if dataset.retry_late_sources else int(duration.total_seconds())
     )
     assert update.cpu == "1.5"
     assert update.memory == "3.7G"
@@ -245,9 +244,6 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
         ("rrfs-forecast-18-hour", 150, False, 5),
         ("rrfs-forecast-18-hour", 158, False, -3),
         ("rrfs-forecast-84-hour", 233, True, -3),
-        ("rrfs-ens-forecast", 233, True, -3),
-        ("refs-forecast-hourly", 238, True, -3),
-        ("refs-forecast-3-hourly", 238, True, -3),
         ("rrfs-forecast-sub-hourly", 134, False, -1),
     ],
 )
@@ -308,7 +304,6 @@ def test_rrfs_retry_admission_and_fire_anchored_cutoff(
     if created:
         retry = batch.create_namespaced_job.call_args.args[1]
         assert retry.spec.active_deadline_seconds == spec["activeDeadlineSeconds"]
-        assert (
-            retry.spec.template.spec.active_deadline_seconds
-            == retry.spec.active_deadline_seconds
+        assert retry.spec.template.spec.active_deadline_seconds == int(
+            update.pod_active_deadline.total_seconds()
         )

@@ -5,7 +5,8 @@ import os
 import random
 import re
 import string
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
@@ -27,7 +28,63 @@ SERVICE_ACCOUNT = "reformatters-update-trigger"
 VALIDATION_FAILURE_EXIT_CODE = 20
 _CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
 _CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
+RETRY_FIRE_TIME_ANNOTATION = "dynamical.org/retry-fire-time"
+RETRY_NEXT_FIRE_TIME_ANNOTATION = "dynamical.org/retry-next-fire-time"
+RETRY_POLL_DEADLINE_ANNOTATION = "dynamical.org/retry-poll-deadline"
+RETRY_TIMING_ANNOTATIONS = (
+    RETRY_FIRE_TIME_ANNOTATION,
+    RETRY_NEXT_FIRE_TIME_ANNOTATION,
+    RETRY_POLL_DEADLINE_ANNOTATION,
+)
+RETRY_EPOCH_SECONDS_PATTERN = r"^(0|[1-9][0-9]{0,9})$"
 log = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class RetryTiming:
+    fire_time: Timestamp
+    next_fire_time: Timestamp
+    poll_deadline: Timestamp
+
+    def __post_init__(self) -> None:
+        for value in (self.fire_time, self.next_fire_time, self.poll_deadline):
+            assert isinstance(value, pd.Timestamp), (
+                "Retry timing must use pandas Timestamps"
+            )
+            assert not pd.isna(value), "Retry timing must contain valid timestamps"
+            assert value.tzinfo is None, "Retry timing must use UTC-naive timestamps"
+            assert value == value.floor("s"), "Retry timing must use whole seconds"
+            assert re.fullmatch(
+                RETRY_EPOCH_SECONDS_PATTERN, str(int(value.timestamp()))
+            ), "Retry timing must use nonnegative epoch seconds of at most 10 digits"
+        assert (
+            self.fire_time
+            < self.poll_deadline
+            <= self.next_fire_time - timedelta(seconds=120)
+        ), (
+            "Retry timing must satisfy fire_time < poll_deadline <= next_fire_time - 120s"
+        )
+
+    def to_annotations(self) -> dict[str, str]:
+        return {
+            RETRY_FIRE_TIME_ANNOTATION: str(int(self.fire_time.timestamp())),
+            RETRY_NEXT_FIRE_TIME_ANNOTATION: str(int(self.next_fire_time.timestamp())),
+            RETRY_POLL_DEADLINE_ANNOTATION: str(int(self.poll_deadline.timestamp())),
+        }
+
+    @classmethod
+    def from_annotations(cls, annotations: Mapping[str, str]) -> RetryTiming | None:
+        present = [key in annotations for key in RETRY_TIMING_ANNOTATIONS]
+        if not any(present):
+            return None
+        assert all(present), (
+            "Retry timing annotations must be all present or all absent"
+        )
+        values = [annotations[key] for key in RETRY_TIMING_ANNOTATIONS]
+        assert all(
+            re.fullmatch(RETRY_EPOCH_SECONDS_PATTERN, value) for value in values
+        ), "Retry timing annotations must be canonical nonnegative epoch seconds"
+        return cls(*(pd.Timestamp(int(value), unit="s") for value in values))
 
 
 class Job(pydantic.BaseModel):
@@ -386,11 +443,46 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     return image
 
 
+def read_job_retry_timing(
+    job_name: str, cron_job: CronJob, polling_duration: timedelta
+) -> RetryTiming:
+    config.load_incluster_config()
+    job = client.BatchV1Api().read_namespaced_job(job_name, os.environ["POD_NAMESPACE"])
+    annotations = job.metadata.annotations or {}
+    timing = RetryTiming.from_annotations(annotations)
+    if timing is not None:
+        assert cron_job.previous_fire_time(timing.fire_time) == timing.fire_time, (
+            "Retry fire time does not match the CronJob schedule"
+        )
+        assert cron_job.next_fire_time(timing.fire_time) == timing.next_fire_time, (
+            "Retry next fire time does not match the CronJob schedule"
+        )
+        return timing
+    scheduled = annotations.get("batch.kubernetes.io/cronjob-scheduled-timestamp")
+    anchor = scheduled if scheduled is not None else job.metadata.creation_timestamp
+    assert anchor is not None, "Root Job has no creation timestamp"
+    anchor = pd.Timestamp(anchor)
+    assert not pd.isna(anchor), "Root Job has an invalid timestamp"
+    if anchor.tzinfo is not None:
+        anchor = anchor.tz_convert("UTC").tz_localize(None)
+    fire_time = anchor if scheduled is not None else cron_job.previous_fire_time(anchor)
+    next_fire_time = cron_job.next_fire_time(fire_time)
+    return RetryTiming(
+        fire_time=fire_time,
+        next_fire_time=next_fire_time,
+        poll_deadline=min(
+            fire_time + polling_duration, next_fire_time - timedelta(seconds=120)
+        ),
+    )
+
+
 def create_job_from_cronjob(
     cronjob_name: str,
     job_name: str,
     *,
     skip_if_next_run_within_deadline: bool = False,
+    retry_timing: RetryTiming | None = None,
+    active_deadline: timedelta | None = None,
 ) -> bool:
     assert len(job_name) <= 63, f"Invalid Kubernetes Job name {job_name!r}"
     assert re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", job_name), (
@@ -423,13 +515,28 @@ def create_job_from_cronjob(
     labels.update({_CRONJOB_NAME_LABEL: cronjob_name, _CRONJOB_UID_LABEL: cronjob_uid})
     annotations = dict(template.metadata.annotations or {}) if template.metadata else {}
     annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+    if retry_timing is not None:
+        annotations.update(retry_timing.to_annotations())
+    spec = copy.deepcopy(template.spec)
+    if active_deadline is not None:
+        assert retry_timing is not None, "A retry deadline requires retry timing"
+        seconds = active_deadline.total_seconds()
+        assert seconds > 0, "Retry Job deadline must be positive whole seconds"
+        assert seconds.is_integer(), "Retry Job deadline must be positive whole seconds"
+        assert isinstance(spec.active_deadline_seconds, int), (
+            "CronJob Job template has no active deadline"
+        )
+        assert seconds <= spec.active_deadline_seconds, (
+            "Retry Job deadline cannot exceed the template Job deadline"
+        )
+        spec.active_deadline_seconds = int(seconds)
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
         metadata=client.V1ObjectMeta(
             name=job_name, labels=labels, annotations=annotations
         ),
-        spec=copy.deepcopy(template.spec),
+        spec=spec,
     )
     try:
         batch_v1.create_namespaced_job(namespace, job)
@@ -438,22 +545,30 @@ def create_job_from_cronjob(
         if error.status != 409:
             raise
         existing = batch_v1.read_namespaced_job(job_name, namespace)
-        if existing.metadata.name != job_name or any(
-            (existing.metadata.labels or {}).get(key) != value
-            for key, value in (
-                (_CRONJOB_NAME_LABEL, cronjob_name),
-                (_CRONJOB_UID_LABEL, cronjob_uid),
+        if (
+            existing.metadata.name != job_name
+            or any(
+                (existing.metadata.labels or {}).get(key) != value
+                for key, value in (
+                    (_CRONJOB_NAME_LABEL, cronjob_name),
+                    (_CRONJOB_UID_LABEL, cronjob_uid),
+                )
             )
+            or any(
+                (existing.metadata.annotations or {}).get(key) != annotations.get(key)
+                for key in RETRY_TIMING_ANNOTATIONS
+            )
+            or existing.spec.active_deadline_seconds != spec.active_deadline_seconds
         ):
             raise
         log.info(f"Job {job_name} already exists from CronJob {cronjob_name}")
     return True
 
 
-def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
+def retry_job_name(job_name: str, max_retries: int | None = 1) -> tuple[bool, str]:
     match = re.search(r"-r([1-9]\d*)$", job_name)
     retry = int(match[1]) if match else 0
-    should_retry = retry < max_retries
+    should_retry = max_retries is None or retry < max_retries
     parent = job_name[: match.start()] if match else job_name
     suffix = f"-r{retry + 1}"
     # Indexed pod hostnames append a hyphen and an int32 completion index.

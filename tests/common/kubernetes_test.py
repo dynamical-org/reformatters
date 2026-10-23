@@ -1,5 +1,6 @@
 import base64
 import json
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,14 +15,20 @@ from pydantic import ValidationError
 from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import (
+    RETRY_FIRE_TIME_ANNOTATION,
+    RETRY_NEXT_FIRE_TIME_ANNOTATION,
+    RETRY_POLL_DEADLINE_ANNOTATION,
+    RETRY_TIMING_ANNOTATIONS,
     SERVICE_ACCOUNT,
     VALIDATION_FAILURE_EXIT_CODE,
     CronJob,
     Job,
     ReformatCronJob,
+    RetryTiming,
     _load_secret_from_kubernetes_api,
     create_job_from_cronjob,
     load_secret,
+    read_job_retry_timing,
     retry_job_name,
 )
 
@@ -775,7 +782,8 @@ def test_create_job_409_requires_matching_identity(
                     cronjob.metadata.uid if matching else "different-uid"
                 ),
             },
-        )
+        ),
+        spec=cronjob.spec.job_template.spec,
     )
     monkeypatch.setenv("POD_NAMESPACE", "weather")
     monkeypatch.setattr(
@@ -839,3 +847,346 @@ def test_retry_job_name_is_anchored_and_length_safe() -> None:
     assert len(f"{first}-2147483646") <= 63
     assert first != second
     assert (True, first) == retry_job_name("a" * 62 + "b")
+    assert retry_job_name("forecast-update-r99", max_retries=None) == (
+        True,
+        "forecast-update-r100",
+    )
+
+
+@pytest.fixture
+def retry_timing() -> RetryTiming:
+    return RetryTiming(
+        fire_time=pd.Timestamp("2026-08-02T12:00"),
+        next_fire_time=pd.Timestamp("2026-08-02T13:00"),
+        poll_deadline=pd.Timestamp("2026-08-02T12:30"),
+    )
+
+
+@pytest.fixture
+def retry_batch(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    batch = Mock()
+    batch.read_namespaced_cron_job.return_value = _deployed_cronjob()
+    monkeypatch.setenv("POD_NAMESPACE", "weather")
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.config.load_incluster_config", Mock()
+    )
+    monkeypatch.setattr(
+        "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
+    )
+    return batch
+
+
+def test_retry_timing_is_frozen_and_round_trips(retry_timing: RetryTiming) -> None:
+    annotations = retry_timing.to_annotations()
+    assert annotations == {
+        RETRY_FIRE_TIME_ANNOTATION: "1785672000",
+        RETRY_NEXT_FIRE_TIME_ANNOTATION: "1785675600",
+        RETRY_POLL_DEADLINE_ANNOTATION: "1785673800",
+    }
+    assert RetryTiming.from_annotations(annotations) == retry_timing
+    assert RetryTiming.from_annotations({"unrelated": "value"}) is None
+    with pytest.raises(FrozenInstanceError):
+        retry_timing.fire_time = pd.Timestamp("2026-08-03")  # ty: ignore[invalid-assignment]
+
+
+@pytest.mark.parametrize("key", RETRY_TIMING_ANNOTATIONS)
+def test_retry_timing_rejects_partial_annotations(
+    retry_timing: RetryTiming, key: str
+) -> None:
+    annotations = retry_timing.to_annotations()
+    del annotations[key]
+    with pytest.raises(AssertionError, match="all present or all absent"):
+        RetryTiming.from_annotations(annotations)
+
+
+@pytest.mark.parametrize("key", RETRY_TIMING_ANNOTATIONS)
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "NaN",
+        "inf",
+        "1785672000.0",
+        "1e9",
+        "-1",
+        "+1",
+        "01",
+        " 1",
+        "1\n",
+        "\u0661",
+        "99999999999",
+    ],
+)
+def test_retry_timing_rejects_invalid_epoch_seconds(
+    retry_timing: RetryTiming, key: str, value: str
+) -> None:
+    annotations = retry_timing.to_annotations()
+    annotations[key] = value
+    with pytest.raises(AssertionError, match="canonical nonnegative epoch seconds"):
+        RetryTiming.from_annotations(annotations)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fire_time", "2026-08-02T12:30"),
+        ("next_fire_time", "2026-08-02T12:00"),
+        ("poll_deadline", "2026-08-02T11:59"),
+        ("poll_deadline", "2026-08-02T12:58:01"),
+        ("poll_deadline", "2026-08-02T13:00"),
+        ("fire_time", "2026-08-02T12:00Z"),
+        ("fire_time", "2026-08-02T12:00:00.1"),
+        ("fire_time", "NaT"),
+        ("fire_time", "1969-12-31"),
+    ],
+)
+def test_retry_timing_rejects_invalid_timestamps(
+    retry_timing: RetryTiming, field: str, value: str
+) -> None:
+    values = {
+        "fire_time": retry_timing.fire_time,
+        "next_fire_time": retry_timing.next_fire_time,
+        "poll_deadline": retry_timing.poll_deadline,
+        field: pd.Timestamp(value),
+    }
+    with pytest.raises(AssertionError):
+        RetryTiming(**values)
+
+
+@pytest.mark.parametrize(
+    ("scheduled", "created", "expected_fire"),
+    [
+        ("2026-08-02T12:00:00Z", "2026-08-02T13:01:00Z", "2026-08-02T12:00"),
+        ("2026-08-02T08:00:00-04:00", "2026-08-02T13:01:00Z", "2026-08-02T12:00"),
+        (None, "2026-08-02T12:59:59Z", "2026-08-02T12:00"),
+        (None, "2026-08-02T13:00:00Z", "2026-08-02T13:00"),
+        (None, "2026-08-02T08:15:00-04:00", "2026-08-02T12:00"),
+    ],
+)
+def test_read_job_retry_timing_anchors_to_root_job(
+    retry_batch: Mock, scheduled: str | None, created: str, expected_fire: str
+) -> None:
+    annotations = {"cronjob.kubernetes.io/instantiate": "manual"}
+    if scheduled is not None:
+        annotations["batch.kubernetes.io/cronjob-scheduled-timestamp"] = scheduled
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            creation_timestamp=pd.Timestamp(created).to_pydatetime(),
+            annotations=annotations,
+        )
+    )
+    timing = read_job_retry_timing(
+        "root-job", _cron_job("0 * * * *"), timedelta(minutes=30)
+    )
+    fire = pd.Timestamp(expected_fire)
+    assert timing == RetryTiming(
+        fire, fire + timedelta(hours=1), fire + timedelta(minutes=30)
+    )
+    retry_batch.read_namespaced_job.assert_called_once_with("root-job", "weather")
+    retry_batch.read_namespaced_cron_job.assert_not_called()
+
+
+def test_read_job_retry_timing_preserves_original_deadlines(
+    retry_batch: Mock, retry_timing: RetryTiming
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            annotations=retry_timing.to_annotations(),
+            creation_timestamp=datetime(2026, 8, 3, tzinfo=UTC),
+        )
+    )
+    assert (
+        read_job_retry_timing("retry-r7", _cron_job("0 * * * *"), timedelta(minutes=5))
+        == retry_timing
+    )
+
+
+@pytest.mark.parametrize(
+    "polling_duration", [timedelta(minutes=58), timedelta(hours=2)]
+)
+def test_read_job_retry_timing_caps_initial_polling_deadline(
+    retry_batch: Mock, polling_duration: timedelta
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            creation_timestamp=datetime(2026, 8, 2, 12, 1, tzinfo=UTC)
+        )
+    )
+    timing = read_job_retry_timing("root-job", _cron_job("0 * * * *"), polling_duration)
+    assert timing.poll_deadline == timing.next_fire_time - timedelta(seconds=120)
+
+
+@pytest.mark.parametrize("schedule", ["1 * * * *", "0 */6 * * *"])
+def test_read_job_retry_timing_rejects_wrong_schedule(
+    retry_batch: Mock, retry_timing: RetryTiming, schedule: str
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(annotations=retry_timing.to_annotations())
+    )
+    with pytest.raises(AssertionError, match="does not match the CronJob schedule"):
+        read_job_retry_timing("retry-r1", _cron_job(schedule), timedelta(minutes=30))
+
+
+def test_read_job_retry_timing_rejects_partial_metadata(retry_batch: Mock) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            annotations={RETRY_FIRE_TIME_ANNOTATION: "1785672000"}
+        )
+    )
+    with pytest.raises(AssertionError, match="all present or all absent"):
+        read_job_retry_timing("retry-r1", _cron_job("0 * * * *"), timedelta(minutes=30))
+
+
+@pytest.mark.parametrize("seconds", [None, 1, 300, 600])
+def test_create_retry_job_preserves_pod_spec(
+    retry_batch: Mock, retry_timing: RetryTiming, seconds: int | None
+) -> None:
+    assert create_job_from_cronjob(
+        "weather-update",
+        "weather-r1",
+        retry_timing=retry_timing,
+        active_deadline=timedelta(seconds=seconds) if seconds is not None else None,
+    )
+    job = retry_batch.create_namespaced_job.call_args.args[1]
+    template = retry_batch.read_namespaced_cron_job.return_value.spec.job_template
+    assert job.spec.template == template.spec.template
+    assert template.spec.active_deadline_seconds == 600
+    assert job.spec.active_deadline_seconds == (seconds if seconds is not None else 600)
+    assert job.metadata.annotations == {
+        "template-note": "value",
+        "cronjob.kubernetes.io/instantiate": "manual",
+        **retry_timing.to_annotations(),
+    }
+
+
+@pytest.mark.parametrize("seconds", [0, -1, 0.5, 601])
+def test_create_retry_job_rejects_invalid_deadline(
+    retry_batch: Mock, retry_timing: RetryTiming, seconds: float
+) -> None:
+    with pytest.raises(AssertionError, match="deadline"):
+        create_job_from_cronjob(
+            "weather-update",
+            "weather-r1",
+            retry_timing=retry_timing,
+            active_deadline=timedelta(seconds=seconds),
+        )
+    retry_batch.create_namespaced_job.assert_not_called()
+
+
+def test_create_job_rejects_deadline_without_retry_timing(retry_batch: Mock) -> None:
+    with pytest.raises(AssertionError, match="requires retry timing"):
+        create_job_from_cronjob(
+            "weather-update", "weather-r1", active_deadline=timedelta(seconds=300)
+        )
+    retry_batch.create_namespaced_job.assert_not_called()
+
+
+def test_create_retry_job_requires_template_job_deadline(
+    retry_batch: Mock, retry_timing: RetryTiming
+) -> None:
+    retry_batch.read_namespaced_cron_job.return_value.spec.job_template.spec.active_deadline_seconds = None
+    with pytest.raises(AssertionError, match="Job template has no active deadline"):
+        create_job_from_cronjob(
+            "weather-update",
+            "weather-r1",
+            retry_timing=retry_timing,
+            active_deadline=timedelta(seconds=300),
+        )
+    retry_batch.create_namespaced_job.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "mismatch", [None, *RETRY_TIMING_ANNOTATIONS, "deadline", "missing-timing"]
+)
+def test_create_retry_job_409_compares_timing_and_deadline(
+    retry_batch: Mock, retry_timing: RetryTiming, mismatch: str | None
+) -> None:
+    assert create_job_from_cronjob(
+        "weather-update",
+        "weather-r1",
+        retry_timing=retry_timing,
+        active_deadline=timedelta(seconds=300),
+    )
+    existing = retry_batch.create_namespaced_job.call_args.args[1]
+    if mismatch in RETRY_TIMING_ANNOTATIONS:
+        existing.metadata.annotations[mismatch] = "0"
+    elif mismatch == "deadline":
+        existing.spec.active_deadline_seconds = 301
+    elif mismatch == "missing-timing":
+        existing.metadata.annotations = {}
+    retry_batch.read_namespaced_job.return_value = existing
+    retry_batch.create_namespaced_job.side_effect = ApiException(status=409)
+    if mismatch is None:
+        assert create_job_from_cronjob(
+            "weather-update",
+            "weather-r1",
+            retry_timing=retry_timing,
+            active_deadline=timedelta(seconds=300),
+        )
+    else:
+        with pytest.raises(ApiException) as error:
+            create_job_from_cronjob(
+                "weather-update",
+                "weather-r1",
+                retry_timing=retry_timing,
+                active_deadline=timedelta(seconds=300),
+            )
+        assert error.value.status == 409
+
+
+@pytest.mark.parametrize("scheduled", [None, "", "NaT"])
+def test_read_job_retry_timing_rejects_missing_or_invalid_root_anchor(
+    retry_batch: Mock, scheduled: str | None
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            annotations=(
+                {"batch.kubernetes.io/cronjob-scheduled-timestamp": scheduled}
+                if scheduled is not None
+                else {}
+            )
+        )
+    )
+    with pytest.raises(AssertionError, match="timestamp"):
+        read_job_retry_timing("root-job", _cron_job("0 * * * *"), timedelta(minutes=30))
+
+
+def test_read_job_retry_timing_accepts_scheduled_anchor_without_creation_time(
+    retry_batch: Mock, retry_timing: RetryTiming
+) -> None:
+    retry_batch.read_namespaced_job.return_value = client.V1Job(
+        metadata=client.V1ObjectMeta(
+            annotations={
+                "batch.kubernetes.io/cronjob-scheduled-timestamp": "2026-08-02T12:00:00Z"
+            }
+        )
+    )
+    assert (
+        read_job_retry_timing("root-job", _cron_job("0 * * * *"), timedelta(minutes=30))
+        == retry_timing
+    )
+
+
+def test_read_job_retry_timing_propagates_get_errors(retry_batch: Mock) -> None:
+    retry_batch.read_namespaced_job.side_effect = ApiException(status=403)
+    with pytest.raises(ApiException) as error:
+        read_job_retry_timing("root-job", _cron_job("0 * * * *"), timedelta(minutes=30))
+    assert error.value.status == 403
+    retry_batch.create_namespaced_job.assert_not_called()
+
+
+@pytest.mark.parametrize("retry_metadata", [True, False])
+def test_create_job_409_rejects_unexpected_retry_metadata(
+    retry_batch: Mock, retry_timing: RetryTiming, retry_metadata: bool
+) -> None:
+    assert create_job_from_cronjob("weather-update", "weather-r1")
+    existing = retry_batch.create_namespaced_job.call_args.args[1]
+    if retry_metadata:
+        existing.metadata.annotations.update(retry_timing.to_annotations())
+    else:
+        existing.spec.active_deadline_seconds = 300
+    retry_batch.read_namespaced_job.return_value = existing
+    retry_batch.create_namespaced_job.side_effect = ApiException(status=409)
+    with pytest.raises(ApiException) as error:
+        create_job_from_cronjob("weather-update", "weather-r1")
+    assert error.value.status == 409

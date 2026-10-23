@@ -25,6 +25,8 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 
+Backfill workers and retries share a launch reference time; reuse `--reference-time` to resume the same admission window. Resubmitting Manual: Backfill captures a new reference time.
+
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.

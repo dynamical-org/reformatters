@@ -25,6 +25,8 @@ On a large ensemble archive also set `--probe-workers` (see Options): the scan's
 
 Pass `--checkpoint-dir` on any whole-archive scan you cannot afford to repeat. The manifest and decode scans are the long pole of a virtual `run-all` — hours on a large ensemble archive, where one sampled decode job alone takes tens of minutes — and without it an interruption anywhere loses all of it. With it each unit is recorded as it finishes (a manifest slice, a decode region job) and a re-run picks up from there.
 
+Use `scan_manifest`'s `probe_dims` when completeness must cover every chunk along additional label dimensions.
+
 When the run completes, stdout prints the path of `validation_summary.md` (relative to the repo root). Open that file first.
 
 ### Options

@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
 )
+from reformatters.google.weathernext_virtual.holdback_audit import forbidden_chunk_keys
 from scripts import icechunk_utils, weathernext2_holdback
 from scripts.weathernext2_holdback import (
     _operational_dataset,
@@ -23,7 +24,6 @@ from scripts.weathernext2_holdback import (
     _run_audit,
     _run_delete,
     _run_publish,
-    forbidden_chunk_keys,
 )
 
 
