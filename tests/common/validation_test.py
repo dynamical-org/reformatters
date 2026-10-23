@@ -19,6 +19,7 @@ from reformatters.common.config_models import (
     Encoding,
 )
 from reformatters.common.template_utils import ignore_consolidated_metadata_spec_warning
+from tests.common.virtual_region_job_test import _create_template_ds, _make_region_job
 
 
 class NanTestDataVar(DataVar[BaseInternalAttrs]):
@@ -225,6 +226,35 @@ def test_check_current_data_requires_append_dim_frequency(
         validation.CheckCurrentData(max_delay=timedelta(hours=2)).check(
             _context(forecast_dataset, "init_time")
         )
+
+
+@pytest.mark.parametrize("present_inits", [2, 3, 4])
+def test_currency_checks_owned_window_after_successor_fire(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    present_inits: int,
+) -> None:
+    template = xr.DataTree(
+        _create_template_ds(4)
+        .to_dataset()
+        .assign_coords(init_time=pd.date_range("2026-10-17T21:00", periods=4, freq="h"))
+    )
+    job = _make_region_job(template, region=slice(0, 3), processing_mode="update")
+    ds = template.to_dataset().isel(init_time=slice(0, present_inits))
+    context = _context(
+        ds,
+        "init_time",
+        append_dim_frequency=pd.Timedelta("1h"),
+        region_job=job,
+    )
+    monkeypatch.setattr(pd.Timestamp, "now", lambda: pd.Timestamp("2026-10-18T00:55"))
+    with caplog.at_level(logging.INFO):
+        result = validation.CheckCurrentData(max_delay=timedelta(minutes=52)).check(
+            context
+        )
+    assert result.passed == (present_inits >= 3)
+    assert "2026-10-17T23:00:00" in result.message
+    assert "Capping newest due" in caplog.text
 
 
 def test_check_recent_nans_passes(forecast_dataset: xr.Dataset) -> None:

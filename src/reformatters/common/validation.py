@@ -287,6 +287,7 @@ class CheckCurrentData(Validator):
     availability plus ingestion time and slack. Materialized datasets also account
     for their update schedule and processing time. The append_dim_frequency grid is
     anchored to the dataset's own positions, regardless of when validation runs.
+    A virtual update is responsible only for positions within its polled window.
     """
 
     max_delay: timedelta
@@ -309,6 +310,14 @@ class CheckCurrentData(Validator):
             first
             + ((pd.Timestamp.now() - self.max_delay - first) // frequency) * frequency
         )
+        if context.region_job is not None:
+            job = context.region_job
+            window = job.template_ds.to_dataset().get_index(append_dim)[job.region]
+            assert len(window), "Currency validation requires a nonempty update window"
+            window_end = pd.Timestamp(window.max())
+            if due > window_end:
+                log.info("Capping newest due %s to update window %s", due, window_end)
+                due = window_end
         if due < first:
             return ValidationResult(
                 passed=True,

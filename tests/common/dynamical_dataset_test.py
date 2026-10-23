@@ -255,7 +255,7 @@ def test_update_validates_only_after_final_worker_finishes(
     monkeypatch.setattr(
         ExampleDataset,
         "_validate_dataset",
-        Mock(side_effect=lambda name: events.append("validated")),
+        Mock(side_effect=lambda name, region_job: events.append("validated")),
     )
 
     ExampleDataset().update("update-123", worker_index=worker_index, workers_total=3)
@@ -889,6 +889,56 @@ def test_run_virtual_operational_update_asserts_single_writer() -> None:
         dataset._run_virtual_operational_update(
             [Mock()], worker_index=1, workers_total=1
         )
+
+
+def test_virtual_update_keeps_fire_and_validation_window_across_midnight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    dataset_type = type(dataset)
+    fire = pd.Timestamp("2026-10-17T23:50")
+    now = [fire]
+    monkeypatch.setattr(pd.Timestamp, "now", lambda tz=None: now[0])
+    template = xr.DataTree(
+        _create_template_ds(4)
+        .to_dataset()
+        .assign_coords(init_time=pd.date_range("2026-10-17T20:00", periods=4, freq="h"))
+    )
+    cron = dataset.operational_kubernetes_resources("test")[0].model_copy(
+        update={"schedule": "50 * * * *", "pod_active_deadline": timedelta(minutes=75)}
+    )
+    monkeypatch.setattr(
+        dataset_type, "operational_kubernetes_resources", lambda self, image_tag: [cron]
+    )
+    monkeypatch.setattr(
+        dataset_type, "virtual_poll_deadline_grace", timedelta(minutes=10)
+    )
+    monkeypatch.setattr(dataset_type, "_assert_no_structural_drift", Mock())
+    monkeypatch.setattr(type(dataset.store_factory), "primary_store", Mock())
+    monkeypatch.setattr(
+        type(dataset.store_factory), "replica_stores", Mock(return_value=[])
+    )
+    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
+
+    def get_template(self: object, end_time: Timestamp) -> xr.DataTree:
+        assert end_time == fire
+        now[0] = pd.Timestamp("2026-10-18T00:51")
+        return template
+
+    monkeypatch.setattr(dataset_type, "_get_template", get_template)
+    process = Mock()
+    checks = Mock()
+    monkeypatch.setattr(VirtualTestRegionJob, "process_worker_jobs", process)
+    monkeypatch.setattr(validation, "validate_dataset", checks)
+
+    dataset.update("midnight-update")
+
+    job = process.call_args.args[0][0]
+    assert job.poll_deadline == pd.Timestamp("2026-10-18T00:55")
+    assert checks.call_args.kwargs["region_job"] is job
+    assert job.template_ds.to_dataset().get_index("init_time")[
+        job.region
+    ].max() == pd.Timestamp("2026-10-17T23:00")
 
 
 @pytest.mark.slow

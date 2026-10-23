@@ -10,14 +10,14 @@ A virtual dataset complements the materialized (rechunked) time-series dataset o
 
 - **Spatial / map-optimized chunking.** Chunks follow the native source-file layout — usually one time step over the full spatial grid — so a virtual `-spatial` dataset serves map and spatial queries efficiently, while the materialized dataset provides the complementary time-series chunking.
 - **Every curated source variable, cheaply.** A variable costs only a handful of byte-range refs, not a rechunked copy, so a virtual dataset can include every variable we have metadata for rather than just the materialized subset.
-- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data can be visible within seconds of publication while an update is polling (target ≤ 5 s end to end). See [Operational updates](#operational-updates-single-writer).
+- **Very low latency updates.** Writing refs records byte offsets without moving data, so a new source file's data can be visible within seconds of publication while an update is polling (target ≤ 5 s end to end). See [Operational updates](#operational-updates-one-worker-per-job).
 
 ## Scale
 
 Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — one `(variable, …, lead/time)` field — becomes one virtual chunk, so ref counts track the full Cartesian product of the dataset's dimensions *including the variable axis*. A multi-year ensemble dataset reaches order 10⁹ refs and tens of millions of source index files. Two consequences shape the design:
 
 - **Manifests must be split** (see [Manifest splitting](#manifest-splitting)) — a single per-array manifest at this ref count is too large to rewrite on every commit.
-- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and run single-writer.
+- **Backfills must run in parallel** — backfill is bounded by index-file *count*, not ref count, and tens of millions of index downloads is hours of work even at high concurrency. Operational updates touch a handful of files per fire and use one worker per Job.
 
 ## The write loop
 
@@ -30,7 +30,7 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 **The yield is the commit unit.** The loop's batching policy: a backfill sweeps once and yields everything available across the worker's jobs, so the whole worker is **one commit** — this keeps the commit count at `workers_total` rather than one-per-init, relieving shared-branch CAS contention (`jobs_per_pod` sets the batch = inits per commit, mirroring `MaterializedRegionJob`). An operational update yields every file `discover_available` returns on a sweep that contributes refs, so a file's refs commit the tick it is found; `tick_interval` only lower-bounds sweep cadence. A yield contains *whole* source files — never split a file across yields — and is never empty (an empty icechunk commit raises). The default generator skips a file with an error log if its refs do not cover the representative cell `filter_already_present` probes, allowing other files in the tick to commit. Such a file remains eligible for the next update. The write loop asserts this same coverage contract for custom generators.
 
-`processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates-single-writer)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
+`processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates-one-worker-per-job)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
 ## What a `VirtualRegionJob` implementer writes
 
@@ -64,25 +64,17 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
-## Operational updates: single writer
+## Operational updates: one worker per Job
 
-`operational_update_jobs()` returns **one** job spanning the active window (the recent, still-incomplete span of the append dim). One pod commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
+Use one worker per operational Job. Commit whole files and any required dimension growth atomically to `main`; rebuild conflicting batches from a fresh session. Use a backfill to catch up rather than adding operational workers.
 
-Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly to the data ingested (never NaN-padded toward "now"), and a resize can never race another writer. If an update falls far behind, run a backfill to catch up rather than scaling operational updates to multiple workers.
+Metadata refresh uses the same writable snapshot to read the committed extent and publish template metadata. Keep metadata unconsolidated and never grow dimensions beyond ingested data.
 
-Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
+Polling and inline validation share one operational window. Pending source files are retried by subsequent updates.
 
-Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
+CronJob concurrency policies are not store-wide locks. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 
-Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
-
-**Files the source hasn't published yet roll to the next fire rather than failing the run.** An update stops polling at its `poll_deadline` — the scheduled fire plus the cron job's `pod_active_deadline`, less a small grace — and returns with those files still pending; final validation determines whether the Job succeeds. The next fire re-sweeps an overlapping window. Files published during an inactive gap wait until that fire; low latency requires a polling pod when the source files arrive. `pod_active_deadline` therefore sizes how long a fire chases its own files: cover the source's typical publication time with headroom, and let a late cycle roll over rather than stretching past the fire interval (`concurrencyPolicy: Replace` kills a run that outlives its successor's fire anyway). Both ends of a fire's work are anchored to its scheduled fire rather than to process start: a pod replacing an evicted one stops polling when the pod it replaced would have, and its window ends at that fire, so it finishes its predecessor's steps instead of adopting the next fire's and waiting out its deadline on files that publish after it. A source that stops publishing altogether is caught by validation in the final update pod (data currency and manifest completeness).
-
-Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
-
-Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
-
-Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
+See `DynamicalDataset` and `VirtualRegionJob` for the update lifecycle and each dataset's `operational_kubernetes_resources()` for its scheduling policy.
 
 ## Backfill: parallel on a pre-sized temp branch
 
@@ -135,9 +127,9 @@ The loop opens sessions on all stores and commits replicas-then-primary. "Commit
 
 ## Operational validation
 
-The final update pod validates each operational update. A dataset lists every check — configured `validation.Validator` instances — in its `validators()`. `validate_dataset` runs each against a `ValidationContext` (the opened dataset, store, append dim, template variables). A check that probes the manifest sets `requires_virtual_dataset`, and the context additionally carries the operational-window region job, built once (via `operational_update_jobs`) and shared across primary + replica.
+Configure operational checks in `validators()`. Inline validation uses the window polled by that invocation; standalone validation uses the current window. Currency checks are limited to the validated window.
 
-Two virtual checks ship in `validation.py`; both are bounded so the whole validation stays well under a couple of minutes even on a large ensemble dataset:
+Two virtual checks ship in `validation.py`. Their sampling is bounded; size the validation allowance from measured runtime for the dataset:
 
 - **`CheckVirtualManifestCompleteness`** — the virtual analog of the materialized `CheckExpectedShards`. Re-runs the operational filter (`region_job.source_file_coords()` + `filter_already_present`) over the recent window and checks, per append-dim position, the fraction of expected source files present against `min_present_fraction` (a tuple indexed newest-first; older positions held to its last value). Positions past the store's append-dim extent are skipped, since the window runs ahead of what the source has published: a wholly un-ingested recent stretch is `CheckCurrentData`'s job, while an interior gap still fails here. `(1.0,)` requires every remaining append-dim position fully ingested; `(0.5, 1.0)` lets the newest be half-published (e.g. GEFS 35-day's slow long lead times) while older ones must be complete. The last tier must be 1.0 (asserted) since it holds for every older append-dim position; loosen only the leading tiers, which cover positions the source may still be filling in. Fails — never silently passes — if the window is shorter than the threshold tiers. Reusing the dataset's own coord generation means structural absences (e.g. hour-0 accumulated vars) are already excluded — no false positives. Cheap: one ref-existence probe per file, no decode. `include_vars` / `exclude_vars` narrow the check to the source files carrying those variables, so variables publishing on different schedules can be checked separately, each held to a whole 1.0 from the position where its own files are expected; the split must fall on source-file boundaries (asserted), since presence is probed through each file's representative variable.
 - **`CheckVirtualDecodeHealth`** — where completeness checks references *exist*, this checks the ones that exist actually decode. It keeps only the source files present in the manifest (`filter_already_present`) — so a not-yet-published ref is never mistaken for a decode failure — and decodes a bounded sample (first + last + interior lead times across every ensemble member). `positions` (an int, default 1) targets that many of the newest positions *with data*, so a broken newest reference is caught at the very next validation rather than a cycle later; use more than 1 when the newest position does not carry every variable. `positions="all"` covers the whole window, optionally capped to `max_positions` evenly spaced positions for an offline sweep. A variable fails if any sampled chunk errors or all of its sampled chunks decode entirely NaN; the check fails — never silently passes — when no references are present. `allow_all_nan_vars` explicitly names exceptional variables whose sampled chunks may legitimately all be NaN; they still fail on decode errors or missing sampled references. The full-archive NaN/coverage scan stays offline (one full-message decode per chunk across all leads × members is hours).
