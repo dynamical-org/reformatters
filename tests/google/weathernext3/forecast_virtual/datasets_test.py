@@ -23,6 +23,11 @@ from reformatters.google.weathernext3.forecast_virtual.region_job import (
     GoogleWeathernext3ForecastVirtualSourceFileCoord,
 )
 from reformatters.google.weathernext3.forecast_virtual.template_config import STATISTICS
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LICENSE,
+    REAL_TIME_ATTRIBUTION,
+)
 from reformatters.google.weathernext_virtual import listing
 from reformatters.google.weathernext_virtual.listing import NativeObjectMetadata
 from reformatters.google.weathernext_virtual.validation import CheckNoRefsInsideHoldback
@@ -46,6 +51,23 @@ def job_for(
         region=slice(0, 1),
         reformat_job_name="test",
         publication_cutoff=pd.Timestamp(cutoff),
+    )
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
+def test_terms_licence_and_attribution(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+) -> None:
+    attributes = dataset.template_config.dataset_attributes
+    assert attributes.license == LICENSE
+    assert attributes.attribution == (
+        "Google WeatherNext 3 forecast data processed by dynamical.org "
+        "from Google's WeatherNext 3 experimental data. "
+        f"{COPYRIGHT}. {REAL_TIME_ATTRIBUTION}"
+    )
+    assert all(
+        "earth-engine" not in text and "Earth Engine" not in text
+        for text in (attributes.attribution, attributes.license, attributes.description)
     )
 
 

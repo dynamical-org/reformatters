@@ -21,8 +21,11 @@ from reformatters.common.config_models import (
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
-
-ATTRIBUTION = "Google requires this attribution: © 2026 DeepMind Technologies Limited's machine learning models used to create the experimental data made available at https://developers.google.com/earth-engine/datasets/catalog/projects_gcp-public-data-weathernext_assets_weathernext_3_0_0_0p1deg under CC BY 4.0 licence terms. This data is intended for experimental modelling only and is not intended, validated, or approved for real world use. Use of the third-party materials referred to in the Acknowledgements section may be governed by separate terms and conditions or license provisions. Your use of the third-party materials is subject to any such terms and you should check that you can comply with any applicable restrictions or terms and conditions before use."
+from reformatters.google.weathernext_terms import (
+    COPYRIGHT,
+    LICENSE,
+    REAL_TIME_ATTRIBUTION,
+)
 
 STATISTICS = ("mean", "p10", "p25", "p50", "p75", "p90")
 
@@ -50,7 +53,7 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
     @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        description = "Weather forecasts from the 64-member Google DeepMind WeatherNext 3 ensemble model. Forecast values are published hourly once their valid time is at least one hour in the past, so recent initialization times are intentionally partial."
+        description = "Weather forecasts from the 64-member Google DeepMind WeatherNext 3 ensemble model."
         if self.grid_degrees == 0.05:
             description += " These variables are WeatherNext 3's station-trained head, defined everywhere."
         return DatasetAttributes(
@@ -58,8 +61,12 @@ class GoogleWeathernext3ForecastVirtualTemplateConfig(
             dataset_version="0.1.0",
             name=self.dataset_name_value,
             description=description,
-            attribution=ATTRIBUTION,
-            license="CC-BY-4.0",
+            attribution=(
+                "Google WeatherNext 3 forecast data processed by dynamical.org "
+                "from Google's WeatherNext 3 experimental data. "
+                f"{COPYRIGHT}. {REAL_TIME_ATTRIBUTION}"
+            ),
+            license=LICENSE,
             spatial_domain="Global",
             spatial_resolution="0.1 degrees (~10km)"
             if self.grid_degrees == 0.1
