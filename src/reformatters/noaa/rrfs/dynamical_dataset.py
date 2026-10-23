@@ -73,13 +73,16 @@ class NoaaRrfsDataset(
             ),
         )
 
+    def current_data_max_delay(self) -> timedelta:
+        return (
+            timedelta(minutes=self.update_offset_minutes)
+            + self.update_deadline
+            - self.virtual_poll_deadline_grace
+        )
+
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(
-                max_delay=timedelta(minutes=self.update_offset_minutes)
-                + self.update_deadline
-                - self.virtual_poll_deadline_grace
-            ),
+            validation.CheckCurrentData(max_delay=self.current_data_max_delay()),
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=self.min_present_fraction
             ),

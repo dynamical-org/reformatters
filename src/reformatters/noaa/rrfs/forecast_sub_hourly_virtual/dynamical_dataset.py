@@ -22,3 +22,8 @@ class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
     region_job_class: type[NoaaRrfsForecastSubHourlyVirtualRegionJob] = (
         NoaaRrfsForecastSubHourlyVirtualRegionJob
     )
+
+    def current_data_max_delay(self) -> timedelta:
+        # A delayed init's first file can land after this pod's poll deadline; the
+        # next hourly fire checks that init.
+        return timedelta(hours=2, minutes=40)
