@@ -230,6 +230,21 @@ def test_commit_if_icechunk_commits_icechunk_stores() -> None:
     assert kwargs["message"] == "test message"
 
 
+def test_commit_if_icechunk_records_metadata_on_snapshot() -> None:
+    repo = icechunk.Repository.create(icechunk.in_memory_storage())
+    session = repo.writable_session("main")
+    zarr.create_group(session.store)
+
+    commit_if_icechunk(
+        "msg", session.store, [], metadata={"worker": 0, "init_time": "2026-10-22"}
+    )
+
+    latest = next(repo.ancestry(branch="main"))
+    assert latest.message == "msg"
+    assert latest.metadata["worker"] == 0
+    assert latest.metadata["init_time"] == "2026-10-22"
+
+
 def test_commit_if_icechunk_commits_replicas_before_primary() -> None:
     call_order: list[str] = []
 
