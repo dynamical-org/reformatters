@@ -29,12 +29,11 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # Gating lead group f360 typically lands ~08:00-08:09 UTC (recent days;
-            # wxopticon external-ecmwf-ifs-ens-long-aws p99 08:26); pod spin-up adds
-            # a head start before late-lead downloads, so fire at 08:05.
+            # f360 lands on S3 ~07:50 UTC and on GCS ~08:25-08:35. Leads not yet on
+            # GCS fall back to S3, which throttles many concurrent pods.
             schedule="5 8 * * *",
             suspend=False,
-            pod_active_deadline=timedelta(minutes=35),  # runs take <26 min
+            pod_active_deadline=timedelta(minutes=45),  # runs take <35 min
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -43,7 +42,8 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
-            parallelism=min(workers, 20),
+            # Cap parallelism to avoid 500s from overloaded s3://ecmwf-forecasts
+            parallelism=min(workers, 10),
         )
 
         return [operational_update_cron_job]
