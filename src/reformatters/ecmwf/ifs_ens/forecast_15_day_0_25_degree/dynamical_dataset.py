@@ -42,6 +42,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             ephemeral_storage="30G",
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
+            # Cap parallelism at 10 to avoid 500s from overloaded s3://ecmwf-forecasts
             parallelism=min(workers, 10),
         )
 
