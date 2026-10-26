@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 import zarr
+from click import unstyle
 from typer.main import get_command
 from typer.testing import CliRunner
 
@@ -103,7 +104,7 @@ def test_cli_backfill_requires_reference_time() -> None:
         [DATASET_IDS[0], "backfill", "2026-01-02", "job", "0", "1"],
     )
     assert result.exit_code == 2
-    assert "--reference-time" in result.output
+    assert "Missing option '--reference-time'" in unstyle(result.output)
 
 
 @pytest.mark.parametrize(
