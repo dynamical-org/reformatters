@@ -207,8 +207,8 @@ def finalize(
     # metadata write to here; overwrite backfills publish here so a metadata change
     # (new variable, extension) appears only after all chunk data is written. Fresh-store
     # backfills wrote metadata before workers started and skip this.
-    # A zarr v3 store is only ever a replica, so publishing this format before the
-    # icechunk stores below keeps the primary the last store to advance.
+    # A zarr v3 store is never the primary of an icechunk replica, so publishing this
+    # format before the icechunk stores below keeps the primary the last store to advance.
     if publish_zarr3_metadata:
         primary_store = store_factory.primary_store(writable=True)
         replica_stores = store_factory.replica_stores(writable=True)

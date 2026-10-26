@@ -44,6 +44,9 @@ from reformatters.ecmwf.aifs_single.forecast_virtual import (
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EcmwfIfsEns46DayGribArchiver,
 )
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.deprecated_zarr_v3 import (
+    EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset,
+)
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -398,7 +401,9 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
     # ECMWF
     EcmwfIfsEnsForecast15Day025DegreeDataset(
         primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
-        replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
+    ),
+    EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
+        primary_storage_config=SourceCoopZarrDatasetStorageConfig(),
     ),
     EcmwfIfsEnsForecast46Day15DegreeDataset(
         primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),

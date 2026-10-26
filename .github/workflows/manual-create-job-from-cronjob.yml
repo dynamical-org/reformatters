@@ -16,6 +16,7 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-aifs-ens-forecast-update
         - ecmwf-aifs-single-forecast-update
         - ecmwf-aifs-single-forecast-virtual-update
+        - ecmwf-ifs-ens-15-day-deprecated-zarr-v3-update
         - ecmwf-ifs-ens-46-day-6-hourly-update
         - ecmwf-ifs-ens-46-day-daily-update
         - ecmwf-ifs-ens-46-day-gribs-archive-grib-files

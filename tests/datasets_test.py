@@ -275,6 +275,12 @@ def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
     assert len(validators) >= 1, f"{dataset.dataset_id}: no validators defined"
 
 
+# Operational names of datasets that run over another dataset's published store id.
+_OPERATIONAL_NAME_OVERRIDES = {
+    "ecmwf-ifs-ens-15-day-deprecated-zarr-v3": "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
+}
+
+
 @pytest.mark.parametrize(
     "dataset",
     DYNAMICAL_DATASETS,
@@ -283,7 +289,10 @@ def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
 def test_dataset_id_matches_template_config(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    assert dataset.dataset_id == dataset.template_config.dataset_id
+    assert (
+        _OPERATIONAL_NAME_OVERRIDES.get(dataset.dataset_id, dataset.dataset_id)
+        == dataset.template_config.dataset_id
+    )
 
 
 @pytest.mark.parametrize(
@@ -310,9 +319,9 @@ def test_store_factory_k8s_secret_names_not_empty_for_datasets_with_replicas(
 def test_no_zarr3_primary_with_icechunk_replica(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    """Zarr v3 is deprecated: an existing zarr v3 store may only be a replica of an
-    icechunk primary. Finalize publishes zarr v3 stores before icechunk ones, so a
-    zarr v3 primary would advance before its icechunk replica."""
+    """Zarr v3 is deprecated: a zarr v3 primary may not have an icechunk replica.
+    Finalize publishes zarr v3 stores before icechunk ones, so a zarr v3 primary would
+    advance before its icechunk replica."""
     if dataset.primary_storage_config.format != DatasetFormat.ZARR3:
         return
 
