@@ -39,6 +39,7 @@ class GoogleWeathernext3ForecastVirtualDataset(
                 name=f"{prefix}-update",
                 schedule="10 * * * *",
                 pod_active_deadline=timedelta(minutes=55),
+                active_deadline=timedelta(minutes=55),
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.7",

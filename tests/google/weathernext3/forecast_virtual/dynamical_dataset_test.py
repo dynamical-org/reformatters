@@ -30,7 +30,10 @@ def test_update_reserves_time_for_inline_validation(
     assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=40)
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.pod_active_deadline == pd.Timedelta(minutes=55)
-    assert update.active_deadline is None
+    assert update.active_deadline == pd.Timedelta(minutes=55)
+    job = update.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
+    assert job["activeDeadlineSeconds"] == 55 * 60
+    assert job["template"]["spec"]["activeDeadlineSeconds"] == 55 * 60
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)

@@ -39,9 +39,6 @@ from reformatters.common.logging import get_logger
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.retry import retry
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
-from reformatters.google.weathernext_virtual.region_job import (
-    WeatherNextVirtualRegionJob,
-)
 from scripts.validation.scan_common import (
     build_virtual_jobs,
     read_checkpoint,
@@ -423,12 +420,10 @@ def scan_manifest(
         "time",
         "lead_time",
     }
-    if issubclass(dataset.region_job_class, WeatherNextVirtualRegionJob):
+    # A coord covers every statistic of its lead, so it is present only if all are.
+    if "statistic" in dataset.template_config.all_dims:
         admission_units = True
-        statistic_dims = (
-            ("statistic",) if "statistic" in dataset.template_config.all_dims else ()
-        )
-        probe_dims = tuple(dict.fromkeys((*probe_dims, *statistic_dims)))
+        probe_dims = tuple(dict.fromkeys((*probe_dims, "statistic")))
     if checkpoint_dir is not None and (probe_dims or admission_units):
         checkpoint_dir = checkpoint_dir / digest(
             [store.session.snapshot_id, *probe_dims, str(admission_units)],
