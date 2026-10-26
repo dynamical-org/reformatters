@@ -5,74 +5,15 @@ from unittest.mock import Mock
 import icechunk
 import pandas as pd
 import pytest
-import typer
 import xarray as xr
 from zarr.storage import MemoryStore
 
 from reformatters.common import kubernetes, validation
-from reformatters.common.config import Config
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.types import DatetimeLike
 from reformatters.noaa.refs.forecast_hourly_virtual.dynamical_dataset import (
     NoaaRefsForecastHourlyVirtualDataset,
 )
-from reformatters.noaa.rrfs_ens.forecast_virtual.dynamical_dataset import (
-    NoaaRrfsEnsForecastVirtualDataset,
-)
-
-
-@pytest.mark.parametrize(
-    ("dataset_class", "fire", "cutoff", "validation_ends", "retry_cutoff"),
-    [
-        (NoaaRrfsEnsForecastVirtualDataset, "13:10", "16:16", "16:20", "19:08"),
-        (NoaaRefsForecastHourlyVirtualDataset, "13:45", "16:22", "16:26", "19:03"),
-        (NoaaRefsForecastHourlyVirtualDataset, "13:45", "19:03", "19:07", "19:43"),
-    ],
-)
-def test_missing_source_retries_poll_with_frozen_cycle(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    dataset_class: type[
-        NoaaRefsForecastHourlyVirtualDataset | NoaaRrfsEnsForecastVirtualDataset
-    ],
-    fire: str,
-    cutoff: str,
-    validation_ends: str,
-    retry_cutoff: str,
-) -> None:
-    dataset = dataset_class(
-        primary_storage_config=StorageConfig(
-            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
-        )
-    )
-    root = pd.Timestamp(f"2026-10-19 {fire}")
-    dataset._retry_timing = kubernetes.RetryTiming(
-        root, root + timedelta(hours=6), pd.Timestamp(f"2026-10-19 {cutoff}")
-    )
-    now = pd.Timestamp(f"2026-10-19 {validation_ends}")
-    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: now))
-    monkeypatch.setattr(type(Config), "is_prod", property(lambda self: True))
-    monkeypatch.setenv("CRON_JOB_NAME", "refs-update")
-    failure = validation.OperationalValidationError(
-        "missing", ["CheckVirtualManifestCompleteness"]
-    )
-    monkeypatch.setattr(dataset_class, "validate_dataset", Mock(side_effect=failure))
-    create = Mock(return_value=True)
-    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", create)
-
-    with pytest.raises(typer.Exit):
-        dataset._validate_after_update("update-r1")
-
-    args, kwargs = create.call_args
-    assert args == ("refs-update", "update-r2")
-    timing = kwargs["retry_timing"]
-    assert timing.fire_time == root
-    assert timing.next_fire_time == root + timedelta(hours=6)
-    assert timing.poll_deadline == pd.Timestamp(f"2026-10-19 {retry_cutoff}")
-    assert kwargs["active_deadline"] == timing.poll_deadline - now + timedelta(
-        minutes=6
-    )
-    assert "skip_if_next_run_within_deadline" not in kwargs
 
 
 @pytest.mark.parametrize("now", ["19:43", "19:45", "19:47"])
@@ -155,7 +96,12 @@ def test_only_missing_data_classification(
     )
 
 
-def test_late_source_retries_require_single_store(tmp_path: Path) -> None:
+def test_late_source_retries_require_single_store(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        NoaaRefsForecastHourlyVirtualDataset, "retry_late_sources", True
+    )
     storage = StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK)
     with pytest.raises(ValueError, match="single store without replicas"):
         NoaaRefsForecastHourlyVirtualDataset(

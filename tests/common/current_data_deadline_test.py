@@ -30,19 +30,19 @@ _FRESHNESS_DEADLINES = [
     ("noaa-urma-analysis-virtual", "2026-09-27 00:00", "7h40m"),
     ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "52m"),
     ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:00", "52m"),
-    ("noaa-rrfs-forecast-84-hour-virtual", "2026-09-27 00:00", "230m"),
-    ("noaa-rrfs-forecast-18-hour-virtual", "2026-09-27 00:00", "155m"),
-    ("noaa-rrfs-forecast-sub-hourly-virtual", "2026-09-27 00:00", "133m"),
-    ("noaa-rrfs-ens-forecast-virtual", "2026-09-27 00:00", "256m"),
-    ("noaa-refs-forecast-hourly-virtual", "2026-09-27 00:00", "262m"),
-    ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "262m"),
+    ("noaa-rrfs-forecast-84-hour-virtual", "2026-09-27 00:00", "360m"),
+    ("noaa-rrfs-forecast-18-hour-virtual", "2026-09-27 00:00", "230m"),
+    ("noaa-rrfs-forecast-sub-hourly-virtual", "2026-09-27 00:00", "160m"),
+    ("noaa-rrfs-ens-forecast-virtual", "2026-09-27 00:00", "360m"),
+    ("noaa-refs-forecast-hourly-virtual", "2026-09-27 00:00", "360m"),
+    ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "360m"),
     ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "4D"),
     ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "2026-09-23 00:00", "4D"),
-    ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "6h23m"),
-    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "6h11m"),
-    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "7h30m"),
+    ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "7h55m"),
+    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "5h42m"),
+    ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "8h"),
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "4h02m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "5h"),
     ("google-weathernext2-forecast-operational-virtual", "2026-09-26 12:00", "12h"),
@@ -147,6 +147,32 @@ def test_current_data_cases_cover_registered_datasets() -> None:
     assert {case[0] for case in _FRESHNESS_DEADLINES} == registered
 
 
+@pytest.mark.parametrize("hour", [0, 6, 12, 18])
+@pytest.mark.parametrize(
+    ("dataset_id", "validation_delay"),
+    [
+        ("ecmwf-aifs-single-forecast", "8h15m"),
+        ("ecmwf-aifs-single-forecast-virtual", "5h42m"),
+        ("ecmwf-aifs-single-forecast-virtual", "7h35m"),
+        ("ecmwf-aifs-single-forecast-virtual", "8h38m"),
+        ("ecmwf-aifs-ens-forecast", "8h"),
+        ("ecmwf-aifs-ens-forecast", "8h08m"),
+    ],
+)
+def test_aifs_validation_requires_the_current_init(
+    dataset_id: str,
+    validation_delay: str,
+    hour: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init = pd.Timestamp("2026-10-21") + timedelta(hours=hour)
+    now = init + pd.Timedelta(validation_delay)
+    assert not _check_at_time(
+        dataset_id, now, init - timedelta(hours=6), monkeypatch
+    ).passed
+    assert _check_at_time(dataset_id, now, init, monkeypatch).passed
+
+
 @pytest.mark.parametrize(
     ("dataset_id", "now", "latest"),
     [
@@ -164,7 +190,7 @@ def test_current_data_allows_source_and_processing_time(
     ).passed
 
 
-def test_virtual_polling_starts_before_freshness_deadline() -> None:
+def test_virtual_polling_starts_by_freshness_deadline() -> None:
     init = pd.Timestamp("2026-09-27")
     for dataset in DYNAMICAL_DATASETS:
         if not issubclass(dataset.region_job_class, VirtualRegionJob):
@@ -177,7 +203,7 @@ def test_virtual_polling_starts_before_freshness_deadline() -> None:
                 for job in dataset.operational_kubernetes_resources("test-image")
                 if isinstance(job, ReformatCronJob)
             )
-            assert update.next_fire_time(init) < init + check.max_delay, (
+            assert update.next_fire_time(init) <= init + check.max_delay, (
                 dataset.dataset_id
             )
 
@@ -188,6 +214,7 @@ def test_virtual_polling_starts_before_freshness_deadline() -> None:
         case[0]
         for case in _FRESHNESS_DEADLINES
         if case[0].startswith(("noaa-rrfs-", "noaa-refs-"))
+        and case[0] != "noaa-rrfs-forecast-sub-hourly-virtual"
     ],
 )
 def test_rrfs_and_refs_current_init_is_due_at_poll_deadline(
@@ -205,3 +232,21 @@ def test_rrfs_and_refs_current_init_is_due_at_poll_deadline(
     assert not stale.passed
     assert due.isoformat() in stale.message
     assert _check_at_time(dataset_id, deadline, due, monkeypatch).passed
+
+
+def test_rrfs_sub_hourly_init_is_due_at_next_fire_poll_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset_id = "noaa-rrfs-forecast-sub-hourly-virtual"
+    dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)
+    assert isinstance(dataset, NoaaRrfsDataset)
+    due = pd.Timestamp("2026-09-27 00:00")
+    cadence = dataset.template_config.append_dim_frequency
+    deadline = dataset._virtual_poll_deadline(
+        due + timedelta(minutes=dataset.update_offset_minutes)
+    )
+    previous = due - cadence
+    assert _check_at_time(dataset_id, deadline, previous, monkeypatch).passed
+    stale = _check_at_time(dataset_id, deadline + cadence, previous, monkeypatch)
+    assert not stale.passed
+    assert due.isoformat() in stale.message

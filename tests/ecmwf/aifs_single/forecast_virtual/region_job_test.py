@@ -638,8 +638,8 @@ def test_file_refs_covers_every_variable_in_a_real_index(
 def test_operational_update_jobs_single_polling_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A production fire time: init+5h20m for the 2025-03-01T00 init.
-    now = pd.Timestamp("2025-03-01T05:20")
+    # A production fire time: init+5h42m for the 2025-03-01T00 init.
+    now = pd.Timestamp("2025-03-01T05:42")
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **kw: now))
 
     jobs, template_ds = EcmwfAifsSingleForecastVirtualRegionJob.operational_update_jobs(

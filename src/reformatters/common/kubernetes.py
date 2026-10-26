@@ -437,6 +437,8 @@ def get_deployed_cronjob_image(cronjob_name: str) -> str:
     config.load_kube_config()
     batch_v1 = client.BatchV1Api()
     cronjob = batch_v1.read_namespaced_cron_job(cronjob_name, "default")
+    assert cronjob.spec.job_template.spec is not None
+    assert cronjob.spec.job_template.spec.template.spec is not None
     image = cronjob.spec.job_template.spec.template.spec.containers[0].image
     assert isinstance(image, str), f"CronJob {cronjob_name} image is not a string"
     assert len(image) > 0, f"CronJob {cronjob_name} has no container image"
@@ -448,6 +450,7 @@ def read_job_retry_timing(
 ) -> RetryTiming:
     config.load_incluster_config()
     job = client.BatchV1Api().read_namespaced_job(job_name, os.environ["POD_NAMESPACE"])
+    assert job.metadata is not None
     annotations = job.metadata.annotations or {}
     timing = RetryTiming.from_annotations(annotations)
     if timing is not None:
@@ -497,7 +500,9 @@ def create_job_from_cronjob(
         return False
 
     template = cronjob.spec.job_template
+    assert template.spec is not None
     if skip_if_next_run_within_deadline:
+        assert template.spec.template.spec is not None
         deadline = template.spec.template.spec.active_deadline_seconds
         assert isinstance(deadline, int), "CronJob pod has no active deadline"
         now = pd.Timestamp(datetime.now(UTC))
@@ -509,6 +514,7 @@ def create_job_from_cronjob(
             )
             return False
 
+    assert cronjob.metadata is not None
     cronjob_uid = cronjob.metadata.uid
     assert isinstance(cronjob_uid, str), "CronJob has no UID"
     labels = dict(template.metadata.labels or {}) if template.metadata else {}
@@ -545,6 +551,8 @@ def create_job_from_cronjob(
         if error.status != 409:
             raise
         existing = batch_v1.read_namespaced_job(job_name, namespace)
+        assert existing.metadata is not None
+        assert existing.spec is not None
         if (
             existing.metadata.name != job_name
             or any(

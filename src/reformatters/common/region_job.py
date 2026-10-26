@@ -10,6 +10,7 @@ from typing import (
     Literal,
     Self,
     TypeVar,
+    cast,
     get_args,
 )
 
@@ -130,7 +131,10 @@ class SourceFileCoord(FrozenBaseModel):
         - For an analysis dataset created from forecast data: {"time": self.init_time + self.lead_time}
         """
         # .model_dump() returns a dict from attribute names to values
-        return self.model_dump(exclude={"status", "downloaded_path"})
+        return cast(
+            Mapping[Dim, CoordinateValue],
+            self.model_dump(exclude={"status", "downloaded_path"}),
+        )
 
     @property
     def append_dim_coord(self) -> CoordinateValue:

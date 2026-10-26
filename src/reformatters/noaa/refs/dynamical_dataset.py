@@ -12,8 +12,9 @@ from .template_config import NoaaRefsForecastTemplateConfig
 
 class NoaaRefsDataset(NoaaRrfsDataset[NoaaRefsDataVar, NoaaRefsSourceFileCoord]):
     update_offset_minutes: NonNegativeInt = 105
-    update_deadline: timedelta = timedelta(minutes=163)
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=6)
-    retry_late_sources: ClassVar[bool] = True
+    # Poll until init + 6 h to cover late cycles, ending before the next fire.
+    update_deadline: timedelta = timedelta(minutes=262)
+    # Validation of the hourly product takes up to about 4 minutes.
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=7)
     template_config: NoaaRefsForecastTemplateConfig
     region_job_class: type[NoaaRefsRegionJob] = NoaaRefsRegionJob

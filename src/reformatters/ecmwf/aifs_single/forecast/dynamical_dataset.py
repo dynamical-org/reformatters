@@ -27,9 +27,8 @@ class EcmwfAifsSingleForecastDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # AIFS-single f360 (last lead) ecmwf-forecasts S3 p99 ~init+6h10m (recent
-            # files land 5h25m-6h03m), so fetch at init+6h13m.
-            schedule="13 */6 * * *",
+            # Source GRIB/index pairs normally finish near init+7h35m.
+            schedule="15 2,8,14,20 * * *",
             pod_active_deadline=timedelta(minutes=10),  # runs take ~1 min
             image=image_tag,
             dataset_id=self.dataset_id,
@@ -46,6 +45,6 @@ class EcmwfAifsSingleForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=23)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=55)),
             validation.CheckRecentNans(append_dim_window=3),
         )
