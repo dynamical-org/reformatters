@@ -74,7 +74,7 @@ def test_operational_kubernetes_resources() -> None:
     assert update_cron_job.name == "ecmwf-ifs-ens-15-day-deprecated-zarr-v3-update"
     assert update_cron_job.dataset_id == dataset.dataset_id
     assert update_cron_job.schedule == "45 8 * * *"
-    assert update_cron_job.suspend is True
+    assert update_cron_job.suspend is False
     assert update_cron_job.workers_total == 2 * dataset.num_variable_groups()
     assert update_cron_job.parallelism == min(update_cron_job.workers_total, 10)
     assert update_cron_job.secret_names == [

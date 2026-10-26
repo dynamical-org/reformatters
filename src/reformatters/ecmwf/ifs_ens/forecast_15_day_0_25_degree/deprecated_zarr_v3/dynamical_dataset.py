@@ -65,7 +65,6 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
                 update_cron_job,
                 # f360 lands on GCS ~08:20-08:35 UTC
                 schedule="45 8 * * *",
-                suspend=True,
             )
         ]
 
