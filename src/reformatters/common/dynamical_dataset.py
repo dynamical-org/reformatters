@@ -471,11 +471,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         *,
         worker_index: Annotated[int, typer.Argument(envvar="WORKER_INDEX")],
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
+        reference_time: Annotated[datetime, typer.Option()],
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
-        reference_time: datetime | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
     ) -> None:
@@ -483,8 +483,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
-        run_time = pd.Timestamp(reference_time) if reference_time is not None else None
-        if run_time is not None and run_time.tz is not None:
+        run_time = pd.Timestamp(reference_time)
+        if run_time.tz is not None:
             run_time = run_time.tz_convert("UTC").tz_localize(None)
 
         all_jobs = self.region_job_class.get_jobs(

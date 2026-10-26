@@ -97,6 +97,15 @@ def test_cli_has_backfill_command(dataset_id: str) -> None:
     )
 
 
+def test_cli_backfill_requires_reference_time() -> None:
+    result = runner.invoke(
+        app,
+        [DATASET_IDS[0], "backfill", "2026-01-02", "job", "0", "1"],
+    )
+    assert result.exit_code == 2
+    assert "--reference-time" in result.output
+
+
 @pytest.mark.parametrize(
     "dataset",
     DYNAMICAL_DATASETS,

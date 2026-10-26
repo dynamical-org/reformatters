@@ -606,6 +606,7 @@ def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
         "test-job-name",
         worker_index=0,
         workers_total=1,
+        reference_time=pd.Timestamp("2000-01-03"),
     )
 
     mock_job0.process.assert_called_once()
