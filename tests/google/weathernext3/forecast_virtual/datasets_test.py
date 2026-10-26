@@ -331,7 +331,6 @@ def test_unrestricted_update_window(
     assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
     assert job.publication_holdback is None
     assert job.publication_cutoff == pd.Timestamp.max
-    assert job.reference_time == pd.Timestamp(fire)
     newest = pd.Timestamp(
         newest_hourly
         if config.append_dim_frequency == pd.Timedelta("1h")
@@ -349,23 +348,10 @@ def test_unrestricted_update_window(
         (init, lead) for init in window for lead in leads
     }
     assert all(query.match_glob is None for query in job._listing_queries(coords[-1]))
-    metadata = job.commit_metadata()
-    assert metadata.keys() == {
-        "reformat_job_name",
-        "publication_policy",
-        "reference_time",
-        "launch_scope",
-    }
-    assert metadata["publication_policy"] == "unrestricted"
-    assert (
-        metadata["reference_time"] == pd.Timestamp(fire).tz_localize("UTC").isoformat()
-    )
-    assert job.launch_scope is not None
-    assert job.launch_scope.append_dim_end == newest + config.append_dim_frequency
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-def test_unrestricted_backfill_ignores_reference_time(
+def test_unrestricted_backfill_includes_every_lead(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
     config = dataset.template_config
@@ -376,7 +362,6 @@ def test_unrestricted_backfill_ignores_reference_time(
         all_data_vars=config.data_vars,
         reformat_job_name="backfill",
         filter_variable_names=[config.data_vars[0].name],
-        reference_time=pd.Timestamp("2026-01-01T01:00"),
     )
     assert jobs
     assert all(job.publication_cutoff == pd.Timestamp.max for job in jobs)

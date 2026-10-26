@@ -16,12 +16,10 @@ import ssl
 import subprocess
 import time
 from collections.abc import Callable, Iterator
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
-import pandas as pd
 import pytest
 import yaml
 from kubernetes import client
@@ -30,14 +28,9 @@ from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common import deploy, kubernetes_security
 from reformatters.common import kubernetes as reformatters_kubernetes
 from reformatters.common.kubernetes import (
-    RETRY_FIRE_TIME_ANNOTATION,
-    RETRY_NEXT_FIRE_TIME_ANNOTATION,
-    RETRY_POLL_DEADLINE_ANNOTATION,
-    RETRY_TIMING_ANNOTATIONS,
     SERVICE_ACCOUNT,
     CronJob,
     ReformatCronJob,
-    RetryTiming,
 )
 from reformatters.common.kubernetes_security import (
     _JOB_FIELDS,
@@ -398,7 +391,6 @@ def cluster(apiserver: ApiServer) -> Cluster:
             cpu="1",
             memory="1G",
             schedule="0 * * * *",
-            active_deadline=timedelta(minutes=10),
             shared_memory="1G",
             secret_names=["source-credentials"],
             service_account_name="default",
@@ -1438,136 +1430,3 @@ def test_deploy_with_edit_permissions_and_bootstrap(
         ).status_code
         == 403
     )
-
-
-def _retry_annotations() -> dict[str, str]:
-    return RetryTiming(
-        pd.Timestamp("2026-08-02T12:00"),
-        pd.Timestamp("2026-08-02T13:00"),
-        pd.Timestamp("2026-08-02T12:58"),
-    ).to_annotations()
-
-
-@pytest.mark.parametrize("deadline", [1, 300, 600])
-def test_retry_timing_allows_bounded_job_deadline(
-    cluster: Cluster, deadline: int
-) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["spec"]["activeDeadlineSeconds"] = deadline
-    cluster.assert_allowed(job)
-
-
-@pytest.mark.parametrize("cronjob_name", [UPDATE, MINIMAL])
-def test_retry_timing_allows_unchanged_job_deadline(
-    cluster: Cluster, cronjob_name: str
-) -> None:
-    job = cluster.job_for(cronjob_name)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    cluster.assert_allowed(job)
-
-
-@pytest.mark.parametrize("key", RETRY_TIMING_ANNOTATIONS)
-@pytest.mark.parametrize("only_one", [True, False])
-def test_partial_retry_timing_is_denied(
-    cluster: Cluster, key: str, only_one: bool
-) -> None:
-    annotations = _retry_annotations()
-    if only_one:
-        annotations = {key: annotations[key]}
-    else:
-        del annotations[key]
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(annotations)
-    cluster.assert_denied(job, "clone")
-
-
-@pytest.mark.parametrize("key", RETRY_TIMING_ANNOTATIONS)
-@pytest.mark.parametrize(
-    "value",
-    [
-        "",
-        "NaN",
-        "inf",
-        "1785672000.0",
-        "1e9",
-        "-1",
-        "+1",
-        "01",
-        " 1",
-        "1\n",
-        "\u0661",
-        "99999999999",
-    ],
-)
-def test_invalid_retry_epoch_seconds_are_denied(
-    cluster: Cluster, key: str, value: str
-) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["metadata"]["annotations"][key] = value
-    cluster.assert_denied(job, "clone")
-
-
-@pytest.mark.parametrize(
-    ("key", "value"),
-    [
-        (RETRY_FIRE_TIME_ANNOTATION, "1785675480"),
-        (RETRY_FIRE_TIME_ANNOTATION, "1785675600"),
-        (RETRY_NEXT_FIRE_TIME_ANNOTATION, "1785672000"),
-        (RETRY_POLL_DEADLINE_ANNOTATION, "1785672000"),
-        (RETRY_POLL_DEADLINE_ANNOTATION, "1785671999"),
-        (RETRY_POLL_DEADLINE_ANNOTATION, "1785675481"),
-        (RETRY_POLL_DEADLINE_ANNOTATION, "1785675600"),
-    ],
-)
-def test_unordered_retry_timing_is_denied(
-    cluster: Cluster, key: str, value: str
-) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["metadata"]["annotations"][key] = value
-    cluster.assert_denied(job, "clone")
-
-
-@pytest.mark.parametrize("deadline", [601, 3600])
-def test_retry_job_cannot_extend_deadline(cluster: Cluster, deadline: int) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["spec"]["activeDeadlineSeconds"] = deadline
-    cluster.assert_denied(job, "clone")
-
-
-def test_retry_job_cannot_remove_deadline(cluster: Cluster) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    del job["spec"]["activeDeadlineSeconds"]
-    cluster.assert_denied(job, "clone")
-
-
-def test_retry_job_cannot_add_deadline_to_unbounded_template(cluster: Cluster) -> None:
-    job = cluster.job_for(MINIMAL)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["spec"]["activeDeadlineSeconds"] = 1
-    cluster.assert_denied(job, "clone")
-
-
-@pytest.mark.parametrize(
-    "mutation", [key for key in NEGATIVE_MUTATIONS if key != "active-deadline"]
-)
-def test_retry_metadata_preserves_clone_restrictions(
-    cluster: Cluster, mutation: str
-) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["spec"]["activeDeadlineSeconds"] = 300
-    NEGATIVE_MUTATIONS[mutation](job)
-    cluster.assert_denied(job)
-
-
-def test_retry_job_cannot_shorten_pod_deadline(cluster: Cluster) -> None:
-    job = cluster.job_for(UPDATE)
-    job["metadata"]["annotations"].update(_retry_annotations())
-    job["spec"]["activeDeadlineSeconds"] = 300
-    job["spec"]["template"]["spec"]["activeDeadlineSeconds"] = 300
-    cluster.assert_denied(job, "clone")

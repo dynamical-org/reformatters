@@ -1,13 +1,13 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Self
 
 import pandas as pd
 import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import DataVar
-from reformatters.common.region_job import CoordinateValue, LaunchScope, RegionJob
+from reformatters.common.region_job import CoordinateValue, RegionJob
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.google.weathernext_virtual.holdback import is_publishable, utc_now
@@ -57,6 +57,35 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
 
     @classmethod
+    def get_jobs(
+        cls,
+        tmp_store: Path,
+        template_ds: xr.DataTree,
+        append_dim: AppendDim,
+        all_data_vars: Sequence[GoogleWeathernext3DataVar],
+        reformat_job_name: str,
+        filter_start: Timestamp | None = None,
+        filter_end: Timestamp | None = None,
+        filter_contains: list[Timestamp] | None = None,
+        filter_variable_names: list[str] | None = None,
+    ) -> Sequence[Self]:
+        jobs = super().get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=filter_start,
+            filter_end=filter_end,
+            filter_contains=filter_contains,
+            filter_variable_names=filter_variable_names,
+        )
+        if cls.publication_holdback is None:
+            return jobs
+        cutoff = utc_now() - cls.publication_holdback
+        return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
+
+    @classmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,  # noqa: ARG003
@@ -75,14 +104,14 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         ],
         xr.DataTree,
     ]:
-        reference_time = job_fire_time or utc_now()
+        fire_time = job_fire_time or utc_now()
         if cls.publication_holdback is None:
             cutoff = pd.Timestamp.max
-            newest_init = (reference_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+            newest_init = (fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
                 cls.init_frequency
             )
         else:
-            cutoff = reference_time - cls.publication_holdback
+            cutoff = fire_time - cls.publication_holdback
             newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
                 cls.init_frequency
             )
@@ -100,14 +129,7 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
             reformat_job_name=reformat_job_name,
             region=slice(window_start, len(inits)),
             processing_mode="update",
-            reference_time=reference_time,
             publication_cutoff=cutoff,
-            launch_scope=LaunchScope(
-                append_dim_end=append_dim_end,
-                filter_start=append_dim_end - cls.operational_update_window,
-                filter_end=append_dim_end,
-                filter_variable_names=[var.path for var in all_data_vars],
-            ),
         )
         return [job], template
 

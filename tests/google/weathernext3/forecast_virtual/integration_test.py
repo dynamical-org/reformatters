@@ -1,20 +1,13 @@
-import json
 from pathlib import Path
-from typing import Any
 from unittest.mock import Mock
 
 import icechunk
 import pandas as pd
 import pytest
-from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
-from reformatters.google.weathernext3.forecast_virtual import region_job as job_module
 from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import (
     GoogleWeathernext3ForecastVirtualDataset,
-)
-from reformatters.google.weathernext3.forecast_virtual.region_job import (
-    GoogleWeathernext3ForecastVirtualRegionJob,
 )
 from reformatters.google.weathernext3.forecast_virtual.source import (
     parse_wn3_source_location,
@@ -30,59 +23,6 @@ from reformatters.google.weathernext_virtual.holdback_audit import (
 from scripts.validation import availability
 from scripts.validation.manifest_scan import scan_manifest
 from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS, job_for
-
-
-@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-@pytest.mark.usefixtures("delayed_publication")
-def test_reference_time_survives_clock_boundary_and_retry(
-    dataset: GoogleWeathernext3ForecastVirtualDataset, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    reference = pd.Timestamp("2026-01-02T00:59:59Z").tz_localize(None)
-    clock = Mock(
-        side_effect=[
-            reference.tz_localize(None) + pd.Timedelta(hours=i) for i in range(1000)
-        ]
-    )
-    monkeypatch.setattr(job_module, "utc_now", clock)
-
-    original_init = dataset.region_job_class.__init__
-
-    def advance_clock(
-        self: GoogleWeathernext3ForecastVirtualRegionJob,
-        **values: Any,  # noqa: ANN401
-    ) -> None:
-        job_module.utc_now()
-        original_init(self, **values)
-
-    monkeypatch.setattr(dataset.region_job_class, "__init__", advance_clock)
-    config = dataset.template_config
-    kwargs: dict[str, Any] = {
-        "tmp_store": Path("unused"),
-        "template_ds": config.get_template(pd.Timestamp("2026-01-02")),
-        "append_dim": "init_time",
-        "all_data_vars": config.data_vars,
-        "filter_variable_names": [config.data_vars[0].name],
-        "reformat_job_name": "fixed-launch",
-        "reference_time": reference,
-        "append_dim_end": pd.Timestamp("2026-01-02"),
-    }
-    jobs = dataset.region_job_class.get_jobs(**kwargs)
-    retry = dataset.region_job_class.get_jobs(**kwargs)
-    assert len(jobs) > 1
-    assert clock.call_count == 2 * len(jobs)
-    for job in [*jobs, *retry]:
-        assert job.launch_scope is not None
-        assert job.launch_scope == jobs[0].launch_scope
-        assert job.launch_scope.append_dim_end == pd.Timestamp("2026-01-02")
-        assert job.launch_scope.filter_variable_names == [config.data_vars[0].path]
-        assert job.reference_time == reference.tz_localize(None)
-        assert job.publication_cutoff == pd.Timestamp("2026-01-01T23:59:59")
-        assert (
-            job.commit_metadata()["publication_cutoff"] == "2026-01-01T23:59:59+00:00"
-        )
-    assert [job.source_file_coords() for job in jobs] == [
-        job.source_file_coords() for job in retry
-    ]
 
 
 def test_exact_source_paths() -> None:
@@ -193,7 +133,10 @@ def test_source_audit_catches_future_source_under_eligible_target(
         validate_container=False,
     )
     snapshot = session.commit(
-        "independently planted source", metadata=job.commit_metadata()
+        "independently planted source",
+        metadata={
+            "publication_cutoff": job.publication_cutoff.tz_localize("UTC").isoformat()
+        },
     )
     target_audit = run_audit(repo, "fixture", None, snapshot, None, tmp_path / "target")
     assert target_audit.present_keys == 0
@@ -213,23 +156,13 @@ def test_source_audit_catches_future_source_under_eligible_target(
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
 @pytest.mark.parametrize("route", ["direct", "availability"])
-@pytest.mark.parametrize("unrestricted", [False, True])
 def test_scan_defaults_probe_every_statistic_and_count_each_lead(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     route: str,
-    unrestricted: bool,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     job = job_for(dataset, "2026-01-01T03:00")
-    if unrestricted:
-        # A recorded reference time must not be replayed as a holdback cutoff.
-        job = job.model_copy(
-            update={
-                "publication_cutoff": pd.Timestamp.max,
-                "reference_time": pd.Timestamp("2026-01-01T01:30"),
-            }
-        )
     repo = icechunk.Repository.create(icechunk.in_memory_storage())
     session = repo.writable_session("main")
     template_utils.write_metadata(
@@ -251,10 +184,7 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
                 length=16,
                 validate_container=False,
             )
-    snapshot = session.commit(
-        "one complete, one missing p90, one missing lead",
-        metadata=job.commit_metadata(),
-    )
+    snapshot = session.commit("one complete, one missing p90, one missing lead")
     start = pd.Timestamp("2026-01-01")
     end = start + 2 * dataset.template_config.append_dim_frequency
     store = repo.readonly_session(snapshot_id=snapshot).store
@@ -265,7 +195,6 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
             start=start,
             end=end,
             variables=[name],
-            snapshot_metadata=repo.lookup_snapshot(snapshot).metadata,
             probe_workers=2,
         )
         counts = result.file_availability
@@ -282,77 +211,9 @@ def test_scan_defaults_probe_every_statistic_and_count_each_lead(
             "resolve_scan_window",
             lambda ctx: (dataset, store, start, end),
         )
-        monkeypatch.setattr(availability, "open_icechunk_repository", lambda url: repo)
         counts = availability.run_manifest_scan(ctx)
         assert (tmp_path / ctx.unavailable_timestamps_file).exists()
     horizon = dataset.template_config.horizon_hours
-    expected = {start: (1, horizon if unrestricted else 3)}
     second = start + dataset.template_config.append_dim_frequency
-    if unrestricted:
-        expected[second] = (0, horizon)
-    elif horizon == 48:
-        expected[second] = (0, 2)
+    expected = {start: (1, horizon), second: (0, horizon)}
     assert counts == expected
-
-
-@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-def test_wn3_scan_requires_provenance(
-    dataset: GoogleWeathernext3ForecastVirtualDataset,
-) -> None:
-    assert dataset.region_job_class.requires_scan_provenance is True
-    repo = icechunk.Repository.create(icechunk.in_memory_storage())
-    with pytest.raises(AssertionError, match="require a recorded publication policy"):
-        scan_manifest(
-            dataset,
-            repo.readonly_session("main").store,
-            start=pd.Timestamp("2026-01-01"),
-            end=pd.Timestamp("2026-01-02"),
-            snapshot_metadata={},
-        )
-
-
-@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-@pytest.mark.usefixtures("delayed_publication")
-def test_update_metadata_records_reference_and_launch_scope(
-    dataset: GoogleWeathernext3ForecastVirtualDataset,
-) -> None:
-    config = dataset.template_config
-    fire = pd.Timestamp("2026-02-01T05:10:00Z").tz_localize(None)
-    jobs, template = dataset.region_job_class.operational_update_jobs(
-        MemoryStore(),
-        Path("unused"),
-        config.get_template,
-        "init_time",
-        config.data_vars,
-        "scheduled-update",
-        fire,
-    )
-    (job,) = jobs
-    assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
-    cutoff = fire - pd.Timedelta("1h")
-    end = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
-        config.append_dim_frequency
-    ) + config.append_dim_frequency
-    start = end - job.operational_update_window
-    assert job.reference_time == fire
-    assert job.publication_cutoff == cutoff
-    assert job.launch_scope is not None
-    assert job.launch_scope.append_dim_end == end
-    assert job.launch_scope.filter_start == start
-    assert job.launch_scope.filter_end == end
-    assert job.launch_scope.filter_variable_names == [
-        var.path for var in config.data_vars
-    ]
-    assert template.to_dataset().get_index("init_time")[job.region.start] == start
-    assert (
-        template.to_dataset().get_index("init_time")[job.region.stop - 1]
-        == end - config.append_dim_frequency
-    )
-    metadata = job.commit_metadata()
-    assert metadata["publication_cutoff"] == cutoff.tz_localize("UTC").isoformat()
-    assert metadata["reference_time"] == fire.tz_localize("UTC").isoformat()
-    scope = json.loads(metadata["launch_scope"])
-    assert scope["append_dim_end"] == end.tz_localize("UTC").isoformat()
-    assert scope["filter_start"] == start.tz_localize("UTC").isoformat()
-    assert scope["filter_end"] == end.tz_localize("UTC").isoformat()
-    assert scope["filter_variable_names"] == [var.path for var in config.data_vars]

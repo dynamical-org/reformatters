@@ -15,7 +15,7 @@ import typer
 import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
-from pydantic import Field, PrivateAttr, computed_field, model_validator
+from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
     kubernetes,
@@ -39,7 +39,6 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.retry import DeadlineExceededError, check_deadline
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -68,8 +67,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
-    retry_late_sources: ClassVar[bool] = False
-    _retry_timing: kubernetes.RetryTiming | None = PrivateAttr(default=None)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -148,14 +145,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")] = 1,
     ) -> None:
         """Update an existing dataset with the latest data."""
-        self._retry_timing = None
-        if self.retry_late_sources and Config.is_prod:
-            cron = self._operational_cron_job(ReformatCronJob)
-            self._retry_timing = kubernetes.read_job_retry_timing(
-                reformat_job_name,
-                cron,
-                cron.pod_active_deadline - self.virtual_poll_deadline_grace,
-            )
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         with self._monitor(
@@ -204,13 +193,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 isinstance(error, validation.OperationalValidationError)
                 and Config.is_prod
             ):
-                if (
-                    self._retry_timing is not None
-                    and error.only_missing_data
-                    and pd.Timestamp.now() >= self._retry_timing.poll_deadline
-                ):
-                    self._retry_late_source_update(reformat_job_name)
-                    raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
                 should_retry, retry_job_name = kubernetes.retry_job_name(
                     reformat_job_name
                 )
@@ -226,37 +208,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             # Stop with exit code that fails the job rather than having this pod retry
             raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
 
-    def _retry_late_source_update(self, reformat_job_name: str) -> None:
-        timing = self._retry_timing
-        assert timing is not None
-        cron = self._operational_cron_job(ReformatCronJob)
-        now = pd.Timestamp.now().floor("s")
-        final_cutoff = timing.next_fire_time - timedelta(minutes=2)
-        if now >= final_cutoff:
-            log.info("No polling time remains before %s", timing.next_fire_time)
-            return
-        poll_deadline = min(
-            now + cron.pod_active_deadline - self.virtual_poll_deadline_grace,
-            final_cutoff,
-        )
-        retry_timing = kubernetes.RetryTiming(
-            fire_time=timing.fire_time,
-            next_fire_time=timing.next_fire_time,
-            poll_deadline=poll_deadline,
-        )
-        _, retry_job_name = kubernetes.retry_job_name(
-            reformat_job_name, max_retries=None
-        )
-        try:
-            kubernetes.create_job_from_cronjob(
-                os.environ["CRON_JOB_NAME"],
-                retry_job_name,
-                retry_timing=retry_timing,
-                active_deadline=poll_deadline - now + self.virtual_poll_deadline_grace,
-            )
-        except Exception:
-            log.exception("Could not submit %s", retry_job_name)
-
     def backfill_kubernetes(
         self,
         append_dim_end: datetime | None = None,
@@ -269,7 +220,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         docker_image: str | None = None,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
-        reference_time: datetime | None = None,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -279,16 +229,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "backfill_kubernetes is only supported in prod environment"
         )
 
-        reference_time = (
-            pd.Timestamp(reference_time).as_unit("s")
-            if reference_time is not None
-            else pd.Timestamp.now(tz="UTC").floor("s")
-        )
-        reference_time = (
-            reference_time.tz_convert("UTC").tz_localize(None)
-            if reference_time.tz is not None
-            else reference_time
-        )
         overwrite = overwrite_chunks or overwrite_metadata
         existing_ds = self._open_existing_store()
         template_ds, resolved_end = self._resolve_backfill_template(
@@ -311,25 +251,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 "in place without launching workers; the filter and --docker-image "
                 "options would have no effect"
             )
-            metadata = None
-            if issubclass(self.region_job_class, VirtualRegionJob):
-                jobs = self.region_job_class.get_jobs(
-                    tmp_store=self._tmp_store(),
-                    template_ds=template_ds,
-                    append_dim=self.template_config.append_dim,
-                    all_data_vars=self.template_config.data_vars,
-                    reformat_job_name="metadata-refresh",
-                    reference_time=reference_time,
-                    append_dim_end=resolved_end,
-                )
-                metadata = jobs[0].commit_metadata() if jobs else {}
             template_utils.refresh_store_metadata(
                 self.store_factory,
                 template_ds,
                 self.template_config.append_dim,
                 self._tmp_store(),
                 consolidated=self.region_job_class.consolidated_metadata,
-                metadata=metadata,
             )
             log.info("Metadata refresh complete, no chunk data written.")
             return
@@ -373,8 +300,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     else None
                 ),
                 filter_variable_names=filter_variable_names,
-                reference_time=reference_time,
-                append_dim_end=resolved_end,
             )
         )
         workers_total = int(np.ceil(num_jobs / jobs_per_pod))
@@ -383,7 +308,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         command = [
             "backfill",
             resolved_end.isoformat(),
-            f"--reference-time={reference_time.isoformat()}",
         ]
         if filter_start is not None:
             command.append(f"--filter-start={filter_start.isoformat()}")
@@ -438,14 +362,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
         filter_variable_names: list[str] | None = None,
-        reference_time: datetime | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
         assert Config.is_dev or Config.is_test, (
             "backfill_local is only supported in dev or test environments"
         )
 
-        reference_time = reference_time or pd.Timestamp.now(tz="UTC").floor("s")
         template_ds = self._get_template(append_dim_end)
         # Write metadata to final store. Required for Zarr v3 only, Icechunk metadata is written in parallel_setup.
         if not self.store_factory.all_stores_icechunk():
@@ -454,7 +376,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         self.backfill(
             append_dim_end,
             reformat_job_name="local",
-            reference_time=reference_time,
             worker_index=0,
             workers_total=1,
             filter_start=filter_start,
@@ -471,7 +392,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         *,
         worker_index: Annotated[int, typer.Argument(envvar="WORKER_INDEX")],
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")],
-        reference_time: Annotated[datetime, typer.Option()],
         filter_start: datetime | None = None,
         filter_end: datetime | None = None,
         filter_contains: list[datetime] | None = None,
@@ -483,18 +403,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
-        run_time = pd.Timestamp(reference_time)
-        if run_time.tz is not None:
-            run_time = run_time.tz_convert("UTC").tz_localize(None)
-
         all_jobs = self.region_job_class.get_jobs(
             tmp_store=tmp_store,
             template_ds=template_ds,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
-            reference_time=run_time,
-            append_dim_end=pd.Timestamp(append_dim_end),
             filter_start=pd.Timestamp(filter_start) if filter_start else None,
             filter_end=pd.Timestamp(filter_end) if filter_end else None,
             filter_contains=(
@@ -588,9 +502,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
-            metadata=all_jobs[0].commit_metadata()
-            if all_jobs and isinstance(all_jobs[0], VirtualRegionJob)
-            else None,
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
@@ -669,26 +580,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
         job = job.model_copy(
-            update={
-                "poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now()),
-                "write_deadline": (
-                    self._retry_timing.poll_deadline
-                    if self._retry_timing is not None
-                    else None
-                ),
-            }
+            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
-        try:
-            check_deadline(job.write_deadline)
-            job.refresh_metadata(self.store_factory, self._tmp_store())
-            check_deadline(job.write_deadline)
-            self.region_job_class.process_worker_jobs(
-                [job], self.store_factory, "main", worker_index, overwrite_chunks=False
-            )
-        except DeadlineExceededError:
-            log.info("Write deadline reached; continuing to validation")
+        job.refresh_metadata(self.store_factory, self._tmp_store())
+        self.region_job_class.process_worker_jobs(
+            [job], self.store_factory, "main", worker_index, overwrite_chunks=False
+        )
 
     def validate_dataset(
         self,
@@ -776,13 +675,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         operational_update_jobs = self.region_job_class.operational_update_jobs
         fire_time_kwarg: dict[str, Any] = {}
         if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
-            fire_time_kwarg["job_fire_time"] = (
-                self._retry_timing.fire_time
-                if self._retry_timing is not None
-                else self._operational_cron_job(ReformatCronJob).previous_fire_time(
-                    pd.Timestamp.now()
-                )
-            )
+            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
+                ReformatCronJob
+            ).previous_fire_time(pd.Timestamp.now())
 
         return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
@@ -950,8 +845,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         the next fire and being killed mid-poll. Lands a grace period before the pod's
         own active deadline, leaving room to validate, exit and check in.
         """
-        if self._retry_timing is not None:
-            return self._retry_timing.poll_deadline
         cron_job = self._operational_cron_job(ReformatCronJob)
         assert (
             timedelta(0)
@@ -966,9 +859,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
-        assert not (self.retry_late_sources and self.replica_storage_configs), (
-            "Late-source retries require a single store without replicas"
-        )
         # A virtual region job emits chunk refs into icechunk and needs the source
         # containers registered, so the virtual config is mandatory for it.
         if (

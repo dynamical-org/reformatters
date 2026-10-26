@@ -390,10 +390,6 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     Unlike StoreFactory.primary_store this needs no credentials or Kubernetes secret
     access, so offline validation runs anywhere the store is publicly readable.
     """
-    return open_icechunk_repository(url).readonly_session("main").store
-
-
-def open_icechunk_repository(url: str) -> icechunk.Repository:
     storage = _icechunk_storage(url)
     assert storage is not None, url
     config = (
@@ -410,7 +406,7 @@ def open_icechunk_repository(url: str) -> icechunk.Repository:
         config=config,
         authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
     )
-    return repo
+    return repo.readonly_session("main").store
 
 
 def load_retried(da: xr.DataArray) -> xr.DataArray:

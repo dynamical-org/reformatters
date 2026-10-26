@@ -606,7 +606,6 @@ def test_backfill(monkeypatch: pytest.MonkeyPatch) -> None:
         "test-job-name",
         worker_index=0,
         workers_total=1,
-        reference_time=pd.Timestamp("2000-01-03"),
     )
 
     mock_job0.process.assert_called_once()
@@ -662,10 +661,7 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     monkeypatch.setattr(storage, "_get_store_path", _get_store_path)
 
     mock_job0.process = Mock(return_value={})
-    before = pd.Timestamp.now(tz="UTC").floor("s")
     dataset.backfill_local(pd.Timestamp("2000-01-02"))
-    reference_time = backfill_mock.call_args.kwargs["reference_time"]
-    assert before <= reference_time <= pd.Timestamp.now(tz="UTC")
 
     assert (
         xr.open_zarr(dataset.store_factory.primary_store()).attrs["cool"] == "weather"
@@ -685,7 +681,6 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
         filter_end=None,
         filter_contains=None,
         filter_variable_names=None,
-        reference_time=reference_time,
     )
 
 
@@ -732,7 +727,6 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         filter_end=datetime(2020, 1, 1),
         filter_variable_names=["a", "b"],
         docker_image="my-docker-image",
-        reference_time=pd.Timestamp("2026-10-01T10:20:30Z"),
     )
 
     assert mock_run.call_count == 1
@@ -747,8 +741,6 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert "--filter-end=2020-01-01T00:00:00" in input_str
     assert "--filter-variable-names=a" in input_str
     assert "--filter-variable-names=b" in input_str
-    assert input_str.count("--reference-time=") == 1
-    assert "--reference-time=2026-10-01T10:20:30" in input_str
     # Docker image
     assert '"my-docker-image"' in input_str
 

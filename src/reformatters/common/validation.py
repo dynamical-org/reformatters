@@ -73,17 +73,6 @@ class ValidationResult(pydantic.BaseModel):
 class OperationalValidationError(ValueError):
     """Raised by validate_dataset when one or more checks fail."""
 
-    def __init__(self, message: str, failed_checks: Sequence[str] = ()) -> None:
-        super().__init__(message)
-        self.failed_checks = tuple(failed_checks)
-
-    @property
-    def only_missing_data(self) -> bool:
-        return bool(self.failed_checks) and set(self.failed_checks) <= {
-            "CheckCurrentData",
-            "CheckVirtualManifestCompleteness",
-        }
-
 
 @dataclass(frozen=True)
 class ValidationContext:
@@ -286,7 +275,7 @@ def validate_dataset(
             dataset_id,
             *[name for name, _ in failures],
         ]
-        raise OperationalValidationError(message, [name for name, _ in failures])
+        raise OperationalValidationError(message)
 
     log.info(f"{dataset_id} validation passed all checks")
 

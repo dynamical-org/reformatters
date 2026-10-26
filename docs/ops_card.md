@@ -21,7 +21,7 @@ Accessible via manually triggered github actions. Follow link and click "run wor
 - [Create job from cronjob](https://github.com/dynamical-org/reformatters/actions/workflows/manual-create-job-from-cronjob.yml) - Use this to manually re-run any workflow. This is safe to do.
 
 ## Troubleshooting
-- **Validation fails**: The final update pod exits 20 and its Job fails. Check for an automatic retry before using "Create job from cronjob" to rerun the update. Retry budgets and cutoff behavior are configured in code; inspect the retry Job and logs before starting another writer. Missing source data at update time is a common cause. The `validate` CLI remains available for standalone checks.
+- **Validation fails**: The final update pod exits 20 and its Job fails. Check for an automatic retry before using "Create job from cronjob" to rerun the update. Retries are bounded and submitted only if the next scheduled fire is farther away than the pod deadline. Missing source data at update time is a common cause. The `validate` CLI remains available for standalone checks.
 - **Update times out**: Use "Get jobs" and "Get pods" to check status. A run whose logs end with `Received SIGTERM, exiting` was stopped by kubernetes (eviction, pod active deadline, or a replacing fire); one whose logs stop with no such line was killed outright (e.g. out of memory) or stopped making progress on its own.
 - **Update fails**: Look at issues and logs. Jobs that raise an error usually require a code change to fix (e.g. structural change to data at the source). If it appears a code change is needed, make a PR, merge it, wait for the deploy action to complete, then re-run the update. If it appears transient, re-run the update job.
 

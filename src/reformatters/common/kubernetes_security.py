@@ -7,15 +7,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from reformatters.common.kubernetes import (
-    RETRY_EPOCH_SECONDS_PATTERN,
-    RETRY_FIRE_TIME_ANNOTATION,
-    RETRY_NEXT_FIRE_TIME_ANNOTATION,
-    RETRY_POLL_DEADLINE_ANNOTATION,
-    RETRY_TIMING_ANNOTATIONS,
-    SERVICE_ACCOUNT,
-    CronJob,
-)
+from reformatters.common.kubernetes import SERVICE_ACCOUNT, CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -173,21 +165,6 @@ def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
             "expression": "has(params.spec.jobTemplate.metadata) && has(params.spec.jobTemplate.metadata.annotations) ? params.spec.jobTemplate.metadata.annotations : {}",
         },
         {
-            "name": "hasRetryTiming",
-            "expression": f"{json.dumps(RETRY_TIMING_ANNOTATIONS)}.exists(k, k in variables.jobAnnotations)",
-        },
-        {
-            "name": "validRetryTiming",
-            "expression": (
-                f"{json.dumps(RETRY_TIMING_ANNOTATIONS)}.all(k, k in variables.jobAnnotations && "
-                f"variables.jobAnnotations[k].matches({json.dumps(RETRY_EPOCH_SECONDS_PATTERN)})) ? "
-                f"int(variables.jobAnnotations[{json.dumps(RETRY_FIRE_TIME_ANNOTATION)}]) < "
-                f"int(variables.jobAnnotations[{json.dumps(RETRY_POLL_DEADLINE_ANNOTATION)}]) && "
-                f"int(variables.jobAnnotations[{json.dumps(RETRY_POLL_DEADLINE_ANNOTATION)}]) <= "
-                f"int(variables.jobAnnotations[{json.dumps(RETRY_NEXT_FIRE_TIME_ANNOTATION)}]) - 120 : false"
-            ),
-        },
-        {
             "name": "podLabels",
             "expression": "has(object.spec.template.metadata.labels) ? object.spec.template.metadata.labels : {}",
         },
@@ -204,7 +181,6 @@ def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
         "!object.metadata.name.matches('.*-[0-9]+$')",
         "!has(object.metadata.ownerReferences) || size(object.metadata.ownerReferences) == 0",
         "!has(object.metadata.finalizers) || size(object.metadata.finalizers) == 0",
-        "!variables.hasRetryTiming || variables.validRetryTiming",
         _same_map(
             "variables.jobLabels",
             "variables.sourceLabels",
@@ -214,10 +190,7 @@ def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
             "variables.jobAnnotations",
             "variables.sourceAnnotations",
             {"cronjob.kubernetes.io/instantiate": "'manual'"},
-            ignored=(
-                f"({json.dumps(RETRY_TIMING_ANNOTATIONS)} + "
-                f"(request.dryRun == true ? [{json.dumps(CANARY_ANNOTATION)}] : []))"
-            ),
+            ignored=f"(request.dryRun == true ? [{json.dumps(CANARY_ANNOTATION)}] : [])",
         ),
         "object.spec.template.spec == params.spec.jobTemplate.spec.template.spec",
         _same_optional_field(
@@ -249,14 +222,6 @@ def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
     }
     for field in _JOB_FIELDS:
         expected = f"params.spec.jobTemplate.spec.{field}"
-        if field == "activeDeadlineSeconds":
-            actual = f"object.spec.{field}"
-            expressions.append(
-                f"variables.hasRetryTiming && has({actual}) && has({expected}) ? "
-                f"{actual} > 0 && {actual} <= {expected} : "
-                f"({_same_optional_field('object.spec', 'params.spec.jobTemplate.spec', field)})"
-            )
-            continue
         if field == "completions":
             expressions.append(
                 f"has({expected}) ? object.spec.completions == {expected} : "

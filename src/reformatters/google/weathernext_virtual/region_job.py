@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Generic, NamedTuple, TypeVar
 import httpx
 import pandas as pd
 import xarray as xr
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from reformatters.common.config_models import DataVar
 from reformatters.common.logging import get_logger
@@ -19,7 +19,7 @@ from reformatters.common.region_job import (
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
-from .holdback import PUBLICATION_HOLDBACK, is_publishable
+from .holdback import is_publishable
 from .listing import NativeObjectMetadata, ObjectListingQuery, list_objects
 
 log = get_logger(__name__)
@@ -44,46 +44,9 @@ SOURCE_COORD = TypeVar("SOURCE_COORD", bound=WeatherNextSourceFileCoord)
 class WeatherNextVirtualRegionJob(
     VirtualRegionJob[DATA_VAR, SOURCE_COORD], Generic[DATA_VAR, SOURCE_COORD]
 ):
-    requires_scan_provenance: ClassVar[bool] = True
     manifest_init_split: ClassVar[int]
     publication_holdback: ClassVar[Timedelta | None] = None
     publication_cutoff: Timestamp = pd.Timestamp.max
-
-    @model_validator(mode="before")
-    @classmethod
-    def _backfill_cutoff(cls, values: Any) -> Any:  # noqa: ANN401
-        if (
-            cls.publication_holdback is not None
-            and isinstance(values, dict)
-            and values.get("reference_time") is not None
-        ):
-            values = dict(values)
-            values.setdefault(
-                "publication_cutoff",
-                pd.Timestamp(values["reference_time"]) - cls.publication_holdback,
-            )
-        return values
-
-    def commit_metadata(self) -> dict[str, str]:
-        metadata = {"reformat_job_name": self.reformat_job_name}
-        if self.publication_cutoff == pd.Timestamp.max:
-            metadata["publication_policy"] = "unrestricted"
-            if self.reference_time is not None:
-                metadata["reference_time"] = self.reference_time.tz_localize(
-                    "UTC"
-                ).isoformat()
-        else:
-            metadata["publication_cutoff"] = self.publication_cutoff.tz_localize(
-                "UTC"
-            ).isoformat()
-            metadata["reference_time"] = (
-                (self.reference_time or self.publication_cutoff + PUBLICATION_HOLDBACK)
-                .tz_localize("UTC")
-                .isoformat()
-            )
-        if self.launch_scope is not None:
-            metadata["launch_scope"] = self.launch_scope.model_dump_json()
-        return metadata
 
     @abstractmethod
     def _available_lead_times(

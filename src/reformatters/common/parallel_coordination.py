@@ -19,7 +19,6 @@ from reformatters.common import storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
-from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
@@ -55,7 +54,6 @@ def parallel_setup(
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
-    metadata: dict[str, str] | None = None,
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
@@ -98,7 +96,6 @@ def parallel_setup(
                 "Expand dataset",
                 ic_stores[0],
                 ic_stores[1:],
-                metadata=metadata,
             )
             # Persist virtual chunk containers so repo stays in sync with in-code config
             store_factory.persist_virtual_config()
@@ -261,11 +258,7 @@ def finalize(
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
             )
             new_snapshot = session.commit(
-                commit_message,
-                rebase_with=icechunk.ConflictDetector(),
-                metadata=all_jobs[0].commit_metadata()
-                if all_jobs and isinstance(all_jobs[0], VirtualRegionJob)
-                else None,
+                commit_message, rebase_with=icechunk.ConflictDetector()
             )
             repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
         if diverged_roles:

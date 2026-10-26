@@ -106,7 +106,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         GoogleWeathernext2DataVar, GoogleWeathernext2ForecastVirtualSourceFileCoord
     ]
 ):
-    requires_scan_provenance: ClassVar[bool] = False
     source_layout: ClassVar[SourceLayout]
 
     @classmethod
@@ -121,8 +120,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
         filter_end: Timestamp | None = None,
         filter_contains: list[Timestamp] | None = None,
         filter_variable_names: list[str] | None = None,
-        reference_time: Timestamp | None = None,
-        append_dim_end: Timestamp | None = None,
     ) -> Sequence[Self]:
         jobs = super().get_jobs(
             tmp_store=tmp_store,
@@ -134,12 +131,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             filter_end=filter_end,
             filter_contains=filter_contains,
             filter_variable_names=filter_variable_names,
-            reference_time=reference_time,
-            append_dim_end=append_dim_end,
         )
         if cls.source_layout == "historical" or cls.publication_holdback is None:
             return jobs
-        cutoff = (reference_time or _utc_now()) - cls.publication_holdback
+        cutoff = _utc_now() - cls.publication_holdback
         return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
 
     @classmethod
