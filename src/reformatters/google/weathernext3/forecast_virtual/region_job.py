@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar
 
 import pandas as pd
 import xarray as xr
@@ -10,7 +10,6 @@ from reformatters.common.config_models import DataVar
 from reformatters.common.region_job import CoordinateValue, RegionJob
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef
-from reformatters.google.weathernext_virtual.holdback import is_publishable, utc_now
 from reformatters.google.weathernext_virtual.listing import (
     PROXY_LOCATION_PREFIX,
     ObjectListingQuery,
@@ -19,6 +18,7 @@ from reformatters.google.weathernext_virtual.region_job import (
     NativeSourceChunk,
     WeatherNextSourceFileCoord,
     WeatherNextVirtualRegionJob,
+    utc_now,
 )
 
 from .source import source_horizon, source_store_key, source_store_url
@@ -57,35 +57,6 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
 
     @classmethod
-    def get_jobs(
-        cls,
-        tmp_store: Path,
-        template_ds: xr.DataTree,
-        append_dim: AppendDim,
-        all_data_vars: Sequence[GoogleWeathernext3DataVar],
-        reformat_job_name: str,
-        filter_start: Timestamp | None = None,
-        filter_end: Timestamp | None = None,
-        filter_contains: list[Timestamp] | None = None,
-        filter_variable_names: list[str] | None = None,
-    ) -> Sequence[Self]:
-        jobs = super().get_jobs(
-            tmp_store=tmp_store,
-            template_ds=template_ds,
-            append_dim=append_dim,
-            all_data_vars=all_data_vars,
-            reformat_job_name=reformat_job_name,
-            filter_start=filter_start,
-            filter_end=filter_end,
-            filter_contains=filter_contains,
-            filter_variable_names=filter_variable_names,
-        )
-        if cls.publication_holdback is None:
-            return jobs
-        cutoff = utc_now() - cls.publication_holdback
-        return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
-
-    @classmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,  # noqa: ARG003
@@ -105,16 +76,9 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
         xr.DataTree,
     ]:
         fire_time = job_fire_time or utc_now()
-        if cls.publication_holdback is None:
-            cutoff = pd.Timestamp.max
-            newest_init = (fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
-                cls.init_frequency
-            )
-        else:
-            cutoff = fire_time - cls.publication_holdback
-            newest_init = (cutoff.floor("h") - pd.Timedelta("1h")).floor(
-                cls.init_frequency
-            )
+        newest_init = (fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+            cls.init_frequency
+        )
         append_dim_end = newest_init + cls.init_frequency
         template = get_template_fn(append_dim_end)
         inits = template.to_dataset().get_index(append_dim)
@@ -129,7 +93,6 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
             reformat_job_name=reformat_job_name,
             region=slice(window_start, len(inits)),
             processing_mode="update",
-            publication_cutoff=cutoff,
         )
         return [job], template
 
@@ -179,31 +142,17 @@ class GoogleWeathernext3ForecastVirtualRegionJob(
     def _listing_queries(
         self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord
     ) -> Sequence[ObjectListingQuery]:
-        queries = []
-        for var in coord.data_vars:
-            prefix = (
-                f"{source_store_key(coord.init_time)}/{var.internal_attrs.source_name}_"
+        return [
+            ObjectListingQuery(
+                prefix=f"{source_store_key(coord.init_time)}/{var.internal_attrs.source_name}_"
             )
-            whole_variable = is_publishable(
-                coord.init_time,
-                source_horizon(coord.init_time),
-                self.publication_cutoff,
-            )
-            queries.append(
-                ObjectListingQuery(
-                    prefix=prefix,
-                    match_glob=None
-                    if whole_variable
-                    else f"{prefix}{{{','.join(STATISTICS)}}}/c/{coord.lead_index}/0/0",
-                )
-            )
-        return queries
+            for var in coord.data_vars
+        ]
 
     def file_refs(
         self, coord: GoogleWeathernext3ForecastVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
         refs = super().file_refs(coord, file_size)
-        assert is_publishable(coord.init_time, coord.lead_time, self.publication_cutoff)
         for ref in refs:
             assert ref.data_var in coord.data_vars
             assert ref.out_loc["init_time"] == coord.init_time

@@ -19,10 +19,13 @@ from reformatters.common.region_job import (
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
-from .holdback import is_publishable
 from .listing import NativeObjectMetadata, ObjectListingQuery, list_objects
 
 log = get_logger(__name__)
+
+
+def utc_now() -> Timestamp:
+    return pd.Timestamp.now(tz="UTC").tz_localize(None)
 
 
 class WeatherNextSourceFileCoord(InitLeadSourceFileCoord):
@@ -45,8 +48,6 @@ class WeatherNextVirtualRegionJob(
     VirtualRegionJob[DATA_VAR, SOURCE_COORD], Generic[DATA_VAR, SOURCE_COORD]
 ):
     manifest_init_split: ClassVar[int]
-    publication_holdback: ClassVar[Timedelta | None] = None
-    publication_cutoff: Timestamp = pd.Timestamp.max
 
     @abstractmethod
     def _available_lead_times(
@@ -82,32 +83,12 @@ class WeatherNextVirtualRegionJob(
         processing_region_ds: xr.Dataset,
         data_var_group: Sequence[DATA_VAR],
     ) -> Sequence[SOURCE_COORD]:
-        return self._step_coords(processing_region_ds, data_var_group, publishable=True)
-
-    def held_back_source_file_coords(
-        self,
-    ) -> Sequence[SOURCE_COORD]:
-        """Return every held-back source step in this job's processing region."""
-        return self._step_coords(
-            self._processing_region_ds(), self.data_vars, publishable=False
-        )
-
-    def _step_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[DATA_VAR],
-        *,
-        publishable: bool,
-    ) -> Sequence[SOURCE_COORD]:
         coords = []
         for init_time_value in processing_region_ds["init_time"].values:
             init_time = pd.Timestamp(init_time_value)
             for lead_time in self._available_lead_times(
                 init_time, processing_region_ds
             ):
-                eligible = is_publishable(init_time, lead_time, self.publication_cutoff)
-                if eligible is not publishable:
-                    continue
                 coords.extend(
                     self._coords_for_step(init_time, lead_time, data_var_group)
                 )
@@ -173,8 +154,7 @@ class WeatherNextVirtualRegionJob(
         ]
     ]:
         if self.processing_mode == "update":
-            if self.publication_cutoff == pd.Timestamp.max:
-                self._assert_pending_refs_bounded(remaining)
+            self._assert_pending_refs_bounded(remaining)
             yield from super().process_virtual_refs(remaining)
             return
 
@@ -199,7 +179,7 @@ class WeatherNextVirtualRegionJob(
             refs_per_var[var.path] for coord in remaining for var in coord.data_vars
         )
         assert pending_refs <= bound, (
-            f"Unrestricted update has {pending_refs} pending refs, exceeding bound {bound}; "
+            f"Update has {pending_refs} pending refs, exceeding bound {bound}; "
             "backfill the missing range with backfill-kubernetes before updating"
         )
 

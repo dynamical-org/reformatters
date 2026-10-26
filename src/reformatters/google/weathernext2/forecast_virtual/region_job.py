@@ -1,7 +1,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from math import prod
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar
 
 import pandas as pd
 import xarray as xr
@@ -19,9 +19,6 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.google.weathernext_virtual.holdback import (
-    utc_now as _utc_now,
-)
 from reformatters.google.weathernext_virtual.listing import (
     PROXY_LOCATION_PREFIX,
     ObjectListingQuery,
@@ -31,6 +28,7 @@ from reformatters.google.weathernext_virtual.region_job import (
     WeatherNextSourceFileCoord,
     WeatherNextVirtualRegionJob,
 )
+from reformatters.google.weathernext_virtual.region_job import utc_now as _utc_now
 
 from .template_config import (
     INIT_TIME_FREQUENCY,
@@ -109,35 +107,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
     source_layout: ClassVar[SourceLayout]
 
     @classmethod
-    def get_jobs(
-        cls,
-        tmp_store: Path,
-        template_ds: xr.DataTree,
-        append_dim: AppendDim,
-        all_data_vars: Sequence[GoogleWeathernext2DataVar],
-        reformat_job_name: str,
-        filter_start: Timestamp | None = None,
-        filter_end: Timestamp | None = None,
-        filter_contains: list[Timestamp] | None = None,
-        filter_variable_names: list[str] | None = None,
-    ) -> Sequence[Self]:
-        jobs = super().get_jobs(
-            tmp_store=tmp_store,
-            template_ds=template_ds,
-            append_dim=append_dim,
-            all_data_vars=all_data_vars,
-            reformat_job_name=reformat_job_name,
-            filter_start=filter_start,
-            filter_end=filter_end,
-            filter_contains=filter_contains,
-            filter_variable_names=filter_variable_names,
-        )
-        if cls.source_layout == "historical" or cls.publication_holdback is None:
-            return jobs
-        cutoff = _utc_now() - cls.publication_holdback
-        return [job.model_copy(update={"publication_cutoff": cutoff}) for job in jobs]
-
-    @classmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,
@@ -167,19 +136,10 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
                 job_fire_time=PER_INIT_STORE_DATE,
             )
         job_fire_time = job_fire_time or _utc_now()
-        publication_cutoff = pd.Timestamp.max
-        if cls.publication_holdback is None:
-            newest_init = (job_fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
-                INIT_TIME_FREQUENCY
-            )
-        else:
-            publication_cutoff = job_fire_time - cls.publication_holdback
-            latest_publishable_valid_time = (
-                publication_cutoff
-                - (publication_cutoff - PER_INIT_STORE_DATE) % INIT_TIME_FREQUENCY
-            )
-            newest_init = latest_publishable_valid_time - LEAD_TIMES[0]
-        jobs, template_ds = super().operational_update_jobs(
+        newest_init = (job_fire_time - OPERATIONAL_SOURCE_LANDING_DELAY).floor(
+            INIT_TIME_FREQUENCY
+        )
+        return super().operational_update_jobs(
             primary_store=primary_store,
             tmp_store=tmp_store,
             get_template_fn=get_template_fn,
@@ -188,11 +148,6 @@ class GoogleWeathernext2ForecastVirtualRegionJob(
             reformat_job_name=reformat_job_name,
             job_fire_time=newest_init + INIT_TIME_FREQUENCY,
         )
-        (job,) = jobs
-        assert isinstance(job, cls)
-        return [
-            job.model_copy(update={"publication_cutoff": publication_cutoff})
-        ], template_ds
 
     def _available_lead_times(
         self, init_time: Timestamp, processing_region_ds: xr.Dataset

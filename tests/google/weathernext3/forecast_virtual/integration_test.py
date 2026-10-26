@@ -2,7 +2,7 @@ from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS, j
 
 
 def test_exact_source_paths() -> None:
-    job = job_for(DATASETS[0], "2026-01-01T01:00")
+    job = job_for(DATASETS[0])
     coord = job.source_file_coords()[0]
     assert (
         coord.get_url()

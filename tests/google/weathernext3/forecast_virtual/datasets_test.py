@@ -30,7 +30,6 @@ from reformatters.google.weathernext_terms import (
 )
 from reformatters.google.weathernext_virtual import listing
 from reformatters.google.weathernext_virtual.listing import NativeObjectMetadata
-from reformatters.google.weathernext_virtual.validation import CheckNoRefsInsideHoldback
 
 DATASETS = [
     ds
@@ -40,7 +39,7 @@ DATASETS = [
 
 
 def job_for(
-    dataset: GoogleWeathernext3ForecastVirtualDataset, cutoff: str = "2026-01-20"
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> GoogleWeathernext3ForecastVirtualRegionJob:
     config = dataset.template_config
     return dataset.region_job_class(
@@ -50,7 +49,6 @@ def job_for(
         append_dim="init_time",
         region=slice(0, 1),
         reformat_job_name="test",
-        publication_cutoff=pd.Timestamp(cutoff),
     )
 
 
@@ -123,19 +121,15 @@ def test_template_and_operations(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-def test_holdback_mapping_and_source_horizons(
+def test_source_mapping_and_horizons(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
-    job = job_for(dataset, "2026-01-01T02:00")
+    job = job_for(dataset)
     coords = job.source_file_coords()
-    assert [coord.lead_time for coord in coords] == [
+    assert [coord.lead_time for coord in coords[:2]] == [
         pd.Timedelta("1h"),
         pd.Timedelta("2h"),
     ]
-    assert all(
-        coord.lead_time > pd.Timedelta("2h")
-        for coord in job.held_back_source_file_coords()
-    )
     coord = coords[1]
     assert coord.lead_index == 1
     assert coord.chunk_location(job.data_vars[0], "p90").endswith("_p90/c/1/0/0")
@@ -148,11 +142,10 @@ def test_holdback_mapping_and_source_horizons(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-@pytest.mark.parametrize(("hour", "source_hours"), [(0, 360), (1, 48)])
+@pytest.mark.parametrize("hour", [0, 1])
 def test_listing_admission_and_restart(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     hour: int,
-    source_hours: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     job = job_for(dataset)
@@ -161,16 +154,9 @@ def test_listing_admission_and_restart(
     coord = GoogleWeathernext3ForecastVirtualSourceFileCoord(
         init_time=init, lead_time=pd.Timedelta("1h"), data_vars=job.data_vars
     )
-    job = job.model_copy(
-        update={
-            "publication_cutoff": init
-            + pd.Timedelta(hours=source_hours)
-            - pd.Timedelta("1ns")
-        }
-    )
     (query,) = job._listing_queries(coord)
     assert query.delimiter is None
-    assert query.match_glob == f"{query.prefix}{{mean,p10,p25,p50,p75,p90}}/c/0/0/0"
+    assert query.match_glob is None
     locations = [chunk.location for chunk in job._source_chunks(coord)]
     missing = True
     calls = []
@@ -249,56 +235,11 @@ def test_listing_admission_and_restart(
             )
             == []
         )
-    job = job.model_copy(
-        update={"publication_cutoff": init + pd.Timedelta(hours=source_hours)}
-    )
-    assert job._listing_queries(coord)[0].match_glob is None
     calls.clear()
     second = coord.model_copy(update={"lead_time": pd.Timedelta("2h")})
     job.discover_available([coord, second])
     assert len(calls) == 1
     assert calls[0] == {"prefix": query.prefix, "maxResults": "1000"}
-
-
-@pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-@pytest.mark.parametrize(
-    "fire", ["2026-02-01T00:10", "2026-02-01T05:10", "2026-02-04T19:10"]
-)
-@pytest.mark.usefixtures("delayed_publication")
-def test_update_window(
-    dataset: GoogleWeathernext3ForecastVirtualDataset, fire: str
-) -> None:
-    config = dataset.template_config
-    jobs, template = dataset.region_job_class.operational_update_jobs(
-        MemoryStore(),
-        Path("unused"),
-        config.get_template,
-        "init_time",
-        config.data_vars[:1],
-        "test",
-        pd.Timestamp(fire),
-    )
-    (job,) = jobs
-    assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
-    assert job.processing_mode == "update"
-    assert job.publication_cutoff == pd.Timestamp(fire) - pd.Timedelta("1h")
-    inits = template.to_dataset().get_index("init_time")
-    assert inits[-1] == (job.publication_cutoff.floor("h") - pd.Timedelta("1h")).floor(
-        config.append_dim_frequency
-    )
-    coords = job.source_file_coords()
-    final = [
-        coord
-        for coord in coords
-        if coord.lead_time == pd.Timedelta(hours=config.horizon_hours)
-    ]
-    assert final
-    assert all(
-        coord.init_time + coord.lead_time <= job.publication_cutoff for coord in coords
-    )
-    assert final[-1].init_time == (
-        job.publication_cutoff.floor("h") - pd.Timedelta(hours=config.horizon_hours)
-    ).floor(config.append_dim_frequency)
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
@@ -311,7 +252,7 @@ def test_update_window(
         ("2026-02-04T19:10", "2026-02-04T13:00", "2026-02-04T12:00"),
     ],
 )
-def test_unrestricted_update_window(
+def test_update_window(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     fire: str,
     newest_hourly: str,
@@ -329,8 +270,6 @@ def test_unrestricted_update_window(
     )
     (job,) = jobs
     assert isinstance(job, GoogleWeathernext3ForecastVirtualRegionJob)
-    assert job.publication_holdback is None
-    assert job.publication_cutoff == pd.Timestamp.max
     newest = pd.Timestamp(
         newest_hourly
         if config.append_dim_frequency == pd.Timedelta("1h")
@@ -351,7 +290,7 @@ def test_unrestricted_update_window(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
-def test_unrestricted_backfill_includes_every_lead(
+def test_backfill_includes_every_lead(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
     config = dataset.template_config
@@ -364,11 +303,9 @@ def test_unrestricted_backfill_includes_every_lead(
         filter_variable_names=[config.data_vars[0].name],
     )
     assert jobs
-    assert all(job.publication_cutoff == pd.Timestamp.max for job in jobs)
     assert {
         coord.lead_time for job in jobs for coord in job.source_file_coords()
     } == set(pd.timedelta_range("1h", periods=config.horizon_hours, freq="1h"))
-    assert not any(job.held_back_source_file_coords() for job in jobs)
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
@@ -453,44 +390,6 @@ def test_source_zstd_bytes_decode_with_extra_singleton_dims() -> None:
     )
 
 
-def test_holdback_validator_on_statistic_fixture() -> None:
-    job = job_for(DATASETS[0], "2026-01-01T01:00")
-    repo = icechunk.Repository.create(icechunk.in_memory_storage())
-    session = repo.writable_session("main")
-    template_utils.write_metadata(
-        job.template_ds,
-        session.store,
-        "w-",
-        consolidated=False,
-        skip_icechunk_commit=True,
-    )
-    session.commit("template")
-
-    def check() -> None:
-        validation.validate_dataset(
-            [CheckNoRefsInsideHoldback()],
-            store=repo.readonly_session("main").store,
-            append_dim="init_time",
-            dataset_id="test",
-            region_job=job,
-        )
-
-    check()
-    session = repo.writable_session("main")
-    # Presence checks read the manifest, so an arbitrary local payload suffices.
-    sync(
-        session.store.set(
-            f"{job.data_vars[0].path}/c/0/0/1/0/0",
-            default_buffer_prototype().buffer.from_bytes(b"present"),
-        )
-    )
-    session.commit("forbidden lead")
-    with pytest.raises(
-        validation.OperationalValidationError, match="publication cutoff"
-    ):
-        check()
-
-
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
 def test_template_regenerates_identically(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
@@ -516,7 +415,7 @@ def test_template_regenerates_identically(
 
 
 def test_validators_decode_every_statistic_on_small_store() -> None:
-    job = job_for(DATASETS[0], "2026-01-01T01:00")
+    job = job_for(DATASETS[0])
     template = job.template_ds.isel(
         init_time=slice(0, 1), lead_time=slice(0, 1), y=slice(0, 2), x=slice(0, 2)
     )
@@ -535,7 +434,6 @@ def test_validators_decode_every_statistic_on_small_store() -> None:
     session.commit("all statistics")
     checks = [
         validation.CheckVirtualManifestCompleteness(),
-        CheckNoRefsInsideHoldback(),
         validation.CheckVirtualDecodeHealth(
             sampled_levels=len(STATISTICS), max_workers=2
         ),
