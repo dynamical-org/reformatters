@@ -1,0 +1,70 @@
+{
+  "shape": [
+    1,
+    6,
+    360,
+    1801,
+    3600
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        1,
+        1,
+        1801,
+        3600
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "scale_offset",
+      "configuration": {
+        "scale": 3.6
+      }
+    },
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "zstd",
+      "configuration": {
+        "level": 0,
+        "checksum": false
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Precipitation rate",
+    "short_name": "prate",
+    "standard_name": "precipitation_flux",
+    "units": "kg m-2 s-1",
+    "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s. WeatherNext 3 forecast of 1-hour precipitation from its experimental satellite-radar precipitation head; a model forecast, not an observation.",
+    "step_type": "avg",
+    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "statistic",
+    "lead_time",
+    "y",
+    "x"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

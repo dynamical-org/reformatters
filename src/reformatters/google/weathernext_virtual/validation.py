@@ -8,7 +8,7 @@ from reformatters.common.validation import (
     Validator,
 )
 
-from .region_job import GoogleWeathernext2ForecastVirtualRegionJob
+from .region_job import WeatherNextVirtualRegionJob
 
 _REPORTED_STEPS = 20
 
@@ -20,7 +20,7 @@ class CheckNoRefsInsideHoldback(Validator):
 
     def check(self, context: ValidationContext) -> ValidationResult:
         region_job = context.virtual_region_job()
-        assert isinstance(region_job, GoogleWeathernext2ForecastVirtualRegionJob)
+        assert isinstance(region_job, WeatherNextVirtualRegionJob)
         store = context.store
         assert isinstance(store, IcechunkStore)
         append_dim = region_job.append_dim
