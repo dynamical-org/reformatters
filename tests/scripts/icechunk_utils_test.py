@@ -65,3 +65,36 @@ def test_gc_passes_requested_limits(
     icechunk_utils.main()
 
     gc.assert_called_once_with(datetime(2026, 9, 20, 14, 30, tzinfo=UTC), **expected)
+
+
+def test_icechunk_utils_parses_k8s_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], icechunk_utils.AuthMode, str]] = []
+
+    def fake_count_snapshots(
+        repos: list[str], *, auth: icechunk_utils.AuthMode, k8s_secret: str
+    ) -> None:
+        calls.append((repos, auth, k8s_secret))
+
+    monkeypatch.setattr(icechunk_utils, "count_snapshots", fake_count_snapshots)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "icechunk_utils.py",
+            "--repo",
+            "s3://bucket/repo.icechunk",
+            "--k8s-secret",
+            "weathernext2-storage-options-key",
+            "count",
+        ],
+    )
+
+    icechunk_utils.main()
+
+    assert calls == [
+        (
+            ["s3://bucket/repo.icechunk"],
+            "secret",
+            "weathernext2-storage-options-key",
+        )
+    ]
