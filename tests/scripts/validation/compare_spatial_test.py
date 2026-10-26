@@ -5,11 +5,12 @@ import pytest
 import xarray as xr
 
 from scripts.validation.compare_spatial import (
+    _compute_spatial_stats,
     _spatial_color_range,
     align_reference_spatially,
     run_compare_spatial,
 )
-from scripts.validation.utils import RunContext, load_zarr_dataset
+from scripts.validation.utils import RunContext, VariableStats, load_zarr_dataset
 
 
 def _reference_ds() -> xr.Dataset:
@@ -131,3 +132,20 @@ def test_spatial_color_range_uses_available_values_without_hiding_nan_slice() ->
         7.0,
     )
     assert _spatial_color_range("wind_u_10m", np.array([]), np.array([])) == (0.0, 1.0)
+
+
+@pytest.mark.parametrize("wind", [False, True])
+def test_spatial_statistics_preserve_values_and_extrema(wind: bool) -> None:
+    data = xr.DataArray([[350.0, np.nan], [10.0, np.nan]], dims=("y", "x"))
+    if wind:
+        data.attrs.update(standard_name="wind_from_direction", units="degree")
+    stats = VariableStats(name="test")
+    val_clean, ref_clean = _compute_spatial_stats(data, data.copy(), stats)
+    np.testing.assert_array_equal(val_clean, [350.0, 10.0])
+    np.testing.assert_array_equal(ref_clean, val_clean)
+    for prefix in ("val", "ref"):
+        assert getattr(stats, f"{prefix}_spatial_min") == 10.0
+        assert getattr(stats, f"{prefix}_spatial_max") == 350.0
+        assert getattr(stats, f"{prefix}_spatial_mean") == pytest.approx(
+            0.0 if wind else 180.0, abs=1e-10
+        )

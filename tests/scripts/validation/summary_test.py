@@ -8,6 +8,7 @@ from scripts.validation.summary import (
     _availability_line,
     _metadata_table,
     _run_parameters_table,
+    _value_ts_table,
     _variable_section,
 )
 from scripts.validation.utils import RunContext, VariableStats
@@ -114,3 +115,27 @@ def test_summary_omits_statistic_for_numeric_only_variable(tmp_path: Path) -> No
     section = _variable_section(stats, _ctx(_dataset(with_vertical_dim=True), tmp_path))
     assert "statistic" not in section
     assert section.startswith("### `temperature` [pressure_level=500]")
+
+
+def test_virtual_analysis_summary_omits_absent_lead(tmp_path: Path) -> None:
+    ctx = _ctx(
+        _dataset(with_vertical_dim=False).isel(lead_time=0).rename(init_time="time"),
+        tmp_path,
+    )
+    ctx.is_virtual = True
+    header = _value_ts_table(VariableStats(name="temperature"), ctx)[0]
+    assert "sampled" in header
+    assert "lead=" not in header
+    assert "None" not in header
+
+
+def test_virtual_forecast_summary_retains_sampling_details(tmp_path: Path) -> None:
+    ctx = _ctx(_dataset(with_vertical_dim=True), tmp_path)
+    ctx.is_virtual = True
+    ctx.value_ts_lead_label = "6h"
+    ctx.value_ts_member = 2
+    stats = VariableStats(
+        name="temperature", level_dim="pressure_level", level_value=500
+    )
+    header = _value_ts_table(stats, ctx)[0]
+    assert "sampled lead=6h, member=2, pressure_level=500" in header
