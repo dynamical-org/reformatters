@@ -12,6 +12,7 @@ from reformatters.common import validation
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.pydantic import replace
 from reformatters.common.region_job import RegionJob
+from reformatters.common.storage import StoreFactory
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
@@ -42,7 +43,20 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
     @computed_field
     @property
     def dataset_id(self) -> str:
-        return "ecmwf-ifs-ens-15-day-0-25-degree-zarr"
+        return "ecmwf-ifs-ens-15-day-deprecated-zarr-v3"
+
+    @computed_field
+    @property
+    def store_factory(self) -> StoreFactory:
+        # The store keeps the published dataset_id; dataset_id above only names the
+        # CLI command and kubernetes resources.
+        return StoreFactory(
+            primary_storage_config=self.primary_storage_config,
+            replica_storage_configs=self.replica_storage_configs,
+            dataset_id=self.template_config.dataset_id,
+            template_config_version=self.template_config.version,
+            icechunk_virtual_config=self.icechunk_virtual_config,
+        )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         (update_cron_job,) = super().operational_kubernetes_resources(image_tag)

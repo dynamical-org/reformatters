@@ -38,7 +38,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "360m"),
     ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
-    ("ecmwf-ifs-ens-15-day-0-25-degree-zarr", "2026-09-27 00:00", "9h20m"),
+    ("ecmwf-ifs-ens-15-day-deprecated-zarr-v3", "2026-09-27 00:00", "9h20m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "4D"),
     ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "2026-09-23 00:00", "4D"),
     ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "7h55m"),

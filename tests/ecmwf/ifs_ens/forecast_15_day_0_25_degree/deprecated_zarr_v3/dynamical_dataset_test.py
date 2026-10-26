@@ -33,7 +33,7 @@ def _registered[T: DynamicalDataset[Any, Any]](cls: type[T]) -> T:
 def test_registered_zarr_dataset_keeps_published_store_and_metadata() -> None:
     dataset = _registered(EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset)
 
-    assert dataset.dataset_id == "ecmwf-ifs-ens-15-day-0-25-degree-zarr"
+    assert dataset.dataset_id == "ecmwf-ifs-ens-15-day-deprecated-zarr-v3"
     assert dataset.template_config.dataset_id == PUBLISHED_DATASET_ID
     assert dataset.primary_storage_config.format == DatasetFormat.ZARR3
     assert dataset.store_factory.replica_urls() == []
@@ -71,7 +71,7 @@ def test_operational_kubernetes_resources() -> None:
         "test-image-tag"
     )
 
-    assert update_cron_job.name == "ecmwf-ifs-ens-15-day-0-25-degree-zarr-update"
+    assert update_cron_job.name == "ecmwf-ifs-ens-15-day-deprecated-zarr-v3-update"
     assert update_cron_job.dataset_id == dataset.dataset_id
     assert update_cron_job.schedule == "45 8 * * *"
     assert update_cron_job.suspend is True
@@ -81,7 +81,7 @@ def test_operational_kubernetes_resources() -> None:
         dataset.primary_storage_config.k8s_secret_name
     ]
     assert dataset._validation_monitor_name() == (
-        "ecmwf-ifs-ens-15-day-0-25-degree-zarr-validate"
+        "ecmwf-ifs-ens-15-day-deprecated-zarr-v3-validate"
     )
     assert update_cron_job.name != icechunk_cron_job.name
     assert (

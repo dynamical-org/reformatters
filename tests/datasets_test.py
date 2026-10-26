@@ -277,7 +277,7 @@ def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
 
 # Operational names of datasets that run over another dataset's published store id.
 _OPERATIONAL_NAME_OVERRIDES = {
-    "ecmwf-ifs-ens-15-day-0-25-degree-zarr": "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
+    "ecmwf-ifs-ens-15-day-deprecated-zarr-v3": "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
 }
 
 
