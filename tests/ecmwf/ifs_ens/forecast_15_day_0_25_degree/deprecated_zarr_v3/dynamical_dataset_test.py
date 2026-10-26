@@ -1,7 +1,10 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pytest
+import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
@@ -10,6 +13,9 @@ from reformatters.common.iterating import item
 from reformatters.common.storage import DatasetFormat
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.deprecated_zarr_v3 import (
     EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.deprecated_zarr_v3.template_config import (
+    EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3TemplateConfig,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
@@ -93,3 +99,59 @@ def test_validators() -> None:
         validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=20)),
         validation.CheckRecentNans(append_dim_window=3),
     )
+
+
+def _shifted_store(end: str) -> xr.DataTree:
+    template_config = EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3TemplateConfig()
+    return template_config.model_copy(
+        update={"append_dim_start": pd.Timestamp("2024-04-02")}
+    ).get_template(pd.Timestamp(end))
+
+
+def test_backfill_rejects_store_with_shifted_labels() -> None:
+    dataset = _registered(EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset)
+    existing_ds = _shifted_store("2024-04-04")
+
+    with pytest.raises(AssertionError, match="do not match the template"):
+        dataset._resolve_backfill_template(
+            existing_ds,
+            datetime(2024, 4, 3),
+            overwrite_chunks=False,
+            overwrite_metadata=True,
+        )
+
+
+def test_backfill_accepts_store_with_template_labels() -> None:
+    dataset = _registered(EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset)
+    existing_ds = dataset.template_config.get_template(pd.Timestamp("2024-04-03"))
+
+    template_ds, _ = dataset._resolve_backfill_template(
+        existing_ds,
+        datetime(2024, 4, 3),
+        overwrite_chunks=False,
+        overwrite_metadata=True,
+    )
+
+    assert template_ds["init_time"].to_numpy()[0] == pd.Timestamp("2024-04-01")
+
+
+def test_writers_reject_store_with_shifted_labels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dataset = _registered(EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset)
+    monkeypatch.setattr(
+        type(dataset), "_open_existing_store", lambda self: _shifted_store("2024-04-04")
+    )
+
+    with pytest.raises(AssertionError, match="do not match the template"):
+        dataset._process_region_jobs(
+            all_jobs=[],
+            worker_index=0,
+            workers_total=1,
+            reformat_job_name="test",
+            template_ds=dataset.template_config.get_template(
+                pd.Timestamp("2024-04-03")
+            ),
+            tmp_store=tmp_path,
+            update_template_with_results=True,
+        )

@@ -1,13 +1,23 @@
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
+import numpy as np
+import pandas as pd
+import xarray as xr
 from pydantic import computed_field
 
 from reformatters.common import validation
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.pydantic import replace
+from reformatters.common.region_job import RegionJob
+from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
+    IfsEnsSourceFileCoord,
 )
 
 from .region_job import EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3RegionJob
@@ -49,4 +59,59 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
         return (
             validation.CheckCurrentData(max_delay=timedelta(hours=9, minutes=20)),
             validation.CheckRecentNans(append_dim_window=3),
+        )
+
+    def _resolve_backfill_template(
+        self,
+        existing_ds: xr.DataTree | None,
+        append_dim_end: datetime | None,
+        *,
+        overwrite_chunks: bool,
+        overwrite_metadata: bool,
+    ) -> tuple[xr.DataTree, pd.Timestamp]:
+        template_ds, resolved_end = super()._resolve_backfill_template(
+            existing_ds,
+            append_dim_end,
+            overwrite_chunks=overwrite_chunks,
+            overwrite_metadata=overwrite_metadata,
+        )
+        if existing_ds is not None:
+            self._assert_stored_labels_match_template(existing_ds, template_ds)
+        return template_ds, resolved_end
+
+    def _process_region_jobs(
+        self,
+        all_jobs: Sequence[RegionJob[EcmwfDataVar, IfsEnsSourceFileCoord]],
+        worker_index: int,
+        workers_total: int,
+        reformat_job_name: str,
+        template_ds: xr.DataTree,
+        tmp_store: Path,
+        *,
+        update_template_with_results: bool,
+        overwrite_chunks: bool = False,
+        overwrite_metadata: bool = False,
+    ) -> None:
+        if (existing_ds := self._open_existing_store()) is not None:
+            self._assert_stored_labels_match_template(existing_ds, template_ds)
+        super()._process_region_jobs(
+            all_jobs,
+            worker_index,
+            workers_total,
+            reformat_job_name,
+            template_ds,
+            tmp_store,
+            update_template_with_results=update_template_with_results,
+            overwrite_chunks=overwrite_chunks,
+            overwrite_metadata=overwrite_metadata,
+        )
+
+    def _assert_stored_labels_match_template(
+        self, existing_ds: xr.DataTree, template_ds: xr.DataTree
+    ) -> None:
+        append_dim = self.template_config.append_dim
+        stored: np.ndarray[Any, Any] = existing_ds.dataset[append_dim].values
+        expected = template_ds.dataset[append_dim].values[: stored.size]
+        assert np.array_equal(stored, expected), (
+            f"Stored {append_dim} labels do not match the template; refusing to write"
         )
