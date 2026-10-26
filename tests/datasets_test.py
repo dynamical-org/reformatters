@@ -275,6 +275,12 @@ def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
     assert len(validators) >= 1, f"{dataset.dataset_id}: no validators defined"
 
 
+# Operational names of datasets that run over another dataset's published store id.
+_OPERATIONAL_NAME_OVERRIDES = {
+    "ecmwf-ifs-ens-15-day-0-25-degree-zarr": "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
+}
+
+
 @pytest.mark.parametrize(
     "dataset",
     DYNAMICAL_DATASETS,
@@ -283,7 +289,10 @@ def test_validators_are_defined(dataset: DynamicalDataset[Any, Any]) -> None:
 def test_dataset_id_matches_template_config(
     dataset: DynamicalDataset[Any, Any],
 ) -> None:
-    assert dataset.dataset_id == dataset.template_config.dataset_id
+    assert (
+        _OPERATIONAL_NAME_OVERRIDES.get(dataset.dataset_id, dataset.dataset_id)
+        == dataset.template_config.dataset_id
+    )
 
 
 @pytest.mark.parametrize(

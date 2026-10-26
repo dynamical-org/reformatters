@@ -116,6 +116,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     @computed_field
     @property
     def dataset_id(self) -> str:
+        # Names the CLI command and kubernetes resources; store paths always use
+        # template_config.dataset_id, so a subclass may override this to run a second
+        # dataset over the same published id.
         return self.template_config.dataset_id
 
     def update_template(self) -> None:
@@ -128,7 +131,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         return StoreFactory(
             primary_storage_config=self.primary_storage_config,
             replica_storage_configs=self.replica_storage_configs,
-            dataset_id=self.dataset_id,
+            dataset_id=self.template_config.dataset_id,
             template_config_version=self.template_config.version,
             icechunk_virtual_config=self.icechunk_virtual_config,
         )

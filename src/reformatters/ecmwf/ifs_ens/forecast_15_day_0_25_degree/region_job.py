@@ -52,6 +52,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # variable that we can parallelize.
     max_vars_per_download_group: ClassVar[int] = 1
     max_vars_per_job: ClassVar[int] = 1
+    open_data_sources: ClassVar[tuple[EcmwfOpenDataSource, ...]] = ("gcs", "s3")
 
     @classmethod
     def source_file_var_groups(
@@ -118,7 +119,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
         """Download the file for the given coordinate and return the local path."""
         if isinstance(coord, OpenDataSourceFileCoord):
             return ecmwf_download_with_fallback(
-                ("gcs", "s3"),
+                self.open_data_sources,
                 lambda source: self._download_from_source(coord, source),
             )
         # MARS lives on Dynamical's source.coop archive; no mirror to fall back to.
