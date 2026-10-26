@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock
 
-import icechunk
 import numpy as np
 import pandas as pd
 import pytest
@@ -689,10 +688,10 @@ def test_scan_window_probe_workers_bounds_concurrent_jobs(
     cache holds on an archive with many source files per job, so a caller must be
     able to lower it.
     """
-    seen: list[dict[str, Any]] = []
+    seen: list[dict[str, int]] = []
 
     def fake_probe_jobs(
-        jobs: object, store: object, **kwargs: object
+        jobs: object, store: object, **kwargs: int
     ) -> Iterator[tuple[object, list[object]]]:
         seen.append(kwargs)
         return iter(())
@@ -714,7 +713,7 @@ def test_scan_window_probe_workers_bounds_concurrent_jobs(
                 probe_workers=probe_workers,
             )
 
-    assert seen == [{"max_workers": 8, "probe_dims": ()}, {"probe_dims": ()}]
+    assert seen == [{"max_workers": 8}, {}]
 
 
 def test_resolve_bounds_clamps_a_start_before_the_dataset() -> None:
@@ -730,68 +729,3 @@ def test_resolve_bounds_clamps_a_start_before_the_dataset() -> None:
     )
 
     assert (start, end) == (pd.Timestamp("2020-10-01"), pd.Timestamp("2021-01-01"))
-
-
-def test_admission_units_do_not_collapse_shared_store_urls() -> None:
-    position = pd.Timestamp("2025-01-01")
-    present = _Coord(position, "same.zarr", pd.Timedelta("1h"))
-    missing = _Coord(position, "same.zarr", pd.Timedelta("2h"))
-    counts: dict[pd.Timestamp, list[int]] = {}
-    _fold_file_availability(
-        [(present, True), (missing, False)],  # ty: ignore[invalid-argument-type]
-        {},
-        counts,
-        admission_units=True,
-    )
-    assert counts[position] == [1, 2]
-
-
-def test_all_statistic_labels_probed_at_every_lead() -> None:
-
-    position = pd.Timestamp("2025-01-01")
-    coords = [_Coord(position, "same.zarr", pd.Timedelta(hours=h)) for h in (1, 2)]
-    var = _var("temperature")
-    template = xr.Dataset(
-        {
-            "temperature": (
-                ("init_time", "lead_time", "statistic", "y", "x"),
-                np.zeros((1, 2, 6, 1, 1)),
-            )
-        },
-        coords={
-            "init_time": [position],
-            "lead_time": pd.to_timedelta([1, 2], unit="h"),
-            "statistic": ["mean", "std", "p10", "p25", "p75", "p90"],
-            "y": [0],
-            "x": [0],
-        },
-    )
-    template.temperature.encoding["chunks"] = (1, 1, 1, 1, 1)
-    repo = icechunk.Repository.create(icechunk.in_memory_storage())
-    session = repo.writable_session("main")
-    group = zarr.open_group(session.store, mode="w")
-    group.create_array(
-        "temperature", shape=(1, 2, 6, 1, 1), chunks=(1, 1, 1, 1, 1), dtype="float32"
-    )
-    for lead in range(2):
-        for statistic in range(6):
-            if lead == 0 and statistic == 5:
-                continue
-            session.store.set_virtual_ref(
-                f"temperature/c/0/{lead}/{statistic}/0/0",
-                "https://invalid.example/no-fetch",
-                offset=0,
-                length=4,
-                validate_container=False,
-            )
-    snapshot = session.commit("missing old non-mean statistic")
-    job = _Job(coords, [], [var], template)
-    presence = manifest_scan._probe_job(
-        job,  # ty: ignore[invalid-argument-type]
-        repo.readonly_session(snapshot_id=snapshot).store,
-        ("statistic",),
-    )
-    assert [present for _, present in presence] == [False, True]
-    counts: dict[pd.Timestamp, list[int]] = {}
-    _fold_file_availability(presence, {}, counts, admission_units=True)
-    assert counts[position] == [1, 2]

@@ -118,7 +118,7 @@ def test_template_and_operations(
     )
     decode = dataset.validators()[-1]
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
-    assert decode.sample_all_dims == ("statistic",)
+    assert decode.sampled_levels == len(STATISTICS)
     assert decode.max_workers == 2
 
 
@@ -537,7 +537,7 @@ def test_validators_decode_every_statistic_on_small_store() -> None:
         validation.CheckVirtualManifestCompleteness(),
         CheckNoRefsInsideHoldback(),
         validation.CheckVirtualDecodeHealth(
-            sample_all_dims=("statistic",), max_workers=2
+            sampled_levels=len(STATISTICS), max_workers=2
         ),
     ]
     validation.validate_dataset(

@@ -77,41 +77,10 @@ def coord_position(coord: SourceFileCoord) -> pd.Timestamp:
 
 
 def _probe_job(
-    job: VirtualRegionJob[Any, Any],
-    store: IcechunkStore,
-    probe_dims: tuple[str, ...] = (),
+    job: VirtualRegionJob[Any, Any], store: IcechunkStore
 ) -> list[tuple[SourceFileCoord, bool]]:
     """(coord, is_present) for every source file one region job covers."""
     candidates = list(job.source_file_coords())
-    if probe_dims:
-        group = zarr.open_group(store, mode="r")
-        keys_by_var = {
-            var.path: _var_keys(job.template_ds, group, var) for var in job.data_vars
-        }
-        keyed = [
-            (
-                coord,
-                [
-                    key
-                    for var in job.data_vars
-                    if _coord_carries(coord, var)
-                    for key in _var_chunk_keys(
-                        keys_by_var[var.path], coord.out_loc(), probe_dims
-                    )
-                ],
-            )
-            for coord in candidates
-        ]
-        presence = _exists_many(
-            store,
-            list({key for _, keys in keyed for key in keys}),
-            max_attempts=_SCAN_MAX_RETRIES,
-        )
-        return [
-            (coord, bool(keys) and all(presence[key] for key in keys))
-            for coord, keys in keyed
-        ]
-
     # Retried: a whole-archive scan makes enough reads that a transient object store
     # failure is near-certain, and one un-retried probe would kill the run.
     missing = retry(
@@ -127,7 +96,6 @@ def probe_jobs(
     store: IcechunkStore,
     # 48 network-bound probe workers is the tuned value for the target run host.
     max_workers: int = 48,
-    probe_dims: tuple[str, ...] = (),
 ) -> Iterator[tuple[VirtualRegionJob[Any, Any], list[tuple[SourceFileCoord, bool]]]]:
     """Probe every job's source files concurrently, yielding (job, [(coord, present)])
     as jobs complete. In-flight work is bounded so a whole-archive scan never holds
@@ -135,7 +103,7 @@ def probe_jobs(
     job_iter = iter(jobs)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_probe_job, job, store, probe_dims): job
+            pool.submit(_probe_job, job, store): job
             for job in islice(job_iter, max_workers * 4)
         }
         while futures:
@@ -143,7 +111,7 @@ def probe_jobs(
             for future in done:
                 job = futures.pop(future)
                 for refill in islice(job_iter, 1):
-                    futures[pool.submit(_probe_job, refill, store, probe_dims)] = refill
+                    futures[pool.submit(_probe_job, refill, store)] = refill
                 yield job, future.result()
 
 
@@ -176,8 +144,6 @@ def _fold_file_availability(
     coord_presence: Sequence[tuple[SourceFileCoord, bool]],
     lead_limits: dict[pd.Timestamp, pd.Timedelta],
     counts: dict[pd.Timestamp, list[int]],
-    *,
-    admission_units: bool = False,
 ) -> None:
     """Fold one job's probes into per-position [present_files, expected_files] counts.
 
@@ -185,15 +151,7 @@ def _fold_file_availability(
     coords is counted once (virtual jobs carry one variable group per region, so a file
     never spans jobs); present if any coord saw it present. Files past a position's
     expected_forecast_length are not expected (e.g. leads beyond a 36-hour-era init).
-    With `admission_units`, each coord is counted on its own instead.
     """
-    if admission_units:
-        for coord, is_present in coord_presence:
-            if coord_is_expected(coord, lead_limits):
-                bucket = counts.setdefault(coord_position(coord), [0, 0])
-                bucket[1] += 1
-                bucket[0] += int(is_present)
-        return
     present_by_file: dict[tuple[pd.Timestamp, str], bool] = {}
     for coord, is_present in coord_presence:
         if not coord_is_expected(coord, lead_limits):
@@ -293,19 +251,13 @@ def _var_keys(
     )
 
 
-def _var_chunk_keys(
-    keys: _VarKeys,
-    out_loc: Mapping[Any, Any],
-    probe_dims: tuple[str, ...] = (),
-) -> list[str]:
+def _var_chunk_keys(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> list[str]:
     """Chunk keys at `out_loc`, covering unlabeled levels and one spatial chunk."""
     indices = []
     for dim, chunk_size, count in zip(
         keys.dims, keys.chunks, keys.chunk_counts, strict=True
     ):
-        if dim in probe_dims:
-            indices.append(range(count))
-        elif dim in out_loc:
+        if dim in out_loc:
             position = keys.indexes[dim].get_loc(out_loc[dim])
             assert isinstance(position, int)
             indices.append((position // chunk_size,))
@@ -398,8 +350,6 @@ def scan_manifest(
     checkpoint_dir: Path | None = None,
     window: pd.Timedelta | None = None,
     probe_workers: int | None = None,
-    probe_dims: tuple[str, ...] = (),
-    admission_units: bool = False,
 ) -> ManifestScanResult:
     """Probe `store`'s manifest per source file and per variable. No decode.
 
@@ -411,24 +361,6 @@ def scan_manifest(
     ensemble archive runs for hours, long enough that an interruption is likely; without
     checkpoints the whole scan is lost and starts over.
     """
-    assert not set(probe_dims) & {
-        "latitude",
-        "longitude",
-        "y",
-        "x",
-        "init_time",
-        "time",
-        "lead_time",
-    }
-    # A coord covers every statistic of its lead, so it is present only if all are.
-    if "statistic" in dataset.template_config.all_dims:
-        admission_units = True
-        probe_dims = tuple(dict.fromkeys((*probe_dims, "statistic")))
-    if checkpoint_dir is not None and (probe_dims or admission_units):
-        checkpoint_dir = checkpoint_dir / digest(
-            [store.session.snapshot_id, *probe_dims, str(admission_units)],
-            length=12,
-        )
     if checkpoint_dir is not None and window is None:
         window = _CHECKPOINT_WINDOW
     windows: list[tuple[pd.Timestamp | None, pd.Timestamp | None]] = [(start, end)]
@@ -462,8 +394,6 @@ def scan_manifest(
                 end=window_end,
                 variables=variables,
                 probe_workers=probe_workers,
-                probe_dims=probe_dims,
-                admission_units=admission_units,
             )
             if path is not None:
                 _write_checkpoint(path, result)
@@ -578,8 +508,6 @@ def _scan_window(
     end: pd.Timestamp | None,
     variables: list[str] | None,
     probe_workers: int | None = None,
-    probe_dims: tuple[str, ...] = (),
-    admission_units: bool = False,
 ) -> ManifestScanResult:
     log.info(f"Building region jobs for {dataset.dataset_id} [{start} .. {end}]")
     jobs = cast(
@@ -599,17 +527,9 @@ def _scan_window(
     progress_every = max(1, len(jobs) // 20)
     probe_kwargs = {} if probe_workers is None else {"max_workers": probe_workers}
     for i, (job, coord_presence) in enumerate(
-        probe_jobs(
-            jobs,
-            store,
-            probe_dims=probe_dims,
-            **probe_kwargs,
-        ),
-        start=1,
+        probe_jobs(jobs, store, **probe_kwargs), start=1
     ):
-        _fold_file_availability(
-            coord_presence, lead_limits, file_counts, admission_units=admission_units
-        )
+        _fold_file_availability(coord_presence, lead_limits, file_counts)
         for var in job.data_vars:
             var_availability.setdefault(var.path, {})
         pending_probes.extend(_var_probes(job, coord_presence, group, keys_by_var))

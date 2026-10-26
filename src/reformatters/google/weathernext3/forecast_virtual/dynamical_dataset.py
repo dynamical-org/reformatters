@@ -14,6 +14,7 @@ from .region_job import (
     GoogleWeathernext3ForecastVirtualSourceFileCoord,
 )
 from .template_config import (
+    STATISTICS,
     GoogleWeathernext3DataVar,
     GoogleWeathernext3ForecastVirtualTemplateConfig,
 )
@@ -73,7 +74,7 @@ class GoogleWeathernext3ForecastVirtualDataset(
                 positions="all",
                 max_positions=2,
                 sampled_leads=1,
-                sample_all_dims=("statistic",),
+                sampled_levels=len(STATISTICS),
                 max_workers=2,
             ),
         )
