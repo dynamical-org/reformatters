@@ -1,6 +1,7 @@
 import contextlib
 import functools
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -28,6 +29,7 @@ from reformatters.common.types import AppendDim
 log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
+JOB_STATE_RETENTION = timedelta(days=1)
 
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
@@ -315,6 +317,24 @@ class StoreFactory(FrozenBaseModel):
             for entry in fs.ls(path, detail=False):
                 if entry.rsplit("/", 1)[-1] != "state.json":
                     fs.rm(entry, recursive=True)
+
+    def clear_expired_job_states(self, current_job_name: str) -> None:
+        cutoff = datetime.now(UTC) - JOB_STATE_RETENTION
+        fs = self._coordination_fs()
+        states = fs.glob(
+            f"{self._coordination_base_path()}/*/state.json", detail=True, refresh=True
+        )
+        for path, info in states.items():
+            if info["type"] != "file" or path.rsplit("/", 2)[-2] == current_job_name:
+                continue
+            modified = (
+                info["LastModified"]
+                if "LastModified" in info
+                else datetime.fromtimestamp(info["mtime"], UTC)
+            )
+            if modified < cutoff:
+                with contextlib.suppress(FileNotFoundError):
+                    fs.rm(path)
 
 
 _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS = {

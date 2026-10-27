@@ -190,6 +190,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     if not self._prepare_and_wait_materialized_update(
                         materialized_job, cron, is_first=is_first
                     ):
+                        if is_last:
+                            self.store_factory.clear_expired_job_states(
+                                reformat_job_name
+                            )
                         return
             tmp_store = self._tmp_store()
 
@@ -219,16 +223,20 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     job_uid=job_uid,
                 )
 
-        if is_last:
-            self._validate_after_update(
-                reformat_job_name,
-                materialized_job=materialized_job,
-                job_fire_time=job_fire_time,
-            )
+        try:
+            if is_last:
+                self._validate_after_update(
+                    reformat_job_name,
+                    materialized_job=materialized_job,
+                    job_fire_time=job_fire_time,
+                )
 
-        log.info(
-            f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
-        )
+            log.info(
+                f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
+            )
+        finally:
+            if is_last and materialized_job is not None:
+                self.store_factory.clear_expired_job_states(reformat_job_name)
 
     def _prepare_and_wait_materialized_update(
         self, job: client.V1Job, cron: CronJob, *, is_first: bool

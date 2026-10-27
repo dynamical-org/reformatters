@@ -77,7 +77,7 @@ The [materialized queue and re-pass rules](operational_update_timing.md#material
 
 Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jobTemplate`. The update service account and deployer need `list` permission on Jobs. The shared listing helper selects that label and orders Jobs by `(creationTimestamp, name)`.
 
-`state.json` contains the Job UID in `uid` and one of `run`, `skip`, or `finalized` in `state`. Readers accept it only for the current Job UID; another UID counts as absent. Setup/results cleanup preserves this file.
+`state.json` contains the Job UID in `uid` and one of `run`, `skip`, or `finalized` in `state`. Readers accept it only for the current Job UID; another UID counts as absent. Setup/results cleanup preserves this file for replacement pods.
 
 ### Completion triggers
 
@@ -99,7 +99,7 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 
 For queued materialized updates, finalization records `finalized` only after every store's publication CAS succeeds and the divergence check passes. This write precedes deletion of temporary branches and coordination files. A failed or interrupted publication leaves the existing state and temporary branches available for inspection or retry.
 
-The last worker deletes the temporary Icechunk branches, then setup and result files; `state.json` is retained. See the [materialized lifecycle](operational_update_timing.md#materialized-queue-and-re-passes) for replacement-pod, validation, and backoff behavior.
+The last worker deletes the temporary Icechunk branches, then setup and result files; it retains the current Job's `state.json`. After validation and any re-pass backoff/submission, the last index deletes other Jobs' `state.json` files under this dataset's `_internal/` whose object modification time is more than `JOB_STATE_RETENTION` (one day) old. This threshold exceeds every configured operational Job and pod deadline, enforced by a registry-wide test. Other leftover files are untouched. The last index also performs this cleanup when exiting on `skip` or `finalized` state. See the [materialized lifecycle](operational_update_timing.md#materialized-queue-and-re-passes) for replacement-pod, validation, and backoff behavior.
 
 ## Failure modes
 
