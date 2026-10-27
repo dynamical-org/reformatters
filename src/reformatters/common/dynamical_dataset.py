@@ -173,7 +173,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 if is_first:
                     self._assert_no_structural_drift(template_ds)
                 self._run_virtual_operational_update(
-                    all_jobs, worker_index, workers_total
+                    all_jobs, worker_index, workers_total, job_fire_time=job_fire_time
                 )
             else:
                 self._process_region_jobs(
@@ -577,6 +577,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         all_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
         worker_index: int,
         workers_total: int,
+        *,
+        job_fire_time: Timestamp | None = None,
     ) -> None:
         """One-worker virtual dataset operational update: commit one or more
         whole source files straight to the "main" icechunk branch as they arrive
@@ -596,7 +598,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
         job = job.model_copy(
-            update={"poll_deadline": self._virtual_poll_deadline(pd.Timestamp.now())}
+            update={
+                "poll_deadline": self._virtual_poll_deadline(
+                    job_fire_time if job_fire_time is not None else pd.Timestamp.now()
+                )
+            }
         )
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.

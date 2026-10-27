@@ -65,6 +65,8 @@ def test_inline_validation_does_not_move_tip(
         all_jobs: Sequence[GoogleWeathernext3ForecastVirtualRegionJob],
         worker_index: int,
         workers_total: int,
+        *,
+        job_fire_time: pd.Timestamp | None = None,
     ) -> None:
         (job,) = all_jobs
         session = repo.writable_session("main")

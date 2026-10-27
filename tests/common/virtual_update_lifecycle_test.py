@@ -105,7 +105,7 @@ def test_virtual_update_validates_once_after_polling_and_retries_only_without_al
     monkeypatch.setattr(
         dataset_class,
         "_run_virtual_operational_update",
-        Mock(side_effect=lambda *args: events.append("polling ended")),
+        Mock(side_effect=lambda *args, **kwargs: events.append("polling ended")),
     )
 
     def validate(*args: object, **kwargs: object) -> None:
@@ -251,6 +251,52 @@ def test_complete_window_exits_without_discovery_or_sleep(
     sleep.assert_not_called()
 
 
+def test_allow_poll_deadline_keeps_the_selected_fire_when_start_straddles_successor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    template_utils.write_metadata(_create_template_ds(0), dataset.store_factory)
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    cron = cron.model_copy(
+        update={
+            "schedule": "0 0,6,12,18 * * *",
+            "concurrency_policy": "Allow",
+            "pod_active_deadline": timedelta(hours=6, minutes=3),
+        }
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset,
+        "operational_kubernetes_resources",
+        Mock(return_value=[cron]),
+    )
+    fire = APPEND_DIM_START + APPEND_DIM_FREQ
+    successor = cron.next_fire_time(fire)
+    now = [successor - timedelta(seconds=1)]
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda *args, **kwargs: now[0])
+    )
+
+    def tmp_store(self: VirtualTestDataset) -> Path:
+        now[0] = successor + timedelta(seconds=1)
+        return tmp_path / "tmp.zarr"
+
+    monkeypatch.setattr(VirtualTestDataset, "_tmp_store", tmp_store)
+    template = Mock(return_value=_create_template_ds(1))
+    monkeypatch.setattr(VirtualTestDataset, "_get_template", template)
+    monkeypatch.setattr(VirtualTestDataset, "_assert_no_structural_drift", Mock())
+    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
+    process = Mock()
+    monkeypatch.setattr(VirtualTestRegionJob, "process_worker_jobs", process)
+    monkeypatch.setattr(VirtualTestDataset, "_validate_after_update", Mock())
+
+    dataset.update("straddling-update")
+
+    template.assert_called_once_with(fire)
+    (job,) = process.call_args.args[0]
+    assert job.poll_deadline == dataset._virtual_poll_deadline(fire)
+    assert job.poll_deadline < dataset._virtual_poll_deadline(now[0])
+
+
 @pytest.mark.parametrize("currency_passes", [False, True])
 def test_allow_validation_keeps_the_selected_window_after_the_successor_fire(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, currency_passes: bool
@@ -305,6 +351,8 @@ def test_allow_validation_keeps_the_selected_window_after_the_successor_fire(
         jobs: Sequence[VirtualTestRegionJob],
         worker_index: int,
         workers_total: int,
+        *,
+        job_fire_time: pd.Timestamp | None = None,
     ) -> None:
         _process_virtual(jobs[0], repo)
         now[0] = successor + timedelta(minutes=2)
