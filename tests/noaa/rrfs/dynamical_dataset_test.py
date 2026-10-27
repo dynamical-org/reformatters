@@ -71,7 +71,7 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
 
 
 @pytest.mark.parametrize(
-    ("cls", "offset", "duration", "grace", "schedule", "cutoff_minutes", "max_delay"),
+    ("cls", "offset", "duration", "grace", "schedule", "cutoff", "max_delay"),
     [
         (
             NoaaRrfsForecast84HourVirtualDataset,
@@ -79,7 +79,7 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(minutes=300),
             timedelta(minutes=5),
             "5 1,7,13,19 * * *",
-            360,
+            timedelta(minutes=360),
             timedelta(minutes=360),
         ),
         (
@@ -88,17 +88,17 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(minutes=170),
             timedelta(minutes=5),
             "5 1,4,7,10,13,16,19,22 * * *",
-            230,
+            timedelta(minutes=230),
             timedelta(minutes=230),
         ),
         (
             NoaaRrfsForecastSubHourlyVirtualDataset,
             75,
-            timedelta(minutes=59),
-            timedelta(seconds=60),
+            timedelta(minutes=62, seconds=37),
+            timedelta(seconds=81),
             "15 * * * *",
-            133,
-            timedelta(minutes=160),
+            timedelta(minutes=136, seconds=16),
+            timedelta(minutes=138),
         ),
         (
             NoaaRrfsEnsForecastVirtualDataset,
@@ -106,7 +106,7 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(minutes=295),
             timedelta(minutes=5),
             "10 1,7,13,19 * * *",
-            360,
+            timedelta(minutes=360),
             timedelta(minutes=360),
         ),
     ],
@@ -117,7 +117,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     duration: timedelta,
     grace: timedelta,
     schedule: str,
-    cutoff_minutes: int,
+    cutoff: timedelta,
     max_delay: timedelta,
     tmp_path: Path,
 ) -> None:
@@ -131,7 +131,9 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert dataset.update_offset_minutes == offset
     assert dataset.update_deadline == duration
     spec = update.as_kubernetes_object()["spec"]
-    assert spec["concurrencyPolicy"] == "Replace"
+    assert spec["concurrencyPolicy"] == (
+        "Allow" if cls is NoaaRrfsForecastSubHourlyVirtualDataset else "Replace"
+    )
     job = spec["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
     assert (
@@ -146,23 +148,21 @@ def test_poll_deadline_update_schedule_and_decode_health(
     end = fire + dataset.update_deadline
     assert update.previous_fire_time(fire) == fire
     assert update.pod_active_deadline == duration
-    cutoff = init + pd.Timedelta(minutes=cutoff_minutes)
+    poll_end = init + cutoff
     assert dataset.virtual_poll_deadline_grace == grace
-    assert dataset._virtual_poll_deadline(fire) == end - grace == cutoff
+    assert dataset._virtual_poll_deadline(fire) == end - grace == poll_end
     termination_end = end + pd.Timedelta(seconds=pod["terminationGracePeriodSeconds"])
     assert (
         update.next_fire_time(fire)
         == fire + dataset.template_config.append_dim_frequency
     )
-    assert (
-        update.next_fire_time(fire) - termination_end
-        == (
-            dataset.template_config.append_dim_frequency
-            - duration
-            - pd.Timedelta(seconds=30)
-        )
-        > pd.Timedelta(0)
+    gap = update.next_fire_time(fire) - termination_end
+    assert gap == (
+        dataset.template_config.append_dim_frequency
+        - duration
+        - pd.Timedelta(seconds=30)
     )
+    assert (gap < pd.Timedelta(0)) == (cls is NoaaRrfsForecastSubHourlyVirtualDataset)
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
     assert current.max_delay == max_delay
@@ -225,7 +225,13 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
         fire = due_init + pd.Timedelta(minutes=dataset.update_offset_minutes)
         assert update.previous_fire_time(fire) == fire
         cutoff = fire + dataset.update_deadline - dataset.virtual_poll_deadline_grace
-        for now in (fire, fire + pd.Timedelta("10min"), cutoff + pd.Timedelta("1s")):
+        for now in (
+            fire,
+            fire + pd.Timedelta("10min"),
+            cutoff + pd.Timedelta("1s")
+            if cutoff < update.next_fire_time(fire)
+            else update.next_fire_time(fire) - pd.Timedelta("1s"),
+        ):
             monkeypatch.setattr(
                 pd.Timestamp, "now", classmethod(lambda cls, now=now: now)
             )
@@ -253,7 +259,6 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
         ("rrfs-ens-forecast", 363, False, -3),
         ("refs-forecast-hourly", 363, False, -3),
         ("refs-forecast-3-hourly", 363, False, -3),
-        ("rrfs-forecast-sub-hourly", 134, False, -1),
     ],
 )
 def test_rrfs_retry_admission_and_fire_anchored_cutoff(

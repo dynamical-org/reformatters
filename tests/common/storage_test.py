@@ -819,7 +819,10 @@ class TestCommitIfIcechunkFailureIsolation:
         assert replica.session.commit.call_count == 10
         primary.session.commit.assert_not_called()
 
-    def test_transient_replica_failure_retried_then_primary_commits(self) -> None:
+    @pytest.mark.parametrize("allow_rebase", [False, True])
+    def test_transient_replica_failure_retried_then_primary_commits(
+        self, allow_rebase: bool
+    ) -> None:
         primary = MagicMock(spec=IcechunkStore)
         primary.session = MagicMock()
 
@@ -835,10 +838,15 @@ class TestCommitIfIcechunkFailureIsolation:
         replica.session = MagicMock()
         replica.session.commit.side_effect = flaky_commit
 
-        commit_if_icechunk("msg", primary, [replica])
+        commit_if_icechunk("msg", primary, [replica], allow_rebase=allow_rebase)
 
         assert replica.session.commit.call_count == 3
         primary.session.commit.assert_called_once()
+        for commit in (
+            *replica.session.commit.call_args_list,
+            primary.session.commit.call_args,
+        ):
+            assert (commit.kwargs["rebase_with"] is not None) == allow_rebase
 
     @pytest.mark.parametrize("conflicting_replica", [False, True])
     def test_conflict_returns_to_transaction_without_same_session_retry(

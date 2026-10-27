@@ -45,7 +45,17 @@ Use one cron per dataset, with one minute offset across all its cycles:
 - Untriggered materialized schedules use the latest class's `S` for the first readiness tier. Earlier classes accept that wait as latency.
 - Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`. Change a consumer's cron together with activation of its trigger.
 
-Check every cycle class against the resulting single cron. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates-single-writer) and [parallel processing](parallel_processing.md) for the mechanisms in use.
+Check every cycle class against the resulting single cron. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates) and [parallel processing](parallel_processing.md) for the mechanisms in use.
+
+## Virtual polling
+
+For CronJobs on `Allow`, fire at `a + E − L − 1 min`, where `a` is the source anchor, `E` the earliest normal usable-file arrival after it, and `L` the p95 startup duration. Choose one minute offset from the earliest cycle class. Poll until the next fire plus `L + 1 min`, so a file arriving at the next fire remains observable while its successor starts. Exit early when nothing in the selected window remains pending.
+
+Set both pod and Job active deadlines to `Δf + L + 1 min + V + 30 s`, with `Δf` the fire interval and `V` the largest observed validation duration. Set `virtual_poll_deadline_grace = V + 30 s`. The cutoff is the selected fire plus the pod deadline minus that grace. Round Sentry's `max_runtime` up to whole minutes so it does not expire before the pod deadline.
+
+Select the fire once at execution start for initial job construction, the polling cutoff and end-of-run manifest/decode validation, including when startup crosses the successor fire. Currency checks still use current time. A replacement starting after the successor fire may select its window and cutoff; the original Job deadline bounds lifetime even though the replacement's pod deadline restarts.
+
+Validate once after polling ends. Validation failure exits 20 and fails the Job; virtual datasets on `Allow` create no validation re-pass Job. Source lateness can therefore alert at poll end under the currency rule below. Datasets still on `Replace` retain their existing retry lifecycle until adoption. See [virtual operational updates](virtual_datasets.md#operational-updates) for writer coordination and recovery.
 
 ## Currency and integrity validation
 

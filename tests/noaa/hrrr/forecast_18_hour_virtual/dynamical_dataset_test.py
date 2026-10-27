@@ -43,17 +43,24 @@ def dataset(tmp_path: Path) -> NoaaHrrrForecast18HourVirtualDataset:
     return make_dataset(tmp_path)
 
 
-def test_polling_leaves_validation_time_inside_single_deadline(
+def test_polling_overlaps_next_fire_and_leaves_validation_time(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
-    fire = pd.Timestamp("2026-10-02T00:50")
-    deadline = pd.Timestamp("2026-10-02T01:47")
+    fire = pd.Timestamp("2026-10-02T00:44")
+    deadline = pd.Timestamp("2026-10-02T01:45:44")
 
-    assert cron.pod_active_deadline == timedelta(minutes=59)
+    assert cron.schedule == "44 * * * *"
+    assert cron.concurrency_policy == "Allow"
+    assert (
+        cron.active_deadline
+        == cron.pod_active_deadline
+        == timedelta(minutes=63, seconds=31)
+    )
     assert dataset._virtual_poll_deadline(fire) == deadline
     assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
-    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)
+    assert deadline - cron.next_fire_time(fire) == timedelta(seconds=104)
+    assert fire + cron.pod_active_deadline - deadline == timedelta(seconds=107)
 
 
 @pytest.mark.slow
@@ -193,8 +200,8 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "50 * * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=59)
+    assert update_cron_job.schedule == "44 * * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(minutes=63, seconds=31)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
@@ -208,7 +215,7 @@ def test_validators(dataset: NoaaHrrrForecast18HourVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(minutes=52)
+    assert current_data.max_delay == timedelta(minutes=74)
     completeness = next(
         validator
         for validator in validators

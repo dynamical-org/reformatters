@@ -25,7 +25,7 @@ The Cartesian product of regions and variable groups produces the full job list,
 - **Materialized** — opens stores once and writes all of the worker's jobs in a single commit.
 - **Virtual** — gathers the worker's source files across all its jobs, dropping the already-present ones unless `overwrite_chunks` asks for a rewrite, then commits each batch its generator yields (a backfill yields once → one commit per worker, like materialized; an operational update yields per poll tick), because a committed icechunk session is read-only (see [virtual_datasets.md](virtual_datasets.md#the-write-loop)).
 
-The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which are single-writer (see below).
+The only fork outside this call is the coordination lifecycle: everything runs the parallel temp-branch flow below except virtual operational updates, which use one worker per Job (see below).
 
 ## Reader safety
 
@@ -59,9 +59,9 @@ All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). 
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
 
-### Virtual Icechunk operational updates (single-writer exception)
+### Virtual Icechunk operational updates (one worker per Job)
 
-Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Their *operational* updates run **single-writer** and commit whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
+Virtual Icechunk datasets (`VirtualRegionJob`) are the one exception to the temp-branch coordinator. Their *operational* updates run **one worker per Job** and commit whole source files straight to `main` as each arrives, so readers see new data within seconds rather than at finalization. Jobs on `Allow` may overlap; conflicted commits re-filter against a fresh session before retrying. There is no temp branch, no `parallel_setup`, no coordination files, and no finalization step — `update()` routes virtual operational updates to `_run_virtual_operational_update` instead of `_process_region_jobs`.
 
 This is safe because each commit contains a *whole* source file's references (all of its chunks), so a reader on `main` always sees either none or all of a file's data. Reader-visible atomicity comes from icechunk's per-commit transaction, not from a branch swap. See [virtual_datasets.md](virtual_datasets.md).
 

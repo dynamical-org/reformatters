@@ -125,7 +125,8 @@ def backfill_and_update_in_isolated_store(
 
     next_init = init + config.append_dim_frequency
     fire = next_init + pd.Timedelta(minutes=dataset.update_offset_minutes)
-    now = fire + dataset.update_deadline - dataset.virtual_poll_deadline_grace
+    poll_end = fire + dataset.update_deadline - dataset.virtual_poll_deadline_grace
+    now = fire
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
@@ -141,6 +142,8 @@ def backfill_and_update_in_isolated_store(
     def published_interval(
         job: NoaaRrfsRegionJob, pending: list[NoaaRrfsSourceFileCoord]
     ) -> list[tuple[NoaaRrfsSourceFileCoord, int]]:
+        nonlocal now
+        now = poll_end
         return original_discover(
             job, [coord for coord in pending if init <= coord.init_time <= next_init]
         )
@@ -148,7 +151,7 @@ def backfill_and_update_in_isolated_store(
     monkeypatch.setattr(
         dataset.region_job_class, "discover_available", published_interval
     )
-    assert dataset._virtual_poll_deadline(now) == now
+    assert dataset._virtual_poll_deadline(now) == poll_end
     dataset.update("isolated-test-update")
     updated = validation.open_flattened_dataset(
         dataset.store_factory.primary_store(), consolidated=False

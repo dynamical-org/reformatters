@@ -557,6 +557,109 @@ def test_virtual_batch_conflicts_exhaust_five_fresh_attempts(
     _assert_store_values(repo.readonly_session("main").store, n_inits=1)
 
 
+@pytest.mark.parametrize("path", ["added", "pressure_level/added"])
+def test_old_template_cannot_commit_growth_after_a_variable_is_added(
+    virtual_memory_repo: icechunk.Repository, path: str
+) -> None:
+    repo = virtual_memory_repo
+    old_template = _create_template_ds(2)
+    _process_virtual(_make_region_job(old_template, region=slice(0, 1)), repo)
+    session = repo.writable_session("main")
+    zarr.open_group(session.store, mode="r+").create_array(
+        path,
+        shape=(1,),
+        chunks=(1,),
+        dtype="float64",
+        fill_value=np.nan,
+        dimension_names=("init_time",),
+    )
+    before = session.commit("add variable")
+    old_writer = _make_region_job(old_template, region=slice(1, 2))
+
+    with pytest.raises(AssertionError, match=rf"Cannot grow init_time to 2.*{path}"):
+        _process_virtual(old_writer, repo)
+
+    assert repo.lookup_branch("main") == before
+    store = repo.readonly_session("main").store
+    with validation.open_flattened_dataset(store, consolidated=False) as ds:
+        assert ds[path].sizes["init_time"] == ds.sizes["init_time"] == 1
+    _assert_store_values(store, n_inits=1)
+
+
+@pytest.mark.parametrize("group", [None, "pressure_level"])
+@pytest.mark.parametrize("refresh_first", [False, True])
+def test_refresh_and_growth_recheck_extent_after_either_commit_order(
+    virtual_memory_repo: icechunk.Repository,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    group: str | None,
+    refresh_first: bool,
+) -> None:
+    repo = virtual_memory_repo
+    old_template = _create_template_ds(2)
+    if group is not None:
+        old_template[group] = xr.DataTree(old_template.to_dataset())
+        setup = repo.writable_session("main")
+        old_template[group].to_dataset().isel(init_time=slice(0, 0)).to_zarr(
+            setup.store, group=group, mode="a", compute=False, consolidated=False
+        )
+        setup.commit("create vertical group")
+    _process_virtual(_make_region_job(old_template, region=slice(0, 1)), repo)
+    before = repo.lookup_branch("main")
+    stale = repo.writable_session("main")
+    added_path = f"{group}/added" if group else "added"
+    source_path = f"{group}/temperature_2m" if group else "temperature_2m"
+    new_template = old_template.copy(deep=True)
+    new_template[added_path] = new_template[source_path].copy(deep=True)
+    factory = Mock()
+    factory.primary_store.side_effect = lambda **kwargs: (
+        repo.writable_session("main").store
+    )
+    factory.replica_stores.return_value = []
+
+    def refresh() -> None:
+        template_utils.refresh_store_metadata(
+            factory,
+            new_template,
+            "init_time",
+            tmp_path / "refresh.zarr",
+            consolidated=False,
+        )
+
+    old_writer = _make_region_job(old_template, region=slice(1, 2))
+    if refresh_first:
+        refresh()
+        opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+        with pytest.raises(AssertionError, match=added_path):
+            _process_virtual(old_writer, repo)
+        assert len(opened) == 2
+        assert _snapshot_count(repo) == 1 + sum(
+            1 for _ in repo.ancestry(snapshot_id=before)
+        )
+        _process_virtual(_make_region_job(new_template, region=slice(1, 2)), repo)
+    else:
+        _process_virtual(old_writer, repo)
+        opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+        refresh()
+        assert len(opened) == 2
+
+    for snapshot in repo.ancestry(branch="main"):
+        store = repo.readonly_session(snapshot_id=snapshot.id).store
+        with validation.open_flattened_dataset(store, consolidated=False) as ds:
+            size = ds.sizes["init_time"]
+            assert all(
+                var.sizes["init_time"] == size
+                for var in ds.variables.values()
+                if "init_time" in var.dims
+            )
+        if snapshot.id == before:
+            break
+    store = repo.readonly_session("main").store
+    with validation.open_flattened_dataset(store, consolidated=False) as ds:
+        assert ds[added_path].sizes["init_time"] == 2
+    _assert_store_values(store, n_inits=2)
+
+
 def test_explicit_overwrite_survives_conflict_retry(
     virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
