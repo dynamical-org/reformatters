@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pandas as pd
 import pydantic
@@ -283,6 +283,7 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
+    concurrency_policy: Literal["Allow", "Forbid", "Replace"] = "Replace"
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.
@@ -318,7 +319,7 @@ class CronJob(Job):
             "spec": {
                 "schedule": self.schedule,
                 "suspend": self.suspend,
-                "concurrencyPolicy": "Replace",
+                "concurrencyPolicy": self.concurrency_policy,
                 "jobTemplate": {"spec": job_spec},
             },
         }

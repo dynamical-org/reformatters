@@ -64,6 +64,8 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
+Each batch commits to replicas before the primary. A conflicting transaction opens a fresh writable session on the same repository, filters out complete files, and recomputes any expansion before recommitting. Retries are bounded to five attempts per repository; a primary conflict does not replay an already committed replica. Explicit `overwrite_chunks` backfills bypass filtering.
+
 ## Operational updates: single writer
 
 `operational_update_jobs()` returns **one** job spanning the active window (the recent, still-incomplete span of the append dim). One pod commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
@@ -71,6 +73,8 @@ This invariant is also what lets the filter probe a single representative cell p
 Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly to the data ingested (never NaN-padded toward "now"), and a resize can never race another writer. If an update falls far behind, run a backfill to catch up rather than scaling operational updates to multiple workers.
 
 Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
+
+The refresh reads each store's extent from the same session it commits, without automatic rebase. Any branch advance retries with a fresh session, so concurrent growth cannot be overwritten with metadata trimmed to an older extent. Replicas retain their own extents.
 
 Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
 

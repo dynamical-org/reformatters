@@ -840,6 +840,26 @@ class TestCommitIfIcechunkFailureIsolation:
         assert replica.session.commit.call_count == 3
         primary.session.commit.assert_called_once()
 
+    @pytest.mark.parametrize("conflicting_replica", [False, True])
+    def test_conflict_returns_to_transaction_without_same_session_retry(
+        self, conflicting_replica: bool
+    ) -> None:
+        primary = MagicMock(spec=IcechunkStore)
+        primary.session = MagicMock()
+        replica = MagicMock(spec=IcechunkStore)
+        replica.session = MagicMock()
+        conflicting = replica if conflicting_replica else primary
+        error = icechunk.RebaseFailedError("snapshot", [])
+        conflicting.session.commit.side_effect = error
+
+        with pytest.raises(icechunk.ConflictError) as raised:
+            commit_if_icechunk("msg", primary, [replica])
+
+        assert raised.value is error
+        assert conflicting.session.commit.call_count == 1
+        if conflicting_replica:
+            primary.session.commit.assert_not_called()
+
 
 class TestPrimaryStoreReadonly:
     """`primary_store(writable=False)` opens a readonly icechunk session.

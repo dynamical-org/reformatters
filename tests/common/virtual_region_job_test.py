@@ -388,6 +388,391 @@ def _make_replica_repo(
     )
 
 
+@pytest.fixture
+def virtual_memory_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> icechunk.Repository:
+    dataset = _make_dataset(tmp_path)
+    repo_config, credentials = _repository_config_and_credentials(
+        dataset.icechunk_virtual_config
+    )
+    repo = icechunk.Repository.create(
+        icechunk.in_memory_storage(),
+        config=repo_config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    template_utils.write_metadata(
+        _create_template_ds(0),
+        repo.writable_session("main").store,
+        mode="w-",
+        consolidated=False,
+    )
+    monkeypatch.setattr(
+        "reformatters.common.retry.exponential_backoff_time", lambda attempt: 0.0
+    )
+    return repo
+
+
+def _queue_stale_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+    repo: icechunk.Repository,
+    stale_sessions: Sequence[icechunk.Session],
+) -> list[icechunk.Session]:
+    writable_session = repo.writable_session
+    queued = iter(stale_sessions)
+    opened: list[icechunk.Session] = []
+
+    def open_session(branch: str) -> icechunk.Session:
+        session = next(queued, None)
+        if session is None:
+            session = writable_session(branch)
+        opened.append(session)
+        return session
+
+    monkeypatch.setattr(repo, "writable_session", open_session)
+    return opened
+
+
+@pytest.mark.parametrize("stale_count", [0, 1, 3])
+def test_overlapping_same_file_skips_complete_file_after_conflicts(
+    virtual_memory_repo: icechunk.Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    stale_count: int,
+) -> None:
+    repo = virtual_memory_repo
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    coords = job.source_file_coords()
+    refs = [
+        ref
+        for _, file_refs in next(job.process_virtual_refs(coords))
+        for ref in file_refs
+    ]
+    batch = [(coords[0], refs)]
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_virtual_refs",
+        lambda self, remaining: iter([batch]),
+    )
+    stale_sessions = [repo.writable_session("main") for _ in range(stale_count)]
+    job.process_virtual(repo, [], "main", coords)
+    after_winner = _snapshot_count(repo)
+    opened = _queue_stale_sessions(monkeypatch, repo, stale_sessions)
+
+    job.process_virtual(repo, [], "main", coords)
+
+    assert len(opened) == stale_count + 1
+    assert _snapshot_count(repo) == after_winner
+    _assert_store_values(repo.readonly_session("main").store, n_inits=1)
+
+
+def test_conflict_retry_filters_complete_files_from_mixed_batch(
+    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = virtual_memory_repo
+    job = _make_region_job(_create_template_ds(2), region=slice(0, 2))
+    coords = job.source_file_coords()
+    files = [
+        (batch[0][0], [ref for _, refs in batch for ref in refs])
+        for batch in job.process_virtual_refs(coords)
+    ]
+    stale = repo.writable_session("main")
+    winner = repo.writable_session("main")
+    job.sync_dims_to([winner.store], 1)
+    job._emit_refs(
+        [winner.store],
+        [ref._replace(offset=BLOCK_NBYTES) for ref in files[0][1]],
+    )
+    winner.commit("concurrent whole file with corrected refs")
+    before = _snapshot_count(repo)
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_virtual_refs",
+        lambda self, remaining: iter([files]),
+    )
+
+    job.process_virtual(repo, [], "main", [coord for coord, _ in files])
+
+    assert len(opened) == 2
+    assert _snapshot_count(repo) == before + 1
+    result = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
+    assert result.sizes["init_time"] == 2
+    for lead_idx in range(N_LEADS):
+        np.testing.assert_array_equal(
+            result.temperature_2m.isel(init_time=0, lead_time=lead_idx),
+            _block_values(0, 1),
+        )
+        np.testing.assert_array_equal(
+            result.temperature_2m.isel(init_time=1, lead_time=lead_idx),
+            _block_values(1, lead_idx),
+        )
+
+
+@pytest.mark.parametrize(("winner_init", "retrying_init"), [(1, 0), (0, 1)])
+def test_conflicting_growth_recomputes_extent_from_fresh_session(
+    virtual_memory_repo: icechunk.Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    winner_init: int,
+    retrying_init: int,
+) -> None:
+    repo = virtual_memory_repo
+    template = _create_template_ds(2)
+    before = _snapshot_count(repo)
+    stale = repo.writable_session("main")
+    winner = _make_region_job(template, region=slice(winner_init, winner_init + 1))
+    _process_virtual(winner, repo)
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    retrying = _make_region_job(
+        _create_template_ds(retrying_init + 1),
+        region=slice(retrying_init, retrying_init + 1),
+    )
+
+    _process_virtual(retrying, repo)
+
+    assert len(opened) == 2
+    assert _snapshot_count(repo) == before + 2
+    store = repo.readonly_session("main").store
+    _assert_store_values(store, n_inits=2)
+    result = xr.open_zarr(store, decode_timedelta=True)
+    np.testing.assert_array_equal(result.init_time, template.coords["init_time"])
+    np.testing.assert_array_equal(result.valid_time, template.coords["valid_time"])
+
+
+def test_virtual_batch_conflicts_exhaust_five_fresh_attempts(
+    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = virtual_memory_repo
+    stale_sessions = [repo.writable_session("main") for _ in range(5)]
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    coords = job.source_file_coords()
+    _process_virtual(job, repo)
+    before = _snapshot_count(repo)
+    opened = _queue_stale_sessions(monkeypatch, repo, stale_sessions)
+
+    with pytest.raises(icechunk.ConflictError):
+        job.process_virtual(repo, [], "main", coords)
+
+    assert len(opened) == 5
+    assert _snapshot_count(repo) == before
+    _assert_store_values(repo.readonly_session("main").store, n_inits=1)
+
+
+def test_explicit_overwrite_survives_conflict_retry(
+    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = virtual_memory_repo
+    template = _create_template_ds(2)
+    job = _make_region_job(template, region=slice(0, 1))
+    _process_virtual(job, repo)
+    stale = repo.writable_session("main")
+    successor = _make_region_job(template, region=slice(1, 2))
+    _process_virtual(successor, repo)
+    before = _snapshot_count(repo)
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    original_batches = VirtualTestRegionJob.process_virtual_refs
+
+    def corrected_batches(
+        self: VirtualTestRegionJob,
+        remaining: Sequence[VirtualTestSourceFileCoord],
+    ) -> Iterator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]:
+        for batch in original_batches(self, remaining):
+            yield [
+                (coord, [ref._replace(offset=BLOCK_NBYTES) for ref in refs])
+                for coord, refs in batch
+            ]
+
+    monkeypatch.setattr(VirtualTestRegionJob, "process_virtual_refs", corrected_batches)
+    factory = Mock(spec=StoreFactory)
+    factory.icechunk_primary_and_replica_repos.return_value = (repo, [])
+
+    VirtualTestRegionJob.process_worker_jobs(
+        [job], factory, "main", 0, overwrite_chunks=True
+    )
+
+    assert len(opened) == 2
+    assert _snapshot_count(repo) == before + 1
+    result = xr.open_zarr(repo.readonly_session("main").store, decode_timedelta=True)
+    for lead_idx in range(N_LEADS):
+        np.testing.assert_array_equal(
+            result.temperature_2m.isel(init_time=0, lead_time=lead_idx),
+            _block_values(0, 1),
+        )
+        np.testing.assert_array_equal(
+            result.temperature_2m.isel(init_time=1, lead_time=lead_idx),
+            _block_values(1, lead_idx),
+        )
+
+
+def test_overlapping_backfill_overwrite_retries_identical_refs(
+    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = virtual_memory_repo
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    session = repo.writable_session("main")
+    job.sync_dims_to([session.store], 1)
+    snapshot = session.commit("pre-size backfill")
+    repo.create_branch("backfill", snapshot)
+    stale = repo.writable_session("backfill")
+    _process_virtual(job, repo, branch="backfill")
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    before = _snapshot_count(repo, "backfill")
+
+    job.process_virtual(
+        repo, [], "backfill", job.source_file_coords(), overwrite_chunks=True
+    )
+
+    assert len(opened) == 2
+    assert _snapshot_count(repo, "backfill") == before + 1
+    store = repo.readonly_session("backfill").store
+    _assert_store_values(store, n_inits=1)
+
+    async def read_refs() -> dict[tuple[int, ...], tuple[str, int, int]]:
+        refs = {}
+        async for batch in store.array_chunk_iterator("temperature_2m"):
+            indices, _, locations, offsets, lengths, _ = batch
+            refs.update(
+                {
+                    tuple(int(i) for i in index): (location, int(offset), int(length))
+                    for index, location, offset, length in zip(
+                        indices, locations, offsets, lengths, strict=True
+                    )
+                }
+            )
+        return refs
+
+    refs = asyncio.run(read_refs())
+    assert refs == {
+        (0, lead_idx, 0, 0): (
+            job.messages_url,
+            *_message_offset_length(0, lead_idx),
+        )
+        for lead_idx in range(N_LEADS)
+    }
+    assert all(
+        store.session.chunk_type("/temperature_2m", index) == icechunk.ChunkType.virtual
+        for index in refs
+    )
+    assert repo.lookup_branch("main") == snapshot
+    assert (
+        job.filter_already_present(
+            job.source_file_coords(), repo.readonly_session("main").store
+        )
+        == job.source_file_coords()
+    )
+
+
+def test_primary_conflict_does_not_replay_committed_replica(
+    virtual_memory_repo: icechunk.Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    primary = virtual_memory_repo
+    dataset = _make_dataset(tmp_path)
+    repo_config, credentials = _repository_config_and_credentials(
+        dataset.icechunk_virtual_config
+    )
+    replica = icechunk.Repository.create(
+        icechunk.in_memory_storage(),
+        config=repo_config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    template_utils.write_metadata(
+        _create_template_ds(0),
+        replica.writable_session("main").store,
+        mode="w-",
+        consolidated=False,
+    )
+    template = _create_template_ds(2)
+    predecessor = _make_region_job(template, region=slice(0, 1))
+    _process_virtual(predecessor, replica)
+    stale = primary.writable_session("main")
+    _process_virtual(predecessor, primary)
+    primary_opened = _queue_stale_sessions(monkeypatch, primary, [stale])
+    replica_opened = _queue_stale_sessions(monkeypatch, replica, [])
+    replica_before = _snapshot_count(replica)
+    primary_before = _snapshot_count(primary)
+    successor = _make_region_job(template, region=slice(1, 2))
+    primary_writable = primary.writable_session
+
+    def open_primary(branch: str) -> icechunk.Session:
+        assert _snapshot_count(replica) == replica_before + 1
+        return primary_writable(branch)
+
+    monkeypatch.setattr(primary, "writable_session", open_primary)
+
+    _process_virtual(successor, primary, [replica])
+
+    assert len(primary_opened) == 2
+    assert len(replica_opened) == 1
+    assert _snapshot_count(primary) == primary_before + 1
+    assert _snapshot_count(replica) == replica_before + 1
+    for repo in (primary, replica):
+        _assert_store_values(repo.readonly_session("main").store, n_inits=2)
+
+    successor.process_virtual(
+        primary, [replica], "main", successor.source_file_coords()
+    )
+    assert _snapshot_count(primary) == primary_before + 1
+    assert _snapshot_count(replica) == replica_before + 1
+
+
+@pytest.mark.parametrize("overwrite_chunks", [False, True])
+def test_disjoint_backfill_rebases_without_rebuilding_batch(
+    virtual_memory_repo: icechunk.Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    overwrite_chunks: bool,
+) -> None:
+    repo = virtual_memory_repo
+    template = _create_template_ds(2)
+    job = _make_region_job(template, region=slice(0, 1))
+    session = repo.writable_session("main")
+    job.sync_dims_to([session.store], 2)
+    snapshot = session.commit("pre-size backfill")
+    repo.create_branch("backfill", snapshot)
+    stale = repo.writable_session("backfill")
+    _process_virtual(job, repo, branch="backfill")
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    successor = _make_region_job(template, region=slice(1, 2))
+
+    successor.process_virtual(
+        repo,
+        [],
+        "backfill",
+        successor.source_file_coords(),
+        overwrite_chunks=overwrite_chunks,
+    )
+
+    assert len(opened) == 1
+    _assert_store_values(repo.readonly_session("backfill").store, n_inits=2)
+    assert (
+        job.filter_already_present(
+            job.source_file_coords(), repo.readonly_session("main").store
+        )
+        == job.source_file_coords()
+    )
+
+
+@pytest.mark.parametrize("error", [AssertionError("structural"), ValueError("source")])
+def test_virtual_batch_does_not_retry_non_conflict_errors(
+    virtual_memory_repo: icechunk.Repository,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    repo = virtual_memory_repo
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    opened = _queue_stale_sessions(monkeypatch, repo, [])
+    before = _snapshot_count(repo)
+    emit_refs = Mock(side_effect=error)
+    monkeypatch.setattr(VirtualTestRegionJob, "_emit_refs", emit_refs)
+
+    with pytest.raises(type(error), match=str(error)):
+        _process_virtual(job, repo)
+
+    assert len(opened) == 1
+    emit_refs.assert_called_once()
+    assert _snapshot_count(repo) == before
+
+
 # --- unit tests (chunk_key, sizing, commit guard) ---
 
 
