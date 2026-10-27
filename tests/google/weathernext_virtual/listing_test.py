@@ -256,6 +256,36 @@ def test_service_token_never_reaches_error_telemetry(
     client.flush()
 
     assert envelopes
-    serialized = b"".join(envelopes)
-    assert b"_get_icechunk_store" in serialized
-    assert TOKEN.encode() not in serialized
+    # Decode the event items and check every string, so JSON escaping can't hide a match.
+    strings: list[str] = []
+
+    def collect(value: object) -> None:
+        if isinstance(value, str):
+            strings.append(value)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                strings.append(str(key))
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    for envelope in envelopes:
+        for line in envelope.splitlines():
+            if line.startswith(b"{"):
+                collect(json.loads(line))
+    assert any("_get_icechunk_store" in string for string in strings)
+    assert "virtual_config" in strings
+    assert not any(TOKEN in string for string in strings)
+
+
+@pytest.mark.parametrize(
+    "token", ["short", "has\\backslash-0123456789", "has space 0123456789"]
+)
+def test_service_token_outside_the_safe_alphabet_falls_back_without_echo(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, token: str
+) -> None:
+    mock_service_token_secret(monkeypatch, token)
+    assert listing.service_token_headers() == {}
+    assert "public tier" in caplog.text
+    assert token not in caplog.text

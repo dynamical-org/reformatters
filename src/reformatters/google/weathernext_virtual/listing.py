@@ -1,3 +1,4 @@
+import re
 from base64 import b64decode
 from typing import NamedTuple
 
@@ -12,6 +13,7 @@ from reformatters.common.retry import retry
 PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
 OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
 SERVICE_TOKEN_SECRET_NAME = "wn-service-token"  # noqa: S105
+_SERVICE_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~-]{16,512}")
 
 log = get_logger(__name__)
 
@@ -49,6 +51,15 @@ def service_token_headers() -> dict[str, str]:
         log.warning(
             f"{SERVICE_TOKEN_SECRET_NAME} has no WN_SERVICE_TOKEN; "
             "reading wn.dynamical.org on the public tier"
+        )
+        return {}
+    if not _SERVICE_TOKEN_PATTERN.fullmatch(token):
+        # Never echo the value. Only this alphabet is sent: it needs no escaping in any
+        # repr, so the telemetry scrubber's exact-value redaction can always find it.
+        log.warning(
+            f"{SERVICE_TOKEN_SECRET_NAME} WN_SERVICE_TOKEN is not 16-512 characters of "
+            "A-Z, a-z, 0-9, '.', '_', '~' or '-'; reading wn.dynamical.org on the "
+            "public tier"
         )
         return {}
     monitoring.register_sensitive_value(token)
