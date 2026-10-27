@@ -486,17 +486,20 @@ def commit_if_icechunk(
     message: str,
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
+    *,
+    allow_rebase: bool = True,
 ) -> None:
-    """Commit Icechunk replicas before the primary, rebasing disjoint writes.
+    """Commit Icechunk replicas before the primary, optionally rebasing disjoint writes.
 
-    Conflicts the rebase cannot resolve raise icechunk.ConflictError. Other errors
-    are retried on the same session, up to ten attempts per store.
+    With allow_rebase=False, any branch advance raises icechunk.ConflictError.
+    Unresolved conflicts also raise icechunk.ConflictError. Other errors are
+    retried on the same session, up to ten attempts per store.
     """
 
     def _commit(icechunk_store: IcechunkStore) -> None:
         icechunk_store.session.commit(
             message=message,
-            rebase_with=icechunk.ConflictDetector(),
+            rebase_with=icechunk.ConflictDetector() if allow_rebase else None,
         )
 
     for store in replica_stores:

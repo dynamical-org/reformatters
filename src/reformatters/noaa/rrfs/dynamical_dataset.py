@@ -1,13 +1,13 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any, ClassVar, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from pydantic import Field, NonNegativeInt
 
 from reformatters.common import validation
 from reformatters.common.config_models import DataVar
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.kubernetes import ConcurrencyPolicy, CronJob, ReformatCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
 from reformatters.noaa.noaa_virtual_region_job import NoaaVirtualSourceFileCoord
 from reformatters.noaa.projected_forecast_template_config import (
@@ -27,7 +27,7 @@ class NoaaRrfsDataset(
     template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     update_offset_minutes: NonNegativeInt
     update_deadline: timedelta
-    concurrency_policy: ClassVar[Literal["Allow", "Forbid", "Replace"]] = "Replace"
+    concurrency_policy: ClassVar[ConcurrencyPolicy] = "Replace"
     min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)

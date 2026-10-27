@@ -255,7 +255,7 @@ def test_update_validates_only_after_final_worker_finishes(
     monkeypatch.setattr(
         ExampleDataset,
         "_validate_dataset",
-        Mock(side_effect=lambda name: events.append("validated")),
+        Mock(side_effect=lambda name, **kwargs: events.append("validated")),
     )
 
     ExampleDataset().update("update-123", worker_index=worker_index, workers_total=3)

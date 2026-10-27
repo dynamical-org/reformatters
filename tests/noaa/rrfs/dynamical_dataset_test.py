@@ -98,7 +98,7 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(seconds=81),
             "15 * * * *",
             timedelta(minutes=136, seconds=16),
-            timedelta(minutes=139),
+            timedelta(minutes=138),
         ),
         (
             NoaaRrfsEnsForecastVirtualDataset,
@@ -228,7 +228,9 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
         for now in (
             fire,
             fire + pd.Timedelta("10min"),
-            min(cutoff, update.next_fire_time(fire)) - pd.Timedelta("1s"),
+            cutoff + pd.Timedelta("1s")
+            if cutoff < update.next_fire_time(fire)
+            else update.next_fire_time(fire) - pd.Timedelta("1s"),
         ):
             monkeypatch.setattr(
                 pd.Timestamp, "now", classmethod(lambda cls, now=now: now)

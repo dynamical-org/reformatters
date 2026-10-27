@@ -28,6 +28,7 @@ VALIDATION_FAILURE_EXIT_CODE = 20
 _CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
 _CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
 log = get_logger(__name__)
+type ConcurrencyPolicy = Literal["Allow", "Forbid", "Replace"]
 
 
 class Job(pydantic.BaseModel):
@@ -283,7 +284,7 @@ class CronJob(Job):
     schedule: Annotated[str, pydantic.Field(min_length=1)]
     ttl: timedelta = timedelta(hours=12)
     suspend: bool = False
-    concurrency_policy: Literal["Allow", "Forbid", "Replace"] = "Replace"
+    concurrency_policy: ConcurrencyPolicy = "Replace"
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.

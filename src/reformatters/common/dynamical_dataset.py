@@ -147,6 +147,15 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         """Update an existing dataset with the latest data."""
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
+        job_fire_time: Timestamp | None = None
+        if (
+            issubclass(self.region_job_class, VirtualRegionJob)
+            and (
+                cron_job := self._operational_cron_job(ReformatCronJob)
+            ).concurrency_policy
+            == "Allow"
+        ):
+            job_fire_time = cron_job.previous_fire_time(pd.Timestamp.now())
         with self._monitor(
             ReformatCronJob,
             reformat_job_name,
@@ -156,7 +165,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             tmp_store = self._tmp_store()
 
             all_jobs, template_ds = self._operational_update_jobs(
-                reformat_job_name, tmp_store
+                reformat_job_name, tmp_store, job_fire_time=job_fire_time
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
@@ -178,15 +187,17 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 )
 
         if is_last:
-            self._validate_after_update(reformat_job_name)
+            self._validate_after_update(reformat_job_name, job_fire_time=job_fire_time)
 
         log.info(
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
 
-    def _validate_after_update(self, reformat_job_name: str) -> None:
+    def _validate_after_update(
+        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
+    ) -> None:
         try:
-            self.validate_dataset(reformat_job_name)
+            self._validate_with_monitor(reformat_job_name, job_fire_time=job_fire_time)
         except Exception as error:
             log.exception("Operational validation failed for %s", reformat_job_name)
             if (
@@ -605,6 +616,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         references rather than shards), and CheckReplicaMatchesPrimary on every
         replica.
         """
+        self._validate_with_monitor(reformat_job_name)
+
+    def _validate_with_monitor(
+        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
+    ) -> None:
         with self._monitor(
             ReformatCronJob,
             reformat_job_name,
@@ -615,7 +631,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 math.ceil(cron.pod_active_deadline.total_seconds() / 60) + 10
             ),
         ):
-            self._validate_dataset(reformat_job_name)
+            self._validate_dataset(reformat_job_name, job_fire_time=job_fire_time)
 
     def _validation_monitor_name(self) -> str:
         if os.getenv("CRON_JOB_NAME") in {
@@ -629,12 +645,16 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         assert update_name.endswith("-update")
         return update_name.removesuffix("-update") + "-validate"
 
-    def _validate_dataset(self, reformat_job_name: str) -> None:
+    def _validate_dataset(
+        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
+    ) -> None:
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         validators = list(self.validators())
         if not is_virtual:
             validators.append(validation.CheckExpectedShards())
-        region_job = self._virtual_validation_region_job(validators, reformat_job_name)
+        region_job = self._virtual_validation_region_job(
+            validators, reformat_job_name, job_fire_time=job_fire_time
+        )
 
         primary_store = self.store_factory.primary_store()
         validation.validate_dataset(
@@ -674,15 +694,23 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             log.info(f"Done validating {replica_store}")
 
     def _operational_update_jobs(
-        self, reformat_job_name: str, tmp_store: Path
+        self,
+        reformat_job_name: str,
+        tmp_store: Path,
+        *,
+        job_fire_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """The jobs an operational update runs, and the template they write against."""
         operational_update_jobs = self.region_job_class.operational_update_jobs
         fire_time_kwarg: dict[str, Any] = {}
         if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
-            fire_time_kwarg["job_fire_time"] = self._operational_cron_job(
-                ReformatCronJob
-            ).previous_fire_time(pd.Timestamp.now())
+            fire_time_kwarg["job_fire_time"] = (
+                job_fire_time
+                if job_fire_time is not None
+                else self._operational_cron_job(ReformatCronJob).previous_fire_time(
+                    pd.Timestamp.now()
+                )
+            )
 
         return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
@@ -698,6 +726,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         self,
         validators: Sequence[validation.Validator],
         reformat_job_name: str,
+        *,
+        job_fire_time: Timestamp | None = None,
     ) -> VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD] | None:
         """The operational-window job a manifest-probing check runs against, or None if
         none of the validators need it. Built once and shared across primary + replica
@@ -705,7 +735,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         if not any(v.requires_virtual_dataset for v in validators):
             return None
         jobs, _template_ds = self._operational_update_jobs(
-            reformat_job_name, self._tmp_store()
+            reformat_job_name, self._tmp_store(), job_fire_time=job_fire_time
         )
         job = item(jobs)
         assert isinstance(job, VirtualRegionJob), (

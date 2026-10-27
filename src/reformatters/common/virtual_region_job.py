@@ -487,7 +487,10 @@ class VirtualRegionJob(
         now = pd.Timestamp.now(tz="UTC")
         commit_start = time.monotonic()
         storage.commit_if_icechunk(
-            f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}", session.store, []
+            f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            session.store,
+            [],
+            allow_rebase=not resized,
         )
         log.info(
             f"Committed {len(refs)} refs "
