@@ -37,11 +37,12 @@ def test_anonymous_object_url_normalization(url: str, expected: str) -> None:
 def test_http_directory_timestamp_formats_preserve_seconds() -> None:
     objects = parse_http_listing(
         "https://example.org/data/",
-        '<a href="a">a</a> 26-Oct-2026 02:45:26 123\n<a href="b">b</a> 2026-10-25 03:06 123',
+        '<a href="a">a</a> 26-Oct-2026 02:45:26 123\n<a href="b">b</a> 2026-10-25 03:06 123\n<tr><td><a href="c" title="c">c</a></td><td>12 MiB</td><td>2026-Feb-19 23:46</td></tr>',
     )
     assert objects == {
         "https://example.org/data/a": pd.Timestamp("2026-10-26T02:45:26"),
         "https://example.org/data/b": pd.Timestamp("2026-10-25T03:06"),
+        "https://example.org/data/c": pd.Timestamp("2026-02-19T23:46"),
     }
 
 
@@ -98,20 +99,13 @@ def test_gcs_uses_updated_and_follows_page_token(tmp_path: Path) -> None:
     source.close()
 
 
-def test_http_head_and_anonymous_access_gap(tmp_path: Path) -> None:
+def test_anonymous_access_gap(tmp_path: Path) -> None:
     def respond(request: httpx.Request) -> httpx.Response:
-        if request.method == "HEAD":
-            return httpx.Response(
-                200, headers={"Last-Modified": "Mon, 26 Oct 2026 01:02:03 GMT"}
-            )
         return httpx.Response(403)
 
     source = TimestampSource(tmp_path, 1)
     source.client.close()
     source.client = httpx.Client(transport=httpx.MockTransport(respond))
-    assert source.head("https://example.org/file") == pd.Timestamp(
-        "2026-10-26T01:02:03"
-    )
     assert source.probe_gcs("bucket") is not None
     assert source.list("gs://bucket/a/").objects == {}
     source.close()

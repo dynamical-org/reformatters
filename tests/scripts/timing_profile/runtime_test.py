@@ -71,9 +71,6 @@ def test_runtime_uses_historical_fire_and_maximum_inline_validation_including_er
     assert stats.processing == 117
     assert stats.validation_p95 == 164
     assert stats.validation_max == 180
-    assert stats.by_fire_hour[1].validation_max == 10
-    assert stats.by_fire_hour[2].validation_max == 20
-    assert stats.by_fire_hour[1].startup_estimate == 20
     assert stats.validation_count == 3
     assert stats.non_ok_count == 1
     assert stats.off_schedule_count == 1

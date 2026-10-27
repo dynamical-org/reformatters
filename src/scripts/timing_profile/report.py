@@ -31,15 +31,15 @@ class MeasuredUnit:
     first: float | None
     complete: float | None
     missing_files: int
-    components: dict[str, float]
+    raw_first: float | None
+    file_arrivals: dict[frozenset[str], float]
 
 
 def aggregate_unit(
     unit: Unit, listings: dict[str, Listing], *, as_of: pd.Timestamp | None = None
 ) -> MeasuredUnit:
-    available = []
+    available: dict[frozenset[str], float] = {}
     missing = 0
-    components: dict[str, float] = {}
     for file in unit.files:
         timestamps = [listings[listing_prefix(url)].objects.get(url) for url in file]
         timestamps = [
@@ -51,15 +51,20 @@ def aggregate_unit(
             continue
         usable = max(value for value in timestamps if value is not None)
         offset = (usable - unit.anchor).total_seconds()
-        available.append(offset)
-        group = "0p25" if any(".0p25." in url for url in file) else "other"
-        components[group] = max(components.get(group, float("-inf")), offset)
+        available[file] = offset
+    raw_first = min(available.values()) if available else None
+    visible = [
+        max(available[file] for file in group)
+        for group in unit.visibility_groups
+        if all(file in available for file in group)
+    ]
     return MeasuredUnit(
         unit,
-        min(available) if available else None,
-        max(available) if available and missing == 0 else None,
+        (min(visible) if visible else None) if unit.visibility_groups else raw_first,
+        max(available.values()) if available and missing == 0 else None,
         missing,
-        components,
+        raw_first,
+        available,
     )
 
 
@@ -102,14 +107,22 @@ def recommended_cron(offset: float, interval: float, cron: ReformatCronJob) -> s
 
 def cycle_classes(
     units: Sequence[MeasuredUnit],
+    *,
+    virtual: bool = False,
 ) -> list[tuple[str, list[MeasuredUnit]]]:
     by_hour: dict[int, list[MeasuredUnit]] = defaultdict(list)
     for unit in units:
         by_hour[unit.unit.anchor.hour].append(unit)
-    measured = {
-        hour: arrival_stats([u.complete for u in values if u.complete is not None]).p50
+    arrivals = {
+        hour: [
+            value
+            for unit in values
+            if (value := unit.first if virtual else unit.complete) is not None
+        ]
         for hour, values in by_hour.items()
-        if any(u.complete is not None for u in values)
+    }
+    measured = {
+        hour: arrival_stats(values).p50 for hour, values in arrivals.items() if values
     }
     classes: list[list[int]] = []
     for hour in sorted(measured, key=lambda key: measured[key]):
@@ -126,6 +139,108 @@ def cycle_classes(
         )
         for hours in classes
     ]
+
+
+@dataclass(frozen=True)
+class ClassRecommendation:
+    tier: str
+    cycle_class: str
+    offset: float | None
+    delay: float
+    threshold: float
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    offset: float | None
+    delay: float | None
+    deadline: float | None
+    validation_grace: float | None
+    classes: tuple[ClassRecommendation, ...]
+
+
+def recommend(
+    units: Sequence[MeasuredUnit],
+    runtime: RuntimeStats,
+    *,
+    virtual: bool,
+    interval: float,
+    currency_interval: float,
+    spacing: float,
+    manual: bool = False,
+) -> Recommendation:
+    if manual or not units:
+        return Recommendation(None, None, None, None, ())
+    tiers = list(dict.fromkeys(unit.unit.tier for unit in units))
+    classes = []
+    for tier in tiers:
+        for name, grouped in cycle_classes(
+            [unit for unit in units if unit.unit.tier == tier], virtual=virtual
+        ):
+            arrivals = [
+                value
+                for unit in grouped
+                if (value := unit.first if virtual else unit.complete) is not None
+            ]
+            if not arrivals:
+                continue
+            stats = arrival_stats(arrivals)
+            threshold = late_threshold(stats)
+            raw = [unit.raw_first for unit in grouped if unit.raw_first is not None]
+            offset = (
+                virtual_fire(min(raw), runtime.startup_estimate)
+                if virtual and raw and runtime.startup_estimate is not None
+                else (None if virtual else schedule_candidates(stats)["draft"])
+            )
+            if not virtual:
+                assert offset is not None
+            delay = currency_delay(
+                threshold if offset is None or virtual else ceil_minute(offset),
+                grouped[0].unit.anchor_minus_label,
+                currency_interval,
+                spacing,
+                virtual=virtual,
+            )
+            classes.append(ClassRecommendation(tier, name, offset, delay, threshold))
+    first_tier = [value for value in classes if value.tier == tiers[0]]
+    offsets = [value.offset for value in first_tier if value.offset is not None]
+    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
+    chosen = (
+        (virtual_fire(min(raw), runtime.startup_estimate) // 60) * 60
+        if virtual and raw and runtime.startup_estimate is not None
+        else (None if virtual or not offsets else ceil_minute(max(offsets)))
+    )
+    delays = (
+        [value.delay for value in first_tier]
+        if virtual
+        else [
+            currency_delay(
+                chosen,
+                unit.unit.anchor_minus_label,
+                currency_interval,
+                spacing,
+                virtual=False,
+            )
+            for unit in units
+            if unit.unit.tier == tiers[0] and chosen is not None
+        ]
+    )
+    deadline = (
+        virtual_deadline(interval, runtime.startup_estimate, runtime.validation_max)
+        if virtual
+        and runtime.startup_estimate is not None
+        and runtime.validation_max is not None
+        else (None if virtual else interval)
+    )
+    return Recommendation(
+        chosen,
+        ceil_minute(max(delays)) if delays else None,
+        deadline,
+        ceil(runtime.validation_max + 30)
+        if virtual and runtime.validation_max is not None
+        else None,
+        tuple(classes),
+    )
 
 
 def render_dataset(
@@ -156,18 +271,6 @@ def render_dataset(
         f"Runtime: L estimate p95 {duration(runtime.startup_estimate)}; R p95 {duration(runtime.processing)}; V p95/max {duration(runtime.validation_p95)} / {duration(runtime.validation_max)}. Scheduled-ok n={runtime.scheduled_count}; matched inline validation n={runtime.validation_count}; non-ok update n={runtime.non_ok_count}; off-schedule ok n={runtime.off_schedule_count}. Check-ins: {runtime.first} .. {runtime.last} UTC.",
         "",
     ]
-    if runtime.by_fire_hour:
-        lines.extend(
-            [
-                "| Scheduled fire hour (UTC) | L estimate p95 | R p95 | V p95 / max | Scheduled-ok / matched validation n |",
-                "|---|---:|---:|---:|---:|",
-                *[
-                    f"| {hour:02} | {duration(values.startup_estimate)} | {duration(values.processing)} | {duration(values.validation_p95)} / {duration(values.validation_max)} | {values.scheduled_count} / {values.validation_count} |"
-                    for hour, values in sorted(runtime.by_fire_hour.items())
-                ],
-                "",
-            ]
-        )
     if gap:
         lines.extend([f"Source: **not measured; keep constants** — {gap}.", ""])
         return "\n".join(lines)
@@ -199,18 +302,30 @@ def render_dataset(
             ]
         )
         return "\n".join(lines)
-    recommendations: list[tuple[str, str, float | None, float, float]] = []
-    for tier, tier_units in sorted(tiers.items()):
+    manual = dataset.dataset_id in {
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+        "noaa-mrms-conus-analysis-hourly",
+    }
+    recommendation = recommend(
+        units,
+        runtime,
+        virtual=virtual,
+        interval=interval,
+        currency_interval=currency_interval,
+        spacing=anchor_spacing(dataset).total_seconds(),
+        manual=manual,
+    )
+    for tier, tier_units in tiers.items():
         lines.extend(
             [
                 f"### {tier}",
                 "",
-                "| Cycle class | Complete / expected | Missing old / recent censored | First-file n / p50 / p95 / p99 / E | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
+                "| Cycle class | Complete / expected | Missing old / recent censored | First usable file (virtual: first visibility) n / p50 / p95 / p99; raw E | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
                 "|---|---:|---:|---|---|---|",
             ]
         )
         candidates = []
-        for cycle_class, grouped in cycle_classes(tier_units):
+        for cycle_class, grouped in cycle_classes(tier_units, virtual=virtual):
             complete = [unit.complete for unit in grouped if unit.complete is not None]
             first = [unit.first for unit in grouped if unit.first is not None]
             horizon = max(complete) if complete else 0
@@ -230,8 +345,15 @@ def render_dataset(
                         first_stats.p50,
                         first_stats.p95,
                         first_stats.p99,
-                        first_stats.earliest,
                     )
+                )
+                + "; "
+                + duration(
+                    min(raw)
+                    if (
+                        raw := [u.raw_first for u in grouped if u.raw_first is not None]
+                    )
+                    else None
                 )
                 if first_stats
                 else "not measured"
@@ -254,45 +376,25 @@ def render_dataset(
             lines.append(
                 f"| {cycle_class} | {len(complete)} / {len(grouped)} | {missing} / {censored} | {first_cell} | {unit_cell} | {window} |"
             )
-            if stats and first_stats:
-                threshold = late_threshold(first_stats if virtual else stats)
+            if stats and not manual:
                 for name, offset in schedule_candidates(stats).items():
                     fraction, latency = candidate_outcomes(
                         complete, offset, runtime.startup_estimate, runtime.processing
                     )
-                    candidates.append(
-                        f"| {cycle_class} | {name} | {duration(offset)} | {fraction:.2%} | {duration(latency)} |"
-                    )
-                if virtual:
-                    offset = (
-                        virtual_fire(first_stats.earliest, runtime.startup_estimate)
-                        if runtime.startup_estimate is not None
+                    after_or_never = (
+                        (sum(value > offset for value in complete) + missing)
+                        / (len(grouped) - censored)
+                        if len(grouped) > censored
                         else None
                     )
-                    delay = currency_delay(
-                        threshold,
-                        grouped[0].unit.anchor_minus_label,
-                        currency_interval,
-                        anchor_spacing(dataset).total_seconds(),
-                        virtual=True,
+                    candidates.append(
+                        f"| {cycle_class} | {name} | {duration(offset)} | {fraction:.2%} | {f'{after_or_never:.2%}' if after_or_never is not None else 'unmeasured'} | {duration(latency)} |"
                     )
-                else:
-                    offset = schedule_candidates(stats)["draft"]
-                    delay = currency_delay(
-                        ceil_minute(offset),
-                        grouped[0].unit.anchor_minus_label,
-                        currency_interval,
-                        anchor_spacing(dataset).total_seconds(),
-                        virtual=False,
-                    )
-                recommendations.append(
-                    (tier, cycle_class, offset, delay, late_threshold(stats))
-                )
         lines.extend(
             [
                 "",
-                "| Cycle class | S candidate | S | Fraction of units arriving after S | Median on-time latency estimate (S - arrival + L + R) |",
-                "|---|---|---:|---:|---:|",
+                "| Cycle class | S candidate | S | Fraction of units arriving after S | After S or never (older missing included) | Median on-time latency estimate (S - arrival + L + R) |",
+                "|---|---|---:|---:|---:|---:|",
                 *candidates,
                 "",
             ]
@@ -301,53 +403,31 @@ def render_dataset(
         [
             "### Advisory constants",
             "",
-            "| Tier / class | Per-class offset | max_delay | Backstop T (unit) |",
+            "| Tier / class | Per-class offset | max_delay | T (first visibility for virtuals; complete unit otherwise) |",
             "|---|---:|---:|---:|",
         ]
     )
-    for tier, cycle_class, offset, delay, threshold in recommendations:
-        lines.append(
-            f"| {tier} / {cycle_class} | {duration(offset)} | {duration(ceil_minute(delay))} | {duration(threshold)} |"
-        )
     lines.extend(
-        render_single_cron(
-            dataset, cron, tiers, recommendations, runtime, interval, units
-        )
+        f"| {value.tier} / {value.cycle_class} | {duration(value.offset)} | {duration(ceil_minute(value.delay))} | {duration(value.threshold)} |"
+        for value in recommendation.classes
     )
+    lines.extend(render_single_cron(dataset, cron, recommendation, units, interval))
     return "\n".join(lines)
 
 
 def render_single_cron(
     dataset: DynamicalDataset[Any, Any],
     cron: ReformatCronJob,
-    tiers: dict[str, list[MeasuredUnit]],
-    recommendations: list[tuple[str, str, float | None, float, float]],
-    runtime: RuntimeStats,
-    interval: float,
+    recommendation: Recommendation,
     units: Sequence[MeasuredUnit],
+    interval: float,
 ) -> list[str]:
     lines: list[str] = []
     virtual = is_virtual(dataset)
-    first_tier = min(tiers)
-    offsets = [
-        offset
-        for tier, _, offset, _, _ in recommendations
-        if tier == first_tier and offset is not None
-    ]
-    if offsets and dataset.dataset_id != "noaa-gefs-forecast-35-day-0-5-degree-virtual":
-        chosen = min(offsets) if virtual else max(offsets)
-        chosen = (chosen // 60) * 60 if virtual else ceil_minute(chosen)
-        deadline = (
-            virtual_deadline(interval, runtime.startup_estimate, runtime.validation_max)
-            if virtual
-            and runtime.startup_estimate is not None
-            and runtime.validation_max is not None
-            else (None if virtual else interval)
-        )
-        scalar_delay = max(
-            delay for tier, _, _, delay, _ in recommendations if tier == first_tier
-        )
-        scalar_delay = ceil_minute(scalar_delay)
+    chosen = recommendation.offset
+    deadline = recommendation.deadline
+    scalar_delay = recommendation.delay
+    if chosen is not None and scalar_delay is not None:
         current_delay = next(
             (
                 validator.max_delay.total_seconds()
@@ -378,28 +458,36 @@ def render_single_cron(
         if virtual:
             lines.extend(
                 [
-                    f"Validation grace: {duration(ceil(runtime.validation_max + 30)) if runtime.validation_max is not None else 'unmeasured; keep constants'} (maximum observed V plus allowance).",
+                    f"Validation grace: {duration(recommendation.validation_grace) if recommendation.validation_grace is not None else 'unmeasured; keep constants'} (maximum observed V plus allowance).",
                     "",
                 ]
             )
-    if dataset.dataset_id == "noaa-gefs-forecast-35-day-0-5-degree-virtual":
+    if dataset.dataset_id in {
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+        "noaa-mrms-conus-analysis-hourly",
+    }:
         lines.extend(
             [
                 "",
-                "One-cron recommendation: keep named-exception window constants; review the measured tier arrivals manually.",
+                "One-cron recommendation: **keep constants; review manually** (named exception).",
                 "",
             ]
         )
     if dataset.dataset_id == "noaa-gefs-forecast-35-day":
-        paired = [
-            unit
-            for unit in units
-            if unit.unit.tier.startswith("tier 1")
-            and unit.complete is not None
-            and {"0p25", "other"} <= unit.components.keys()
-        ]
+        paired = []
+        for unit in units:
+            if not unit.unit.tier.startswith("tier 1") or unit.complete is None:
+                continue
+            siblings: dict[bool, list[float]] = defaultdict(list)
+            for file in unit.unit.files:
+                siblings[any(".0p25." in url for url in file)].append(
+                    unit.file_arrivals[file]
+                )
+            if siblings[True] and siblings[False]:
+                paired.append((max(siblings[True]), max(siblings[False])))
         flips = sum(
-            unit.components["0p25"] > unit.components["other"] for unit in paired
+            high_resolution > low_resolution
+            for high_resolution, low_resolution in paired
         )
         lines.extend(
             [

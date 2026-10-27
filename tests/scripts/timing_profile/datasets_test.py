@@ -17,7 +17,9 @@ from reformatters.noaa.gefs.forecast_16_day_0_5_degree_virtual.region_job import
     NoaaGefsForecast16Day05DegreeVirtualRegionJob,
 )
 from scripts.timing_profile.datasets import expected_units, source_gap, usable_file
-from scripts.timing_profile.sources import TimestampSource
+from scripts.timing_profile.report import aggregate_unit, recommend
+from scripts.timing_profile.runtime import RuntimeStats
+from scripts.timing_profile.sources import Listing, TimestampSource
 
 
 @pytest.mark.parametrize(
@@ -46,6 +48,16 @@ def test_analysis_readiness_includes_boundary_and_only_target_cycle(
     assert any("f000" in url for url in urls)
     assert not any("20261019" in url or "/06/" in url for url in urls)
     assert all(len(file) == 2 for file in units[0].files)
+    if dataset_id.endswith("virtual"):
+        assert units[0].visibility_groups
+        gated_urls = {
+            url
+            for group in units[0].visibility_groups
+            for file in group
+            for url in file
+        }
+        assert not any("f006" in url for url in gated_urls)
+        assert any("f000" in url for url in gated_urls)
 
 
 def test_gefs_35_day_readiness_tiers_include_members_and_indexes(
@@ -174,3 +186,91 @@ def test_gefs_timing_representatives_preserve_every_required_file(
     )
     source.close()
     assert set(measured[0].files) == full_files
+
+
+@pytest.mark.parametrize("product", ["final", "preliminary"])
+def test_chirps_keeps_unavailable_positions_without_calling_live_discovery(
+    product: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == f"ucsb-chc-chirps-analysis-{product}"
+    )
+
+    def unexpected_discovery(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Timing probes must not filter unavailable source dates")
+
+    monkeypatch.setattr(
+        "reformatters.ucsb_chc.chirps.region_job._available_file_urls",
+        unexpected_discovery,
+    )
+    source = TimestampSource(tmp_path, 1)
+    units = list(
+        expected_units(
+            dataset, pd.Timestamp("2026-10-20"), pd.Timestamp("2026-10-23"), source
+        )
+    )
+    source.close()
+    assert len(units) == 3
+    assert all(unit.anchor_minus_label == 86400 for unit in units)
+    assert any("2026.10.19.tif" in url for file in units[0].files for url in file)
+
+
+def test_mrms_pass_one_uses_only_its_own_product(tmp_path: Path) -> None:
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == "noaa-mrms-conus-analysis-hourly"
+    )
+    source = TimestampSource(tmp_path, 1)
+    units = list(
+        expected_units(
+            dataset, pd.Timestamp("2026-10-20"), pd.Timestamp("2026-10-20T01"), source
+        )
+    )
+    source.close()
+    assert [unit.tier for unit in units] == ["position", "pass 1 (exception)"]
+    assert len(units[1].files) == 1
+    assert all(
+        "MultiSensor_QPE_01H_Pass1" in url for file in units[1].files for url in file
+    )
+
+
+def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
+    tmp_path: Path,
+) -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-hrrr-analysis-virtual"
+    )
+    anchor = pd.Timestamp("2026-10-20T12")
+    source = TimestampSource(tmp_path, 1)
+    (unit,) = expected_units(dataset, anchor, anchor + pd.Timedelta(hours=1), source)
+    source.close()
+    assert len(unit.visibility_groups) == 1
+    own_cycle = set(unit.visibility_groups[0])
+    assert len(own_cycle) == 3
+    assert len(unit.files) == 4
+    objects = {}
+    for file in unit.files:
+        for url in file:
+            objects[url] = anchor + pd.Timedelta(
+                minutes=53 if file in own_cycle else -6
+            )
+    listings = {url.rsplit("/", 1)[0] + "/": Listing(objects, "S3") for url in objects}
+    measured = aggregate_unit(unit, listings)
+    assert measured.raw_first == -360
+    assert measured.first == 3180
+    result = recommend(
+        [measured],
+        RuntimeStats(30, None, 20, 60, 1, 1, 0, 0, None, None),
+        virtual=True,
+        interval=3600,
+        currency_interval=3600,
+        spacing=3600,
+    )
+    assert result.delay == 4320
+    # Before 13Z's own-cycle gate, the previous pod must not require 13Z.
+    assert (
+        pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.delay)
+    ).floor("h") == anchor

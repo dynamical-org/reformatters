@@ -34,12 +34,25 @@ from reformatters.google.weathernext_virtual.listing import PROXY_LOCATION_PREFI
 from reformatters.google.weathernext_virtual.region_job import (
     WeatherNextVirtualRegionJob,
 )
+from reformatters.noaa.gefs.analysis_0_25_degree_virtual.region_job import (
+    NoaaGefsAnalysis025DegreeVirtualSourceFileCoord,
+)
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_PRE_EXTENSION_MAX,
     NoaaGefsVirtualDataVar,
 )
+from reformatters.noaa.gfs.analysis_virtual.region_job import (
+    NoaaGfsAnalysisVirtualSourceFileCoord,
+)
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
+from reformatters.noaa.hrrr.analysis_virtual.region_job import (
+    NoaaHrrrAnalysisVirtualSourceFileCoord,
+)
 from reformatters.noaa.hrrr.region_job import NoaaHrrrSourceFileCoord
+from reformatters.ucsb_chc.chirps.region_job import (
+    UcsbChcChirpsAnalysisMaterializedRegionJob,
+    UcsbChcChirpsAnalysisSourceFileCoord,
+)
 
 from .sources import TimestampSource, canonical_url
 
@@ -50,6 +63,7 @@ class Unit:
     tier: str
     files: tuple[frozenset[str], ...]
     anchor_minus_label: float
+    visibility_groups: tuple[tuple[frozenset[str], ...], ...] = ()
 
 
 def source_gap(dataset_id: str) -> str | None:
@@ -139,6 +153,19 @@ def archive_units(
                 0,
             )
         return
+    if issubclass(dataset.region_job_class, UcsbChcChirpsAnalysisMaterializedRegionJob):
+        product = dataset.region_job_class.model_fields["product"].default
+        for anchor in anchors:
+            coord = UcsbChcChirpsAnalysisSourceFileCoord(
+                product=product, time=anchor - label_offset
+            )
+            yield Unit(
+                anchor,
+                "position",
+                (frozenset([coord.get_url()]),),
+                label_offset.total_seconds(),
+            )
+        return
     if issubclass(dataset.region_job_class, NoaaNdviCdrAnalysisRegionJob):
         for anchor in anchors:
             label = anchor - label_offset
@@ -180,12 +207,13 @@ def expected_units(
     )
     label_offset = (
         frequency
-        if observational and frequency >= pd.Timedelta("1d")
+        if observational and frequency >= pd.Timedelta(days=1)
         else pd.Timedelta(0)
     )
     anchors = pd.date_range(start.ceil(spacing), end, freq=spacing, inclusive="left")
     if "ifs-ens-forecast-46-day" in dataset_id or issubclass(
-        dataset.region_job_class, NoaaNdviCdrAnalysisRegionJob
+        dataset.region_job_class,
+        (NoaaNdviCdrAnalysisRegionJob, UcsbChcChirpsAnalysisMaterializedRegionJob),
     ):
         yield from archive_units(dataset, anchors, label_offset, source)
         return
@@ -215,6 +243,7 @@ def expected_units(
             getattr(job, "max_vars_per_download_group", None) or len(job.data_vars),
         )
         tiers: dict[str, set[frozenset[str]]] = {}
+        positions: dict[pd.Timestamp, set[frozenset[str]]] = {}
         for group in groups:
             for coord in job.generate_source_file_coords(processing, group):
                 if (
@@ -248,11 +277,52 @@ def expected_units(
                 else:
                     files = usable_file(coord)
                 tiers.setdefault(tier, set()).add(files)
-        for tier, files in tiers.items():
+                position = visibility_position(coord, spacing)
+                if position is not None:
+                    positions.setdefault(position, set()).add(files)
+        yield from readiness_units(anchor, tiers, positions, label_offset, dataset_id)
+
+
+def visibility_position(
+    coord: SourceFileCoord, spacing: pd.Timedelta
+) -> pd.Timestamp | None:
+    if not isinstance(
+        coord,
+        (
+            NoaaHrrrAnalysisVirtualSourceFileCoord,
+            NoaaGfsAnalysisVirtualSourceFileCoord,
+            NoaaGefsAnalysis025DegreeVirtualSourceFileCoord,
+        ),
+    ):
+        return None
+    valid_time = coord.init_time + coord.lead_time
+    return valid_time if coord.init_time == valid_time.floor(spacing) else None
+
+
+def readiness_units(
+    anchor: pd.Timestamp,
+    tiers: dict[str, set[frozenset[str]]],
+    positions: dict[pd.Timestamp, set[frozenset[str]]],
+    label_offset: pd.Timedelta,
+    dataset_id: str,
+) -> Iterator[Unit]:
+    for tier, files in tiers.items():
+        yield Unit(
+            anchor,
+            tier,
+            tuple(sorted(files, key=sorted)),
+            label_offset.total_seconds(),
+            tuple(tuple(files) for files in positions.values()),
+        )
+        if dataset_id == "noaa-mrms-conus-analysis-hourly":
             yield Unit(
                 anchor,
-                tier,
-                tuple(sorted(files, key=sorted)),
+                "pass 1 (exception)",
+                tuple(
+                    file
+                    for file in files
+                    if any("MultiSensor_QPE_01H_Pass1" in url for url in file)
+                ),
                 label_offset.total_seconds(),
             )
 

@@ -1,6 +1,6 @@
 # Operational update timing
 
-Publish as soon as the source has the data. Timing values are hand-set constants in each dataset's code. This document defines the rules for selecting those values; the [adoption plan](plans/operational_update_timing.md) tracks their rollout. A timing recommendation does not activate polling, overlapping writers, retries, or triggers.
+Publish as soon as the source has the data. Timing values are hand-set constants in each dataset's code. This document defines the rules for selecting those values; the [adoption plan](plans/operational_update_timing.md) tracks their rollout.
 
 ## Latency and readiness units
 
@@ -23,30 +23,30 @@ uv run python -m scripts.timing_profile --days 35 --checkins-dir /path/to/checki
 
 Omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. The tool changes no dataset code and has no recurring schedule.
 
-The profiler measures source arrival p50, p95, p99, and earliest normal arrival (`E`) after the anchor. It aggregates timestamps into usable files and complete readiness units before taking percentiles. It reports startup (`L`) as an estimate from scheduled fire to update check-in, materialized processing through publish (`R`), and validation duration (`V`), including both p95 and the observed maximum. Virtual check-in duration includes source waiting and cannot establish processing time. Runtime classes use historical scheduled fire hours; check-ins alone do not establish which source initialization a run processed. Missing components remain unmeasured.
+The profiler measures source arrival p50, p95, p99, and earliest normal arrival (`E`) after the anchor. It aggregates timestamps into usable files and complete readiness units before taking percentiles. It reports startup (`L`) as an estimate from scheduled fire to update check-in, materialized processing through publish (`R`), and validation duration (`V`), including both p95 and the observed maximum. Virtual check-in duration includes source waiting and cannot establish processing time. Historical check-in schedules establish the fire time, but check-ins alone do not establish which source initialization a run processed. Missing components remain unmeasured.
 
 Use a trailing window, normally 35 days. Inspect sample count, actual coverage, missing and censored units, source identity, reuploads, and source regime changes. Rewritten or reprocessed timestamps do not establish first availability. A dataset without anonymous arrival evidence keeps its constants. Do not add credentialed source access just to tune its schedule.
 
-`E` is the minimum first-file arrival in the window after excluding verified outliers. Keep recurring fast episodes. Measure cycle classes separately when their median arrivals differ by at least fifteen minutes.
+`E` is the minimum first-file arrival in the window after excluding verified outliers. Keep recurring fast episodes. Measure cycle classes separately when their median arrivals differ by at least fifteen minutes, using first visibility for virtual datasets and complete-unit arrival for materialized datasets.
 
-The profiler is the sole implementation of the numerical formulas. It recommends a late threshold (`T`) from the arrival tail and compares candidate schedule offsets (`S`) against the measured distribution. `T` identifies a late source. `S` selects the cut between normal arrival and an anomalous delay for an untriggered materialized dataset. Choose `S` by hand from the candidate comparison before moving a cron or deriving values from it. The fraction of complete observed units arriving after `S` is arrival evidence, not a prediction of validation alerts: a multi-position unit can pass with a complete prefix.
+The numerical formulas are implemented in the profiler. The late threshold is `T = p95 + max(p95 − p50, 15 min)`. The draft untriggered schedule offset is `S = p95 + max(p95 − p50, 5 min)`; the profiler compares this with other candidate offsets against the measured distribution. `T` identifies a late source. `S` selects the cut between normal arrival and an anomalous delay for an untriggered materialized dataset. Choose `S` by hand from the candidate comparison before moving a cron or deriving values from it. The fraction of complete observed units arriving after `S` is arrival evidence, not a prediction of validation alerts: a multi-position unit can pass with a complete prefix.
 
 ## Schedules
 
 Use one cron per dataset, with one minute offset across all its cycles:
 
-- Virtual schedules use the earliest cycle class. Account for startup and a small advance before `E`; later classes spend the difference polling.
+- Virtual schedules fire at `a + E − L − 1 min`, using raw earliest file arrival across all tiers and cycle classes. Later classes spend the difference polling.
 - Untriggered materialized schedules use the latest class's `S` for the first readiness tier. Earlier classes accept that wait as latency.
 - Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`. Change a consumer's cron together with activation of its trigger.
 
-Check every cycle class against the resulting single cron. Keep lifecycle changes separate from advisory recommendations until the corresponding adoption step is implemented. Configure deadlines using the adopted lifecycle and measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates-single-writer) and [parallel processing](parallel_processing.md) for the mechanisms in use.
+Check every cycle class against the resulting single cron. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates-single-writer) and [parallel processing](parallel_processing.md) for the mechanisms in use.
 
 ## Currency and integrity validation
 
 `CheckCurrentData.max_delay` is measured from an append position's label. It must never require a position before the fire intended to publish it:
 
-- For virtual datasets, use the first-file late threshold, a small allowance, and the difference between anchor and label.
-- For materialized datasets, use the intended fire's offset (`S` for an untriggered run, `T` for a backstop), measured from the unit's earliest position label. When one fire covers several anchors, also account for the interval between fires minus anchor spacing.
+- For virtual datasets, `max_delay = T_first_file + 4 min + (a − label)`. Here first file means the file that makes a new position visible. Where discovery gates each position on its own-cycle files, measure the maximum of those files per position, then the minimum across positions. Forecast virtuals use the earliest usable file. Polling start `E` always uses the raw earliest usable file.
+- For materialized datasets, `max_delay = F + (a − earliest label) + max(0, Δf − anchor spacing)`, where `F` is the intended fire's offset (`S` for an untriggered run, `T` for a backstop), and `Δf` is the fire interval. The last term accounts for a fire covering several anchors.
 
 Use one scalar per dataset. Later positions in a multi-position unit are detected later. Compute it against the final single cron, including minute rounding and every cycle class, rather than against processing completion. Use the profiler's recommendations to review the current cron, deadlines, and `max_delay` together.
 
@@ -63,6 +63,6 @@ The dataset implementations define the values and boundaries of these exceptions
 - GEFS 35-day virtual uses one daily window; intermediate extension waves can wait until the next fire.
 - GEFS 35-day materialized extension has no completion trigger and waits for an eligible later run after its age gate.
 - WeatherNext 2 uses all members and levels of one variable and lead as its unit, measured from the unit's last object.
-- MRMS uses one hourly run; pass 1 is an exception to the latency target.
+- MRMS uses one hourly run; pass 1 is an exception.
 
 Arrivals beyond a fire's chosen offset alert when currency or integrity checks detect them. Choose offsets to make this rare under normal source operation.

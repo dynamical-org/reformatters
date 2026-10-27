@@ -4,7 +4,6 @@ import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
@@ -43,14 +42,14 @@ def listing_prefix(url: str) -> str:
 
 def parse_http_listing(url: str, body: str) -> dict[str, pd.Timestamp]:
     objects = {}
-    pattern = (
-        r'<a href="([^"]+)">[^<]*</a>\s+'
-        r"(\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}(?::\d{2})?"
-        r"|\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)"
-    )
-    for href, modified in re.findall(pattern, body):
-        if not href.endswith("/"):
-            objects[urljoin(url, unescape(href))] = pd.Timestamp(modified)
+    pattern = r'<a\b[^>]*href="([^"]+)"[^>]*>[^<]*</a>([^\n]*)'
+    date = r"\d{2}-[A-Za-z]{3}-\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-[A-Za-z]{3}-\d{2}"
+    for href, tail in re.findall(pattern, body):
+        modified = re.search(
+            rf"({date}) \d{{2}}:\d{{2}}(?::\d{{2}})?", re.sub(r"<[^>]+>", " ", tail)
+        )
+        if not href.endswith("/") and modified:
+            objects[urljoin(url, unescape(href))] = pd.Timestamp(modified[0])
     return objects
 
 
@@ -63,18 +62,6 @@ class TimestampSource:
 
     def close(self) -> None:
         self.client.close()
-
-    def head(self, url: str) -> pd.Timestamp | None:
-        response = self.client.head(url)
-        if response.status_code in {403, 404}:
-            return None
-        response.raise_for_status()
-        value = response.headers.get("Last-Modified")
-        return (
-            pd.Timestamp(parsedate_to_datetime(value)).tz_convert(None)
-            if value
-            else None
-        )
 
     def list_many(self, prefixes: set[str]) -> dict[str, Listing]:
         with ThreadPoolExecutor(self.workers) as pool:

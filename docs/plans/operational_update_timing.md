@@ -8,14 +8,14 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 
 | Step | Scope | Status | Dataset adoption |
 |---|---|---|---|
-| [B: measurement and documentation](https://github.com/dynamical-org/reformatters/pull/1261) | K1: anonymous source timestamps, exported or live read-only check-ins, advisory timing and candidate comparisons; documentation foundation | Draft | No timing constants changed |
-| B′: urgent currency values | K9: fix `max_delay` values that require positions before their existing fires | Pending | None tracked here yet |
-| A: overlap primitives | K2: configurable concurrency; K3: fresh-session conflict recovery; K4: metadata refresh using its committing session | Pending | Inert until a cohort enables overlap |
-| C: virtual pilot and cohorts | K5/K9: poll windows, deadlines, and currency values; virtual lifecycle documentation | Pending | Pilot: HRRR 18-hour and RRFS sub-hourly; remaining virtual families follow |
-| D: materialized pilot and cohorts | K2/K6/K7/K9: queue, deadlines, validation re-passes, untriggered schedules; K10: analysis boundary windows | Pending | Pilot: HRRR 48-hour; remaining materialized families follow |
-| G: completion triggers and cohorts | K8: completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
+| [B: measurement and documentation](https://github.com/dynamical-org/reformatters/pull/1261) | anonymous source timestamps, exported or live read-only check-ins, advisory timing and candidate comparisons; documentation foundation | Draft | No timing constants changed |
+| B′: urgent currency values | audit `max_delay` against existing fires | Not needed: an audit found current `max_delay` values already satisfy the currency rule | No correction required |
+| A: overlap primitives | configurable concurrency; fresh-session conflict recovery; metadata refresh using its committing session | Draft | Conflict recovery and metadata refresh apply to existing datasets; overlap activation waits for a cohort |
+| C: virtual pilot and cohorts | poll windows, deadlines, and currency values; virtual lifecycle documentation | Pending | Pilot: HRRR 18-hour and RRFS sub-hourly; remaining virtual families follow |
+| D: materialized pilot and cohorts | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Pending | Pilot: HRRR 48-hour; remaining materialized families follow |
+| G: completion triggers and cohorts | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
 
-Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. Urgent currency corrections can proceed independently against existing crons. An untriggered cron move waits for review of the profiler's `S` comparison. A consumer's move from `S` to `T` lands with its trigger activation.
+Adoption status is tracked here; recommendations do not activate polling, overlapping writers, retries, or triggers. Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. An untriggered cron move waits for review of the profiler's `S` comparison. A consumer's move from `S` to `T` lands with its trigger activation.
 
 ## Remaining lifecycle contracts
 

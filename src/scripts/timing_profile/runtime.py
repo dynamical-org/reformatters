@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,39 +17,17 @@ log = get_logger(__name__)
 
 
 @dataclass(frozen=True)
-class RuntimeDurations:
+class RuntimeStats:
     startup_estimate: float | None
     processing: float | None
     validation_p95: float | None
     validation_max: float | None
     scheduled_count: int
     validation_count: int
-
-
-@dataclass(frozen=True)
-class RuntimeStats(RuntimeDurations):
     non_ok_count: int
     off_schedule_count: int
     first: pd.Timestamp | None
     last: pd.Timestamp | None
-    by_fire_hour: dict[int, RuntimeDurations]
-
-
-def summarize_durations(
-    lags: list[float],
-    processing: list[float],
-    validation: list[float],
-    *,
-    virtual: bool,
-) -> RuntimeDurations:
-    return RuntimeDurations(
-        arrival_stats(lags).p95 if lags else None,
-        arrival_stats(processing).p95 if processing and not virtual else None,
-        arrival_stats(validation).p95 if validation else None,
-        max(validation) if validation else None,
-        len(lags),
-        len(validation),
-    )
 
 
 def read_checkins(directory: Path | None, monitor: str) -> list[dict[str, Any]]:
@@ -76,8 +54,6 @@ def measure_runtime(
     )
     lags, processing, validation = [], [], []
     update_ends = []
-    scheduled_ends: list[tuple[pd.Timestamp, int]] = []
-    by_hour: dict[int, dict[str, list[float]]] = {}
     validation_errors = [
         pd.Timestamp(checkin["dateUpdated"]).tz_convert(None)
         for checkin in validations
@@ -113,12 +89,6 @@ def measure_runtime(
             continue
         lags.append(lag)
         processing.append(checkin["duration"] / 1000)
-        by_hour.setdefault(fire.hour, {"L": [], "R": [], "V": []})
-        by_hour[fire.hour]["L"].append(lag)
-        by_hour[fire.hour]["R"].append(checkin["duration"] / 1000)
-        scheduled_ends.append(
-            (pd.Timestamp(checkin["dateUpdated"]).tz_convert(None), fire.hour)
-        )
     for checkin in validations:
         began = checkin.get("dateInProgress")
         if (
@@ -133,25 +103,19 @@ def measure_runtime(
             0 <= (began - closed).total_seconds() <= 120 for closed in update_ends
         ):
             validation.append(checkin["duration"] / 1000)
-            matches = [
-                ((began - closed).total_seconds(), hour)
-                for closed, hour in scheduled_ends
-                if 0 <= (began - closed).total_seconds() <= 120
-            ]
-            if matches:
-                by_hour[min(matches)[1]]["V"].append(checkin["duration"] / 1000)
     return RuntimeStats(
-        **asdict(summarize_durations(lags, processing, validation, virtual=virtual)),
+        startup_estimate=arrival_stats(lags).p95 if lags else None,
+        processing=arrival_stats(processing).p95
+        if processing and not virtual
+        else None,
+        validation_p95=arrival_stats(validation).p95 if validation else None,
+        validation_max=max(validation) if validation else None,
+        scheduled_count=len(lags),
+        validation_count=len(validation),
         non_ok_count=non_ok,
         off_schedule_count=off_schedule,
         first=min(observed) if observed else None,
         last=max(observed) if observed else None,
-        by_fire_hour={
-            hour: summarize_durations(
-                values["L"], values["R"], values["V"], virtual=virtual
-            )
-            for hour, values in by_hour.items()
-        },
     )
 
 
