@@ -84,7 +84,7 @@ Pod 0 decides once, before any index computes region jobs. Job annotations deter
 - Other Jobs annotated `cronjob.kubernetes.io/instantiate: manual` are manual, including operator clones and re-passes.
 - Remaining Jobs are scheduled. Ownership does not determine the kind.
 
-A scheduled Job takes the backstop check when a trigger for its CronJob was created within `Δf/2` before its own creation. It waits for older writers without recording a state, then checks only `CheckCurrentData` against the published store. It records `skip` if current, otherwise `run`. The comparison uses the scheduled Job's own creation time even when pod 0 is replaced later. Every other Job records `run`. Until annotated triggers exist, the backstop check is inactive.
+A scheduled Job takes the backstop check when a trigger for its CronJob was created within `Δf/2` before its own creation. It waits for older writers without recording a state, then checks only `CheckCurrentData` against the published store. It records `skip` if current, otherwise `run`. The comparison uses the scheduled Job's own creation time even when pod 0 is replaced later. Every other Job records `run`.
 
 All indices, including replacement pods, reuse the matching-UID decision. `skip` and `finalized` exit 0 without processing or validation. On `run`, each index waits until no older Job is writing, checking every 30 seconds, before reading the store and computing jobs. Waiting only on older Jobs prevents deadlock; a finalized Job does not block the queue while validating or sleeping. A Job deciding whether to skip never records `run` first, so it cannot suppress a re-pass and then skip.
 
@@ -100,6 +100,18 @@ The last index follows the [publication and cleanup order](parallel_processing.m
 An interrupted backoff is lost; a later trigger or scheduled fire covers it. A replacement that sees finalized state exits successfully, including after an interruption in cleanup, validation, or backoff. Every persistent failure can start another chain at each fire, and sleeping pods retain their resources. See the [operations card](ops_card.md#troubleshooting) for first response steps.
 
 Materialized datasets outside this lifecycle retain one immediate `-r1`, submitted only when the next scheduled fire is farther away than the pod deadline. A multi-worker replacement after cleanup waits for deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
+
+## Completion triggers
+
+A virtual producer dispatches its configured materialized consumers when its window becomes complete: it started with pending files, all pending files became present before poll end, and no file was skipped as unreadable. Completion counts regardless of which overlapping pod committed the last file. A window complete at startup or incomplete at poll end produces no trigger; the consumer's backstop cron covers those cases.
+
+The write loop returns the completion flag. Dispatch happens after polling and before validation, outside the commit path. Producers list their consumers in `materialized_update_triggers`; each consumer accepts only units it publishes. Only consumers whose scheduled fire publishes one append position are eligible. A multi-producer consumer takes its trigger from the source that usually completes last; the backstop covers the others.
+
+Trigger Job names are deterministic per consumer and unit, fit the indexed Job name budget, and never end in a numeric suffix. `create_job_from_cronjob` deduplicates a 409 only for the same CronJob name and UID and respects consumer suspension. Trigger Jobs carry `dynamical.org/run-kind: trigger` on Job metadata and enter the materialized queue. Admission permits that exact annotation value only on the Job; labels and pod templates remain pinned. Staging producers cannot trigger production consumers.
+
+A triggered consumer's cron is its backstop at the latest cycle class's late threshold T, rounded up to the fire minute. Its `max_delay` equals the cron's actual offset from the position label, so the currency check cannot skip a missing unit at the fire. Move the cron and currency allowance together with trigger activation. Submission failures are logged without preventing producer validation; lost triggers are covered by that cron.
+
+The IFS 46-day archiver emits one trigger per init. GEFS 35-day extension tier 2 receives no trigger: its source window does not normally complete during a producer run, and the consumer's age-gated update window covers it on a later init's trigger or backstop.
 
 ## Repair window
 

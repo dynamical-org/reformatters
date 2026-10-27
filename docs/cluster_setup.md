@@ -29,6 +29,10 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 
    Deploy automatically creates and checks bindings for every CronJob it deploys, then grants the `reformatters-update-trigger` account access. It never updates or deletes bindings or policies. Deploy assumes the static policies remain installed and does not run admission probes or wait for propagation; a new target can briefly become authorized before its binding is active on every API server. The bootstrap grants namespaced Role/RoleBinding creation and read/patch access to `reformatters-update-trigger`. It also grants, through RBAC, every permission deploy delegates to the trigger account, because Kubernetes escalation checks ignore permissions granted only by an external authorizer such as EKS access policies. The deploy identity also needs ordinary namespaced workload management. No per-dataset admin step is needed. Do not grant wildcard verbs to the trigger account or its groups. Before pruning bindings or replacing policies, pause production and staging deploys and wait for in-flight deploys to finish. For pruning, revoke the targets from the trigger Role and wait for propagation before deleting bindings. For policy replacement, revoke the trigger RoleBinding until verification passes and the policies are active on all API servers.
 
+   Clones may add `dynamical.org/run-kind: trigger` only to Job annotations. Other values, labels, pod annotations, and pod specifications remain pinned to the CronJob template. Admission verification probes the accepted annotation, a wrong value, a pod annotation, an altered pod image, and an unannotated clone.
+
+   Replace policies between scheduled fires with no re-pass chain in flight. While the trigger RoleBinding is revoked, every clone submitted by the trigger account is refused, including validation re-passes. Keep deploys paused until the replacement policies and all canaries pass on every API server; then restore the RoleBinding and resume deploys. A missed completion trigger is covered by its consumer's backstop cron.
+
 1. Enable Restricted Pod Security warnings and audit before enforcement:
 
    ```sh

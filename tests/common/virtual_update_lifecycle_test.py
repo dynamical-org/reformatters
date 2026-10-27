@@ -18,6 +18,9 @@ from reformatters.common.types import DatetimeLike
 from reformatters.noaa.hrrr.forecast_18_hour_virtual.dynamical_dataset import (
     NoaaHrrrForecast18HourVirtualDataset,
 )
+from reformatters.noaa.hrrr.forecast_48_hour_virtual.dynamical_dataset import (
+    NoaaHrrrForecast48HourVirtualDataset,
+)
 from reformatters.noaa.rrfs.forecast_sub_hourly_virtual.dynamical_dataset import (
     NoaaRrfsForecastSubHourlyVirtualDataset,
 )
@@ -40,10 +43,13 @@ from tests.common.virtual_region_job_test import (
 
 PILOTS = (
     NoaaHrrrForecast18HourVirtualDataset,
+    NoaaHrrrForecast48HourVirtualDataset,
     NoaaRrfsForecastSubHourlyVirtualDataset,
 )
 type PilotDataset = (
-    NoaaHrrrForecast18HourVirtualDataset | NoaaRrfsForecastSubHourlyVirtualDataset
+    NoaaHrrrForecast18HourVirtualDataset
+    | NoaaHrrrForecast48HourVirtualDataset
+    | NoaaRrfsForecastSubHourlyVirtualDataset
 )
 
 
@@ -286,7 +292,7 @@ def test_allow_poll_deadline_keeps_the_selected_fire_when_start_straddles_succes
     monkeypatch.setattr(VirtualTestDataset, "_assert_no_structural_drift", Mock())
     monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
     process = Mock()
-    monkeypatch.setattr(VirtualTestRegionJob, "process_worker_jobs", process)
+    monkeypatch.setattr(VirtualTestRegionJob, "process_virtual_worker_jobs", process)
     monkeypatch.setattr(VirtualTestDataset, "_validate_after_update", Mock())
 
     dataset.update("straddling-update")

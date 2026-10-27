@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from reformatters.common.kubernetes import SERVICE_ACCOUNT, CronJob
+from reformatters.common.kubernetes import RUN_KIND_ANNOTATION, SERVICE_ACCOUNT, CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
@@ -190,8 +190,9 @@ def trigger_admission_resources(namespace: str) -> list[dict[str, Any]]:
             "variables.jobAnnotations",
             "variables.sourceAnnotations",
             {"cronjob.kubernetes.io/instantiate": "'manual'"},
-            ignored=f"(request.dryRun == true ? [{json.dumps(CANARY_ANNOTATION)}] : [])",
+            ignored=f"[{json.dumps(RUN_KIND_ANNOTATION)}] + (request.dryRun == true ? [{json.dumps(CANARY_ANNOTATION)}] : [])",
         ),
+        f"!({json.dumps(RUN_KIND_ANNOTATION)} in variables.jobAnnotations) || variables.jobAnnotations[{json.dumps(RUN_KIND_ANNOTATION)}] == 'trigger'",
         "object.spec.template.spec == params.spec.jobTemplate.spec.template.spec",
         _same_optional_field(
             "object.spec.template.metadata",
@@ -522,6 +523,16 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> No
         )
         probe(altered, f"{prefix}-clone")
         probe(job, None if source else f"{prefix}-clone")
+        trigger = copy.deepcopy(job)
+        trigger["metadata"]["annotations"][RUN_KIND_ANNOTATION] = "trigger"
+        probe(trigger, None if source else f"{prefix}-clone")
+        trigger["metadata"]["annotations"][RUN_KIND_ANNOTATION] = "manual"
+        probe(trigger, f"{prefix}-clone")
+        pod_trigger = copy.deepcopy(job)
+        pod_trigger["spec"]["template"].setdefault("metadata", {}).setdefault(
+            "annotations", {}
+        )[RUN_KIND_ANNOTATION] = "trigger"
+        probe(pod_trigger, f"{prefix}-clone")
 
 
 def trigger_deployment_resources(

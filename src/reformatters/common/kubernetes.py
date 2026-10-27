@@ -27,6 +27,7 @@ SERVICE_ACCOUNT = "reformatters-update-trigger"
 VALIDATION_FAILURE_EXIT_CODE = 20
 _CRONJOB_NAME_LABEL = "dynamical.org/cronjob-name"
 _CRONJOB_UID_LABEL = "dynamical.org/cronjob-uid"
+RUN_KIND_ANNOTATION = "dynamical.org/run-kind"
 log = get_logger(__name__)
 type ConcurrencyPolicy = Literal["Allow", "Forbid", "Replace"]
 
@@ -405,6 +406,7 @@ def create_job_from_cronjob(
     job_name: str,
     *,
     skip_if_next_run_within_deadline: bool = False,
+    kind: Literal["trigger"] | None = None,
 ) -> bool:
     assert len(job_name) <= 63, f"Invalid Kubernetes Job name {job_name!r}"
     assert re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", job_name), (
@@ -440,6 +442,8 @@ def create_job_from_cronjob(
     labels.update({_CRONJOB_NAME_LABEL: cronjob_name, _CRONJOB_UID_LABEL: cronjob_uid})
     annotations = dict(template.metadata.annotations or {}) if template.metadata else {}
     annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+    if kind is not None:
+        annotations[RUN_KIND_ANNOTATION] = kind
     job = client.V1Job(
         api_version="batch/v1",
         kind="Job",
@@ -502,7 +506,7 @@ def job_is_terminal(job: client.V1Job) -> bool:
 def job_kind(job: client.V1Job) -> Literal["trigger", "scheduled", "manual"]:
     assert job.metadata is not None
     annotations = job.metadata.annotations or {}
-    if annotations.get("dynamical.org/run-kind") == "trigger":
+    if annotations.get(RUN_KIND_ANNOTATION) == "trigger":
         return "trigger"
     if annotations.get("cronjob.kubernetes.io/instantiate") == "manual":
         return "manual"

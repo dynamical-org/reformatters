@@ -35,6 +35,7 @@ from reformatters.common.kubernetes import (
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.operational import OperationalResources
 from reformatters.common.region_job import (
     RegionJob,
@@ -68,6 +69,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
@@ -707,9 +709,15 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
         job.refresh_metadata(self.store_factory, self._tmp_store())
-        self.region_job_class.process_worker_jobs(
-            [job], self.store_factory, "main", worker_index, overwrite_chunks=False
+        window_became_complete = job.process_virtual_worker_jobs(
+            [job], self.store_factory, "main", overwrite_chunks=False
         )
+        if window_became_complete and Config.is_prod:
+            source_cronjob = self._operational_cron_job(ReformatCronJob).name
+            if os.getenv("CRON_JOB_NAME") == source_cronjob:
+                unit = job.template_ds.to_dataset().get_index(job.append_dim)[-1]
+                for trigger in self.materialized_update_triggers:
+                    trigger.dispatch(pd.Timestamp(unit))
 
     def validate_dataset(
         self,

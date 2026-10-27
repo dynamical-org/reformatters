@@ -492,6 +492,10 @@ def test_create_job_from_cronjob_is_admitted(
     )
     try:
         assert reformatters_kubernetes.create_job_from_cronjob(UPDATE, "from-code")
+        for _ in range(2):
+            assert reformatters_kubernetes.create_job_from_cronjob(
+                UPDATE, "from-code-trigger", kind="trigger"
+            )
     finally:
         client.Configuration.set_default(client.Configuration())
 
@@ -629,6 +633,13 @@ NEGATIVE_MUTATIONS: dict[str, Callable[[dict[str, Any]], None]] = {
         _annotations, "cronjob.kubernetes.io/instantiate"
     ),
     "extra-annotation": _set(_annotations, "extra", "1"),
+    "wrong-run-kind": _set(_annotations, "dynamical.org/run-kind", "manual"),
+    "pod-run-kind": lambda job: (
+        _template_metadata(job)
+        .setdefault("annotations", {})
+        .__setitem__("dynamical.org/run-kind", "trigger")
+    ),
+    "label-run-kind": _set(_labels, "dynamical.org/run-kind", "trigger"),
     "owner-reference": _forged_owner,
     "finalizer": lambda job: job["metadata"].__setitem__("finalizers", ["a/b"]),
     "generate-name": _generate_name,

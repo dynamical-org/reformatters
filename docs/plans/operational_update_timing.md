@@ -13,7 +13,7 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 | [A: overlap primitives](https://github.com/dynamical-org/reformatters/pull/1227) | configurable concurrency; fresh-session conflict recovery; metadata refresh using its committing session | Draft; implemented | Conflict recovery and metadata refresh apply to existing datasets; overlap activation is adopted per cohort |
 | [C: virtual pilot](https://github.com/dynamical-org/reformatters/pull/1262) | poll windows, deadlines, and currency values; virtual lifecycle documentation | Draft; pilots implemented | HRRR 18-hour and RRFS sub-hourly virtual use overlapping polling with bounded Jobs and selected-fire validation; remaining virtual families follow |
 | [D: materialized pilot and cohorts](https://github.com/dynamical-org/reformatters/pull/1260) | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Draft; pilot implemented | HRRR 48-hour uses the materialized queue, Job-reference-time window, bounded re-passes, and chosen untriggered timing; remaining materialized families and analysis boundaries follow |
-| G: completion triggers and cohorts | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
+| [G: completion triggers and cohorts](https://github.com/dynamical-org/reformatters/pull/1265) | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Draft; pilot implemented | HRRR 48-hour virtual uses overlapping polling and triggers its queued materialized consumer; the consumer uses its triggered backstop timing and currency allowance; remaining cohorts follow |
 
 Adoption status is tracked here; recommendations do not activate polling, overlapping writers, retries, or triggers. Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. The profiler recommends `S = min(p95 + max(p95 − p50, 5 min), p99 + 1 min)` for untriggered runs and retains all three candidates plus the chosen row for review. Untriggered cron moves and derived currency values use that chosen offset; adoption and named exceptions remain subject to manual review. A consumer's move from `S` to `T` lands with its trigger activation.
 
@@ -31,11 +31,7 @@ The [materialized deadlines and monitoring](../operational_update_timing.md#mate
 
 ### Triggers
 
-Dispatch off the commit path and before validation when a virtual window started pending, becomes complete, skipped no unreadable files, and has not reached poll end. Completion by an overlapping writer still counts. A window complete at startup or incomplete at poll end sends no trigger.
-
-Only consumers whose fire publishes exactly one append position receive completion triggers. Use deterministic consumer-and-unit Job names and the clone helper's conflict identity check. A producer triggers only consumer units it publishes; a consumer with several producers takes a trigger only from the producer that normally completes last. The IFS 46-day archiver dispatches once per initialization. Lost triggers are covered by the backstop cron.
-
-Permit only `dynamical.org/run-kind: trigger` as the added Job annotation in clone admission, never on the pod template. Deploy that permission before the first annotated trigger. Activate each consumer's annotation, backstop schedule, and currency values together.
+The [completion-trigger rules](../operational_update_timing.md#completion-triggers) and [dispatch mechanism](../parallel_processing.md#completion-triggers) are implemented with the pilot. Remaining work is cohort adoption, tracked above. Deploy the trigger annotation permission before activating each cohort.
 
 ### Analysis boundaries
 

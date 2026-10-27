@@ -140,6 +140,9 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
             subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
             subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
             subprocess.CompletedProcess([], 0, stderr=""),
+            subprocess.CompletedProcess([], 0, stderr=""),
+            subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
+            subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
         ]
     )
     monkeypatch.setattr(subprocess, "run", run)
@@ -149,7 +152,14 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
         json.loads(call.kwargs["input"])["metadata"]["name"]
         for call in run.call_args_list[1:]
     ]
-    assert len(set(names)) == 5
+    assert len(set(names)) == 8
+    probes = [json.loads(call.kwargs["input"]) for call in run.call_args_list[1:]]
+    key = "dynamical.org/run-kind"
+    assert key not in probes[-4]["metadata"]["annotations"]
+    assert probes[-3]["metadata"]["annotations"][key] == "trigger"
+    assert probes[-2]["metadata"]["annotations"][key] == "manual"
+    assert key not in probes[-1]["metadata"]["annotations"]
+    assert probes[-1]["spec"]["template"]["metadata"]["annotations"][key] == "trigger"
     assert all("--dry-run=server" in call.args[0] for call in run.call_args_list[1:])
 
 

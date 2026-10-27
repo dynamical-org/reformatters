@@ -344,7 +344,7 @@ def _currency_dataset(
         ),
     )
     monkeypatch.setattr(
-        pd.Timestamp, "now", lambda **kwargs: pd.Timestamp("2026-10-26T08:06")
+        pd.Timestamp, "now", lambda **kwargs: pd.Timestamp("2026-10-26T08:12:35")
     )
 
 
@@ -355,7 +355,7 @@ def test_successful_trigger_skips_backstop_and_early_empty_trigger_runs_backstop
     pilot: Pilot, monkeypatch: pytest.MonkeyPatch, latest: str, expected: pc.JobState
 ) -> None:
     trigger = _job("trigger", "2026-10-26T07:00Z", kind="trigger")
-    backstop = _job("backstop")
+    backstop = _job("backstop", "2026-10-26T08:12Z")
     pilot.jobs[:] = [trigger, backstop]
     pilot.write(trigger, "finalized")
     events: list[tuple[str, str]] = []
