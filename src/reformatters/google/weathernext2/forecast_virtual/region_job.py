@@ -253,7 +253,7 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
-    tick_interval: ClassVar[Timedelta] = pd.Timedelta("30s")
+    tick_interval: ClassVar[Timedelta] = pd.Timedelta("3s")
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")

@@ -70,7 +70,7 @@ class NoaaGfsAnalysisVirtualDataset(
     def validators(self) -> Sequence[validation.Validator]:
         return (
             # Allow for variation in source publication time.
-            validation.CheckCurrentData(max_delay=timedelta(minutes=237)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=57)),
             # discover_available holds the frontier back to a whole hour, but releases
             # an earlier incomplete hour once a later one is complete, so an interior
             # gap is reachable and this is what finds it.

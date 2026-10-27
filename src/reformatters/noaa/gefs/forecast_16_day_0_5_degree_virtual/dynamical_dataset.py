@@ -73,7 +73,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=248)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=8)),
             validation.CheckVirtualManifestCompleteness(),
             # Four levels so the sample reaches 600 hPa, an icing level; three would
             # miss every level icing is published at.

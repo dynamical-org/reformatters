@@ -69,7 +69,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=249)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=9)),
             # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

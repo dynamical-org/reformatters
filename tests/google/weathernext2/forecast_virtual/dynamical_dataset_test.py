@@ -68,7 +68,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
 
     (update,) = dataset.operational_kubernetes_resources("test")
-    assert dataset.region_job_class.tick_interval == pd.Timedelta("30s")
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("3s")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
