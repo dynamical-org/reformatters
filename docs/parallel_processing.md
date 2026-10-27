@@ -69,7 +69,25 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
+Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`. Materialized operational updates using the queue below also retain a `state.json`, including for single-worker Jobs.
+
+### Materialized update queue
+
+Materialized updates whose CronJob uses `concurrencyPolicy: Allow` coordinate across Jobs as well as across worker indices. HRRR 48-hour forecasts use this lifecycle. Both the Job and pod deadlines equal the interval between scheduled fires. Other materialized datasets retain their existing lifecycle until their CronJobs adopt `Allow`.
+
+Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jobTemplate`. Workers list Jobs with that label and order them by `(creationTimestamp, name)`. The update service account and deployer need `list` permission on Jobs.
+
+`state.json` records the Job UID and one state: `run`, `skip`, or `finalized`. A file with another UID counts as absent. A Job is **writing** while Kubernetes reports neither a `Complete` nor a `Failed` condition and its state is absent or `run`. Failed indices alone do not make a Job terminal: running siblings may still write.
+
+At the start of `update()`, inside the update check-in and before computing region jobs, pod 0 makes one decision:
+
+- A Job annotated `dynamical.org/run-kind: trigger` is a trigger. A Job annotated `cronjob.kubernetes.io/instantiate: manual` is manual unless it has the trigger annotation; this includes re-passes and operator Jobs created from a CronJob. All remaining Jobs are scheduled. Ownership does not determine the kind.
+- A scheduled Job takes the backstop check if a trigger Job was created within half the fire interval before its own creation. It first waits until no older Job is writing, without recording a state. It then checks only `CheckCurrentData` against the published store: if current, it records `skip`; otherwise, `run`. The window uses Job creation times, including when pod 0 is replaced much later. Until annotated triggers exist, this check is inactive.
+- Every other Job records `run`.
+
+All indices, including replacement pods, reuse the matching-UID state. `skip` and `finalized` exit successfully without processing or validation. On `run`, each index waits until no older Job is writing, checking every 60 seconds, **before** computing its region jobs. All indices therefore compute from the same published store state. A stuck older writer blocks the queue until it finishes or its Job deadline expires.
+
+The update check-in covers the decision, queue wait, processing, and finalization. A skip closes it successfully. The queue waits only on older Jobs, so a chain of queued Jobs cannot deadlock.
 
 ### Setup signal
 
@@ -81,9 +99,21 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 
 ### Cleanup
 
-After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
+After successful finalization, the last worker deletes setup and result files and the temp icechunk branch. Any `state.json` is retained.
 
-Operational validation runs in that last worker after cleanup. A caught validation error exits with code 20 and fails the Job without restarting the finalized index. If a multi-worker Job's last pod is killed during validation, its replacement instead waits for the deleted setup files until its pod deadline; it cannot resume validation. Single-worker replacements rerun the update. Inspect pod termination reasons before retrying the full update as a new Job.
+For queued materialized updates, the last worker records `finalized` immediately after the publication CAS succeeds, before branch or coordination cleanup. A queued Job can then proceed while the older Job validates or sleeps. A replacement index reads `finalized` and exits 0, including after an eviction during cleanup, validation, or backoff. An interruption between publication and recording `finalized` leaves the Job writing until it retries or reaches its deadline.
+
+Operational validation always runs in the last worker after cleanup, even when that index had no region jobs to process. A caught validation error exits with code 20 and fails the Job without restarting that index.
+
+### Materialized re-passes
+
+For queued materialized updates, a validation failure is reported before backoff. Outside the update check-in, the last pod sleeps 5 minutes before `-r1`, 10 before `-r2`, 20 before `-r3`, and 30 before each later re-pass, through `-r16`. Each minute, including immediately before submission, it checks for a newer non-terminal Job with a matching-UID `run` state. If one exists it yields without submitting: that Job covers the work. An undecided, skipped, finalized, or terminal Job does not suppress a re-pass.
+
+Otherwise, `create_job_from_cronjob` submits the next `-rN` as an ordinary manual update, which computes its repair window from the store. The last pod exits 20 whether it submitted or yielded. `-r16` reports its failure and exits without sleeping or creating another re-pass. An interrupted backoff is lost; a later trigger or scheduled fire covers it. Suspending the CronJob prevents re-pass submission.
+
+Every persistent validation failure can start a new chain at each fire, and a sleeping pod retains its resource requests. During a known persistent failure, on-call suspends the CronJob or fixes the validator rather than leaving repeated chains paging.
+
+Materialized datasets outside this queue retain the immediate single `-r1`, submitted only when the next fire is farther away than the pod deadline. If their last pod is killed after cleanup, a multi-worker replacement waits for the deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
 
 ## Failure modes
 

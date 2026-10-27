@@ -3,6 +3,7 @@ import json
 import math
 import os
 import subprocess
+import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +16,7 @@ import typer
 import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
+from kubernetes import client
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
@@ -147,6 +149,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         """Update an existing dataset with the latest data."""
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
+        is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         job_fire_time: Timestamp | None = None
         if (
             issubclass(self.region_job_class, VirtualRegionJob)
@@ -156,12 +159,27 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             == "Allow"
         ):
             job_fire_time = cron_job.previous_fire_time(pd.Timestamp.now())
+        materialized_job = None
         with self._monitor(
             ReformatCronJob,
             reformat_job_name,
             send_in_progress=is_first,
             send_result=is_last,
         ):
+            if not is_virtual and Config.is_prod:
+                cron = self._operational_cron_job(ReformatCronJob)
+                if cron.concurrency_policy == "Allow":
+                    materialized_job = item(
+                        job
+                        for job in kubernetes.list_cronjob_jobs(
+                            os.environ["CRON_JOB_NAME"]
+                        )
+                        if job.metadata.name == reformat_job_name
+                    )
+                    if not self._prepare_materialized_update(
+                        materialized_job, cron, is_first=is_first
+                    ):
+                        return
             tmp_store = self._tmp_store()
 
             all_jobs, template_ds = self._operational_update_jobs(
@@ -184,24 +202,88 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     template_ds=template_ds,
                     tmp_store=tmp_store,
                     update_template_with_results=True,
+                    job_uid=materialized_job.metadata.uid
+                    if materialized_job is not None
+                    else None,
                 )
 
         if is_last:
-            self._validate_after_update(reformat_job_name, job_fire_time=job_fire_time)
+            self._validate_after_update(
+                reformat_job_name,
+                materialized_job=materialized_job,
+                job_fire_time=job_fire_time,
+            )
 
         log.info(
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
 
+    def _prepare_materialized_update(
+        self, job: client.V1Job, cron: CronJob, *, is_first: bool
+    ) -> bool:
+        factory = self.store_factory
+        name, uid = job.metadata.name, job.metadata.uid
+        cronjob_name = os.environ["CRON_JOB_NAME"]
+        state = parallel_coordination.read_job_state(factory, name, uid)
+        if is_first and state is None:
+            assert cron.active_deadline is not None
+            is_backstop = kubernetes.job_kind(job) == "scheduled" and any(
+                kubernetes.job_kind(other) == "trigger"
+                and timedelta(0)
+                <= job.metadata.creation_timestamp - other.metadata.creation_timestamp
+                <= cron.active_deadline / 2
+                for other in kubernetes.list_cronjob_jobs(cronjob_name)
+            )
+            if is_backstop:
+                parallel_coordination.wait_for_older_jobs(factory, cronjob_name, job)
+                if self._current_data_is_published():
+                    state = "skip"
+            state = state or "run"
+            parallel_coordination.write_job_state(factory, name, uid, state)
+            log.info("Job %s decision: %s", name, state)
+        while state is None:
+            time.sleep(5)
+            state = parallel_coordination.read_job_state(factory, name, uid)
+        if state != "run":
+            return False
+        parallel_coordination.wait_for_older_jobs(factory, cronjob_name, job)
+        return True
+
+    def _current_data_is_published(self) -> bool:
+        check = item(
+            check
+            for check in self.validators()
+            if isinstance(check, validation.CheckCurrentData)
+        )
+        store = self.store_factory.primary_store()
+        with validation.open_flattened_dataset(
+            store, consolidated=not isinstance(store, IcechunkStore)
+        ) as ds:
+            return check.check(
+                validation.ValidationContext(
+                    store=store,
+                    ds=ds,
+                    append_dim=self.template_config.append_dim,
+                    append_dim_frequency=self.template_config.append_dim_frequency,
+                )
+            ).passed
+
     def _validate_after_update(
-        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
+        self,
+        reformat_job_name: str,
+        *,
+        materialized_job: client.V1Job | None = None,
+        job_fire_time: Timestamp | None = None,
     ) -> None:
         try:
             self._validate_with_monitor(reformat_job_name, job_fire_time=job_fire_time)
         except Exception as error:
             log.exception("Operational validation failed for %s", reformat_job_name)
             if (
-                isinstance(error, validation.OperationalValidationError)
+                (
+                    materialized_job is not None
+                    or isinstance(error, validation.OperationalValidationError)
+                )
                 and Config.is_prod
                 and not (
                     issubclass(self.region_job_class, VirtualRegionJob)
@@ -210,15 +292,26 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 )
             ):
                 should_retry, retry_job_name = kubernetes.retry_job_name(
-                    reformat_job_name
+                    reformat_job_name,
+                    max_retries=16 if materialized_job is not None else 1,
                 )
                 if should_retry:
                     try:
-                        kubernetes.create_job_from_cronjob(
-                            os.environ["CRON_JOB_NAME"],
-                            retry_job_name,
-                            skip_if_next_run_within_deadline=True,
-                        )
+                        if (
+                            materialized_job is None
+                            or parallel_coordination.backoff_before_repass(
+                                self.store_factory,
+                                os.environ["CRON_JOB_NAME"],
+                                materialized_job,
+                                int(retry_job_name.rsplit("-r", 1)[1]),
+                            )
+                        ):
+                            kubernetes.create_job_from_cronjob(
+                                os.environ["CRON_JOB_NAME"],
+                                retry_job_name,
+                                skip_if_next_run_within_deadline=materialized_job
+                                is None,
+                            )
                     except Exception:
                         log.exception("Could not submit %s", retry_job_name)
             # Stop with exit code that fails the job rather than having this pod retry
@@ -457,6 +550,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         update_template_with_results: bool,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        job_uid: str | None = None,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
@@ -570,6 +664,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 consolidated=self.region_job_class.consolidated_metadata,
                 publish_zarr3_metadata=update_template_with_results or overwrite,
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
+                job_uid=job_uid,
             )
 
     def _run_virtual_operational_update(

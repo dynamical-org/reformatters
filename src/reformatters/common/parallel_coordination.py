@@ -8,14 +8,15 @@ import re
 import time
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import icechunk
 import pandas as pd
 import xarray as xr
+from kubernetes import client
 from pydantic import TypeAdapter
 
-from reformatters.common import storage, template_utils
+from reformatters.common import kubernetes, storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
@@ -40,6 +41,67 @@ def dump_worker_results_json(
 
 class SetupInfo(TypedDict, total=False):
     repo_snapshots: dict[str, str]
+
+
+type JobState = Literal["run", "skip", "finalized"]
+
+
+def read_job_state(
+    store_factory: StoreFactory, job_name: str, job_uid: str
+) -> JobState | None:
+    files = store_factory.read_all_coordination_files(job_name, "state.json")
+    if files:
+        state = json.loads(files[0])
+        if state["uid"] == job_uid:
+            assert state["state"] in {"run", "skip", "finalized"}
+            return state["state"]
+    return None
+
+
+def write_job_state(
+    store_factory: StoreFactory, job_name: str, job_uid: str, state: JobState
+) -> None:
+    store_factory.write_coordination_file(
+        job_name, "state.json", json.dumps({"uid": job_uid, "state": state}).encode()
+    )
+
+
+def job_is_writing(store_factory: StoreFactory, job: client.V1Job) -> bool:
+    return not kubernetes.job_is_terminal(job) and read_job_state(
+        store_factory, job.metadata.name, job.metadata.uid
+    ) in {None, "run"}
+
+
+def wait_for_older_jobs(
+    store_factory: StoreFactory, cronjob_name: str, job: client.V1Job
+) -> None:
+    while any(
+        kubernetes.job_order(other) < kubernetes.job_order(job)
+        and job_is_writing(store_factory, other)
+        for other in kubernetes.list_cronjob_jobs(cronjob_name)
+    ):
+        log.info("Waiting for older Jobs before %s", job.metadata.name)
+        time.sleep(60)
+
+
+def backoff_before_repass(
+    store_factory: StoreFactory,
+    cronjob_name: str,
+    job: client.V1Job,
+    retry_number: int,
+) -> bool:
+    for _ in range(min(5 * 2 ** (retry_number - 1), 30)):
+        time.sleep(60)
+        if any(
+            kubernetes.job_order(other) > kubernetes.job_order(job)
+            and not kubernetes.job_is_terminal(other)
+            and read_job_state(store_factory, other.metadata.name, other.metadata.uid)
+            == "run"
+            for other in kubernetes.list_cronjob_jobs(cronjob_name)
+        ):
+            log.info("Yielding %s to a newer run", job.metadata.name)
+            return False
+    return True
 
 
 def parallel_setup(
@@ -181,6 +243,7 @@ def finalize(
     consolidated: bool,
     publish_zarr3_metadata: bool | None = None,
     exclude_coord_value_chunks: Collection[str] = (),
+    job_uid: str | None = None,
 ) -> None:
     if publish_zarr3_metadata is None:
         publish_zarr3_metadata = update_template_with_results
@@ -226,53 +289,59 @@ def finalize(
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
     # on the temp branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
-    if branch_name != "main":
-        replicas_first = store_factory.icechunk_repos(sort="primary-last")
-        # First pass: commit final metadata and reset main on each repo.
-        diverged_roles: list[str] = []
-        for role, repo in replicas_first:
-            original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
-            current_main = repo.lookup_branch("main")
-            if current_main != original_snapshot:
-                if branch_name not in repo.list_branches() or _snapshot_is_on_branch(
-                    repo, branch_name, current_main, original_snapshot
-                ):
-                    log.info(f"{role}: main already reset by a previous attempt")
-                    continue
-                # Another job (e.g. an operational update) moved main while this job
-                # was running. Icechunk can't merge a committed branch onto the moved
-                # main, so this job's writes cannot be published without discarding
-                # the other job's; the other job wins and this one fails.
-                log.error(
-                    f"{role}: main moved past this job's starting snapshot; "
-                    f"branch {branch_name} will not be published"
-                )
-                diverged_roles.append(role)
+    replicas_first = (
+        store_factory.icechunk_repos(sort="primary-last")
+        if branch_name != "main"
+        else []
+    )
+    # First pass: commit final metadata and reset main on each repo.
+    diverged_roles: list[str] = []
+    for role, repo in replicas_first:
+        original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
+        current_main = repo.lookup_branch("main")
+        if current_main != original_snapshot:
+            if branch_name not in repo.list_branches() or _snapshot_is_on_branch(
+                repo, branch_name, current_main, original_snapshot
+            ):
+                log.info(f"{role}: main already reset by a previous attempt")
                 continue
-            session = repo.writable_session(branch_name)
-            copy_zarr_metadata(
-                updated_template,
-                tmp_store,
-                session.store,
-                icechunk_only=True,
-                exclude_coord_value_chunks=exclude_coord_value_chunks,
+            # Another job (e.g. an operational update) moved main while this job
+            # was running. Icechunk can't merge a committed branch onto the moved
+            # main, so this job's writes cannot be published without discarding
+            # the other job's; the other job wins and this one fails.
+            log.error(
+                f"{role}: main moved past this job's starting snapshot; "
+                f"branch {branch_name} will not be published"
             )
-            new_snapshot = session.commit(
-                commit_message, rebase_with=icechunk.ConflictDetector()
-            )
-            repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
-        if diverged_roles:
-            # Leave the temp branches and coordination files in place for inspection.
-            raise RuntimeError(
-                f"main moved during this job on {diverged_roles}; its writes remain "
-                f"unpublished on branch {branch_name}. Another job (e.g. an "
-                "operational update) published concurrently and wins; re-run this "
-                "job to reprocess and publish."
-            )
-        # Second pass: clean up temp branches.
-        for _role, repo in replicas_first:
-            if branch_name in repo.list_branches():
-                repo.delete_branch(branch_name)
+            diverged_roles.append(role)
+            continue
+        session = repo.writable_session(branch_name)
+        copy_zarr_metadata(
+            updated_template,
+            tmp_store,
+            session.store,
+            icechunk_only=True,
+            exclude_coord_value_chunks=exclude_coord_value_chunks,
+        )
+        new_snapshot = session.commit(
+            commit_message, rebase_with=icechunk.ConflictDetector()
+        )
+        repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
+    if diverged_roles:
+        # Leave the temp branches and coordination files in place for inspection.
+        raise RuntimeError(
+            f"main moved during this job on {diverged_roles}; its writes remain "
+            f"unpublished on branch {branch_name}. Another job (e.g. an "
+            "operational update) published concurrently and wins; re-run this "
+            "job to reprocess and publish."
+        )
+    if job_uid is not None:
+        write_job_state(store_factory, reformat_job_name, job_uid, "finalized")
+
+    # Second pass: clean up temp branches.
+    for _role, repo in replicas_first:
+        if branch_name in repo.list_branches():
+            repo.delete_branch(branch_name)
 
     if workers_total > 1:
         store_factory.clear_coordination_files(reformat_job_name)

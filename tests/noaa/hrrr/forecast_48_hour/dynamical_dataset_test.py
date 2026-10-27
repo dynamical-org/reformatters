@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -175,6 +177,12 @@ def test_operational_kubernetes_resources(
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert len(update_cron_job.secret_names) > 0
+    assert update_cron_job.concurrency_policy == "Allow"
+    assert update_cron_job.active_deadline == timedelta(hours=6)
+    assert update_cron_job.pod_active_deadline == timedelta(hours=6)
+    spec = update_cron_job.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
+    assert spec["activeDeadlineSeconds"] == 21600
+    assert spec["template"]["spec"]["activeDeadlineSeconds"] == 21600
 
 
 def test_validators(dataset: NoaaHrrrForecast48HourDataset) -> None:

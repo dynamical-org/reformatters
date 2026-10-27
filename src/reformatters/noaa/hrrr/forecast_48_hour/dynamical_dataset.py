@@ -36,7 +36,9 @@ class NoaaHrrrForecast48HourDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="53 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=10),  # usually takes <2 min
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
