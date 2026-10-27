@@ -1,16 +1,22 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 
 import pandas as pd
 import xarray as xr
+from zarr.abc.store import Store
 
 from reformatters.common.iterating import item
 from reformatters.common.region_job import (
     CoordinateValue,
+    RegionJob,
     SourceFileResult,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
+    AppendDim,
+    DatetimeLike,
     Dim,
+    Timestamp,
 )
 from reformatters.noaa.gfs.region_job import (
     NoaaGfsCommonRegionJob,
@@ -33,6 +39,34 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
 
     max_vars_per_download_group = 3
     max_vars_per_job = 12
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[NoaaDataVar],
+        reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp | None = None,
+    ) -> tuple[Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]], xr.DataTree]:
+        existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
+        append_dim_start = existing_ds[append_dim].max()
+        reference = (
+            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
+        )
+        template_ds = get_template_fn(reference.floor("6h") + pd.Timedelta(hours=7))
+        jobs = cls.get_jobs(
+            tmp_store=tmp_store,
+            template_ds=template_ds,
+            append_dim=append_dim,
+            all_data_vars=all_data_vars,
+            reformat_job_name=reformat_job_name,
+            filter_start=append_dim_start,
+        )
+        return jobs, template_ds
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""

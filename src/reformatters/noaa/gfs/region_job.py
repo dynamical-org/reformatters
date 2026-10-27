@@ -26,6 +26,7 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timestamp,
 )
 from reformatters.noaa.models import NoaaDataVar
 from reformatters.noaa.noaa_grib_index import grib_message_byte_ranges_from_index
@@ -189,6 +190,8 @@ class NoaaGfsCommonRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[NoaaDataVar, NoaaGfsSourceFileCoord]], xr.DataTree]:
         """
         Return the sequence of RegionJob instances necessary to update the dataset
@@ -197,7 +200,9 @@ class NoaaGfsCommonRegionJob(
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = (
+            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
+        )
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

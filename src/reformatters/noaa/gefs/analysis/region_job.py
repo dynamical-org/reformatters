@@ -24,6 +24,7 @@ from reformatters.common.types import (
     ArrayND,
     DatetimeLike,
     Dim,
+    Timestamp,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_INIT_TIME_FREQUENCY,
@@ -210,6 +211,8 @@ class GefsAnalysisRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp | None = None,
     ) -> tuple[
         Sequence[RegionJob[NoaaGefsDataVar, GefsAnalysisSourceFileCoord]], xr.DataTree
     ]:
@@ -223,12 +226,15 @@ class GefsAnalysisRegionJob(
         will trim the dataset to the actual data processed.
 
         For GEFS analysis, we process data along the time dimension, starting from
-        the most recent time already in the dataset and extending to the current time.
+        the most recent stored time through the newest cycle's boundary position.
         """
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent time already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        reference = (
+            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
+        )
+        append_dim_end = reference.floor("6h") + pd.Timedelta(hours=9)
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

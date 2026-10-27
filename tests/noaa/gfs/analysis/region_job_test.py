@@ -263,7 +263,7 @@ def test_operational_update_jobs(
         reformat_job_name="test_job",
     )
 
-    assert template_ds.time.max() == pd.Timestamp("2021-05-01T10:00")
+    assert template_ds.time.max() == pd.Timestamp("2021-05-01T12:00")
 
     # max_vars_per_job=12 splits 25 vars into 3 jobs
     assert len(jobs) == 3
