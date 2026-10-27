@@ -15,7 +15,7 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. e.g. `aws eks update-kubeconfig --region <region> --name <cluster-name>`, `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`, etc.
 1. Create a kubectl secret containing a single json encoded value to be passed to fsspec `storage_options` or splatted as keyword arguments to an icechunk storage opener `kubectl create secret generic your-destination-storage-options-key --from-literal=contents='{"key": "...", "secret": "..."}'`. See `storage.py`.
 
-1. As a cluster administrator, install the static trigger policies and give the deploy identity permission to create/get bindings and delegate the namespaced `trigger` verb:
+1. As a cluster administrator, install the trigger admission policies and grant the deploy identity its RBAC roles once:
 
    ```sh
    uv run main render-kubernetes-admission-bundle --namespace default > admission.json
@@ -27,21 +27,11 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
      --role=reformatters-trigger-binding-deployer --user=DEPLOY_IDENTITY
    ```
 
-   Deploy automatically creates and checks bindings for every CronJob it deploys, then grants the `reformatters-update-trigger` account access. It never updates or deletes bindings or policies. Deploy assumes the static policies remain installed and does not run admission probes or wait for propagation; a new target can briefly become authorized before its binding is active on every API server. The bootstrap grants namespaced Role/RoleBinding creation and read/patch access to `reformatters-update-trigger`. It also grants, through RBAC, every permission deploy delegates to the trigger account, because Kubernetes escalation checks ignore permissions granted only by an external authorizer such as EKS access policies. The deploy identity also needs ordinary namespaced workload management. No per-dataset admin step is needed. Do not grant wildcard verbs to the trigger account or its groups.
+   The deploy identity also needs ordinary workload permissions and the delegated verbs in RBAC, since external authorizers do not satisfy escalation checks. Never grant wildcard verbs to `reformatters-update-trigger` or its groups. Dataset deploys need no further admin setup. Verification uses server-side dry runs and creates no resources.
 
-   Clones may add `dynamical.org/run-kind: trigger` only to Job annotations. Other values, labels, pod annotations, and pod specifications remain pinned to the CronJob template. Admission verification checks the installed policy specs against the generated bundle, then probes every live CronJob named in the trigger Role: plain and trigger-annotated clones must pass; an unlabeled Job, a wrong annotation value, a pod-template annotation, and an altered image must be refused. With no authorized live CronJobs, it probes only the unlabeled-Job denial.
+   For policy changes, review `kubectl diff -f admission.json`, apply the bundle, and verify. Replace in place only when every changed object relaxes admission or leaves it unchanged; new policies or bindings count as tightening. Otherwise, replace with production and staging deploys paused, none in flight, and the trigger RoleBinding revoked across all API servers. Restore the RoleBinding and resume deploys only after verification passes and the policies are active on all API servers. Revocation blocks all trigger-account clones, including validation re-passes. Roll back by applying the previous bundle under the same rule.
 
-   Replace policies in place only when every changed object relaxes admission or leaves it unchanged, so no mix of old and new objects on any API server admits anything the new bundle forbids. Adding a policy or binding, or tightening any expression, counts as tightening. Keep deploys running and the trigger RoleBinding in place. Render the new bundle, then review the diff, apply, and verify:
-
-   ```sh
-   kubectl diff -f admission.json
-   kubectl apply -f admission.json
-   uv run main verify-kubernetes-admission admission.json --namespace default
-   ```
-
-   If that safety condition does not hold (for example, any object tightens or objects must be deleted and recreated), pause production and staging deploys, wait for in-flight deploys to finish, revoke the trigger RoleBinding, and wait for revocation to propagate before replacing policies. Restore the RoleBinding and resume deploys after verification passes and the policies are active on all API servers. Revocation blocks all trigger-account clones, including validation re-passes; a missed completion trigger is covered by its consumer's backstop cron. Roll back by applying the previous bundle under the same rule.
-
-   Before pruning bindings, pause production and staging deploys and wait for in-flight deploys to finish. Revoke the targets from the trigger Role and wait for propagation before deleting bindings.
+   Prune bindings with deploys paused and none in flight, after removing their targets from the trigger Role and waiting for propagation.
 
 1. Enable Restricted Pod Security warnings and audit before enforcement:
 
