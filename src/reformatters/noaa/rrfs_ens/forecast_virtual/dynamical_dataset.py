@@ -14,6 +14,7 @@ class NoaaRrfsEnsForecastVirtualDataset(NoaaRrfsDataset):
     update_offset_minutes: NonNegativeInt = 70
     update_deadline: timedelta = timedelta(hours=6, minutes=5, seconds=16)
     concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
+    max_delay: ClassVar[timedelta] = timedelta(minutes=122)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=4)
     template_config: NoaaRrfsEnsForecastVirtualTemplateConfig = (
         NoaaRrfsEnsForecastVirtualTemplateConfig()
@@ -21,6 +22,3 @@ class NoaaRrfsEnsForecastVirtualDataset(NoaaRrfsDataset):
     region_job_class: type[NoaaRrfsEnsForecastVirtualRegionJob] = (
         NoaaRrfsEnsForecastVirtualRegionJob
     )
-
-    def current_data_max_delay(self) -> timedelta:
-        return timedelta(minutes=122)

@@ -21,6 +21,23 @@ from tests.noaa.grib_index_fixtures import stub_grib_source_file_reads
 TEMPLATE_CONFIG = NoaaHrrrAnalysisVirtualTemplateConfig()
 
 
+@pytest.mark.parametrize("hour", [0, 12, 23])
+def test_operational_fire_at_46_minutes_includes_its_own_hour(hour: int) -> None:
+    anchor = pd.Timestamp("2014-10-02") + pd.Timedelta(hours=hour)
+    (job,), template = NoaaHrrrAnalysisVirtualRegionJob.operational_update_jobs(
+        primary_store=Mock(),
+        tmp_store=Path("unused-tmp.zarr"),
+        get_template_fn=TEMPLATE_CONFIG.get_template,
+        append_dim="time",
+        all_data_vars=TEMPLATE_CONFIG.data_vars,
+        reformat_job_name="test",
+        job_fire_time=anchor + pd.Timedelta(minutes=46),
+    )
+    times = template.to_dataset().get_index("time")
+    assert times[-1] == anchor
+    assert times[job.region][-1] == anchor
+
+
 def get_var(path: str) -> NoaaHrrrDataVar:
     return next(v for v in TEMPLATE_CONFIG.data_vars if v.path == path)
 

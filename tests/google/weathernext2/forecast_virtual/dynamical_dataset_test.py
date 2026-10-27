@@ -39,6 +39,7 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
 
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-historical-virtual-update"
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("1s")
     assert update.suspend is True
     assert not any(
         isinstance(item, validation.CheckCurrentData) for item in dataset.validators()
@@ -67,6 +68,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
 
     (update,) = dataset.operational_kubernetes_resources("test")
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("30s")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(

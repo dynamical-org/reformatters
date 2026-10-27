@@ -280,8 +280,11 @@ def test_cron_concurrency_defaults_to_replace_and_can_allow_overlap() -> None:
     assert overlapping.as_kubernetes_object() == expected
 
 
+@pytest.mark.parametrize("cron_job_class", [CronJob, ReformatCronJob])
 @pytest.mark.parametrize("policy", ["Allow", "Replace", "Forbid"])
-def test_allow_requires_job_deadline(policy: str) -> None:
+def test_allow_requires_job_deadline(
+    policy: str, cron_job_class: type[CronJob]
+) -> None:
     config = _cron_job_with_name("archive-update").model_dump() | {
         "concurrency_policy": policy
     }
@@ -289,9 +292,9 @@ def test_allow_requires_job_deadline(policy: str) -> None:
         with pytest.raises(
             ValidationError, match="Allow require a Job active_deadline"
         ):
-            CronJob.model_validate(config)
+            cron_job_class.model_validate(config)
     else:
-        assert CronJob.model_validate(config).active_deadline is None
+        assert cron_job_class.model_validate(config).active_deadline is None
 
 
 @pytest.mark.parametrize(

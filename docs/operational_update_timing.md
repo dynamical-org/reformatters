@@ -123,7 +123,7 @@ The dataset implementations define the values and boundaries of these exceptions
 
 - GEFS 35-day virtual uses one daily window; intermediate extension waves can wait until the next fire.
 - GEFS 35-day materialized extension has no completion trigger and waits for an eligible later run after its age gate.
-- WeatherNext 2 uses all members and levels of one variable and lead as its unit, measured from the unit's last object.
+- WeatherNext 2 uses all members and levels of one variable and lead as its unit, measured from the unit's last object. Operational virtual polling uses a 30-second tick to limit proxy listing load.
 - MRMS uses one hourly run; pass 1 is an exception.
 
 Arrivals beyond a fire's chosen offset alert when currency or integrity checks detect them. Choose offsets to make this rare under normal source operation.

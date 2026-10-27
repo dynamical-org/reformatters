@@ -57,6 +57,54 @@ type PilotDataset = (
 )
 
 
+ADOPTED_VIRTUAL_IDS = (
+    "noaa-gfs-forecast-virtual",
+    "noaa-gfs-analysis-virtual",
+    "noaa-gefs-analysis-0-25-degree-virtual",
+    "noaa-gefs-forecast-10-day-0-25-degree-virtual",
+    "noaa-gefs-forecast-16-day-0-5-degree-virtual",
+    "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+    "noaa-hrrr-analysis-virtual",
+    "noaa-hrrr-forecast-18-hour-virtual",
+    "noaa-hrrr-forecast-48-hour-virtual",
+    "noaa-rtma-analysis-virtual",
+    "noaa-rrfs-forecast-84-hour-virtual",
+    "noaa-rrfs-forecast-18-hour-virtual",
+    "noaa-rrfs-forecast-sub-hourly-virtual",
+    "noaa-rrfs-ens-forecast-virtual",
+    "noaa-refs-forecast-hourly-virtual",
+    "noaa-refs-forecast-3-hourly-virtual",
+    "ecmwf-aifs-single-forecast-virtual",
+    "google-weathernext2-forecast-operational-virtual",
+)
+LEGACY_VIRTUAL_IDS = (
+    "google-weathernext3-forecast-48-hour-0-1-degree-virtual",
+    "google-weathernext3-forecast-15-day-0-1-degree-virtual",
+    "google-weathernext3-forecast-15-day-0-05-degree-virtual",
+    "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
+    "google-weathernext2-forecast-historical-virtual",
+    "noaa-rtma-ru-analysis-virtual",
+    "noaa-urma-analysis-virtual",
+)
+DATASETS_BY_ID = {dataset.dataset_id: dataset for dataset in DYNAMICAL_DATASETS}
+
+
+def test_virtual_lifecycle_cohorts_cover_registered_virtuals() -> None:
+    assert not set(ADOPTED_VIRTUAL_IDS) & set(LEGACY_VIRTUAL_IDS)
+    assert set(ADOPTED_VIRTUAL_IDS + LEGACY_VIRTUAL_IDS) == {
+        dataset.dataset_id
+        for dataset in DYNAMICAL_DATASETS
+        if issubclass(dataset.region_job_class, VirtualRegionJob)
+    }
+
+    for dataset_id in LEGACY_VIRTUAL_IDS:
+        cron = DATASETS_BY_ID[dataset_id]._operational_cron_job(
+            kubernetes.ReformatCronJob
+        )
+        assert cron.suspend
+        assert cron.concurrency_policy != "Allow"
+
+
 @pytest.mark.parametrize("dataset_class", PILOTS)
 def test_pilot_job_deadline_ends_before_the_second_successor(
     dataset_class: type[PilotDataset],
@@ -88,14 +136,7 @@ def test_pilot_job_deadline_ends_before_the_second_successor(
 
 @pytest.mark.parametrize(
     "dataset",
-    [
-        dataset
-        for dataset in DYNAMICAL_DATASETS
-        if issubclass(dataset.region_job_class, VirtualRegionJob)
-        and dataset.dataset_id != "noaa-gefs-forecast-35-day-0-5-degree-virtual"
-        and dataset._operational_cron_job(kubernetes.ReformatCronJob).concurrency_policy
-        == "Allow"
-    ],
+    [DATASETS_BY_ID[dataset_id] for dataset_id in ADOPTED_VIRTUAL_IDS],
     ids=lambda dataset: dataset.dataset_id,
 )
 def test_virtual_overlap_reserves_validation_inside_the_job_deadline(
@@ -105,27 +146,47 @@ def test_virtual_overlap_reserves_validation_inside_the_job_deadline(
     fire = cron.previous_fire_time(pd.Timestamp("2026-10-27T12:59"))
     successor = cron.next_fire_time(fire)
     cutoff = dataset._virtual_poll_deadline(fire)
+    spec = cron.as_kubernetes_object()["spec"]
+    assert spec["concurrencyPolicy"] == "Allow"
     assert cron.active_deadline is not None
+    assert (
+        spec["jobTemplate"]["spec"]["activeDeadlineSeconds"]
+        == spec["jobTemplate"]["spec"]["template"]["spec"]["activeDeadlineSeconds"]
+    )
     assert cron.active_deadline == cron.pod_active_deadline
-    assert successor < cutoff < fire + cron.pod_active_deadline
+    assert cutoff < fire + cron.pod_active_deadline
+    if dataset.dataset_id == "noaa-gefs-forecast-35-day-0-5-degree-virtual":
+        assert cron.schedule == "15 2 * * *"
+        assert (
+            cron.active_deadline
+            == cron.pod_active_deadline
+            == timedelta(hours=8, minutes=30)
+        )
+        assert cutoff == fire.normalize() + timedelta(hours=10, minutes=38)
+    else:
+        assert successor < cutoff
     assert cutoff + dataset.virtual_poll_deadline_grace == fire + cron.active_deadline
     assert fire + cron.active_deadline < cron.next_fire_time(successor)
 
 
 @pytest.mark.parametrize(
-    "dataset_class",
+    ("dataset_class", "retry_expected"),
     [
         *(
-            type(dataset)
-            for dataset in DYNAMICAL_DATASETS
-            if issubclass(dataset.region_job_class, VirtualRegionJob)
+            pytest.param(type(DATASETS_BY_ID[dataset_id]), False, id=dataset_id)
+            for dataset_id in ADOPTED_VIRTUAL_IDS
         ),
-        VirtualTestDataset,
+        *(
+            pytest.param(type(DATASETS_BY_ID[dataset_id]), True, id=dataset_id)
+            for dataset_id in LEGACY_VIRTUAL_IDS
+        ),
+        pytest.param(VirtualTestDataset, True, id="local-legacy"),
     ],
 )
 @pytest.mark.parametrize("validation_crashes", [False, True])
 def test_virtual_update_validates_once_after_polling_and_retries_only_without_allow(
     dataset_class: type[Any],
+    retry_expected: bool,
     validation_crashes: bool,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -175,11 +236,7 @@ def test_virtual_update_validates_once_after_polling_and_retries_only_without_al
         "update-123",
         job_fire_time=planning.call_args.kwargs["job_fire_time"],
     )
-    if (
-        dataset._operational_cron_job(kubernetes.ReformatCronJob).concurrency_policy
-        != "Allow"
-        and not validation_crashes
-    ):
+    if retry_expected and not validation_crashes:
         submit.assert_called_once_with(
             f"{dataset.dataset_id}-update",
             "update-123-r1",

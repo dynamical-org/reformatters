@@ -14,6 +14,7 @@ class NoaaRefsForecastHourlyVirtualDataset(NoaaRefsDataset):
     update_offset_minutes: NonNegativeInt = 108
     update_deadline: timedelta = timedelta(hours=6, minutes=6)
     concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
+    max_delay: ClassVar[timedelta] = timedelta(minutes=150)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=4, seconds=44)
     template_config: NoaaRefsForecastHourlyVirtualTemplateConfig = (
         NoaaRefsForecastHourlyVirtualTemplateConfig()
@@ -21,6 +22,3 @@ class NoaaRefsForecastHourlyVirtualDataset(NoaaRefsDataset):
     region_job_class: type[NoaaRefsForecastHourlyVirtualRegionJob] = (
         NoaaRefsForecastHourlyVirtualRegionJob
     )
-
-    def current_data_max_delay(self) -> timedelta:
-        return timedelta(minutes=150)

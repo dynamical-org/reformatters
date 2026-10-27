@@ -14,6 +14,7 @@ class NoaaRrfsForecast18HourVirtualDataset(NoaaRrfsDataset):
     update_offset_minutes: NonNegativeInt = 70
     update_deadline: timedelta = timedelta(hours=3, minutes=4, seconds=24)
     concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
+    max_delay: ClassVar[timedelta] = timedelta(minutes=133)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=3, seconds=8)
     # Snow density is all NaN when the air 300 m above ground is 5 °C or warmer everywhere.
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ("new_snow_density_surface",)
@@ -23,6 +24,3 @@ class NoaaRrfsForecast18HourVirtualDataset(NoaaRrfsDataset):
     region_job_class: type[NoaaRrfsForecast18HourVirtualRegionJob] = (
         NoaaRrfsForecast18HourVirtualRegionJob
     )
-
-    def current_data_max_delay(self) -> timedelta:
-        return timedelta(minutes=133)

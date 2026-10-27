@@ -58,7 +58,6 @@ class EcmwfAifsSingleForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Complete runs exit early; late files remain observable across the next fire.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="35 5,11,17,23 * * *",
@@ -76,7 +75,6 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Currency follows first visibility rather than full-run completion.
             validation.CheckCurrentData(max_delay=timedelta(minutes=366)),
             # Polling waits for all 61 leads before validating a complete run.
             validation.CheckVirtualManifestCompleteness(),
