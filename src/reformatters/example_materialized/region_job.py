@@ -1,6 +1,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+import pandas as pd
 import xarray as xr
 from zarr.abc.store import Store
 
@@ -221,6 +222,8 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
         append_dim: AppendDim,
         all_data_vars: Sequence[ExampleDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[
         Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]], xr.DataTree
     ]:
@@ -256,6 +259,9 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
 
+        job_reference_time : pd.Timestamp
+            The Job creation time in naive UTC; local callers capture one time before planning.
+
         Returns
         -------
         Sequence[RegionJob[ExampleDataVar, ExampleSourceFileCoord]]
@@ -265,7 +271,7 @@ class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCo
         """
         # existing_ds = xr.open_zarr(primary_store)
         # append_dim_start = existing_ds[append_dim].max()
-        # append_dim_end = pd.Timestamp.now()
+        # append_dim_end = job_reference_time
         # template_ds = get_template_fn(append_dim_end)
 
         # jobs = cls.get_jobs(

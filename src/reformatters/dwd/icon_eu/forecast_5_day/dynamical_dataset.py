@@ -87,7 +87,9 @@ class DwdIconEuForecast5DayDataset(
             name=f"{self.dataset_id}-update",
             schedule="52 3,9,15,21 * * *",
             # Runs usually take <5 min; reading directly from DWD can take several times longer.
-            pod_active_deadline=timedelta(minutes=30),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",

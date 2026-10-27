@@ -1,0 +1,172 @@
+import inspect
+from datetime import timedelta
+from pathlib import Path
+from unittest.mock import Mock
+
+import pandas as pd
+import pytest
+import xarray as xr
+from zarr.storage import MemoryStore
+
+from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes import ReformatCronJob
+from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.validation import CheckCurrentData
+from tests.common.current_data_deadline_test import _check_at_time
+
+_ADOPTIONS = {
+    "ecmwf-ifs-ens-forecast-15-day-0-25-degree": ("5 8 * * *", "8h40m", 24),
+    "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree": ("5 10 * * *", "58h5m", 24),
+    "ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree": ("5 10 * * *", "58h5m", 24),
+    "ecmwf-aifs-single-forecast": ("40 1,7,13,19 * * *", "7h40m", 6),
+    "ecmwf-aifs-ens-forecast": ("42 1,7,13,19 * * *", "7h42m", 6),
+    "dwd-icon-eu-forecast-5-day": ("52 3,9,15,21 * * *", "4h2m", 6),
+    "eccc-hrdps-forecast": ("45 3,9,15,21 * * *", "3h45m", 6),
+    "nasa-imerg-analysis-early": ("38 * * * *", "8h", 1),
+    "nasa-imerg-analysis-late": ("44 * * * *", "18h", 1),
+    "u-arizona-swann-analysis": ("0 20 * * *", "5D", 24),
+    "nasa-smap-level3-36km-v9": ("0 6,18 * * *", "6D", 12),
+    "ucsb-chc-chirps-analysis-final": ("0 0 */3 * *", "60D", 24),
+    "ucsb-chc-chirps-analysis-preliminary": ("0 19 * * *", "10D", 24),
+    "noaa-ndvi-cdr-analysis": ("0 20 * * *", "30D", 24),
+}
+
+
+def dataset_for(dataset_id: str) -> DynamicalDataset:
+    return next(ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == dataset_id)
+
+
+@pytest.mark.parametrize("dataset_id", _ADOPTIONS)
+def test_materialized_family_budgets_and_timing(dataset_id: str) -> None:
+    dataset = dataset_for(dataset_id)
+    schedule, delay, hours = _ADOPTIONS[dataset_id]
+    (cron,) = [
+        job
+        for job in dataset.operational_kubernetes_resources("test")
+        if isinstance(job, ReformatCronJob)
+    ]
+    assert cron.schedule == schedule
+    assert cron.concurrency_policy == "Allow"
+    assert cron.pod_active_deadline == timedelta(hours=hours)
+    assert cron.active_deadline == timedelta(hours=hours)
+    (currency,) = [v for v in dataset.validators() if isinstance(v, CheckCurrentData)]
+    assert currency.max_delay == pd.Timedelta(delay)
+    rendered = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
+    assert rendered["activeDeadlineSeconds"] == hours * 3600
+    assert rendered["template"]["spec"]["activeDeadlineSeconds"] == hours * 3600
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    [
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if issubclass(ds.region_job_class, MaterializedRegionJob)
+    ],
+    ids=lambda ds: ds.dataset_id,
+)
+def test_materialized_builders_require_reference_time(
+    dataset: DynamicalDataset,
+) -> None:
+    parameter = inspect.signature(
+        dataset.region_job_class.operational_update_jobs
+    ).parameters["job_reference_time"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty
+
+
+@pytest.mark.parametrize("dataset_id", _ADOPTIONS)
+def test_materialized_family_builders_use_reference_not_wall_clock(
+    dataset_id: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dataset = dataset_for(dataset_id)
+    job_class = dataset.region_job_class
+    assert issubclass(job_class, MaterializedRegionJob)
+    append_dim = dataset.template_config.append_dim
+    variables = dataset.template_config.data_vars
+    existing = xr.Dataset(
+        coords={
+            append_dim: pd.date_range(
+                "2026-10-20",
+                periods=2,
+                freq=dataset.template_config.append_dim_frequency,
+            )
+        }
+    )
+    reference = pd.Timestamp("2026-10-26T14:20")
+    template = Mock(return_value=xr.DataTree(existing))
+    monkeypatch.setattr(xr, "open_zarr", Mock(return_value=existing))
+    monkeypatch.setattr(job_class, "get_jobs", Mock(return_value=[]))
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        Mock(side_effect=AssertionError("Builder must use its explicit reference")),
+    )
+    job_class.operational_update_jobs(
+        primary_store=MemoryStore(),
+        tmp_store=tmp_path,
+        get_template_fn=template,
+        append_dim=append_dim,
+        all_data_vars=variables,
+        reformat_job_name="test",
+        job_reference_time=reference,
+    )
+    expected = reference
+    if "ifs-ens-forecast-46-day" in dataset_id:
+        expected = pd.Timestamp("2026-10-25")
+    elif dataset_id == "ecmwf-aifs-ens-forecast":
+        expected = pd.Timestamp("2026-10-26T08:50")
+    template.assert_called_once_with(expected)
+
+
+@pytest.mark.parametrize(
+    ("dataset_id", "offset"),
+    [
+        ("ecmwf-aifs-single-forecast", "7h40m"),
+        ("ecmwf-aifs-ens-forecast", "7h42m"),
+        ("eccc-hrdps-forecast", "3h45m"),
+        ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "58h5m"),
+        ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "58h5m"),
+    ],
+)
+def test_adopted_forecast_currency_requires_init_at_its_full_fire(
+    dataset_id: str, offset: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = dataset_for(dataset_id)
+    init = pd.Timestamp("2026-10-20")
+    fire = init + pd.Timedelta(offset)
+    (cron,) = [
+        job
+        for job in dataset.operational_kubernetes_resources("test")
+        if isinstance(job, ReformatCronJob)
+    ]
+    assert cron.previous_fire_time(fire) == fire
+    previous = init - dataset.template_config.append_dim_frequency
+    assert _check_at_time(
+        dataset_id, fire - timedelta(seconds=1), previous, monkeypatch
+    ).passed
+    assert not _check_at_time(dataset_id, fire, previous, monkeypatch).passed
+    assert _check_at_time(dataset_id, fire, init, monkeypatch).passed
+
+
+def test_chirps_calendar_deadlines_use_shortest_interval() -> None:
+    dataset = dataset_for("ucsb-chc-chirps-analysis-final")
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    boundary = pd.Timestamp("2026-11-01")
+    assert cron.previous_fire_time(boundary) - cron.previous_fire_time(
+        boundary - timedelta(seconds=1)
+    ) == timedelta(days=1)
+    assert cron.previous_fire_time(
+        boundary + timedelta(days=3)
+    ) - boundary == timedelta(days=3)
+    assert cron.pod_active_deadline == cron.active_deadline == timedelta(days=1)
+
+
+def test_deprecated_plain_zarr_updater_keeps_legacy_lifecycle() -> None:
+    dataset = dataset_for("ecmwf-ifs-ens-15-day-deprecated-zarr-v3")
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    assert cron.schedule == "45 8 * * *"
+    assert cron.concurrency_policy == "Replace"
+    assert cron.pod_active_deadline == timedelta(minutes=45)
+    assert cron.active_deadline is None

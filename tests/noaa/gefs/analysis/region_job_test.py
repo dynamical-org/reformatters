@@ -666,6 +666,7 @@ def test_operational_update_jobs(
                 append_dim="time",
                 all_data_vars=example_data_vars,
                 reformat_job_name="test-update",
+                job_reference_time=pd.Timestamp.now(),
             )
 
             # Verify results

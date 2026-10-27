@@ -81,7 +81,6 @@ def _reset_failure_injection() -> None:
     """Clear the injected failures between tests so class state never leaks."""
     FailRegionJob.fail_download_times = frozenset()
     FailRegionJob.fail_read_var_times = frozenset()
-    FailRegionJob.update_end_time = _START
 
 
 def _time(step: int) -> pd.Timestamp:
@@ -117,8 +116,6 @@ class FailRegionJob(MaterializedRegionJob[FailDataVar, FailSourceFileCoord]):
     fail_download_times: ClassVar[frozenset[pd.Timestamp]] = frozenset()
     # (variable name, time) pairs whose read raises (one variable lags behind).
     fail_read_var_times: ClassVar[frozenset[tuple[str, pd.Timestamp]]] = frozenset()
-    # End (exclusive) the next operational_update_jobs call expands the template to.
-    update_end_time: ClassVar[pd.Timestamp] = _START
 
     def generate_source_file_coords(
         self,
@@ -155,12 +152,14 @@ class FailRegionJob(MaterializedRegionJob[FailDataVar, FailSourceFileCoord]):
         append_dim: AppendDim,
         all_data_vars: Sequence[FailDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[Sequence[RegionJob[FailDataVar, FailSourceFileCoord]], xr.DataTree]:
         # Mirror the standard resume pattern: reprocess from the latest time already
         # in the store through the (injected) end time.
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().values)
-        template_ds = get_template_fn(cls.update_end_time)
+        template_ds = get_template_fn(job_reference_time)
         jobs = cls.get_jobs(
             tmp_store=tmp_store,
             template_ds=template_ds,
@@ -297,7 +296,6 @@ def _backfill_through(dataset: FailDataset, end_step: int) -> None:
 
 def _run_update(dataset: FailDataset, end_step: int, job_name: str) -> None:
     """Run an operational update (resume-from-latest) extending through end_step."""
-    FailRegionJob.update_end_time = _time(end_step)
     jobs, template_ds = FailRegionJob.operational_update_jobs(
         primary_store=dataset.store_factory.primary_store(),
         tmp_store=dataset._tmp_store(),
@@ -305,6 +303,7 @@ def _run_update(dataset: FailDataset, end_step: int, job_name: str) -> None:
         append_dim="time",
         all_data_vars=FailTemplateConfig().data_vars,
         reformat_job_name=job_name,
+        job_reference_time=_time(end_step),
     )
     _run_jobs(dataset, jobs, template_ds, job_name, update_template_with_results=True)
 

@@ -94,13 +94,15 @@ class UarizonaSwannAnalysisRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[UarizonaSwannDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[
         Sequence[RegionJob[UarizonaSwannDataVar, UarizonaSwannAnalysisSourceFileCoord]],
         xr.DataTree,
     ]:
         existing_ds = xr.open_zarr(primary_store)
         append_dim_start = cls._update_append_dim_start(existing_ds)
-        append_dim_end = cls._update_append_dim_end()
+        append_dim_end = job_reference_time
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -155,10 +157,6 @@ class UarizonaSwannAnalysisRegionJob(
                 )
             assert result.shape == (621, 1405)
             return result
-
-    @classmethod
-    def _update_append_dim_end(cls) -> pd.Timestamp:
-        return pd.Timestamp.now()
 
     @classmethod
     def _update_append_dim_start(cls, existing_ds: xr.Dataset) -> pd.Timestamp:

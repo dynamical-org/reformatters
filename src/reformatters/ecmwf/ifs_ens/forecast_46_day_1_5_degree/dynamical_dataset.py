@@ -31,9 +31,11 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
         workers = math.ceil(self.num_variable_groups() / 2)
         operational_update_cron_job = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-daily-update",
-            schedule="0 9 * * *",
+            schedule="5 10 * * *",
             suspend=False,
-            pod_active_deadline=timedelta(hours=3),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=24),
+            active_deadline=timedelta(hours=24),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -54,10 +56,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
             "pressure_level/specific_humidity",
         )
         return (
-            # ECDS publishes about 53 hours after the reference time and the update
-            # runs at 09 UTC, so an initialization lands about 57 hours out. Four days
-            # leaves room for one missed cycle, which the next day's update fills.
-            validation.CheckCurrentData(max_delay=timedelta(days=4)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=58, minutes=5)),
             validation.CheckRecentNans(append_dim_window=3, exclude_vars=masked_vars),
             validation.CheckRecentNans(
                 append_dim_window=3,

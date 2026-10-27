@@ -234,14 +234,14 @@ def test_trigger_targets_keep_their_cron_backstops() -> None:
                 primary_storage_config=NOOP_STORAGE_CONFIG
             ),
             "ecmwf-ifs-ens-46-day-daily-update",
-            "0 9 * * *",
+            "5 10 * * *",
         ),
         (
             EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
                 primary_storage_config=NOOP_STORAGE_CONFIG
             ),
             "ecmwf-ifs-ens-46-day-6-hourly-update",
-            "0 10 * * *",
+            "5 10 * * *",
         ),
     ):
         (cron,) = dataset.operational_kubernetes_resources("image")

@@ -302,6 +302,7 @@ def test_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test_job",
+        job_reference_time=pd.Timestamp.now(),
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2026-05-02T12:00")

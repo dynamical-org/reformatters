@@ -18,6 +18,7 @@ from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
     assert_update_fails_validation,
+    set_local_update_reference_time,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -100,11 +101,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     # Operational update
     dataset = make_dataset()  # fresh one to simulate new process
     append_dim_end = pd.Timestamp("2018-07-14T00:00")
-    monkeypatch.setattr(
-        dataset.region_job_class,
-        "_update_append_dim_end",
-        lambda: append_dim_end,
-    )
+    set_local_update_reference_time(monkeypatch, append_dim_end)
     orig_get_jobs = dataset.region_job_class.get_jobs
     monkeypatch.setattr(
         dataset.region_job_class,

@@ -263,7 +263,7 @@ class NoaaMrmsRegionJob(
         all_data_vars: Sequence[NoaaMrmsDataVar],
         reformat_job_name: str,
         *,
-        job_reference_time: Timestamp | None = None,
+        job_reference_time: Timestamp,
     ) -> tuple[
         Sequence[RegionJob[NoaaMrmsDataVar, NoaaMrmsSourceFileCoord]],
         xr.DataTree,
@@ -275,9 +275,7 @@ class NoaaMrmsRegionJob(
         # and overwritten with pass_2 data once it becomes available (~60-min latency).
         append_dim_start = pd.Timestamp(ds_max_time) - pd.Timedelta(hours=3)
 
-        append_dim_end = (
-            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
-        )
+        append_dim_end = job_reference_time
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

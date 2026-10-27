@@ -479,15 +479,6 @@ def test_read_data_selects_the_hourly_accumulation_band(
     assert read_with_bands("snowfall_surface", ["ASNOW"]) == 1
 
 
-def test_update_append_dim_end() -> None:
-    """Test that _update_append_dim_end returns current time."""
-    before = pd.Timestamp.now()
-    result = NoaaHrrrRegionJob._update_append_dim_end()
-    after = pd.Timestamp.now()
-
-    assert before <= result <= after
-
-
 def test_update_append_dim_start() -> None:
     """Test that _update_append_dim_start returns max time from existing data."""
     times = pd.date_range("2024-01-01", periods=10, freq="1h")

@@ -33,7 +33,9 @@ class EcmwfIfsEnsForecast15Day025DegreeDataset(
             # GCS fall back to S3, which throttles many concurrent pods.
             schedule="5 8 * * *",
             suspend=False,
-            pod_active_deadline=timedelta(minutes=45),  # runs take <35 min
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=24),
+            active_deadline=timedelta(hours=24),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",

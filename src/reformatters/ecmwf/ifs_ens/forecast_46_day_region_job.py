@@ -279,6 +279,8 @@ class EcmwfIfsEns46DayRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[EcmwfIfsEns46DayDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[
         Sequence[RegionJob[EcmwfIfsEns46DayDataVar, EcmwfIfsEns46DaySourceFileCoord]],
         xr.DataTree,
@@ -286,7 +288,8 @@ class EcmwfIfsEns46DayRegionJob(
         existing_ds = xr.open_zarr(primary_store, chunks=None)
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
         newest_init_time = max(
-            append_dim_start, latest_init_time(pd.Timestamp.now("UTC"), LICENCE_DELAY)
+            append_dim_start,
+            latest_init_time(job_reference_time.tz_localize("UTC"), LICENCE_DELAY),
         )
         append_dim_end = newest_init_time + INIT_FREQUENCY
         template_ds = get_template_fn(append_dim_end)

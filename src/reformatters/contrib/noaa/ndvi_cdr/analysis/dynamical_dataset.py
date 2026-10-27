@@ -22,7 +22,9 @@ class NoaaNdviCdrAnalysisDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",
-            pod_active_deadline=timedelta(minutes=30),  # runs take <24 min
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=24),
+            active_deadline=timedelta(hours=24),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="2",

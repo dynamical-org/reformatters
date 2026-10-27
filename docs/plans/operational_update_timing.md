@@ -16,6 +16,7 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 | [G: completion triggers and cohorts](https://github.com/dynamical-org/reformatters/pull/1265) | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Draft; pilot implemented | HRRR 48-hour virtual uses overlapping polling and triggers its queued materialized consumer; the consumer uses its triggered backstop timing and currency allowance; remaining cohorts follow |
 | [F1: virtual families](https://github.com/dynamical-org/reformatters/pull/1267) | overlapping polling, deadlines, grace and currency values | Draft; implemented | GFS forecast/analysis; GEFS analysis, 10-day and 16-day; HRRR analysis; RTMA; RRFS 84-hour, 18-hour and ensemble; REFS hourly/3-hourly; AIFS single; GEFS 35-day daily-window exception; WN2 operational with source timing retained and 3-second polling ticks |
 | [NOAA materialized family](https://github.com/dynamical-org/reformatters/pull/1269) | untriggered timing, materialized lifecycle, reference-time windows and analysis boundaries | Draft; implemented | GFS forecast +5:44 and analysis +3:58 (one cycle class), GEFS analysis +4:03 and 35-day tier 1 +7:15, HRRR analysis +1:10 (currency +3:10), and MRMS; GEFS extension keeps its 28-hour eligibility gate and is requested at +31:15 by the daily cron; GFS/GEFS analysis remain schedule-only; MRMS keeps its current timing pending its separate schedule follow-up |
+| [F3: other materialized families](https://github.com/dynamical-org/reformatters/pull/1268) | required materialized reference-time contract, lifecycle budgets and reviewed timing | Draft; implemented | IFS ENS 15-day and both 46-day variants, AIFS single and ensemble, ICON-EU, HRDPS, IMERG early and late, SWANN, SMAP, CHIRPS final and preliminary, and NDVI |
 
 Suspended WN3, WN2 historical, RTMA-RU and URMA keep their existing lifecycle and immediate validation re-pass. GEFS 35-day virtual retains its short daily polling window, and WN2 operational retains its gated source timing.
 
@@ -52,3 +53,23 @@ GFS and GEFS materialized analysis adopt the [boundary-window rule](../operation
 - Values: compare current and proposed fires, deadlines, and `max_delay` by cycle class. Confirm currency never requires a position before its intended fire, including scalar delays for multi-position units and the final rounded single cron. Unmeasured datasets keep their constants. Report GEFS sibling-order flips when evidence permits.
 
 Roll out each cohort in a quiet source window after review. Mechanism reviews trace whole update paths and trigger-to-queue-to-validation seams; later value reviews use fresh measurement output. After all cohorts, audit code against the evergreen rules, remove superseded retry paths and this plan, and check for stale documentation.
+
+## Other materialized family adoption
+
+| Dataset | Timing adoption | Lifecycle adoption |
+|---|---|---|
+| IFS ENS 15-day | Keep 08:05 UTC and 8h40m currency; separate source/schedule gate | Draft |
+| IFS ENS 46-day daily | +58h05m backstop and currency | Draft |
+| IFS ENS 46-day 6-hourly | +58h05m backstop and currency | Draft |
+| AIFS single | +7h40m, post-October-20 source regime | Draft |
+| AIFS ensemble | +7h42m, post-October-20 source regime | Draft |
+| ICON-EU | Keep timing; insufficient complete units | Draft |
+| HRDPS | +3h45m; source-retention question remains | Draft |
+| IMERG early / late | Keep unmeasured timing | Draft |
+| SWANN / SMAP | Keep unmeasured timing; rewrites are not arrival evidence | Draft |
+| CHIRPS final / preliminary | Keep manual timing | Draft |
+| NDVI | Keep manual timing | Draft |
+
+All datasets in this cohort use Allow concurrency and pod/Job deadlines equal to their fire interval; CHIRPS final uses the minimum calendar interval. Every materialized builder takes a required reference time. Existing IFS 46-day archiver submissions stay unannotated until the trigger cohort enables the backstop check.
+
+AIFS single/ensemble use the source regime beginning October 20. HRDPS adopts the chosen schedule offset with its late-arrival/latency tradeoff reviewed alongside source retention. ICON-EU keeps its timing because the available complete-run sample is insufficient. IMERG, SWANN and SMAP keep unmeasured source timing; CHIRPS and NDVI keep manual timing. IFS ENS 15-day keeps its source, schedule and currency behind its separate measurement gate while adopting lifecycle budgets.

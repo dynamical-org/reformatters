@@ -346,6 +346,7 @@ def test_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test-update",
+        job_reference_time=pd.Timestamp.now(),
     )
 
     # Should create jobs for the new time steps (2025-09-29 and 2025-09-30)

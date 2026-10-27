@@ -212,7 +212,7 @@ class GefsAnalysisRegionJob(
         all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
         *,
-        job_reference_time: Timestamp | None = None,
+        job_reference_time: Timestamp,
     ) -> tuple[
         Sequence[RegionJob[NoaaGefsDataVar, GefsAnalysisSourceFileCoord]], xr.DataTree
     ]:
@@ -231,10 +231,7 @@ class GefsAnalysisRegionJob(
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent time already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        reference = (
-            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
-        )
-        append_dim_end = reference.floor("6h") + pd.Timedelta(hours=9)
+        append_dim_end = job_reference_time.floor("6h") + pd.Timedelta(hours=9)
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

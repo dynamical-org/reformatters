@@ -43,13 +43,13 @@ def test_dataset_variables_are_archived_at_native_resolution(
     } == set(MATERIALIZED_PRODUCT_ECDS_VARIABLES["6-hourly"])
 
 
-def test_operational_cron_jobs_are_enabled_and_do_not_collide_with_daily(
+def test_operational_cron_jobs_are_enabled_with_the_same_backstop(
     dataset: EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
 ) -> None:
     (update,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update.name == "ecmwf-ifs-ens-46-day-6-hourly-update"
-    assert update.schedule == "0 10 * * *"
+    assert update.schedule == "5 10 * * *"
     assert update.suspend is False
 
 

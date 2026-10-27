@@ -77,6 +77,17 @@ def assert_update_fails_validation(
     assert expected_check in str(cause)
 
 
+def set_local_update_reference_time(
+    monkeypatch: pytest.MonkeyPatch, reference: pd.Timestamp
+) -> None:
+    original_now = pd.Timestamp.now
+
+    def now(cls: type[pd.Timestamp], tz: str | None = None) -> pd.Timestamp:
+        return reference if tz == "UTC" else original_now(tz)
+
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(now))
+
+
 def assert_configured_validators(dataset: DynamicalDataset) -> None:
     """Run a dataset's configured validators (plus the shard-presence check that
     validate_dataset adds) against the store its e2e test built.
@@ -107,7 +118,9 @@ def assert_configured_validators(dataset: DynamicalDataset) -> None:
 
     region_job = None
     if any(v.requires_virtual_dataset for v in validators):
-        jobs, _ = dataset.region_job_class.operational_update_jobs(
+        job_class = dataset.region_job_class
+        assert issubclass(job_class, VirtualRegionJob)
+        jobs, _ = job_class.operational_update_jobs(
             primary_store=store,
             tmp_store=dataset._tmp_store(),
             get_template_fn=dataset._get_template,

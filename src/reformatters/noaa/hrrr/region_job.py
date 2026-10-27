@@ -108,7 +108,7 @@ class NoaaHrrrRegionJob(
         all_data_vars: Sequence[NoaaHrrrDataVar],
         reformat_job_name: str,
         *,
-        job_reference_time: Timestamp | None = None,
+        job_reference_time: Timestamp,
     ) -> tuple[
         Sequence[RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]],
         xr.DataTree,
@@ -121,11 +121,7 @@ class NoaaHrrrRegionJob(
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         append_dim_start = cls._update_append_dim_start(existing_ds[append_dim])
 
-        append_dim_end = (
-            job_reference_time
-            if job_reference_time is not None
-            else cls._update_append_dim_end()
-        )
+        append_dim_end = job_reference_time
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -245,11 +241,6 @@ class NoaaHrrrRegionJob(
         keep_mantissa_bits = data_var.internal_attrs.keep_mantissa_bits
         if isinstance(keep_mantissa_bits, int):
             round_float32_inplace(data_array.values, keep_mantissa_bits)
-
-    @classmethod
-    def _update_append_dim_end(cls) -> pd.Timestamp:
-        """Get the end time for operational updates."""
-        return pd.Timestamp.now()
 
     @classmethod
     def _update_append_dim_start(cls, append_dim_coords: xr.DataArray) -> pd.Timestamp:

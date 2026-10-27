@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import suppress
 from copy import deepcopy
@@ -32,7 +32,7 @@ from reformatters.common.shared_memory_utils import (
     make_shared_buffer,
     write_shards,
 )
-from reformatters.common.types import ArrayND
+from reformatters.common.types import AppendDim, ArrayND, DatetimeLike, Timestamp
 from reformatters.common.zarr import copy_data_var
 
 log = get_logger(__name__)
@@ -60,6 +60,21 @@ class MaterializedRegionJob(
     # This is useful in cases where many threads reading data into shared memory
     # causes deadlocks or resource contention.
     read_parallelism: int = os.cpu_count() or 1
+
+    @classmethod
+    def operational_update_jobs(
+        cls,
+        primary_store: Store,
+        tmp_store: Path,
+        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
+        append_dim: AppendDim,
+        all_data_vars: Sequence[DATA_VAR],
+        reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp,
+    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
+        """Return update jobs and their template using one explicit naive-UTC reference."""
+        raise NotImplementedError
 
     def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
         """Download the file for the given coordinate and return the local path."""
