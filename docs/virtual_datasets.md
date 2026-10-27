@@ -72,6 +72,8 @@ Each batch commits to replicas before the primary. A conflicting transaction ope
 
 `main` grows to the data ingested, without NaN-padding toward "now". Overlapping Jobs are safe: each commit attempt opens a fresh writable session, filters out files already ingested by another writer, and grows the append dim from that session's committed extent. A conflicted batch is re-filtered and recommitted on a fresh session. If an update falls far behind, run a backfill to catch up rather than scaling a Job to multiple workers.
 
+Before committing a resize, the writer checks every append-dim array in the session, including arrays outside its template. An old-image pod overlapping a deploy that adds variables fails before commit if it leaves any arrays short; a pod with the complete template can grow them together.
+
 Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
 
 The refresh reads each store's extent from the same session it commits, without automatic rebase. Any branch advance retries with a fresh session, so concurrent growth cannot be overwritten with metadata trimmed to an older extent. Replicas retain their own extents.

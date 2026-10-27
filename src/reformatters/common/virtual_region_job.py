@@ -464,6 +464,20 @@ class VirtualRegionJob(
         resized = needed_size > current_size
         if resized:
             self.sync_dims_to([session.store], needed_size)
+            mismatched_sizes = {
+                path: size
+                for path, array in zarr.open_group(session.store, mode="r").members(
+                    max_depth=None
+                )
+                if isinstance(array, zarr.Array)
+                and isinstance(array.metadata, ArrayV3Metadata)
+                and self.append_dim in (dims := array.metadata.dimension_names or ())
+                and (size := array.shape[dims.index(self.append_dim)]) != needed_size
+            }
+            assert not mismatched_sizes, (
+                f"Cannot grow {self.append_dim} to {needed_size}: arrays have "
+                f"mismatched sizes {mismatched_sizes}; update the writer's template"
+            )
 
         emit_start = time.monotonic()
         prepare_s = emit_start - prepare_start

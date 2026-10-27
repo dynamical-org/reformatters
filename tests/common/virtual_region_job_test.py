@@ -557,6 +557,35 @@ def test_virtual_batch_conflicts_exhaust_five_fresh_attempts(
     _assert_store_values(repo.readonly_session("main").store, n_inits=1)
 
 
+@pytest.mark.parametrize("path", ["added", "pressure_level/added"])
+def test_old_template_cannot_commit_growth_after_a_variable_is_added(
+    virtual_memory_repo: icechunk.Repository, path: str
+) -> None:
+    repo = virtual_memory_repo
+    old_template = _create_template_ds(2)
+    _process_virtual(_make_region_job(old_template, region=slice(0, 1)), repo)
+    session = repo.writable_session("main")
+    zarr.open_group(session.store, mode="r+").create_array(
+        path,
+        shape=(1,),
+        chunks=(1,),
+        dtype="float64",
+        fill_value=np.nan,
+        dimension_names=("init_time",),
+    )
+    before = session.commit("add variable")
+    old_writer = _make_region_job(old_template, region=slice(1, 2))
+
+    with pytest.raises(AssertionError, match=rf"Cannot grow init_time to 2.*{path}"):
+        _process_virtual(old_writer, repo)
+
+    assert repo.lookup_branch("main") == before
+    store = repo.readonly_session("main").store
+    with validation.open_flattened_dataset(store, consolidated=False) as ds:
+        assert ds[path].sizes["init_time"] == ds.sizes["init_time"] == 1
+    _assert_store_values(store, n_inits=1)
+
+
 def test_explicit_overwrite_survives_conflict_retry(
     virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
 ) -> None:
