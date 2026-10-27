@@ -487,22 +487,10 @@ def commit_if_icechunk(
     primary_store: zarr.storage.StoreLike,
     replica_stores: Sequence[Store],
 ) -> None:
-    """Conveience function to handle committing to icechunk stores.
+    """Commit Icechunk replicas before the primary, rebasing disjoint writes.
 
-    By separating out the primary store from the replica stores, we are able
-    to ensure that the replicas are updated before the primary.
-
-    Concurrency handling:
-
-    Dynamical datasets may be written in parallel across multiple Kubernetes jobs.
-    Because these jobs are each responsible for their own discrete region in the zarr,
-    we do not need to coordinate these separate writes. We therefore follow icechunk's
-    "Uncooperative distributed writes" strategy, see documentation:
-    https://icechunk.io/en/latest/parallel/#cooperative-distributed-writes.
-
-
-    Each job however may need to rebase before it is able to commit. We use the rebase_with
-    argument which will handle automatic retries until the commit succeeds.
+    Conflicts the rebase cannot resolve raise icechunk.ConflictError. Other errors
+    are retried on the same session, up to ten attempts per store.
     """
 
     def _commit(icechunk_store: IcechunkStore) -> None:

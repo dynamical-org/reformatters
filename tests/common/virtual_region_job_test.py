@@ -433,7 +433,7 @@ def _queue_stale_sessions(
     return opened
 
 
-@pytest.mark.parametrize("stale_count", [1, 3])
+@pytest.mark.parametrize("stale_count", [0, 1, 3])
 def test_overlapping_same_file_skips_complete_file_after_conflicts(
     virtual_memory_repo: icechunk.Repository,
     monkeypatch: pytest.MonkeyPatch,
@@ -601,30 +601,6 @@ def test_explicit_overwrite_survives_conflict_retry(
             result.temperature_2m.isel(init_time=1, lead_time=lead_idx),
             _block_values(1, lead_idx),
         )
-
-
-def test_overlapping_backfill_overwrite_fails_without_retry(
-    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    repo = virtual_memory_repo
-    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
-    session = repo.writable_session("main")
-    job.sync_dims_to([session.store], 1)
-    snapshot = session.commit("pre-size backfill")
-    repo.create_branch("backfill", snapshot)
-    stale = repo.writable_session("backfill")
-    _process_virtual(job, repo, branch="backfill")
-    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
-    before = _snapshot_count(repo, "backfill")
-
-    with pytest.raises(AssertionError, match="must write disjoint data chunks"):
-        job.process_virtual(
-            repo, [], "backfill", job.source_file_coords(), overwrite_chunks=True
-        )
-
-    assert len(opened) == 1
-    assert _snapshot_count(repo, "backfill") == before
-    _assert_store_values(repo.readonly_session("backfill").store, n_inits=1)
 
 
 def test_primary_conflict_does_not_replay_committed_replica(

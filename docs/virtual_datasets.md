@@ -64,7 +64,7 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
-Each batch commits to replicas before the primary. A conflicting transaction opens a fresh writable session on the same repository, filters out complete files, and recomputes any expansion before recommitting. Retries are bounded to five attempts per repository; a primary conflict does not replay an already committed replica. Explicit `overwrite_chunks` backfills bypass filtering and require disjoint data chunks between concurrent writers.
+Each batch commits to replicas before the primary. A conflicting transaction opens a fresh writable session on the same repository, filters out complete files, and recomputes any expansion before recommitting. Retries are bounded to five attempts per repository; a primary conflict does not replay an already committed replica. Explicit `overwrite_chunks` backfills bypass filtering.
 
 ## Operational updates: single writer
 
@@ -74,7 +74,7 @@ Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly
 
 Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
 
-The refresh reads each store's extent from the same session it commits. A conflict retries with a fresh session, so concurrent growth cannot be overwritten with metadata trimmed to an older extent. Replicas retain their own extents.
+The refresh reads each store's extent from the same session it commits, without automatic rebase. Any branch advance retries with a fresh session, so concurrent growth cannot be overwritten with metadata trimmed to an older extent. Replicas retain their own extents.
 
 Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
 
@@ -84,7 +84,7 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
 
-CronJobs expose `concurrency_policy` (`Replace` by default, also `Allow` or `Forbid`). Datasets retain their existing schedules, deadlines, and replacement policy until configured otherwise.
+CronJobs expose `concurrency_policy` (`Replace` by default, also `Allow` or `Forbid`).
 
 Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 

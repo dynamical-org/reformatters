@@ -247,6 +247,45 @@ def test_refresh_reopens_snapshot_after_concurrent_append(
     assert sessions[0].snapshot_id != sessions[1].snapshot_id
 
 
+@pytest.mark.parametrize("group", ["/", "/pressure_level"])
+def test_refresh_new_array_retries_after_concurrent_append(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, group: str
+) -> None:
+    repo = _repo(2)
+    factory, sessions = _factory(monkeypatch, repo)
+    template = _template(6)
+    node = template[group]
+    node["added"] = node["surface" if group == "/" else "temperature"].copy(deep=True)
+    appended = _append_during_validation(monkeypatch, repo, [4])
+
+    template_utils.refresh_store_metadata(
+        factory,
+        template,
+        "time",
+        tmp_path / "refresh.zarr",
+        consolidated=False,
+    )
+
+    assert appended == [4]
+    store = repo.readonly_session("main").store
+    _assert_contents(store, 4, fixed=False)
+    tree = xr.open_datatree(
+        store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+    )
+    assert all(
+        array.sizes["time"] == 4
+        for node in tree.subtree
+        for array in node.to_dataset().variables.values()
+        if "time" in array.dims
+    )
+    assert tree[group]["added"].isnull().all()
+    assert len(sessions) == 2
+    assert sessions[0].snapshot_id != sessions[1].snapshot_id
+
+
 def test_refresh_primary_conflict_reopens_already_committed_replica_without_new_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

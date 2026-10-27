@@ -443,8 +443,7 @@ class VirtualRegionJob(
         overwrite_chunks: bool,
     ) -> None:
         prepare_start = time.monotonic()
-        # A fresh writable session is opened per attempt because an icechunk
-        # session becomes read-only after commit. sync_dims_to grows the store
+        # A committed or conflicted session cannot be reused. sync_dims_to grows the store
         # lazily (a no-op on the pre-sized backfill branch).
         session = repo.writable_session(branch)
         if not overwrite_chunks:
@@ -474,22 +473,9 @@ class VirtualRegionJob(
 
         now = pd.Timestamp.now(tz="UTC")
         commit_start = time.monotonic()
-        try:
-            storage.commit_if_icechunk(
-                f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}", session.store, []
-            )
-        except icechunk.RebaseFailedError as error:
-            if overwrite_chunks:
-                data_paths = {f"/{ref.data_var.path}" for ref in refs}
-                if any(
-                    conflict.conflict_type == icechunk.ConflictType.ChunkDoubleUpdate
-                    and conflict.path in data_paths
-                    for conflict in error.conflicts
-                ):
-                    raise AssertionError(
-                        "Concurrent overwrite_chunks writers must write disjoint data chunks"
-                    ) from error
-            raise
+        storage.commit_if_icechunk(
+            f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}", session.store, []
+        )
         log.info(
             f"Committed {len(refs)} refs "
             f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s) "

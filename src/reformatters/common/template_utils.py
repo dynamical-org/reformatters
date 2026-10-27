@@ -418,7 +418,6 @@ def refresh_store_metadata(
                 {
                     node.path: node.to_dataset(inherit=False).isel(
                         {append_dim: slice(0, committed_size)},
-                        missing_dims="ignore",
                     )
                     for node in template_ds.subtree
                 }
@@ -443,10 +442,7 @@ def refresh_store_metadata(
                 isinstance(store, IcechunkStore)
                 and store.session.has_uncommitted_changes
             ):
-                store.session.commit(
-                    "Refresh metadata from template",
-                    rebase_with=icechunk.ConflictDetector(),
-                )
+                store.session.commit("Refresh metadata from template")
                 log.info(f"Refreshed metadata from template on {store}")
 
     retry(
