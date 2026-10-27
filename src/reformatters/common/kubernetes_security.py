@@ -431,6 +431,7 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> No
             )
 
     if not cronjob_names:
+        log.info("Verifying admission for targets policy (no authorized CronJobs)")
         probe(
             {
                 "apiVersion": "batch/v1",
@@ -457,7 +458,8 @@ def verify_trigger_admission(namespace: str, cronjob_names: Sequence[str]) -> No
         )
         return
 
-    for name in cronjob_names:
+    for index, name in enumerate(cronjob_names, start=1):
+        log.info("Verifying admission for %s (%d/%d)", name, index, len(cronjob_names))
         response = subprocess.run(  # noqa: S603
             [
                 "/usr/bin/kubectl",
