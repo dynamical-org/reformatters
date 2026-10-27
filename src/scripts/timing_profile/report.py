@@ -24,6 +24,13 @@ from .statistics import (
     virtual_fire,
 )
 
+NAMED_EXCEPTIONS = frozenset(
+    {
+        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
+        "noaa-mrms-conus-analysis-hourly",
+    }
+)
+
 
 @dataclass(frozen=True)
 class MeasuredUnit:
@@ -190,7 +197,7 @@ def recommend(
             offset = (
                 virtual_fire(min(raw), runtime.startup_estimate)
                 if virtual and raw and runtime.startup_estimate is not None
-                else (None if virtual else schedule_candidates(stats)["draft"])
+                else (None if virtual else schedule_candidates(stats)["chosen"])
             )
             if not virtual:
                 assert offset is not None
@@ -302,10 +309,7 @@ def render_dataset(
             ]
         )
         return "\n".join(lines)
-    manual = dataset.dataset_id in {
-        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
-        "noaa-mrms-conus-analysis-hourly",
-    }
+    manual = dataset.dataset_id in NAMED_EXCEPTIONS
     recommendation = recommend(
         units,
         runtime,
@@ -390,15 +394,16 @@ def render_dataset(
                     candidates.append(
                         f"| {cycle_class} | {name} | {duration(offset)} | {fraction:.2%} | {f'{after_or_never:.2%}' if after_or_never is not None else 'unmeasured'} | {duration(latency)} |"
                     )
-        lines.extend(
-            [
-                "",
-                "| Cycle class | S candidate | S | Fraction of units arriving after S | After S or never (older missing included) | Median on-time latency estimate (S - arrival + L + R) |",
-                "|---|---|---:|---:|---:|---:|",
-                *candidates,
-                "",
-            ]
-        )
+        if candidates:
+            lines.extend(
+                [
+                    "",
+                    "| Cycle class | S candidate | S | Fraction of units arriving after S | After S or never (older missing included) | Median on-time latency estimate (S - arrival + L + R) |",
+                    "|---|---|---:|---:|---:|---:|",
+                    *candidates,
+                    "",
+                ]
+            )
     lines.extend(
         [
             "### Advisory constants",
@@ -451,7 +456,7 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                f"One-cron offset: {duration(chosen)}. {'Uses earliest class and first-file E.' if virtual else 'Uses latest class and draft S; selection remains manual.'}",
+                f"One-cron offset: {duration(chosen)}. {'Uses earliest class and first-file E.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
                 "",
             ]
         )
@@ -462,10 +467,7 @@ def render_single_cron(
                     "",
                 ]
             )
-    if dataset.dataset_id in {
-        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
-        "noaa-mrms-conus-analysis-hourly",
-    }:
+    if dataset.dataset_id in NAMED_EXCEPTIONS:
         lines.extend(
             [
                 "",

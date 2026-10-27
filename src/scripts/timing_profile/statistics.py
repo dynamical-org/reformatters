@@ -26,11 +26,13 @@ def late_threshold(stats: ArrivalStats) -> float:
 
 
 def schedule_candidates(stats: ArrivalStats) -> dict[str, float]:
-    return {
+    candidates = {
         "draft": stats.p95 + max(stats.p95 - stats.p50, 5 * 60),
         "p99+1m": stats.p99 + 60,
         "spread, min 3m": stats.p95 + max(stats.p95 - stats.p50, 3 * 60),
     }
+    candidates["chosen"] = min(candidates["draft"], candidates["p99+1m"])
+    return candidates
 
 
 def candidate_outcomes(

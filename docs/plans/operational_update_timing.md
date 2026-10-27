@@ -15,7 +15,7 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 | D: materialized pilot and cohorts | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Pending | Pilot: HRRR 48-hour; remaining materialized families follow |
 | G: completion triggers and cohorts | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
 
-Adoption status is tracked here; recommendations do not activate polling, overlapping writers, retries, or triggers. Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. An untriggered cron move waits for review of the profiler's `S` comparison. A consumer's move from `S` to `T` lands with its trigger activation.
+Adoption status is tracked here; recommendations do not activate polling, overlapping writers, retries, or triggers. Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. The profiler recommends `S = min(p95 + max(p95 − p50, 5 min), p99 + 1 min)` for untriggered runs and retains all three candidates plus the chosen row for review. Untriggered cron moves and derived currency values use that chosen offset; adoption and named exceptions remain subject to manual review. A consumer's move from `S` to `T` lands with its trigger activation.
 
 ## Remaining lifecycle contracts
 

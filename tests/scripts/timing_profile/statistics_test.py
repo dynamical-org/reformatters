@@ -33,11 +33,13 @@ def test_all_schedule_candidates_have_independent_minimum_allowances() -> None:
         "draft": 900,
         "p99+1m": 660,
         "spread, min 3m": 780,
+        "chosen": 660,
     }
     candidates = schedule_candidates(arrival_stats([0, 3600]))
     assert candidates["draft"] == 5040
     assert candidates["spread, min 3m"] == 5040
     assert candidates["p99+1m"] == 3624
+    assert candidates["chosen"] == 3624
 
 
 def test_candidate_outcomes_exclude_late_units_from_latency_estimate() -> None:

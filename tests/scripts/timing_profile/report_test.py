@@ -133,7 +133,7 @@ def measured_units(
             False,
             21600,
             21600,
-            (2160, 2160, 21600, None),
+            (1920, 1920, 21600, None),
         ),
         (
             [(0, (600,)), (1, (600,))],
@@ -141,7 +141,7 @@ def measured_units(
             False,
             10800,
             3600,
-            (900, 8100, 10800, None),
+            (660, 7860, 10800, None),
         ),
         ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (-60, 1740, 3960, 270)),
     ],
@@ -205,7 +205,7 @@ def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> Non
         currency_interval=21600,
         spacing=21600,
     )
-    assert materialized.offset == 3300
+    assert materialized.offset == 3060
 
 
 def test_mrms_reports_pass_one_and_keeps_constants() -> None:
@@ -240,7 +240,8 @@ def test_mrms_reports_pass_one_and_keeps_constants() -> None:
     assert "### pass 1 (exception)" in rendered
     assert "keep constants; review manually" in rendered
     assert "| Cron |" not in rendered
-    assert "| 00Z | draft |" not in rendered
+    assert "S candidate" not in rendered
+    assert "| chosen |" not in rendered
 
 
 def test_rendered_constants_and_after_s_or_never_include_older_missing_unit() -> None:
@@ -262,12 +263,35 @@ def test_rendered_constants_and_after_s_or_never_include_older_missing_unit() ->
     )
     assert "| 00Z | draft | 00:24:30 | 0.00% | 33.33% |" in rendered
     assert "| Cron |" in rendered
-    assert "`25 0,6,12,18 * * *`" in rendered
+    assert "| 00Z | chosen | 00:20:54 | 0.00% | 33.33% |" in rendered
+    assert "`21 0,6,12,18 * * *`" in rendered
     rows = {
         cells[1].strip(): cells[3].strip()
         for line in rendered.splitlines()
         if line.startswith("| ") and len(cells := line.split("|")) == 6
     }
-    assert rows["max_delay"] == "00:25:00"
+    assert rows["max_delay"] == "00:21:00"
     assert rows["Pod deadline"] == "06:00:00"
     assert rows["Job deadline"] == "06:00:00"
+
+
+@pytest.mark.parametrize(
+    ("arrivals", "expected"),
+    [([600] * 20, 660), ([600] * 20 + [3600], 900)],
+    ids=["p99-cap-wins", "spread-wins-with-rare-outlier"],
+)
+def test_chosen_schedule_drives_final_cron_offset_and_currency(
+    arrivals: list[float], expected: float
+) -> None:
+    units = measured_units([(0, (arrival,)) for arrival in arrivals])
+    result = recommend(
+        units,
+        runtime(),
+        virtual=False,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+    )
+    assert result.offset == expected
+    assert result.delay == expected
+    assert result.classes[0].offset == expected
