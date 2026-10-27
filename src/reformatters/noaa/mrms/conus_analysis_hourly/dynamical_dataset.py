@@ -21,7 +21,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
     region_job_class: type[NoaaMrmsRegionJob] = NoaaMrmsRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Pass 2 has ~60-min latency. Update hourly, 3 min after Pass 2 is expected.
+        # Target radar-only arrival; gauge passes fill in on the following hour's run.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="3 * * * *",
@@ -43,7 +43,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
         return (
             validation.CheckCurrentData(max_delay=timedelta(minutes=5)),
             validation.CheckRecentNans(
-                # Gauge-corrected values arrive an hour late, leaving the newest
+                # Gauge-corrected values arrive after the run, leaving the newest
                 # timestamp entirely NaN (excused by the leading 1.0). Measured
                 # quarter-sampled NaN from the second-newest onward is 18.4% (6.2%
                 # over the whole domain), constant across timestamps.
