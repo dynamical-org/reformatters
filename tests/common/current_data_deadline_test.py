@@ -23,7 +23,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-gefs-forecast-16-day-0-5-degree-virtual", "2026-09-27 00:00", "4h08m"),
     ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
     ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h12m"),
-    ("noaa-hrrr-analysis", "2026-09-26 21:00", "3h06m"),
+    ("noaa-hrrr-analysis", "2026-09-26 21:00", "3h08m"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "80m"),
     ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "73m"),
     ("noaa-rtma-ru-analysis-virtual", "2026-09-27 00:15", "45m"),

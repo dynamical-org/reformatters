@@ -41,7 +41,7 @@ VALUES = (
     (NoaaGfsAnalysisDataset, "26 4,10,16,22 * * *", "4h26m", 6),
     (GefsAnalysisDataset, "5 4,10,16,22 * * *", "4h05m", 6),
     (GefsForecast35DayDataset, "9 7 * * *", "7h09m", 24),
-    (NoaaHrrrAnalysisDataset, "6 1,4,7,10,13,16,19,22 * * *", "3h06m", 3),
+    (NoaaHrrrAnalysisDataset, "8 1,4,7,10,13,16,19,22 * * *", "3h08m", 3),
     (NoaaMrmsConusAnalysisHourlyDataset, "3 * * * *", "5m", 1),
 )
 
@@ -128,9 +128,9 @@ def test_hrrr_currency_requires_the_first_covered_anchor_at_each_fire(
 ) -> None:
     dataset = _dataset(NoaaHrrrAnalysisDataset, tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test")
-    fire = pd.Timestamp("2026-10-26") + timedelta(hours=hour, minutes=6)
+    fire = pd.Timestamp("2026-10-26") + timedelta(hours=hour, minutes=8)
     assert cron.previous_fire_time(fire) == fire
-    earliest = fire - pd.Timedelta("3h06m")
+    earliest = fire - pd.Timedelta("3h08m")
     previous = earliest - timedelta(hours=1)
     dataset_id = dataset.dataset_id
     assert _check_at_time(

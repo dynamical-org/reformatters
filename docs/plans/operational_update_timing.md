@@ -39,7 +39,7 @@ The [completion-trigger rules](../operational_update_timing.md#completion-trigge
 
 ### Analysis boundaries
 
-Extend forecast-derived analysis windows through the next cycle's boundary input, with an exclusive template end one position beyond it. The existing unconditional trim then removes the boundary rather than a complete position from the target cycle. Verify this using real region-job overrides and template factories before documenting the rule as adopted.
+GFS and GEFS materialized analysis adopt the [boundary-window rule](../operational_update_timing.md#repair-window) with real-builder, accumulated-input, trimming, and currency regressions in the NOAA materialized family.
 
 ## Verification and rollout gates
 

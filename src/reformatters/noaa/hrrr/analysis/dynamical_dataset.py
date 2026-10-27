@@ -27,7 +27,7 @@ class NoaaHrrrAnalysisDataset(
         """Define Kubernetes cron jobs for operational updates."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="6 1,4,7,10,13,16,19,22 * * *",
+            schedule="8 1,4,7,10,13,16,19,22 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=3),
             active_deadline=timedelta(hours=3),
@@ -50,7 +50,7 @@ class NoaaHrrrAnalysisDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=6)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=8)),
             validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
             # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
             # coverage is small and clustered: a sampled quadrant is regularly all

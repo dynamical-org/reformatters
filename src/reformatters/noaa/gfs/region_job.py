@@ -182,6 +182,10 @@ class NoaaGfsCommonRegionJob(
             round_float32_inplace(data_array.values, keep_mantissa_bits)
 
     @classmethod
+    def _update_append_dim_end(cls, reference: Timestamp) -> Timestamp:
+        return reference
+
+    @classmethod
     def operational_update_jobs(
         cls,
         primary_store: Store,
@@ -200,10 +204,10 @@ class NoaaGfsCommonRegionJob(
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent forecast already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = (
+        reference = (
             job_reference_time if job_reference_time is not None else pd.Timestamp.now()
         )
-        template_ds = get_template_fn(append_dim_end)
+        template_ds = get_template_fn(cls._update_append_dim_end(reference))
 
         jobs = cls.get_jobs(
             tmp_store=tmp_store,

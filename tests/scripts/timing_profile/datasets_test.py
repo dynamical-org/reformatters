@@ -19,7 +19,7 @@ from reformatters.noaa.gefs.forecast_16_day_0_5_degree_virtual.region_job import
 from scripts.timing_profile.datasets import expected_units, source_gap, usable_file
 from scripts.timing_profile.report import aggregate_unit, recommend
 from scripts.timing_profile.runtime import RuntimeStats
-from scripts.timing_profile.sources import Listing, TimestampSource
+from scripts.timing_profile.sources import Listing, TimestampSource, listing_prefix
 
 
 @pytest.mark.parametrize(
@@ -58,6 +58,48 @@ def test_analysis_readiness_includes_boundary_and_only_target_cycle(
         }
         assert not any("f006" in url for url in gated_urls)
         assert any("f000" in url for url in gated_urls)
+
+
+def test_hrrr_materialized_readiness_waits_for_the_trim_boundary_index(
+    tmp_path: Path,
+) -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-hrrr-analysis"
+    )
+    anchor = pd.Timestamp("2026-10-20T12:00")
+    source = TimestampSource(tmp_path, 1)
+    (unit,) = expected_units(dataset, anchor, anchor + pd.Timedelta(hours=1), source)
+    source.close()
+    prefix = "s3://noaa-hrrr-bdp-pds/hrrr.20261020/conus/"
+    arrivals = {
+        "hrrr.t11z.wrfsfcf01.grib2": "2026-10-20T11:53",
+        "hrrr.t11z.wrfsfcf01.grib2.idx": "2026-10-20T11:54",
+        "hrrr.t12z.wrfsfcf00.grib2": "2026-10-20T12:50",
+        "hrrr.t12z.wrfsfcf00.grib2.idx": "2026-10-20T12:51",
+        "hrrr.t12z.wrfsfcf01.grib2": "2026-10-20T13:01",
+        "hrrr.t12z.wrfsfcf01.grib2.idx": "2026-10-20T13:02",
+        "hrrr.t13z.wrfsfcf00.grib2": "2026-10-20T13:50",
+        "hrrr.t13z.wrfsfcf00.grib2.idx": "2026-10-20T13:51",
+    }
+    expected = {
+        frozenset((prefix + name, prefix + name + ".idx"))
+        for name in (
+            "hrrr.t11z.wrfsfcf01.grib2",
+            "hrrr.t12z.wrfsfcf00.grib2",
+            "hrrr.t12z.wrfsfcf01.grib2",
+        )
+    }
+    assert set(unit.files) == expected
+    objects = {prefix + name: pd.Timestamp(time) for name, time in arrivals.items()}
+    listings = {listing_prefix(url): Listing(objects, "fixed input") for url in objects}
+    measured = aggregate_unit(unit, listings)
+    assert measured.first == -360
+    assert measured.complete == 62 * 60
+    before_boundary_index = aggregate_unit(
+        unit, listings, as_of=anchor + pd.Timedelta(minutes=61)
+    )
+    assert before_boundary_index.complete is None
+    assert before_boundary_index.missing_files == 1
 
 
 def test_gefs_35_day_readiness_tiers_include_members_and_indexes(
