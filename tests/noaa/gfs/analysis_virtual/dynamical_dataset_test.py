@@ -194,7 +194,9 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert update_cron_job.schedule == "29 3,9,15,21 * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=45)
+    assert update_cron_job.pod_active_deadline == timedelta(
+        hours=6, minutes=3, seconds=22
+    )
     assert len(update_cron_job.secret_names) > 0
     assert not update_cron_job.suspend
 
@@ -205,7 +207,7 @@ def test_validators(dataset: NoaaGfsAnalysisVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=3, minutes=50)
+    assert current_data.max_delay == timedelta(minutes=237)
 
     # The gate holds the frontier to a complete hour but can still release an earlier
     # incomplete one, so a whole 1.0 over every variable is what catches that.

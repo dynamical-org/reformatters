@@ -180,9 +180,11 @@ def test_operational_kubernetes_resources(
     (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "45 3,9,15,21 * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=30)
-    # Virtual updates are single writer.
+    assert update_cron_job.schedule == "44 3,9,15,21 * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(
+        hours=6, minutes=2, seconds=27
+    )
+    # Each virtual Job has one worker.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
@@ -212,7 +214,7 @@ def test_validators(dataset: NoaaGefsAnalysis025DegreeVirtualDataset) -> None:
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=3, minutes=49)
+    assert current_data.max_delay == timedelta(minutes=249)
 
     # discover_available extends time only to a step holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no

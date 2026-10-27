@@ -28,22 +28,22 @@ def make_dataset(
     )
 
 
-def test_active_single_writer_has_finite_polling_deadline(tmp_path: Path) -> None:
+def test_active_writer_polls_across_the_next_fire(tmp_path: Path) -> None:
     dataset = make_dataset(tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     assert not cron.suspend
     assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
-    assert cron.schedule == "45 * * * *"
-    assert cron.pod_active_deadline == timedelta(minutes=50)
-    fire = pd.Timestamp("2026-10-16T00:45")
+    assert cron.schedule == "41 * * * *"
+    assert cron.pod_active_deadline == timedelta(minutes=62, seconds=9)
+    fire = pd.Timestamp("2026-10-16T00:41")
     deadline = dataset._virtual_poll_deadline(fire)
-    assert fire < deadline < fire + timedelta(hours=1)
+    assert fire + timedelta(hours=1) < deadline < fire + cron.pod_active_deadline
     assert deadline < fire + cron.pod_active_deadline
     assert dataset.region_job_class.operational_update_window == pd.Timedelta("24h")
     current, complete, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == timedelta(minutes=90)
+    assert current.max_delay == timedelta(minutes=73)
     assert isinstance(complete, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     (container,) = dataset.icechunk_virtual_config.containers
@@ -109,10 +109,10 @@ def test_operational_update_appends_new_hour_and_validates(
     dataset.backfill_local(append_dim_end=pd.Timestamp("2017-05-02T01:00"))
     now = pd.Timestamp("2017-05-02T02:40")
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.previous_fire_time(now) == pd.Timestamp("2017-05-02T01:45")
+    assert cron.previous_fire_time(now) == pd.Timestamp("2017-05-02T01:41")
     deadline = dataset._virtual_poll_deadline(now)
-    assert deadline == pd.Timestamp("2017-05-02T02:34:30")
-    assert deadline < now
+    assert deadline == pd.Timestamp("2017-05-02T02:42:26")
+    assert now < deadline
     with monkeypatch.context() as clock:
         clock.setattr(
             pd.Timestamp,

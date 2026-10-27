@@ -150,11 +150,21 @@ def assert_offset_gdal_samples(
                 )
 
 
-@pytest.mark.parametrize("dataset_class", DATASETS)
+@pytest.mark.parametrize(
+    ("dataset_class", "offset", "duration", "grace", "max_delay"),
+    [
+        (NoaaRefsForecastHourlyVirtualDataset, 108, "6h6m", "4m44s", "150m"),
+        (NoaaRefsForecast3HourlyVirtualDataset, 110, "6h2m55s", "1m39s", "156m"),
+    ],
+)
 def test_operational_configuration_requires_complete_manifests(
     dataset_class: type[
         NoaaRefsForecastHourlyVirtualDataset | NoaaRefsForecast3HourlyVirtualDataset
     ],
+    offset: int,
+    duration: str,
+    grace: str,
+    max_delay: str,
     tmp_path: Path,
 ) -> None:
     dataset = dataset_class(
@@ -166,27 +176,31 @@ def test_operational_configuration_requires_complete_manifests(
     assert update.name == f"{dataset.dataset_id}-update"
     assert not update.suspend
     assert update.as_kubernetes_object()["spec"]["suspend"] is False
-    assert update.schedule == "45 1,7,13,19 * * *"
-    assert dataset.update_offset_minutes == 105
-    assert dataset.update_deadline == pd.Timedelta("262min")
+    assert update.schedule == f"{offset % 60} 1,7,13,19 * * *"
+    assert dataset.update_offset_minutes == offset
+    assert dataset.update_deadline == pd.Timedelta(duration)
     assert (
-        update.pod_active_deadline == update.active_deadline == pd.Timedelta("262min")
+        update.pod_active_deadline == update.active_deadline == pd.Timedelta(duration)
     )
     spec = update.as_kubernetes_object()["spec"]
-    assert spec["concurrencyPolicy"] == "Replace"
+    assert spec["concurrencyPolicy"] == "Allow"
     job = spec["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
-    assert job["activeDeadlineSeconds"] == pod["activeDeadlineSeconds"] == 15720
+    assert (
+        job["activeDeadlineSeconds"]
+        == pod["activeDeadlineSeconds"]
+        == int(pd.Timedelta(duration).total_seconds())
+    )
     init = pd.Timestamp("2026-10-11T18")
-    fire = init + pd.Timedelta("105min")
-    cutoff = init + pd.Timedelta("360min")
-    assert dataset.virtual_poll_deadline_grace == pd.Timedelta("7min")
+    fire = init + pd.Timedelta(minutes=offset)
+    cutoff = fire + pd.Timedelta(duration) - pd.Timedelta(grace)
+    assert dataset.virtual_poll_deadline_grace == pd.Timedelta(grace)
     assert dataset._virtual_poll_deadline(fire) == cutoff
     assert (
         update.next_fire_time(fire)
         - (fire + dataset.update_deadline)
         - pd.Timedelta(seconds=pod["terminationGracePeriodSeconds"])
-    ) == pd.Timedelta("97min30s")
+    ) < pd.Timedelta(0)
     assert update.cpu == "1.5"
     assert update.memory == "3.7G"
     assert dataset.icechunk_virtual_config is not None
@@ -196,7 +210,7 @@ def test_operational_configuration_requires_complete_manifests(
     )
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == pd.Timedelta("360min")
+    assert current.max_delay == pd.Timedelta(max_delay)
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (1.0,)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
@@ -374,9 +388,8 @@ def test_real_source_backfill_and_update_numeric_snapshots_and_structural_mean(
     if with_update:
         next_init = init + pd.Timedelta("6h")
         offset = dataset.update_offset_minutes
-        duration = dataset.update_deadline
         fire = next_init + pd.Timedelta(minutes=offset)
-        now = fire + duration - dataset.virtual_poll_deadline_grace
+        now = fire
         monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda *a, **k: now))
         monkeypatch.setattr(
             NoaaRefsRegionJob,

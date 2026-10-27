@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -32,6 +33,8 @@ class NoaaGfsAnalysisVirtualDataset(
         NoaaGfsAnalysisVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=1, seconds=41)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
@@ -52,7 +55,9 @@ class NoaaGfsAnalysisVirtualDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="29 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(minutes=45),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=3, seconds=22),
+            active_deadline=timedelta(hours=6, minutes=3, seconds=22),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -65,7 +70,7 @@ class NoaaGfsAnalysisVirtualDataset(
     def validators(self) -> Sequence[validation.Validator]:
         return (
             # Allow for variation in source publication time.
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=50)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=237)),
             # discover_available holds the frontier back to a whole hour, but releases
             # an earlier incomplete hour once a later one is complete, so an interior
             # gap is reachable and this is what finds it.

@@ -4,6 +4,7 @@ from typing import ClassVar
 import icechunk
 from pydantic import Field
 
+from reformatters.common.kubernetes import ConcurrencyPolicy
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
 from reformatters.noaa.rtma.analysis_virtual.dynamical_dataset import (
     NoaaRtmaAnalysisVirtualDataset,
@@ -15,6 +16,8 @@ from .template_config import NoaaUrmaAnalysisVirtualTemplateConfig
 
 
 class NoaaUrmaAnalysisVirtualDataset(NoaaRtmaAnalysisVirtualDataset):
+    concurrency_policy: ClassVar[ConcurrencyPolicy] = "Replace"
+    update_schedule: ClassVar[str] = "45 * * * *"
     update_deadline: ClassVar[timedelta] = timedelta(minutes=59)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
     max_delay: ClassVar[timedelta] = timedelta(hours=7, minutes=40)

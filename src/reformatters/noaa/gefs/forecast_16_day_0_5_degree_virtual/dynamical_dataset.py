@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -32,6 +33,8 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
         NoaaGefsForecast16Day05DegreeVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=6, seconds=33)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
@@ -50,11 +53,13 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cron_job_name_prefix = self.dataset_id.replace("-0-5-degree", "-0-5")
         # A run publishes ~init+3h46m through ~init+7h11m.
-        # Fire just before the first files become available and stop 30m after expected completion.
+        # Poll across the next fire while files remain pending.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="45 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(hours=4),
+            schedule="43 3,9,15,21 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=8, seconds=22),
+            active_deadline=timedelta(hours=6, minutes=8, seconds=22),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
@@ -68,7 +73,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=47)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=248)),
             validation.CheckVirtualManifestCompleteness(),
             # Four levels so the sample reaches 600 hPa, an icing level; three would
             # miss every level icing is published at.

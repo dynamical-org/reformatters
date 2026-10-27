@@ -48,13 +48,13 @@ def test_polling_leaves_validation_time_inside_single_deadline(
     dataset: NoaaHrrrAnalysisVirtualDataset,
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
-    fire = pd.Timestamp("2026-10-02T00:50")
-    deadline = pd.Timestamp("2026-10-02T01:18")
+    fire = pd.Timestamp("2026-10-02T00:46")
+    deadline = pd.Timestamp("2026-10-02T01:47:45")
 
-    assert cron.pod_active_deadline == timedelta(minutes=30)
+    assert cron.pod_active_deadline == timedelta(minutes=63, seconds=22)
     assert dataset._virtual_poll_deadline(fire) == deadline
     assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
-    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)
+    assert fire + cron.pod_active_deadline - deadline == timedelta(seconds=97)
 
 
 @pytest.mark.slow
@@ -197,8 +197,10 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "50 * * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(minutes=30)
+    assert update_cron_job.schedule == "46 * * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(
+        hours=1, minutes=3, seconds=22
+    )
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend
     assert len(update_cron_job.secret_names) > 0
@@ -212,7 +214,7 @@ def test_validators(dataset: NoaaHrrrAnalysisVirtualDataset) -> None:
         for validator in validators
         if isinstance(validator, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(minutes=54)
+    assert current_data.max_delay == timedelta(minutes=80)
 
     # discover_available extends time only to an hour holding every file it needs, so
     # one instance covering every variable at a whole 1.0 is the right check: no

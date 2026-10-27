@@ -1,6 +1,7 @@
 from datetime import timedelta
 from typing import ClassVar
 
+from reformatters.common.kubernetes import ConcurrencyPolicy
 from reformatters.noaa.rtma.analysis_virtual.dynamical_dataset import (
     NoaaRtmaAnalysisVirtualDataset,
 )
@@ -10,6 +11,7 @@ from .template_config import NoaaRtmaRuAnalysisVirtualTemplateConfig
 
 
 class NoaaRtmaRuAnalysisVirtualDataset(NoaaRtmaAnalysisVirtualDataset):
+    concurrency_policy: ClassVar[ConcurrencyPolicy] = "Replace"
     update_schedule: ClassVar[str] = "*/15 * * * *"
     update_deadline: ClassVar[timedelta] = timedelta(minutes=14)
     update_cron_suspended: ClassVar[bool] = True

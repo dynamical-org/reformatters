@@ -38,7 +38,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         GoogleWeathernext2ForecastOperationalVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=3, seconds=7)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -58,7 +58,9 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         update = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="5 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=4, seconds=23),
+            active_deadline=timedelta(hours=6, minutes=4, seconds=23),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",

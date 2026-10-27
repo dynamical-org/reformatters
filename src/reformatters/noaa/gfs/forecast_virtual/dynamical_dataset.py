@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -32,6 +33,8 @@ class NoaaGfsForecastVirtualDataset(
         NoaaGfsForecastVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2, seconds=31)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gfs_virtual_chunk_containers(),
@@ -53,7 +56,9 @@ class NoaaGfsForecastVirtualDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="29 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(hours=2, minutes=30),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=4, seconds=12),
+            active_deadline=timedelta(hours=6, minutes=4, seconds=12),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",
@@ -66,7 +71,7 @@ class NoaaGfsForecastVirtualDataset(
     def validators(self) -> Sequence[validation.Validator]:
         return (
             # Allow for variation in source publication time.
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=50)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=237)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

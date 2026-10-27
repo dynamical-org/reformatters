@@ -7,7 +7,7 @@ from pydantic import Field
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
-from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.kubernetes import ConcurrencyPolicy, CronJob, ReformatCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
 from reformatters.noaa.rtma.rtma_config_models import RtmaDataVar
 
@@ -23,10 +23,12 @@ from .template_config import NoaaRtmaAnalysisVirtualTemplateConfig
 class NoaaRtmaAnalysisVirtualDataset(
     DynamicalDataset[RtmaDataVar, NoaaRtmaAnalysisVirtualSourceFileCoord]
 ):
-    update_schedule: ClassVar[str] = "45 * * * *"
-    update_deadline: ClassVar[timedelta] = timedelta(minutes=50)
+    update_schedule: ClassVar[str] = "41 * * * *"
+    update_deadline: ClassVar[timedelta] = timedelta(hours=1, minutes=2, seconds=9)
     update_cron_suspended: ClassVar[bool] = False
-    max_delay: ClassVar[timedelta] = timedelta(minutes=90)
+    max_delay: ClassVar[timedelta] = timedelta(minutes=73)
+    concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=43)
 
     template_config: NoaaRtmaAnalysisVirtualTemplateConfig = (
         NoaaRtmaAnalysisVirtualTemplateConfig()
@@ -51,6 +53,10 @@ class NoaaRtmaAnalysisVirtualDataset(
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule=self.update_schedule,
+                concurrency_policy=self.concurrency_policy,
+                active_deadline=(
+                    self.update_deadline if self.concurrency_policy == "Allow" else None
+                ),
                 pod_active_deadline=self.update_deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,

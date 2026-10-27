@@ -33,7 +33,7 @@ class NoaaHrrrAnalysisVirtualDataset(
         NoaaHrrrAnalysisVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=1, seconds=37)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -52,13 +52,13 @@ class NoaaHrrrAnalysisVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Race each hour's cycle: f00/wrfprs/wrfnat publish ~init+51m and the prior
-        # cycle's f01 is already out (~init+53m), so a :50 fire commits the hour's
-        # files within minutes; a late cycle rolls to the next fire.
+        # The first visible hour requires both its own-cycle files and prior-cycle f01.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="50 * * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="46 * * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=1, minutes=3, seconds=22),
+            active_deadline=timedelta(hours=1, minutes=3, seconds=22),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -70,7 +70,7 @@ class NoaaHrrrAnalysisVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=54)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=80)),
             # discover_available extends time only to an hour holding every file it
             # needs, so every ingested position is whole.
             validation.CheckVirtualManifestCompleteness(),
