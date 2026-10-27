@@ -268,3 +268,41 @@ def test_hrrr48_backstop_requires_missing_init_at_fire_plus_startup(
         dataset_id, now, init - timedelta(hours=6), monkeypatch
     ).passed
     assert _check_at_time(dataset_id, now, init, monkeypatch).passed
+
+
+@pytest.mark.parametrize(
+    ("dataset_id", "offset", "startup", "hours"),
+    [
+        ("noaa-gfs-forecast", "5h47m", "21s", (0, 6, 12, 18)),
+        ("noaa-gefs-forecast-35-day", "7h09m", "58s", (0,)),
+        ("ecmwf-aifs-single-forecast", "7h50m", "84s", (0, 6, 12, 18)),
+        ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "58h05m", "51s", (0,)),
+        ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "58h05m", "46s", (0,)),
+    ],
+)
+def test_trigger_family_backstop_requires_the_due_init(
+    dataset_id: str,
+    offset: str,
+    startup: str,
+    hours: tuple[int, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    check = next(
+        check
+        for check in dataset.validators()
+        if isinstance(check, validation.CheckCurrentData)
+    )
+    assert check.max_delay == pd.Timedelta(offset)
+    for hour in hours:
+        init = pd.Timestamp("2026-10-20") + timedelta(hours=hour)
+        fire = init + pd.Timedelta(offset)
+        assert cron.previous_fire_time(fire) == fire
+        previous = init - dataset.template_config.append_dim_frequency
+        assert _check_at_time(
+            dataset_id, fire - timedelta(seconds=1), previous, monkeypatch
+        ).passed
+        now = fire + pd.Timedelta(startup)
+        assert not _check_at_time(dataset_id, now, previous, monkeypatch).passed
+        assert _check_at_time(dataset_id, now, init, monkeypatch).passed

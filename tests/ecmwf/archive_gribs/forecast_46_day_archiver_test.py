@@ -219,11 +219,12 @@ def test_archive_triggers_after_completion(
                 "ecmwf-ifs-ens-46-day-6-hourly-update",
             }
             for call in first_calls:
-                assert len(call.args[1]) in (39, 42)
+                assert len(call.args[1]) <= 52
                 assert len(f"{call.args[1]}-999-xxxxx") <= 63
-                assert not call.kwargs
+                assert call.args[1].endswith(f"-t{max(init_times):%Y%m%d%H%M}z")
+                assert call.kwargs == {"kind": "trigger"}
         submit.reset_mock()
-        archiver.archive_grib_files("archive-job-123", dst_root_path=destination)
+        archiver.archive_grib_files("different-archive-job", dst_root_path=destination)
         assert submit.call_args_list == first_calls
 
 
