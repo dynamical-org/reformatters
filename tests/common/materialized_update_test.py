@@ -495,7 +495,8 @@ def test_healthy_untriggered_update_validates_without_repass(
     pilot.jobs[:] = [job]
     _currency_dataset(pilot, monkeypatch, "2026-10-26T06:00")
 
-    def validate(*args: object) -> None:
+    def validate(*args: object, **kwargs: object) -> None:
+        assert kwargs == {"job_fire_time": None}
         assert pilot.dataset._current_data_is_published()
 
     pilot.validate.side_effect = validate
@@ -1069,7 +1070,10 @@ def test_update_forwards_current_jobs_utc_creation_time_only_to_planning(
     pilot.dataset.update(name)
 
     pilot.compute.assert_called_once_with(
-        name, tmp_path, job_reference_time=pd.Timestamp(expected)
+        name,
+        tmp_path,
+        job_fire_time=None,
+        job_reference_time=pd.Timestamp(expected),
     )
     pilot.api.read_namespaced_job.assert_called_once_with(name, "pilot")
     pilot.process.assert_called_once()
