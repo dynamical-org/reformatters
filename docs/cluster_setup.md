@@ -31,7 +31,7 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 
    Clones may add `dynamical.org/run-kind: trigger` only to Job annotations. Other values, labels, pod annotations, and pod specifications remain pinned to the CronJob template. Admission verification checks the installed policy specs against the generated bundle, then probes every live CronJob named in the trigger Role: plain and trigger-annotated clones must pass; an unlabeled Job, a wrong annotation value, a pod-template annotation, and an altered image must be refused. With no authorized live CronJobs, it probes only the unlabeled-Job denial.
 
-   Replace policies in place when every intermediate state is safe: each API server enforces either the old or new policy, and neither admits anything the new policy forbids. Keep deploys running and the trigger RoleBinding in place. Render the new bundle, then review the diff, apply, and verify:
+   Replace policies in place only when every changed object relaxes admission or leaves it unchanged, so no mix of old and new objects on any API server admits anything the new bundle forbids. Adding a policy or binding, or tightening any expression, counts as tightening. Keep deploys running and the trigger RoleBinding in place. Render the new bundle, then review the diff, apply, and verify:
 
    ```sh
    kubectl diff -f admission.json
@@ -39,7 +39,7 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
    uv run main verify-kubernetes-admission admission.json --namespace default
    ```
 
-   If that safety condition does not hold (for example, the old policy admits something the new one forbids, or objects must be deleted and recreated), pause production and staging deploys, wait for in-flight deploys to finish, revoke the trigger RoleBinding, and wait for revocation to propagate before replacing policies. Restore the RoleBinding and resume deploys after verification passes and the policies are active on all API servers. Revocation blocks all trigger-account clones, including validation re-passes; a missed completion trigger is covered by its consumer's backstop cron. Roll back by applying the previous bundle.
+   If that safety condition does not hold (for example, any object tightens or objects must be deleted and recreated), pause production and staging deploys, wait for in-flight deploys to finish, revoke the trigger RoleBinding, and wait for revocation to propagate before replacing policies. Restore the RoleBinding and resume deploys after verification passes and the policies are active on all API servers. Revocation blocks all trigger-account clones, including validation re-passes; a missed completion trigger is covered by its consumer's backstop cron. Roll back by applying the previous bundle under the same rule.
 
    Before pruning bindings, pause production and staging deploys and wait for in-flight deploys to finish. Revoke the targets from the trigger Role and wait for propagation before deleting bindings.
 
