@@ -35,6 +35,10 @@ Readers must always see a consistent view — either the old data or the fully u
 
 Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
 
+For materialized updates with Icechunk storage, setup captures each repository's starting snapshot before checking it. Every worker checks its own structure and append-dimension labels against those exact snapshots before writing. The template's stored-label prefix must match in every group carrying the append dimension; a different origin or spacing fails instead of relabeling existing chunks. Finalization checks the trimmed template against the primary's starting snapshot and retains the conditional branch reset.
+
+These workers also compare a fingerprint of the ordered regions and variable paths, worker count and assignment, and complete append-dimension labels. Independently reading a different existing extent or crossing a template-time boundary can produce different work lists; disagreement fails the update before the disagreeing worker writes. A retried worker 0 must match the recorded fingerprint, rather than replace it. Use a fresh job or the next scheduled run after resolving a persistent template/store mismatch. This check applies to materialized Icechunk updates; backfills, Zarr-only updates and virtual operational updates use their existing coordination paths. An origin change requires compatible deployed writers and a drain of all jobs targeting the store, including manual backfills.
+
 ### Retraction guard (operational updates)
 
 `RegionJob.update_template_with_results` trims the update template to what the run actually processed, and when nothing was processed the default trims to the start of the trailing shard — inside data readers can already see. Before publishing that template, finalization asserts it is no shorter along the append dim than the published store (`template_utils.assert_no_append_dim_retraction`), so a source outage fails the update instead of dropping whole shards from the published extent. Shrinking a store on purpose requires a backfill.
@@ -69,7 +73,7 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`. Materialized operational updates using the queue below also retain a `state.json`, including for single-worker Jobs.
+Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`, except that materialized Icechunk updates also retain setup state for single-worker retries. Materialized operational updates using the queue below also retain a `state.json`, including for single-worker Jobs.
 
 ### Materialized Job state and ordering
 
@@ -88,6 +92,8 @@ Producers list consumers in `materialized_update_triggers`, with `init_hours` fi
 ### Setup signal
 
 Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.
+
+Materialized Icechunk updates record their starting snapshot IDs and work fingerprint here. A retry with missing or different fingerprint state fails closed; it cannot adopt work prepared by an incompatible worker.
 
 ### Results
 
@@ -120,6 +126,8 @@ On restart, worker 0 retries setup:
 
 Workers 1+ that were polling for setup will proceed once the file appears.
 
+A materialized Icechunk update requires the recorded starting snapshots before reusing a temporary branch. A crash after branch creation but before `ready.json` leaves an unverified temporary branch, so automatic retries fail closed. Inspect the branches and coordination state before cleanup; a fresh job uses a separate temporary branch.
+
 ### Last worker dies during finalization
 
 Finalization is not atomic. Possible partial states:
@@ -128,6 +136,8 @@ Finalization is not atomic. Possible partial states:
 - **Died after resetting all stores but before branch cleanup** — data is fully committed. Orphan branch and coordination files remain but don't affect correctness. A fresh job uses a different job name.
 
 In all cases, `main` either hasn't moved (safe) or has moved to the correct final state. Reader-visible data is never corrupted.
+
+For a materialized Icechunk update, a missing temporary branch plus a moved `main` cannot prove that this job published, so finalization fails closed. A queued update records `finalized` before deleting its temporary branches, so its retries stop at the recorded state instead of reaching finalization. Otherwise, inspect the `main` snapshots and coordination state before cleanup: if the tip belongs to this run, its data is published; otherwise run a fresh job after resolving any template/store mismatch. Backfills retain their existing retry behavior.
 
 ### Worker exhausts per-index retry limit
 

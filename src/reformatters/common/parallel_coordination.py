@@ -6,7 +6,7 @@ See docs/parallel_processing.md for the overall design.
 import json
 import re
 import time
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -14,10 +14,12 @@ from typing import Any, Literal, TypedDict
 import icechunk
 import pandas as pd
 import xarray as xr
+import zarr.errors
 from kubernetes import client
 from pydantic import TypeAdapter
 
 from reformatters.common import kubernetes, storage, template_utils
+from reformatters.common.iterating import digest
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
@@ -44,6 +46,60 @@ def dump_worker_results_json(
 
 class SetupInfo(TypedDict, total=False):
     repo_snapshots: dict[str, str]
+    work_fingerprint: str
+
+
+def work_fingerprint(
+    all_jobs: Sequence[RegionJob[Any, Any]],
+    template_ds: xr.DataTree,
+    *,
+    append_dim: str,
+    workers_total: int,
+    worker_assignment: Literal["spread", "contiguous"],
+) -> str:
+    """Digest of the ordered work list, its worker partitioning and the template's
+    append-dim labels, equal across workers that derived the same work."""
+    assert all(job.append_dim == append_dim for job in all_jobs)
+    work = {
+        "append_dim": append_dim,
+        "workers_total": workers_total,
+        "worker_assignment": worker_assignment,
+        "jobs": [
+            [
+                job.region.start or 0,
+                job.region.stop,
+                job.region.step or 1,
+                [data_var.path for data_var in job.data_vars],
+            ]
+            for job in all_jobs
+        ],
+        "labels": {
+            node.path: [
+                pd.Timestamp(label).isoformat()
+                for label in node.to_dataset().indexes[append_dim]
+            ]
+            for node in template_ds.subtree
+            if append_dim in node.dims
+        },
+    }
+    return digest([json.dumps(work, separators=(",", ":"), sort_keys=True)], length=64)
+
+
+def _new_setup_info(work_fingerprint: str | None) -> SetupInfo:
+    setup_info = SetupInfo()
+    if work_fingerprint is not None:
+        setup_info["work_fingerprint"] = work_fingerprint
+    return setup_info
+
+
+def _assert_setup_work(setup_info: SetupInfo, work_fingerprint: str | None) -> None:
+    if work_fingerprint is None:
+        return
+    recorded = setup_info.get("work_fingerprint")
+    assert recorded == work_fingerprint, (
+        f"Coordination state was set up for work {recorded}, not {work_fingerprint}; "
+        "this worker derived a different job list or template than worker 0"
+    )
 
 
 type JobState = Literal["run", "skip", "finalized"]
@@ -120,7 +176,18 @@ def parallel_setup(
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
+    existing_data_guard: Callable[[xr.DataTree | None], None] | None = None,
+    work_fingerprint: str | None = None,
 ) -> SetupInfo:
+    """Worker 0 branches each Icechunk repo from main and expands metadata there;
+    later workers wait for it.
+
+    `existing_data_guard` requires `work_fingerprint`. Worker 0 runs the guard on each
+    repo's pinned starting snapshot before writing, every worker fails unless its
+    fingerprint equals the one recorded first, and later workers run the guard on the
+    pinned starting snapshots."""
+    pinned = existing_data_guard is not None
+    assert pinned == (work_fingerprint is not None)
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
 
@@ -131,20 +198,34 @@ def parallel_setup(
         existing_setup = store_factory.read_all_coordination_files(
             reformat_job_name, "setup"
         )
-        setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
+        setup_info: SetupInfo = (
+            json.loads(existing_setup[0])
+            if existing_setup
+            else _new_setup_info(work_fingerprint)
+        )
+        _assert_setup_work(setup_info, work_fingerprint)
+        if pinned and not existing_setup:
+            # Its starting snapshot is unknown, so its work cannot be published.
+            orphaned = [
+                role
+                for role, repo in icechunk_repos
+                if branch_name in repo.list_branches()
+            ]
+            assert not orphaned, (
+                f"Temporary branch {branch_name} exists on {orphaned} without "
+                "recorded setup; delete it or use a new job name"
+            )
 
         # Icechunk: create temp branch, write full metadata, commit on branch.
         # This expands the dataset on the temp branch while readers on "main" are unaffected.
         # Branch name is deterministic so worker 0 retries reuse the same branch.
         if icechunk_repos:
-            repo_snapshots = setup_info.setdefault("repo_snapshots", {})
-            for role, repo in icechunk_repos:
-                snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
-                if branch_name in repo.list_branches():
-                    # Branch already exists from a previous worker 0 attempt — reuse it.
-                    log.info(f"Branch {branch_name} already exists on {role}, reusing")
-                else:
-                    repo.create_branch(branch_name, snapshot)
+            _create_temp_branches(
+                setup_info.setdefault("repo_snapshots", {}),
+                icechunk_repos,
+                branch_name=branch_name,
+                existing_data_guard=existing_data_guard,
+            )
             # Copy metadata from local tmp_store to icechunk stores,
             # expanding dimensions by writing updated zarr.json and coordinate arrays.
             ic_stores = [
@@ -167,7 +248,7 @@ def parallel_setup(
             store_factory.persist_virtual_config()
         # Zarr v3: do NOT expand (readers would see empty holes)
 
-        if workers_total > 1:
+        if workers_total > 1 or pinned:
             store_factory.write_coordination_file(
                 reformat_job_name,
                 "setup/ready.json",
@@ -186,9 +267,56 @@ def parallel_setup(
             setup_files = store_factory.read_all_coordination_files(
                 reformat_job_name, "setup"
             )
-        return json.loads(setup_files[0])
+        setup_info = json.loads(setup_files[0])
+        _assert_setup_work(setup_info, work_fingerprint)
+        if existing_data_guard is not None:
+            for role, repo in icechunk_repos:
+                existing_data_guard(
+                    _open_session(
+                        repo.readonly_session(
+                            snapshot_id=setup_info["repo_snapshots"][role]
+                        )
+                    )
+                )
+        return setup_info
 
     return SetupInfo()
+
+
+def _create_temp_branches(
+    repo_snapshots: dict[str, str],
+    icechunk_repos: list[tuple[str, icechunk.Repository]],
+    *,
+    branch_name: str,
+    existing_data_guard: Callable[[xr.DataTree | None], None] | None,
+) -> None:
+    for role, repo in icechunk_repos:
+        snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
+        if existing_data_guard is not None:
+            # The same snapshot the temp branch starts from and finalize resets from.
+            existing_data_guard(
+                _open_session(repo.readonly_session(snapshot_id=snapshot))
+            )
+    for role, repo in icechunk_repos:
+        if branch_name in repo.list_branches():
+            # Branch already exists from a previous worker 0 attempt — reuse it.
+            log.info(f"Branch {branch_name} already exists on {role}, reusing")
+        else:
+            repo.create_branch(branch_name, repo_snapshots[role])
+
+
+def _open_session(session: icechunk.Session) -> xr.DataTree | None:
+    """The session's dataset, or None if it holds none."""
+    try:
+        return xr.open_datatree(
+            session.store,  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            decode_timedelta=True,
+            chunks=None,
+            consolidated=False,
+        )
+    except zarr.errors.GroupNotFoundError:
+        return None
 
 
 def wait_for_workers(
@@ -258,10 +386,8 @@ def finalize(
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
-        template_utils.assert_no_append_dim_retraction(
-            updated_template,
-            store_factory.open_primary_datatree(),
-            all_jobs[0].append_dim,
+        _assert_extends_published(
+            updated_template, store_factory, setup_info, all_jobs[0].append_dim
         )
     else:
         updated_template = template_ds
@@ -305,8 +431,13 @@ def finalize(
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
             if current_main != original_snapshot:
-                if branch_name not in repo.list_branches() or _snapshot_is_on_branch(
-                    repo, branch_name, current_main, original_snapshot
+                temp_exists = branch_name in repo.list_branches()
+                # Guarded runs require the temporary branch to prove prior publication.
+                if (not temp_exists and "work_fingerprint" not in setup_info) or (
+                    temp_exists
+                    and _snapshot_is_on_branch(
+                        repo, branch_name, current_main, original_snapshot
+                    )
                 ):
                     log.info(f"{role}: main already reset by a previous attempt")
                     continue
@@ -348,8 +479,34 @@ def finalize(
             if branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
 
-    if workers_total > 1:
+    if workers_total > 1 or "work_fingerprint" in setup_info:
         store_factory.clear_coordination_files(reformat_job_name)
+
+
+def _assert_extends_published(
+    updated_template: xr.DataTree,
+    store_factory: StoreFactory,
+    setup_info: SetupInfo,
+    append_dim: str,
+) -> None:
+    """Fail unless `updated_template` keeps every published append-dim step. A run
+    recording a work fingerprint compares the primary's pinned starting snapshot,
+    labels included; otherwise the primary as it is now."""
+    repos = dict(store_factory.icechunk_repos(sort="primary-first"))
+    if "work_fingerprint" not in setup_info or "primary" not in repos:
+        template_utils.assert_no_append_dim_retraction(
+            updated_template, store_factory.open_primary_datatree(), append_dim
+        )
+        return
+    snapshot = setup_info["repo_snapshots"]["primary"]
+    published = _open_session(repos["primary"].readonly_session(snapshot_id=snapshot))
+    assert published is not None, f"Snapshot {snapshot} holds no dataset"
+    template_utils.assert_no_append_dim_retraction(
+        updated_template, published, append_dim
+    )
+    template_utils.assert_append_dim_labels_match(
+        updated_template, published, append_dim
+    )
 
 
 def _snapshot_is_on_branch(

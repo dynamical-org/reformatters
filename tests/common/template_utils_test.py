@@ -3,6 +3,7 @@ from pathlib import Path
 
 import dask.array
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 from gribberish.zarr import GribberishCodec
@@ -16,6 +17,7 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.template_utils import (
     _get_mode_from_path_store,
+    assert_append_dim_labels_match,
     assert_no_structural_drift_from_existing_store,
     assert_safe_overwrite,
     assign_var_metadata,
@@ -509,3 +511,57 @@ def test_store_written_coords_finds_all_null_coords() -> None:
     )
     tree = xr.DataTree.from_dict({"/": ds})
     assert store_written_coords(tree) == {"ingested_forecast_length"}
+
+
+# --- assert_append_dim_labels_match tests ---
+
+
+def _labelled_tree(
+    start: str, size: int, *, group_start: str | None = None
+) -> xr.DataTree:
+    def node(first: str) -> xr.Dataset:
+        times = pd.date_range(first, periods=size, freq="D")
+        return xr.Dataset({"v": ("time", np.zeros(size))}, coords={"time": times})
+
+    return xr.DataTree.from_dict(
+        {"/": node(start), "/pressure_level": node(group_start or start)}
+    )
+
+
+def test_append_dim_labels_match_accepts_matching_stored_prefix() -> None:
+    assert_append_dim_labels_match(
+        _labelled_tree("2024-04-01", 5), _labelled_tree("2024-04-01", 3), "time"
+    )
+
+
+def test_append_dim_labels_match_rejects_shifted_origin() -> None:
+    with pytest.raises(ValueError, match=r"groups \['/', '/pressure_level'\]"):
+        assert_append_dim_labels_match(
+            _labelled_tree("2024-04-01", 5), _labelled_tree("2024-03-30", 3), "time"
+        )
+
+
+def test_append_dim_labels_match_checks_every_group() -> None:
+    def groups(second_start: str, size: int) -> xr.DataTree:
+        return xr.DataTree.from_dict(
+            {
+                "/": xr.Dataset(),
+                "/a": _labelled_tree("2024-04-01", size)["/"].to_dataset(),
+                "/b": _labelled_tree(second_start, size)["/"].to_dataset(),
+            }
+        )
+
+    with pytest.raises(ValueError, match=r"groups \['/b'\]"):
+        assert_append_dim_labels_match(
+            groups("2024-04-01", 5), groups("2024-03-30", 3), "time"
+        )
+
+
+def test_append_dim_labels_match_rejects_group_missing_from_template() -> None:
+    template = xr.DataTree.from_dict(
+        {"/": _labelled_tree("2024-04-01", 5)["/"].to_dataset()}
+    )
+    with pytest.raises(ValueError, match="/pressure_level"):
+        assert_append_dim_labels_match(
+            template, _labelled_tree("2024-04-01", 3), "time"
+        )
