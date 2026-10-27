@@ -10,6 +10,7 @@ from typing import Literal, NoReturn
 import sentry_sdk
 import sentry_sdk.crons
 from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
+from sentry_sdk.types import Event
 from sentry_sdk.utils import AnnotatedValue
 
 from reformatters.common.config import Config
@@ -18,6 +19,31 @@ from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
 log = get_logger(__name__)
+
+
+_SENSITIVE_VALUES: set[str] = set()
+
+
+def register_sensitive_value(value: str) -> None:
+    """Redact `value` wherever it appears in an error event, including inside the
+    reprs of captured local variables, which key-based scrubbing can't reach."""
+    if value:
+        _SENSITIVE_VALUES.add(value)
+
+
+def _redact_sensitive_values(value: object) -> object:
+    if isinstance(value, str):
+        for sensitive in _SENSITIVE_VALUES:
+            if sensitive in value:
+                value = value.replace(sensitive, "[Filtered]")
+        return value
+    if isinstance(value, dict):
+        for key in value:
+            value[key] = _redact_sensitive_values(value[key])
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            value[index] = _redact_sensitive_values(item)
+    return value
 
 
 class CredentialScrubber(EventScrubber):
@@ -59,6 +85,11 @@ class CredentialScrubber(EventScrubber):
                         AnnotatedValue.substituted_because_contains_sensitive_data()
                     )
         super().scrub_dict(d)
+
+    def scrub_event(self, event: Event) -> None:
+        super().scrub_event(event)
+        if _SENSITIVE_VALUES:
+            _redact_sensitive_values(event)
 
 
 def log_peak_memory() -> None:

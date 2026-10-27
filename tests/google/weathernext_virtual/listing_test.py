@@ -10,9 +10,13 @@ import httpx
 import icechunk
 import numpy as np
 import pytest
+import sentry_sdk
+import sentry_sdk.envelope
+import sentry_sdk.transport
 import zarr
 from kubernetes.client.exceptions import ApiException
 
+from reformatters.common import monitoring, storage
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
@@ -210,3 +214,48 @@ def test_other_service_token_secret_failures_propagate(
     monkeypatch.setattr(listing.kubernetes, "load_secret", load_secret)
     with pytest.raises(type(error)):
         listing.service_token_headers()
+
+
+def test_service_token_never_reaches_error_telemetry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A readonly open that fails holds the token in its config locals; production
+    Sentry captures locals, so the event must still not contain the token."""
+    mock_service_token_secret(monkeypatch, TOKEN)
+    envelopes: list[bytes] = []
+
+    class MemoryTransport(sentry_sdk.transport.Transport):
+        def capture_envelope(self, envelope: sentry_sdk.envelope.Envelope) -> None:
+            envelopes.append(envelope.serialize())
+
+    virtual_config = IcechunkVirtualConfig(
+        containers=weathernext_virtual_chunk_containers(),
+        read_containers=weathernext_read_chunk_containers,
+        manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+    )
+    storage_config = StorageConfig(
+        base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+    )
+    client = sentry_sdk.Client(
+        dsn="https://public@sentry.example/1",
+        transport=MemoryTransport,
+        include_local_variables=True,
+        max_value_length=16 * 1024,
+        event_scrubber=monitoring.CredentialScrubber(),
+    )
+    with sentry_sdk.isolation_scope() as scope:
+        scope.set_client(client)
+        with pytest.raises(Exception) as raised:  # noqa: PT011
+            storage._get_icechunk_store(
+                str(tmp_path / "missing.icechunk"),
+                storage_config,
+                writable=False,
+                virtual_config=virtual_config,
+            )
+        scope.capture_exception(raised.value)
+    client.flush()
+
+    assert envelopes
+    serialized = b"".join(envelopes)
+    assert b"_get_icechunk_store" in serialized
+    assert TOKEN.encode() not in serialized

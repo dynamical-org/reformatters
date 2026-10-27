@@ -5,7 +5,7 @@ import httpx
 import icechunk
 from kubernetes.client.exceptions import ApiException
 
-from reformatters.common import kubernetes
+from reformatters.common import kubernetes, monitoring
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
@@ -51,6 +51,7 @@ def service_token_headers() -> dict[str, str]:
             "reading wn.dynamical.org on the public tier"
         )
         return {}
+    monitoring.register_sensitive_value(token)
     return {"X-Dynamical-Service-Token": token}
 
 
