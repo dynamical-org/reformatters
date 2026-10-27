@@ -176,6 +176,7 @@ def test_operational_kubernetes_resources(
     (update_cron_job,) = cron_jobs
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
+    assert update_cron_job.schedule == "6 2,8,14,20 * * *"
     assert len(update_cron_job.secret_names) > 0
     assert update_cron_job.concurrency_policy == "Allow"
     assert update_cron_job.active_deadline == timedelta(hours=6)

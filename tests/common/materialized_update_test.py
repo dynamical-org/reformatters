@@ -344,7 +344,7 @@ def _currency_dataset(
         ),
     )
     monkeypatch.setattr(
-        pd.Timestamp, "now", lambda **kwargs: pd.Timestamp("2026-10-26T08:03")
+        pd.Timestamp, "now", lambda **kwargs: pd.Timestamp("2026-10-26T08:06")
     )
 
 
