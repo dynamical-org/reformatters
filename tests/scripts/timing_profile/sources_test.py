@@ -19,6 +19,7 @@ from scripts.timing_profile.sources import (
             "s3://noaa-gfs-bdp-pds/a/b",
         ),
         ("https://noaa-gefs-pds.s3.amazonaws.com/a/b", "s3://noaa-gefs-pds/a/b"),
+        ("https://s3-bucket.s3.amazonaws.com/a/b", "s3://s3-bucket/a/b"),
         (
             "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/a/b",
             "s3://us-west-2.opendata.source.coop/a/b",
