@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common import kubernetes
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.gefs.forecast_35_day.region_job import GefsForecast35DayRegionJob
 from reformatters.noaa.gefs.forecast_35_day.template_config import (
     GefsForecast35DayTemplateConfig,
@@ -38,6 +39,35 @@ def test_trigger_family_mappings_use_only_the_designated_producers() -> None:
         for cron in dataset.operational_kubernetes_resources("test")
     }
     assert set(expected.values()) <= crons
+
+
+def test_trigger_targets_and_virtual_producers_use_allow_with_job_deadlines() -> None:
+    crons = {
+        cron.name: cron
+        for dataset in DYNAMICAL_DATASETS
+        for cron in dataset.operational_kubernetes_resources("test")
+        if isinstance(cron, kubernetes.ReformatCronJob)
+    }
+    targets = {
+        trigger.target_cronjob
+        for producer in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]
+        for trigger in getattr(producer, "materialized_update_triggers", ())
+    }
+    assert targets
+    for name in targets:
+        cron = crons[name]
+        assert cron.concurrency_policy == "Allow", name
+        assert cron.active_deadline is not None, name
+    for producer in DYNAMICAL_DATASETS:
+        if producer.materialized_update_triggers:
+            assert issubclass(producer.region_job_class, VirtualRegionJob)
+            (cron,) = [
+                cron
+                for cron in producer.operational_kubernetes_resources("test")
+                if isinstance(cron, kubernetes.ReformatCronJob)
+            ]
+            assert cron.concurrency_policy == "Allow", producer.dataset_id
+            assert cron.active_deadline is not None, producer.dataset_id
 
 
 def test_gefs_tier_one_triggers_only_the_daily_init(

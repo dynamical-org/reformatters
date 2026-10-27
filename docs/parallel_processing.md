@@ -85,7 +85,7 @@ Producers list consumers in `materialized_update_triggers`, with `init_hours` fi
 
 `MaterializedUpdateTrigger` builds `<consumer>-t<YYYYmmddHHMM>z` names, shortening long prefixes with a digest. `create_job_from_cronjob(kind="trigger")` sets `RUN_KIND_ANNOTATION`.
 
-Archive producers pass their selected complete initialization to `MaterializedUpdateTrigger.dispatch`; the helper derives the name from that initialization rather than the archiver Job name.
+Archive producers pass their selected complete initialization to `MaterializedUpdateTrigger.dispatch`, so trigger names are per init.
 
 ### Setup signal
 
