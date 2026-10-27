@@ -22,6 +22,7 @@ from pydantic import Field, computed_field, model_validator
 from reformatters.common import (
     kubernetes,
     parallel_coordination,
+    storage,
     template_utils,
     validation,
 )
@@ -149,6 +150,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         workers_total: Annotated[int, typer.Argument(envvar="WORKERS_TOTAL")] = 1,
     ) -> None:
         """Update an existing dataset with the latest data."""
+        assert storage.icechunk_branch() == "main", (
+            "Branch override is not allowed for operational updates"
+        )
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
         is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
@@ -345,6 +349,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "backfill_kubernetes is only supported in prod environment"
         )
 
+        target_branch = storage.icechunk_branch()
+        log.info("BACKFILL DRIVER TARGET BRANCH: %s", target_branch)
+        if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with Path(summary_path).open("a") as summary:
+                summary.write(f"\n**Backfill target branch:** `{target_branch}`\n")
+        if target_branch != "main":
+            assert overwrite_chunks, "Branch backfills require --overwrite-chunks"
         overwrite = overwrite_chunks or overwrite_metadata
         existing_ds = self._open_existing_store()
         template_ds, resolved_end = self._resolve_backfill_template(
@@ -461,9 +472,14 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 }
             ),
         )
+        job_manifest = kubernetes_job.as_kubernetes_object()
+        if target_branch != "main":
+            job_manifest["spec"]["template"]["spec"]["containers"][0]["env"].append(
+                {"name": "REFORMATTERS_ICECHUNK_BRANCH", "value": target_branch}
+            )
         subprocess.run(
             ["/usr/bin/kubectl", "apply", "-f", "-"],
-            input=json.dumps(kubernetes_job.as_kubernetes_object()),
+            input=json.dumps(job_manifest),
             text=True,
             check=True,
         )
@@ -480,6 +496,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         filter_variable_names: list[str] | None = None,
     ) -> None:
         """Run dataset reformatting locally in this process."""
+        assert storage.icechunk_branch() == "main", (
+            "Use backfill with a unique job name for branch backfills"
+        )
         assert Config.is_dev or Config.is_test, (
             "backfill_local is only supported in dev or test environments"
         )
@@ -516,6 +535,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_metadata: bool = False,
     ) -> None:
         """Orchestrate running RegionJob instances."""
+        log.info(
+            "BACKFILL WORKER %s TARGET BRANCH: %s",
+            worker_index,
+            storage.icechunk_branch(),
+        )
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
@@ -580,9 +604,20 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
+        target_branch = storage.icechunk_branch()
+        if target_branch != "main":
+            assert not update_template_with_results, (
+                "Branch override is not allowed for operational updates"
+            )
+            assert overwrite_chunks, "Branch backfills require --overwrite-chunks"
+            self._open_existing_store()
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
-        branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
+        branch_name = (
+            target_branch
+            if target_branch != "main"
+            else (f"_job_{reformat_job_name}" if has_icechunk else "main")
+        )
 
         # 0. Guards run on worker 0 before any writes; failing here leaves the live
         # archive untouched. An operational update must not change the structure of
@@ -920,6 +955,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         Only store-missing errors mean None; anything else (auth, network) raises —
         misclassifying an existing store as absent would route a backfill past the
         overwrite guards."""
+        if storage.icechunk_branch() != "main":
+            self.store_factory.icechunk_repos(sort="primary-first")
+            return self.store_factory.open_primary_datatree()
         try:
             return self.store_factory.open_primary_datatree()
         except (

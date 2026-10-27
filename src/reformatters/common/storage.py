@@ -1,5 +1,6 @@
 import contextlib
 import functools
+import os
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from functools import cache
@@ -32,6 +33,32 @@ _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
+
+
+def icechunk_branch() -> str:
+    unexpected = [
+        name
+        for name in os.environ
+        if name.startswith("REFORMATTERS_")
+        and ("BRANCH" in name or "ICECHUNK" in name)
+        and name != "REFORMATTERS_ICECHUNK_BRANCH"
+    ]
+    assert not unexpected, (
+        f"Unknown Icechunk branch environment variables: {unexpected}"
+    )
+    branch = os.environ.get("REFORMATTERS_ICECHUNK_BRANCH")
+    if branch is None:
+        return "main"
+    assert branch not in {"", "main"}, (
+        "Branch override requires an existing non-main branch"
+    )
+    assert branch == branch.strip(), (
+        "Branch override must not have surrounding whitespace"
+    )
+    assert not branch.startswith("_job_"), (
+        "Branch override cannot use the _job_ namespace"
+    )
+    return branch
 
 
 class DatasetFormat(StrEnum):
@@ -109,7 +136,7 @@ class StoreFactory(FrozenBaseModel):
         )
 
     def open_primary_datatree(self) -> xr.DataTree:
-        """The primary store's current published contents."""
+        """The primary store's current contents on the selected branch."""
         return xr.open_datatree(
             self.primary_store(),  # ty: ignore[invalid-argument-type]
             engine="zarr",
@@ -200,6 +227,15 @@ class StoreFactory(FrozenBaseModel):
         `role` uniquely identifies the repo within this StoreFactory:
         "primary" for the primary store, "replica-0", "replica-1", ... for replicas.
         """
+        branch = icechunk_branch()
+        if branch != "main":
+            assert self.all_stores_icechunk(), "Branch backfills require Icechunk"
+            assert not self.replica_storage_configs, (
+                "Branch backfills do not support replicas"
+            )
+            assert self.icechunk_virtual_config is None, (
+                "Branch backfills require materialized data"
+            )
         repo_config, credentials = _repository_config_and_credentials(
             self.icechunk_virtual_config
         )
@@ -208,13 +244,17 @@ class StoreFactory(FrozenBaseModel):
             # Retry to resolve multiple workers racing to create a new repo
             repo = retry(
                 functools.partial(
-                    icechunk.Repository.open_or_create,
+                    icechunk.Repository.open
+                    if branch != "main"
+                    else icechunk.Repository.open_or_create,
                     ic_storage,
                     config=repo_config,
                     authorize_virtual_chunk_access=credentials,
                 ),
                 max_attempts=3,
             )
+            if branch != "main":
+                repo.lookup_branch(branch)
             repos.append((role, repo))
 
         match sort:
@@ -462,6 +502,10 @@ def _get_icechunk_store(
     branch: str = "main",
     virtual_config: IcechunkVirtualConfig | None = None,
 ) -> IcechunkStore:
+    target = icechunk_branch()
+    branch = target if branch == "main" else branch
+    if target != "main":
+        assert virtual_config is None, "Branch backfills require materialized data"
     storage = _get_icechunk_storage(store_path, storage_config)
     repo_config, credentials = _repository_config_and_credentials(virtual_config)
 
@@ -469,7 +513,12 @@ def _get_icechunk_store(
         log.info(
             f"Opening icechunk store {store_path} on branch {branch} in writable mode"
         )
-        repo = icechunk.Repository.open_or_create(
+        open_repo = (
+            icechunk.Repository.open
+            if target != "main"
+            else icechunk.Repository.open_or_create
+        )
+        repo = open_repo(
             storage, config=repo_config, authorize_virtual_chunk_access=credentials
         )
         session = repo.writable_session(branch)

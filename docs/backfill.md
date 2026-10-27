@@ -25,6 +25,20 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 
+## Prepare a private Icechunk branch
+
+For an occasional materialized backfill on an existing Icechunk primary without replicas, create a branch containing the dataset first, then use an inline override:
+
+```sh
+REFORMATTERS_ICECHUNK_BRANCH=candidate DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --overwrite-chunks --docker-image <image-built-from-the-driver-commit> [flags]
+```
+
+Pin `--docker-image` to an image built from the driver's commit and containing this branch-override support. An older worker image silently ignores the environment variable and publishes to `main`; the default deployed image is not sufficient proof. The driver forwards the override to every worker. Driver and worker logs name the resolved branch; the driver also writes it to the GitHub workflow summary when available. Unset means the normal `main` workflow. Unknown `REFORMATTERS_*` names containing `BRANCH` or `ICECHUNK` are rejected. Do not leave the override exported in a shared shell.
+
+The repository, branch and dataset must already exist. `main`, `_job_` names, empty names, Zarr/replica/virtual stores, metadata-only runs, operational updates and `backfill-local` are unsupported. Existing overwrite guards read the selected branch; add `--overwrite-metadata` for expansion or new arrays. Read-only inspection through StoreFactory follows the override too.
+
+Workers commit directly to the private branch, which may contain partial results until the run succeeds. They never publish to `main` or delete the branch; operational updates can continue on `main`. Use one writer per branch, a fresh job name, and identical code/environment across workers and retries. Do not reset or switch the branch mid-job: finalization detects unrelated replacement history, but a reset back to or onto the starting snapshot is not detected. After an ambiguous failure, inspect/discard the candidate and start a fresh branch/job. Validate the candidate before a separately approved publication. This tool does not shift arrays or validate a changed origin for a prepend.
+
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.
@@ -61,4 +75,4 @@ Parallelism beyond what the cluster can schedule starves it: operational update 
 
 ## Concurrency with operational updates
 
-An operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
+For a backfill targeting `main`, an operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
