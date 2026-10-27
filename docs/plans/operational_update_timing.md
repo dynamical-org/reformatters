@@ -8,7 +8,7 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 
 | Step | Scope | Status | Dataset adoption |
 |---|---|---|---|
-| B: measurement and documentation | K1: anonymous source timestamps, exported or live read-only check-ins, advisory timing and candidate comparisons; documentation foundation | Prepared | No timing constants changed |
+| [B: measurement and documentation](https://github.com/dynamical-org/reformatters/pull/1261) | K1: anonymous source timestamps, exported or live read-only check-ins, advisory timing and candidate comparisons; documentation foundation | Draft | No timing constants changed |
 | B′: urgent currency values | K9: fix `max_delay` values that require positions before their existing fires | Pending | None tracked here yet |
 | A: overlap primitives | K2: configurable concurrency; K3: fresh-session conflict recovery; K4: metadata refresh using its committing session | Pending | Inert until a cohort enables overlap |
 | C: virtual pilot and cohorts | K5/K9: poll windows, deadlines, and currency values; virtual lifecycle documentation | Pending | Pilot: HRRR 18-hour and RRFS sub-hourly; remaining virtual families follow |

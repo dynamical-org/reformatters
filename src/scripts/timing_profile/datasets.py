@@ -171,10 +171,11 @@ def expected_units(
     end: pd.Timestamp,
     source: TimestampSource,
 ) -> Iterator[Unit]:
+    dataset_id = dataset.dataset_id
     config = dataset.template_config
     spacing = anchor_spacing(dataset)
     frequency = config.append_dim_frequency
-    observational = config.append_dim == "time" and not dataset.dataset_id.startswith(
+    observational = config.append_dim == "time" and not dataset_id.startswith(
         ("noaa-gfs", "noaa-gefs", "noaa-hrrr")
     )
     label_offset = (
@@ -183,7 +184,7 @@ def expected_units(
         else pd.Timedelta(0)
     )
     anchors = pd.date_range(start.ceil(spacing), end, freq=spacing, inclusive="left")
-    if "ifs-ens-forecast-46-day" in dataset.dataset_id or issubclass(
+    if "ifs-ens-forecast-46-day" in dataset_id or issubclass(
         dataset.region_job_class, NoaaNdviCdrAnalysisRegionJob
     ):
         yield from archive_units(dataset, anchors, label_offset, source)
@@ -222,7 +223,7 @@ def expected_units(
                 ):
                     continue
                 tier = "run" if config.append_dim == "init_time" else "position"
-                if dataset.dataset_id.startswith("noaa-gefs-forecast-35-day"):
+                if dataset_id.startswith("noaa-gefs-forecast-35-day"):
                     tier = (
                         "tier 1 (through f384)"
                         if coord.lead_time <= GEFS_PRE_EXTENSION_MAX
@@ -237,7 +238,7 @@ def expected_units(
                     # Proxy URLs map directly to GCS object keys.
                     bucket = (
                         "weathernext3_statistics_spatial"
-                        if "weathernext3" in dataset.dataset_id
+                        if "weathernext3" in dataset_id
                         else "weathernext"
                     )
                     files = frozenset(
