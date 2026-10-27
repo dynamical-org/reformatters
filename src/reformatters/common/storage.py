@@ -24,6 +24,7 @@ from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
 from reformatters.common.types import AppendDim
+from reformatters.common.user_agent import icechunk_attribution
 
 log = get_logger(__name__)
 
@@ -106,6 +107,7 @@ class StoreFactory(FrozenBaseModel):
             writable,
             branch,
             self.icechunk_virtual_config,
+            icechunk_attribution(self.dataset_id),
         )
 
     def open_primary_datatree(self) -> xr.DataTree:
@@ -128,7 +130,12 @@ class StoreFactory(FrozenBaseModel):
         for config in self.replica_storage_configs:
             store_path = _get_store_path(self.dataset_id, self.version, config)
             store = _get_store(
-                store_path, config, writable, branch, self.icechunk_virtual_config
+                store_path,
+                config,
+                writable,
+                branch,
+                self.icechunk_virtual_config,
+                icechunk_attribution(self.dataset_id),
             )
             stores.append(store)
 
@@ -212,6 +219,7 @@ class StoreFactory(FrozenBaseModel):
                     ic_storage,
                     config=repo_config,
                     authorize_virtual_chunk_access=credentials,
+                    attribution=icechunk_attribution(self.dataset_id),
                 ),
                 max_attempts=3,
             )
@@ -251,6 +259,7 @@ class StoreFactory(FrozenBaseModel):
                 ic_storage,
                 config=repo_config,
                 authorize_virtual_chunk_access=credentials,
+                attribution=icechunk_attribution(self.dataset_id),
             )
             repo.save_config()
             log.info(f"Persisted virtual chunk container config to {role} {store_path}")
@@ -393,12 +402,18 @@ def _get_store(
     writable: bool,
     branch: str = "main",
     virtual_config: IcechunkVirtualConfig | None = None,
+    attribution: icechunk.Attribution | None = None,
 ) -> Store:
     match storage_config.format:
         case DatasetFormat.ICECHUNK:
             assert store_path.endswith(".icechunk")
             return _get_icechunk_store(
-                store_path, storage_config, writable, branch, virtual_config
+                store_path,
+                storage_config,
+                writable,
+                branch,
+                virtual_config,
+                attribution,
             )
         case DatasetFormat.ZARR3:
             assert store_path.endswith(".zarr")
@@ -458,6 +473,7 @@ def _get_icechunk_store(
     writable: bool,
     branch: str = "main",
     virtual_config: IcechunkVirtualConfig | None = None,
+    attribution: icechunk.Attribution | None = None,
 ) -> IcechunkStore:
     storage = _get_icechunk_storage(store_path, storage_config)
     repo_config, credentials = _repository_config_and_credentials(virtual_config)
@@ -467,7 +483,10 @@ def _get_icechunk_store(
             f"Opening icechunk store {store_path} on branch {branch} in writable mode"
         )
         repo = icechunk.Repository.open_or_create(
-            storage, config=repo_config, authorize_virtual_chunk_access=credentials
+            storage,
+            config=repo_config,
+            authorize_virtual_chunk_access=credentials,
+            attribution=attribution,
         )
         session = repo.writable_session(branch)
         return session.store
@@ -476,7 +495,10 @@ def _get_icechunk_store(
             f"Opening icechunk store {store_path} on branch {branch} in readonly mode"
         )
         repo = icechunk.Repository.open(
-            storage, config=repo_config, authorize_virtual_chunk_access=credentials
+            storage,
+            config=repo_config,
+            authorize_virtual_chunk_access=credentials,
+            attribution=attribution,
         )
         session = repo.readonly_session(branch)
         return session.store
