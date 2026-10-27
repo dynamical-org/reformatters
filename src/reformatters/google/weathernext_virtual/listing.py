@@ -3,6 +3,7 @@ from typing import NamedTuple
 
 import httpx
 import icechunk
+from kubernetes.client.exceptions import ApiException
 
 from reformatters.common import kubernetes
 from reformatters.common.logging import get_logger
@@ -30,18 +31,27 @@ def weathernext_virtual_chunk_containers() -> tuple[
 
 def service_token_headers() -> dict[str, str]:
     """The proxy's service-tier header, or none. The token only selects a rate-limit
-    allowance, so a secret that can't be read (absent, or no permission outside a
-    job) falls back to the public tier rather than failing the read."""
+    allowance, so a secret that is absent or not readable by this caller (404/403 from
+    the Kubernetes API outside a job) falls back to the public tier. Anything else,
+    such as a malformed secret, still fails."""
     try:
         secret = kubernetes.load_secret(SERVICE_TOKEN_SECRET_NAME)
-    except Exception as error:  # noqa: BLE001
+    except ApiException as error:
+        if error.status not in (403, 404):
+            raise
         log.warning(
-            f"{SERVICE_TOKEN_SECRET_NAME} unavailable ({type(error).__name__}); "
-            "reading wn.dynamical.org without it"
+            f"{SERVICE_TOKEN_SECRET_NAME} not readable (HTTP {error.status}); "
+            "reading wn.dynamical.org on the public tier"
         )
         return {}
     token = secret.get("WN_SERVICE_TOKEN")
-    return {"X-Dynamical-Service-Token": token} if token else {}
+    if not token:
+        log.warning(
+            f"{SERVICE_TOKEN_SECRET_NAME} has no WN_SERVICE_TOKEN; "
+            "reading wn.dynamical.org on the public tier"
+        )
+        return {}
+    return {"X-Dynamical-Service-Token": token}
 
 
 def weathernext_read_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:

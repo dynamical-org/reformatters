@@ -1,3 +1,4 @@
+import json
 from base64 import b64encode
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,6 +11,7 @@ import icechunk
 import numpy as np
 import pytest
 import zarr
+from kubernetes.client.exceptions import ApiException
 
 from reformatters.common.storage import (
     DatasetFormat,
@@ -185,11 +187,26 @@ def test_readonly_chunk_reads_send_service_token_without_persisting_it(
     )
 
 
+@pytest.mark.parametrize("status", [403, 404])
 def test_unreadable_service_token_secret_falls_back_to_public(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
     def load_secret(name: str) -> dict[str, str]:
-        raise PermissionError("forbidden")
+        raise ApiException(status=status)
 
     monkeypatch.setattr(listing.kubernetes, "load_secret", load_secret)
     assert listing.service_token_headers() == {}
+
+
+@pytest.mark.parametrize(
+    "error", [ApiException(status=500), json.JSONDecodeError("bad", "", 0)]
+)
+def test_other_service_token_secret_failures_propagate(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    def load_secret(name: str) -> dict[str, str]:
+        raise error
+
+    monkeypatch.setattr(listing.kubernetes, "load_secret", load_secret)
+    with pytest.raises(type(error)):
+        listing.service_token_headers()
