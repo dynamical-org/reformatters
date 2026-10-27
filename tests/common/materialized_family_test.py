@@ -155,6 +155,27 @@ def test_adopted_forecast_currency_requires_init_at_its_full_fire(
     assert _check_at_time(dataset_id, fire, init, monkeypatch).passed
 
 
+def test_materialized_allow_deadlines_equal_minimum_calendar_fire_interval() -> None:
+    calendar_start = pd.Timestamp("2023-01-01")
+    calendar_end = pd.Timestamp("2025-01-01")
+    for dataset in _MATERIALIZED_DATASETS:
+        for cron in dataset.operational_kubernetes_resources("test"):
+            if (
+                not isinstance(cron, ReformatCronJob)
+                or cron.concurrency_policy != "Allow"
+            ):
+                continue
+            fire = cron.next_fire_time(calendar_start - timedelta(seconds=1))
+            intervals = []
+            while fire < calendar_end:
+                next_fire = cron.next_fire_time(fire)
+                intervals.append(next_fire - fire)
+                fire = next_fire
+            assert cron.pod_active_deadline == cron.active_deadline == min(intervals), (
+                dataset.dataset_id
+            )
+
+
 def test_chirps_calendar_deadlines_use_shortest_interval() -> None:
     dataset = dataset_for("ucsb-chc-chirps-analysis-final")
     (cron,) = dataset.operational_kubernetes_resources("test")

@@ -141,7 +141,7 @@ def test_backfill_local_and_operational_update(
         update_monkeypatch.setattr(
             pd.Timestamp,
             "now",
-            classmethod(lambda *args, **kwargs: pd.Timestamp("2026-08-28T20:00")),
+            classmethod(lambda *args, **kwargs: pd.Timestamp("2026-08-28T21:35")),
         )
         update_monkeypatch.setattr(
             NoaaGfsAnalysisVirtualRegionJob,
