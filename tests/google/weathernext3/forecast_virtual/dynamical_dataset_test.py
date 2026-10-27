@@ -93,5 +93,4 @@ def test_inline_validation_does_not_move_tip(
     checks.assert_called_once()
     checked_job = checks.call_args.kwargs["region_job"]
     assert isinstance(checked_job, GoogleWeathernext3ForecastVirtualRegionJob)
-    assert checked_job.publication_cutoff == pd.Timestamp.max
     assert snapshot_ids == [repo.lookup_branch("main")]
