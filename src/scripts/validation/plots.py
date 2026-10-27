@@ -45,6 +45,7 @@ from scripts.validation.utils import (
     scope_time_period,
     select_variables_for_plotting,
     start_date_option,
+    statistic_option,
     time_option,
     variables_option,
 )
@@ -105,6 +106,7 @@ def run_all(
     lead_time: str | None = lead_time_option,
     time: str | None = time_option,
     level: float | None = level_option,
+    statistic: str | None = statistic_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
     checkpoint_dir: Path | None = checkpoint_dir_option,
@@ -171,6 +173,7 @@ def run_all(
         checkpoint_dir=checkpoint_dir,
         probe_workers=probe_workers,
         level_override=level,
+        statistic_override=statistic,
         init_time=init_time,
         lead_time=lead_time,
         time=time,

@@ -31,6 +31,7 @@ from scripts.validation.utils import (
     select_var_slice,
     select_variables_for_plotting,
     start_date_option,
+    statistic_option,
     var_slug,
     variables_option,
 )
@@ -274,6 +275,7 @@ def value_timeseries(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    statistic: str | None = statistic_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
@@ -307,6 +309,7 @@ def value_timeseries(
         variables=selected_vars,
         is_virtual=is_virtual_store(dataset_url),
         level_override=level,
+        statistic_override=statistic,
     )
     run_value_timeseries(ctx)
 

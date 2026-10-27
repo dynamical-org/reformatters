@@ -263,6 +263,15 @@ def _run_parameters_table(ctx: RunContext) -> list[str]:
                 else "middle level per vertical dim",
             )
         )
+    if any(stats.label_dim is not None for stats in ctx.stats.values()):
+        rows.append(
+            (
+                "Statistic",
+                f"override {ctx.statistic_override}"
+                if ctx.statistic_override is not None
+                else "mean when declared, otherwise standard_deviation",
+            )
+        )
     if ctx.is_virtual:
         rows.append(
             (
