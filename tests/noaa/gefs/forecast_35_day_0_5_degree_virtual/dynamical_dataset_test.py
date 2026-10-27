@@ -46,7 +46,12 @@ def test_polling_leaves_validation_time_inside_single_deadline(
     )
     (cron_job,) = dataset.operational_kubernetes_resources("test")
     fire = pd.Timestamp("2026-09-27T02:15")
-    assert cron_job.pod_active_deadline == timedelta(hours=8, minutes=30)
+    assert cron_job.concurrency_policy == "Allow"
+    assert (
+        cron_job.active_deadline
+        == cron_job.pod_active_deadline
+        == timedelta(hours=8, minutes=30)
+    )
     assert dataset._virtual_poll_deadline(fire) == pd.Timestamp("2026-09-27T10:38")
     assert dataset._virtual_poll_deadline(fire + pd.Timedelta("2h")) == (
         fire + cron_job.pod_active_deadline - timedelta(minutes=7)

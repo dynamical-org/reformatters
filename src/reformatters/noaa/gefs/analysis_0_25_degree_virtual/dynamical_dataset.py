@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from pydantic import Field
 
@@ -34,6 +35,8 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         NoaaGefsAnalysis025DegreeVirtualRegionJob
     )
 
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=38)
+
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=gefs_virtual_chunk_containers(),
@@ -49,8 +52,10 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         # Fire a few minutes before that and poll until they land.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="45 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            schedule="44 3,9,15,21 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=2, seconds=27),
+            active_deadline=timedelta(hours=6, minutes=2, seconds=27),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",
@@ -64,7 +69,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=49)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=9)),
             # Every ingested position is whole, so no leading fraction tier is needed.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

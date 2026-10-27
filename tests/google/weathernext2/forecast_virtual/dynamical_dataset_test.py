@@ -39,6 +39,7 @@ def test_historical_product_is_fixed_and_has_virtual_health_checks(
 
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.name == "google-wn2-forecast-historical-virtual-update"
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("1s")
     assert update.suspend is True
     assert not any(
         isinstance(item, validation.CheckCurrentData) for item in dataset.validators()
@@ -67,6 +68,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
 
     (update,) = dataset.operational_kubernetes_resources("test")
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("3s")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
@@ -77,13 +79,18 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
     assert update.workers_total == 1
     assert update.parallelism == 1
-    assert update.pod_active_deadline < timedelta(hours=6)
+    assert (
+        update.pod_active_deadline
+        == update.active_deadline
+        == timedelta(hours=6, minutes=4, seconds=23)
+    )
+    assert update.concurrency_policy == "Allow"
     assert update.suspend is False
     fire = pd.Timestamp("2026-10-20T07:05")
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("1min")
-    ) == fire + pd.Timedelta("25min")
-    assert dataset.virtual_poll_deadline_grace == timedelta(minutes=5)
+    ) == fire + pd.Timedelta("6h1m16s")
+    assert dataset.virtual_poll_deadline_grace == timedelta(minutes=3, seconds=7)
     (current,) = [
         item
         for item in dataset.validators()

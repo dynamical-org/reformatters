@@ -213,7 +213,7 @@ def test_operational_update_jobs_single_polling_job(cycle_end_hour: int) -> None
     assert isinstance(job, NoaaGfsAnalysisVirtualRegionJob)
     assert job.processing_mode == "update"
     times = template_ds.to_dataset().get_index("time")
-    # The next cycle cannot publish during this fire's 45-minute pod deadline.
+    # A fire selects its own cycle even while a successor can publish.
     assert times[-1] == target_init + pd.Timedelta("5h")
     assert times[job.region.start] == target_init - pd.Timedelta("12h")
     assert job.region.stop == len(times)

@@ -37,7 +37,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
         EcmwfAifsSingleForecastVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=44)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -58,12 +58,12 @@ class EcmwfAifsSingleForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Poll through init+8h38m to cover staggered delivery and delayed runs;
-        # complete runs exit early, with five minutes reserved for validation.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="42 5,11,17,23 * * *",
-            pod_active_deadline=timedelta(hours=3, minutes=1),
+            schedule="35 5,11,17,23 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=2),
+            active_deadline=timedelta(hours=6, minutes=2),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="1.7",
@@ -75,8 +75,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Early completion must validate the fire's own init.
-            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=42)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=6)),
             # Polling waits for all 61 leads before validating a complete run.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

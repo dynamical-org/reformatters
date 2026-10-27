@@ -59,7 +59,9 @@ class NoaaGefsForecast35Day05DegreeVirtualDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="15 2 * * *",
+            concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=8, minutes=30),
+            active_deadline=timedelta(hours=8, minutes=30),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3.5",

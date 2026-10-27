@@ -188,10 +188,10 @@ def test_operational_kubernetes_resources(
     (update_cron_job,) = cron_jobs
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    # Single-writer virtual update: no fan-out.
+    # Each virtual Job has one worker.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.pod_active_deadline < timedelta(hours=6)
+    assert update_cron_job.pod_active_deadline == timedelta(hours=6, minutes=2)
     assert update_cron_job.suspend is False
     assert len(update_cron_job.secret_names) > 0
 
@@ -209,27 +209,31 @@ def test_validators(dataset: EcmwfAifsSingleForecastVirtualDataset) -> None:
     assert any(isinstance(v, validation.CheckVirtualDecodeHealth) for v in validators)
 
 
-def test_current_data_validator_is_due_at_fire(
+def test_current_data_validator_uses_first_visibility_threshold(
     dataset: EcmwfAifsSingleForecastVirtualDataset,
 ) -> None:
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=5, minutes=42)
+    assert current_data.max_delay == timedelta(hours=6, minutes=6)
 
 
 @pytest.mark.parametrize("hour", [0, 6, 12, 18])
-def test_polling_covers_late_delivery_without_reaching_next_fire(
+def test_polling_covers_late_delivery_across_the_next_fire(
     dataset: EcmwfAifsSingleForecastVirtualDataset, hour: int
 ) -> None:
     init = pd.Timestamp("2026-10-20") + timedelta(hours=hour)
-    fire = init + timedelta(hours=5, minutes=42)
+    fire = init + timedelta(hours=5, minutes=35)
     (cron,) = dataset.operational_kubernetes_resources("test-image-tag")
     cutoff = dataset._virtual_poll_deadline(fire + timedelta(minutes=1))
 
-    assert cutoff == init + timedelta(hours=8, minutes=38)
+    assert cutoff == init + timedelta(hours=11, minutes=36, seconds=16)
     assert cron.previous_fire_time(fire) == fire
-    assert cutoff + dataset.virtual_poll_deadline_grace < cron.next_fire_time(fire)
+    assert (
+        cron.next_fire_time(fire)
+        < cutoff
+        < cutoff + dataset.virtual_poll_deadline_grace
+    )
 
 
 def _resolved_split_size(

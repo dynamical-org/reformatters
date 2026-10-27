@@ -273,13 +273,15 @@ def test_operational_kubernetes_resources(
     (update_cron_job,) = dataset.operational_kubernetes_resources("test-image-tag")
 
     # The first file lands ~init+3h46m and the last member's f384 ~init+7h11m, so the
-    # fire leads the burst and the deadline covers its end with over half an hour to
-    # spare while still ending before the next cycle's fire.
-    assert update_cron_job.schedule == "45 3,9,15,21 * * *"
-    assert update_cron_job.pod_active_deadline == timedelta(hours=4)
+    # fire leads the burst and the deadline covers its end and
+    # overlaps the next cycle's fire.
+    assert update_cron_job.schedule == "43 3,9,15,21 * * *"
+    assert update_cron_job.pod_active_deadline == timedelta(
+        hours=6, minutes=8, seconds=22
+    )
     fire_to_next_fire = timedelta(hours=6)
-    assert update_cron_job.pod_active_deadline < fire_to_next_fire
-    # Virtual updates are single writer.
+    assert update_cron_job.pod_active_deadline > fire_to_next_fire
+    # Each virtual Job has one worker.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
     assert len(update_cron_job.secret_names) > 0
@@ -322,7 +324,7 @@ def test_validators(
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=3, minutes=47)
+    assert current_data.max_delay == timedelta(hours=4, minutes=8)
 
     completeness = next(
         v

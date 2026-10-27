@@ -27,10 +27,10 @@ class NoaaRrfsDataset(
     template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     update_offset_minutes: NonNegativeInt
     update_deadline: timedelta
-    concurrency_policy: ClassVar[ConcurrencyPolicy] = "Replace"
+    concurrency_policy: ClassVar[ConcurrencyPolicy]
+    max_delay: ClassVar[timedelta]
     min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=rrfs_virtual_chunk_containers(),
@@ -75,16 +75,9 @@ class NoaaRrfsDataset(
             ),
         )
 
-    def current_data_max_delay(self) -> timedelta:
-        return (
-            timedelta(minutes=self.update_offset_minutes)
-            + self.update_deadline
-            - self.virtual_poll_deadline_grace
-        )
-
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=self.current_data_max_delay()),
+            validation.CheckCurrentData(max_delay=self.max_delay),
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=self.min_present_fraction
             ),

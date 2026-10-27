@@ -75,39 +75,39 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
     [
         (
             NoaaRrfsForecast84HourVirtualDataset,
-            65,
-            timedelta(minutes=300),
-            timedelta(minutes=5),
-            "5 1,7,13,19 * * *",
-            timedelta(minutes=360),
-            timedelta(minutes=360),
+            71,
+            timedelta(hours=6, minutes=5, seconds=10),
+            timedelta(minutes=3, seconds=23),
+            "11 1,7,13,19 * * *",
+            timedelta(hours=7, minutes=12, seconds=47),
+            timedelta(minutes=133),
         ),
         (
             NoaaRrfsForecast18HourVirtualDataset,
-            65,
-            timedelta(minutes=170),
-            timedelta(minutes=5),
-            "5 1,4,7,10,13,16,19,22 * * *",
-            timedelta(minutes=230),
-            timedelta(minutes=230),
+            70,
+            timedelta(hours=3, minutes=4, seconds=24),
+            timedelta(minutes=3, seconds=8),
+            "10 1,4,7,10,13,16,19,22 * * *",
+            timedelta(hours=4, minutes=11, seconds=16),
+            timedelta(minutes=133),
         ),
         (
             NoaaRrfsForecastSubHourlyVirtualDataset,
             75,
-            timedelta(minutes=62, seconds=37),
-            timedelta(seconds=81),
+            timedelta(hours=1, minutes=2, seconds=37),
+            timedelta(minutes=1, seconds=21),
             "15 * * * *",
-            timedelta(minutes=136, seconds=16),
+            timedelta(hours=2, minutes=16, seconds=16),
             timedelta(minutes=138),
         ),
         (
             NoaaRrfsEnsForecastVirtualDataset,
             70,
-            timedelta(minutes=295),
-            timedelta(minutes=5),
+            timedelta(hours=6, minutes=5, seconds=16),
+            timedelta(minutes=4),
             "10 1,7,13,19 * * *",
-            timedelta(minutes=360),
-            timedelta(minutes=360),
+            timedelta(hours=7, minutes=11, seconds=16),
+            timedelta(minutes=122),
         ),
     ],
 )
@@ -131,9 +131,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert dataset.update_offset_minutes == offset
     assert dataset.update_deadline == duration
     spec = update.as_kubernetes_object()["spec"]
-    assert spec["concurrencyPolicy"] == (
-        "Allow" if cls is NoaaRrfsForecastSubHourlyVirtualDataset else "Replace"
-    )
+    assert spec["concurrencyPolicy"] == "Allow"
     job = spec["jobTemplate"]["spec"]
     pod = job["template"]["spec"]
     assert (
@@ -162,7 +160,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
         - duration
         - pd.Timedelta(seconds=30)
     )
-    assert (gap < pd.Timedelta(0)) == (cls is NoaaRrfsForecastSubHourlyVirtualDataset)
+    assert gap < pd.Timedelta(0)
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
     assert current.max_delay == max_delay
@@ -250,23 +248,34 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
 
 
 @pytest.mark.parametrize(
-    ("variant", "retry_minute", "created", "poll_minutes_remaining"),
+    (
+        "variant",
+        "retry_elapsed",
+        "created",
+        "poll_time_remaining",
+        "offset",
+        "duration",
+        "grace_minutes",
+    ),
     [
-        ("rrfs-forecast-18-hour", 70, True, 160),
-        ("rrfs-forecast-18-hour", 80, False, 150),
-        ("rrfs-forecast-18-hour", 233, False, -3),
-        ("rrfs-forecast-84-hour", 363, False, -3),
-        ("rrfs-ens-forecast", 363, False, -3),
-        ("refs-forecast-hourly", 363, False, -3),
-        ("refs-forecast-3-hourly", 363, False, -3),
+        ("rrfs-forecast-18-hour", "70m", True, "2h40m", 65, "2h50m", 5),
+        ("rrfs-forecast-18-hour", "80m", False, "150m", 65, "2h50m", 5),
+        ("rrfs-forecast-18-hour", "3h53m", False, "-3m", 65, "2h50m", 5),
+        ("rrfs-forecast-84-hour", "6h03m", False, "-3m", 65, "5h", 5),
+        ("rrfs-ens-forecast", "6h03m", False, "-3m", 70, "4h55m", 5),
+        ("refs-forecast-hourly", "6h03m", False, "-3m", 105, "4h22m", 7),
+        ("refs-forecast-3-hourly", "6h03m", False, "-3m", 105, "4h22m", 7),
     ],
 )
-def test_rrfs_retry_admission_and_fire_anchored_cutoff(
+def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
     monkeypatch: pytest.MonkeyPatch,
     variant: str,
-    retry_minute: int,
+    retry_elapsed: str,
     created: bool,
-    poll_minutes_remaining: int,
+    poll_time_remaining: str,
+    offset: int,
+    duration: str,
+    grace_minutes: int,
 ) -> None:
     dataset = next(
         dataset
@@ -274,6 +283,21 @@ def test_rrfs_retry_admission_and_fire_anchored_cutoff(
         if dataset.dataset_id == f"noaa-{variant}-virtual"
     )
     (update,) = dataset.operational_kubernetes_resources("test")
+    deadline = pd.Timedelta(duration)
+    grace = timedelta(minutes=grace_minutes)
+    hours = "1,4,7,10,13,16,19,22" if "18-hour" in variant else "1,7,13,19"
+    update = update.model_copy(
+        update={
+            "schedule": f"{offset % 60} {hours} * * *",
+            "pod_active_deadline": deadline,
+            "active_deadline": deadline,
+            "concurrency_policy": "Replace",
+        }
+    )
+    monkeypatch.setattr(
+        type(dataset), "operational_kubernetes_resources", Mock(return_value=[update])
+    )
+    monkeypatch.setattr(type(dataset), "virtual_poll_deadline_grace", grace)
     spec = update.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
     cronjob = Mock()
     cronjob.metadata.uid = "rrfs-cronjob-uid"
@@ -291,7 +315,7 @@ def test_rrfs_retry_admission_and_fire_anchored_cutoff(
             )
         ),
     )
-    now = pd.Timestamp("2026-10-15T00:00:00Z") + timedelta(minutes=retry_minute)
+    now = pd.Timestamp("2026-10-15T00:00:00Z") + pd.Timedelta(retry_elapsed)
     batch = Mock()
     batch.read_namespaced_cron_job.return_value = cronjob
     monkeypatch.setenv("POD_NAMESPACE", "weather")
@@ -312,8 +336,8 @@ def test_rrfs_retry_admission_and_fire_anchored_cutoff(
         is created
     )
     assert batch.create_namespaced_job.called is created
-    assert dataset._virtual_poll_deadline(now) - now == timedelta(
-        minutes=poll_minutes_remaining
+    assert dataset._virtual_poll_deadline(now) - now == pd.Timedelta(
+        poll_time_remaining
     )
     if created:
         retry = batch.create_namespaced_job.call_args.args[1]
