@@ -84,8 +84,6 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
 
-CronJobs expose `concurrency_policy` (`Replace` by default, also `Allow` or `Forbid`).
-
 Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
