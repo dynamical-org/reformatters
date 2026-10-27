@@ -33,6 +33,7 @@ from scripts.validation.utils import (
     select_var_slice,
     select_variables_for_plotting,
     start_date_option,
+    statistic_option,
     time_option,
     to_reference_longitude,
     var_slug,
@@ -347,6 +348,7 @@ def compare_timeseries(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    statistic: str | None = statistic_option,
     point: list[str] | None = point_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
@@ -382,6 +384,7 @@ def compare_timeseries(
         variables=selected_vars,
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
+        statistic_override=statistic,
         init_time=init_time,
         time=time,
     )

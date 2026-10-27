@@ -1,4 +1,6 @@
 import functools
+import json
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -19,6 +21,10 @@ from zarr.storage import ObjectStore, StoreLike
 from reformatters.common.retry import retry
 from reformatters.common.storage import anonymous_virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
+from reformatters.google.weathernext3.forecast_virtual.template_config import (
+    STATISTICS,
+    GoogleWeathernext3DataVar,
+)
 from reformatters.noaa.refs.models import NoaaRefsDataVar
 
 # Whole-archive scans issue many concurrent object-store reads. Raise zarr's async
@@ -131,6 +137,14 @@ level_option = typer.Option(
     help="Vertical level value to sample for variables on a level dim (e.g. 500 for "
     "500 mb). Selects the nearest level on each variable's own vertical dim. "
     "Default: the middle level. Single-level variables ignore this.",
+)
+
+statistic_option = typer.Option(
+    None,
+    "--statistic",
+    help="Statistic label to sample from a registered source product (e.g. mean or p50). "
+    "Default: mean when declared, otherwise standard_deviation. "
+    "Variables without a statistic axis ignore this.",
 )
 
 point_option = typer.Option(
@@ -273,6 +287,7 @@ class RunContext:
     checkpoint_dir: Path | None = None
     probe_workers: int | None = None
     level_override: float | None = None
+    statistic_override: str | None = None
     # User-pinned append-dim positions. A forecast run uses init_time (and lead_time for
     # the spatial snapshot), an analysis run uses time; each anchors both the spatial
     # snapshot and the temporal comparison so one flag places the whole report.
@@ -411,7 +426,7 @@ def _anonymous_virtual_credentials(
 
 
 def _icechunk_storage(url: str) -> icechunk.Storage | None:
-    """Anonymous read storage for an icechunk store URL, or None if `url` isn't one.
+    """Read storage for an icechunk store URL, or None if `url` isn't one.
 
     An `https://` URL reads the store over plain HTTP, which is how a store whose bucket
     serves no anonymous S3 access is published.
@@ -425,17 +440,14 @@ def _icechunk_storage(url: str) -> icechunk.Storage | None:
         return None
     bucket, _, prefix = url.removeprefix("s3://").partition("/")
     assert prefix, url
-    return icechunk.s3_storage(
-        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
-    )
+    storage_options = json.loads(
+        os.environ.get("VALIDATION_S3_STORAGE_OPTIONS", "{}")
+    ).get(bucket, {"anonymous": True, "region": "us-west-2"})
+    return icechunk.s3_storage(bucket=bucket, prefix=prefix, **storage_options)
 
 
 def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
-    """Open an icechunk store read-only and anonymously (virtual chunk access included).
-
-    Unlike StoreFactory.primary_store this needs no credentials or Kubernetes secret
-    access, so offline validation runs anywhere the store is publicly readable.
-    """
+    """Open an icechunk store read-only, including virtual chunk access."""
     storage = _icechunk_storage(url)
     assert storage is not None, url
     config = (
@@ -682,37 +694,55 @@ def vertical_dims(ds: xr.Dataset, var: str) -> list[str]:
     return [
         str(d)
         for d in ds[var].dims
-        if d not in _NON_VERTICAL_DIMS and np.issubdtype(ds[d].dtype, np.number)
+        if d not in (*_NON_VERTICAL_DIMS, "statistic")
+        and np.issubdtype(ds[d].dtype, np.number)
     ]
 
 
-def choose_statistic(ds: xr.Dataset, var: str) -> dict[str, str]:
+def choose_statistic(
+    ds: xr.Dataset, var: str, override: str | None = None
+) -> dict[str, str]:
     from scripts.validation.scan_common import find_registered_dataset  # noqa: PLC0415
 
     label_dims = [
         str(d)
         for d in ds[var].dims
-        if d not in _NON_VERTICAL_DIMS and not np.issubdtype(ds[d].dtype, np.number)
+        if d not in _NON_VERTICAL_DIMS
+        and (d == "statistic" or not np.issubdtype(ds[d].dtype, np.number))
     ]
     if not label_dims:
         return {}
     if label_dims != ["statistic"]:
         raise ValueError(f"{var}: unsupported categorical axes {label_dims}")
-    labels = set(ds["statistic"].values.tolist())
-    if not labels <= {"mean", "standard_deviation"}:
-        raise ValueError(f"{var}: unknown statistic labels {labels}")
     dataset = find_registered_dataset(ds.attrs.get("dataset_id", ""))
     data_var = (
         next((v for v in dataset.template_config.data_vars if v.path == var), None)
         if dataset is not None
         else None
     )
-    if not isinstance(data_var, NoaaRefsDataVar) or not data_var.has_statistic:
+    if isinstance(data_var, GoogleWeathernext3DataVar):
+        known_labels = set(STATISTICS)
+        declared_labels = known_labels
+    elif isinstance(data_var, NoaaRefsDataVar) and data_var.has_statistic:
+        known_labels = {"mean", "standard_deviation"}
+        families = data_var.internal_attrs.source_families
+        if not families or not set(families) <= {"mean", "sprd"}:
+            raise ValueError(f"{var}: unsupported statistic source families {families}")
+        declared_labels = {
+            "mean" if family == "mean" else "standard_deviation" for family in families
+        }
+    else:
         raise ValueError(f"{var}: statistic axis has no registered source declaration")
-    families = data_var.internal_attrs.source_families
-    if not families or not set(families) <= {"mean", "sprd"}:
-        raise ValueError(f"{var}: unsupported statistic source families {families}")
-    label = "mean" if "mean" in families else "standard_deviation"
+    labels = set(ds["statistic"].values.tolist())
+    if not labels <= known_labels:
+        raise ValueError(f"{var}: unknown statistic labels {labels}")
+    label = (
+        override
+        if override is not None
+        else ("mean" if "mean" in declared_labels else "standard_deviation")
+    )
+    if label not in declared_labels:
+        raise ValueError(f"{var}: statistic {label!r} not declared by source product")
     if label not in labels:
         raise ValueError(f"{var}: declared statistic {label!r} missing from {labels}")
     return {"statistic": label}
@@ -761,7 +791,7 @@ def level_label(stats: VariableStats) -> str:
 
 def select_var_slice(ctx: RunContext, var: str, stats: VariableStats) -> dict[str, Any]:
     level_sel = select_var_level(ctx, var, stats)
-    label_sel = choose_statistic(ctx.validation_ds, var)
+    label_sel = choose_statistic(ctx.validation_ds, var, ctx.statistic_override)
     if label_sel:
         [(stats.label_dim, stats.label_value)] = label_sel.items()
     return {**level_sel, **label_sel}

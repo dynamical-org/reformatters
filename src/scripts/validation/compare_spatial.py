@@ -34,6 +34,7 @@ from scripts.validation.utils import (
     select_var_slice,
     select_variables_for_plotting,
     start_date_option,
+    statistic_option,
     time_option,
     var_slug,
     variables_option,
@@ -416,6 +417,7 @@ def compare_spatial(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    statistic: str | None = statistic_option,
     output_dir: Path | None = output_dir_option,
 ) -> None:
     """Create per-variable spatial comparison plots between two zarr datasets."""
@@ -457,6 +459,7 @@ def compare_spatial(
         variables=selected_vars,
         is_virtual=is_virtual_store(validation_url),
         level_override=level,
+        statistic_override=statistic,
         init_time=init_time,
         lead_time=lead_time,
         time=time,

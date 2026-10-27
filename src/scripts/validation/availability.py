@@ -37,6 +37,7 @@ from scripts.validation.utils import (
     end_date_option,
     get_two_random_points,
     is_virtual_store,
+    level_label,
     level_option,
     load_retried,
     load_zarr_dataset,
@@ -44,9 +45,10 @@ from scripts.validation.utils import (
     probe_workers_option,
     resolve_output_dir,
     scope_time_period,
-    select_var_level,
+    select_var_slice,
     select_variables_for_plotting,
     start_date_option,
+    statistic_option,
     var_slug,
     variables_option,
 )
@@ -182,18 +184,26 @@ def _plot_heatmap(series_by_var: dict[str, AvailabilitySeries], out_path: Path) 
 
 
 def write_availability_artifacts(
-    output_dir: Path, series_by_var: dict[str, AvailabilitySeries]
+    output_dir: Path,
+    series_by_var: dict[str, AvailabilitySeries],
+    display_labels: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, VarAvailabilitySummary]]:
     """Write the heatmap + a trace plot per variable. Returns (heatmap filename, per-var summaries)."""
     assert series_by_var, "no availability series to render"
-    _plot_heatmap(series_by_var, output_dir / HEATMAP_FILENAME)
+    display_labels = display_labels or {}
+    _plot_heatmap(
+        {display_labels.get(var, var): series for var, series in series_by_var.items()},
+        output_dir / HEATMAP_FILENAME,
+    )
 
     summaries: dict[str, VarAvailabilitySummary] = {}
     for var, series in series_by_var.items():
         complete = series.fraction >= 1.0
         incomplete_positions = series.positions[~complete]
         plot_name = f"availability_{var_slug(var)}.png"
-        _plot_var_availability(series, output_dir / plot_name, var)
+        _plot_var_availability(
+            series, output_dir / plot_name, display_labels.get(var, var)
+        )
         labels = _position_labels(incomplete_positions)
         summaries[var] = VarAvailabilitySummary(
             plot=plot_name,
@@ -207,7 +217,14 @@ def write_availability_artifacts(
 
 def apply_availability(ctx: RunContext) -> None:
     """Render availability artifacts from ctx.availability and record them on ctx.stats."""
-    heatmap, summaries = write_availability_artifacts(ctx.output_dir, ctx.availability)
+    display_labels = (
+        {var: f"{var}{level_label(ctx.stats_for(var))}" for var in ctx.availability}
+        if not ctx.is_virtual
+        else None
+    )
+    heatmap, summaries = write_availability_artifacts(
+        ctx.output_dir, ctx.availability, display_labels
+    )
     ctx.combined_availability_plot = heatmap
     for var, summary in summaries.items():
         stats = ctx.stats_for(var)
@@ -405,15 +422,15 @@ def run_value_availability(ctx: RunContext) -> None:
 
     for var in ctx.variables:
         stats = ctx.stats_for(var)
-        level_sel = select_var_level(ctx, var, stats)
+        slice_sel = select_var_slice(ctx, var, stats)
 
         # Load each point's values once and cache them so run_value_timeseries can
         # reuse the same read instead of loading the point data a second time.
         da_p1 = ds_p1[var]
         da_p2 = ds_p2[var]
-        if level_sel:
-            da_p1 = da_p1.sel(level_sel)
-            da_p2 = da_p2.sel(level_sel)
+        if slice_sel:
+            da_p1 = da_p1.sel(slice_sel)
+            da_p2 = da_p2.sel(slice_sel)
         da_p1 = load_retried(da_p1)
         da_p2 = load_retried(da_p2)
         ctx.loaded_point_data[var] = (da_p1, da_p2)
@@ -516,6 +533,7 @@ def build_run_context(
     output_dir: Path | None = None,
     checkpoint_dir: Path | None = None,
     probe_workers: int | None = None,
+    statistic: str | None = None,
 ) -> RunContext:
     """The RunContext a standalone command runs against (run-all builds its own)."""
     ds = load_zarr_dataset(dataset_url)
@@ -548,6 +566,7 @@ def build_run_context(
         checkpoint_dir=checkpoint_dir,
         probe_workers=probe_workers,
         level_override=level,
+        statistic_override=statistic,
     )
 
 
@@ -557,6 +576,7 @@ def availability(
     start_date: str | None = start_date_option,
     end_date: str | None = end_date_option,
     level: float | None = level_option,
+    statistic: str | None = statistic_option,
     output_dir: Path | None = output_dir_option,
     checkpoint_dir: Path | None = checkpoint_dir_option,
     probe_workers: int | None = probe_workers_option,
@@ -577,6 +597,7 @@ def availability(
         output_dir,
         checkpoint_dir,
         probe_workers,
+        statistic=statistic,
     )
     if ctx.is_virtual:
         file_availability = run_manifest_availability(ctx)
